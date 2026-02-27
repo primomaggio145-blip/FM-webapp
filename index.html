@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Accademia Musicale</title>
+  <meta name="description" content="Gestionale per scuole di musica" />
+
+  <!-- Favicon emoji -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎵</text></svg>" />
+
+  <!-- React 18 -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Babel standalone — trasforma JSX nel browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body, #root { height: 100%; width: 100%; }
+    body { background: #0f0e0c; }
+
+    /* Schermata di caricamento */
+    #loading {
+      position: fixed; inset: 0;
+      background: #0f0e0c;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 16px; z-index: 9999;
+      font-family: 'DM Sans', sans-serif;
+      transition: opacity 0.4s ease;
+    }
+    #loading .logo {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px; font-weight: 600;
+      color: #c9a84c; letter-spacing: 0.08em;
+    }
+    #loading .spinner {
+      width: 32px; height: 32px;
+      border: 2px solid #2a2520;
+      border-top-color: #c9a84c;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    #loading .sub {
+      font-size: 12px; color: #4a4438;
+      letter-spacing: 0.1em; text-transform: uppercase;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- Schermata di caricamento (sparisce quando React è pronto) -->
+  <div id="loading">
+    <div class="logo">♪ Accademia Musicale</div>
+    <div class="spinner"></div>
+    <div class="sub">Caricamento in corso…</div>
+  </div>
+
+  <!-- Mount point React -->
+  <div id="root"></div>
+
+  <!-- App JSX — type="text/babel" dice a Babel di trasformarlo -->
+  <script type="text/babel" data-type="module" src="./accademia-musicale-unified.jsx"></script>
+
+  <!-- Bootstrap: monta App nel DOM dopo che Babel l'ha compilata -->
+  <script type="text/babel">
+    // Aspetta che il modulo JSX sia disponibile, poi monta
+    window.addEventListener("load", () => {
+      // Il componente App viene reso disponibile tramite window.AppComponent
+      // (impostato nell'ultimo blocco del file JSX)
+      const rootEl = document.getElementById("root");
+      const loadingEl = document.getElementById("loading");
+
+      const tryMount = () => {
+        if (window.__AppComponent) {
+          const root = ReactDOM.createRoot(rootEl);
+          root.render(React.createElement(window.__AppComponent));
+          // Nascondi loading con fade
+          loadingEl.style.opacity = "0";
+          setTimeout(() => loadingEl.remove(), 400);
+        } else {
+          setTimeout(tryMount, 50);
+        }
+      };
+      tryMount();
+    });
+  </script>
+
+</body>
+</html>

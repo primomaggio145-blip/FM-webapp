@@ -1,0 +1,30 @@
+# Configurazione Netlify per Accademia Musicale
+# Non serve build step — il JSX viene compilato da Babel nel browser
+
+[build]
+  publish = "."        # pubblica la root del repository
+
+# SPA redirect: tutte le rotte → index.html
+[[redirects]]
+  from = "/*"
+  to   = "/index.html"
+  status = 200
+
+# Headers di sicurezza consigliati
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Cache aggressiva per i file statici JS/JSX
+[[headers]]
+  for = "/*.jsx"
+  [headers.values]
+    Cache-Control = "no-cache"   # durante sviluppo: sempre fresco
+
+[[headers]]
+  for = "/*.html"
+  [headers.values]
+    Cache-Control = "no-cache"
