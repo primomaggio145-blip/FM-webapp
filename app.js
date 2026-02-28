@@ -10623,7 +10623,7 @@ const Sidebar = ({ current, setView, user, onLogout }) => {
           , NAV_ITEMS.map(item => {
             const active = current === item.id;
             return (
-              React.createElement('button', { key: item.id, onClick: ()=>{ if(item.id==='sitoWeb'){window.open('futuro-musica.html','_blank');}else{setView(item.id);}},
+              React.createElement('button', { key: item.id, onClick: ()=>{ if(item.id==='sitoWeb'){window.open('index.html','_blank');}else{setView(item.id);}},
                 style: {width:"100%",display:"flex",alignItems:"center",gap:10,
                   padding:"9px 12px",borderRadius:9,border:"none",cursor:"pointer",
                   background:active?C.goldBg:"transparent",
