@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Accademia Musicale</title>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body,#root{height:100%;width:100%}
+    body{background:#0f0e0c}
+    #loading{position:fixed;inset:0;background:#0f0e0c;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;gap:16px;z-index:9999;font-family:monospace;padding:24px}
+    .logo{font-size:22px;font-weight:600;color:#c9a84c;font-family:sans-serif}
+    .spinner{width:32px;height:32px;border:2px solid #2a2520;border-top-color:#c9a84c;
+      border-radius:50%;animation:spin 0.8s linear infinite}
+    .sub{font-size:11px;color:#4a4438;letter-spacing:0.1em;text-transform:uppercase;font-family:sans-serif}
+    .err{color:#f87171;font-size:13px;background:#1a0d0d;padding:16px;border-radius:8px;
+      max-width:90vw;width:100%;word-break:break-all;white-space:pre-wrap;max-height:60vh;overflow:auto}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* ── Pulsante sito pubblico (bottom-right corner) ── */
+    #site-fab {
+      position: fixed; bottom: 80px; right: 16px; z-index: 9000;
+      display: none; /* mostrato solo dopo login */
+      align-items: center; gap: 8px;
+      background: #1a4fa0; color: #fff;
+      border: none; border-radius: 50px; cursor: pointer;
+      padding: 10px 16px 10px 12px;
+      font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500;
+      box-shadow: 0 4px 20px rgba(26,79,160,0.5);
+      transition: all 0.2s; text-decoration: none;
+      letter-spacing: 0.02em;
+    }
+    #site-fab:hover { background: #1555c0; transform: translateY(-2px); }
+    #site-fab svg { flex-shrink: 0; }
+
+    /* ── Toast "dati sincronizzati" ── */
+    #sync-toast {
+      position: fixed; bottom: 130px; right: 16px; z-index: 9001;
+      background: #0a2016; border: 1px solid #14532d; color: #4ade80;
+      border-radius: 8px; padding: 8px 14px;
+      font-family: 'DM Sans', sans-serif; font-size: 12px;
+      opacity: 0; transition: opacity 0.4s; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="logo">♪ Accademia Musicale</div>
+    <div class="spinner" id="spinner"></div>
+    <div class="sub" id="status">Caricamento app.js...</div>
+  </div>
+  <div id="root"></div>
+
+  <!-- FAB sito pubblico — mostrato dopo login -->
+  <a id="site-fab" href="index.html" target="_blank" title="Apri il sito pubblico">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+    </svg>
+    Sito Web
+  </a>
+  <div id="sync-toast">✓ Dati sincronizzati</div>
+
+  <script>
+    window.onerror = function(msg, src, line, col, err) {
+      document.getElementById('spinner').style.display = 'none';
+      document.getElementById('status').style.display = 'none';
+      var d = document.createElement('div');
+      d.className = 'err';
+      d.textContent = 'JS ERROR:\n' + msg + '\nLine: ' + line + '\nCol: ' + col + '\nFile: ' + src;
+      document.getElementById('loading').appendChild(d);
+    };
+    window.onunhandledrejection = function(e) {
+      document.getElementById('spinner').style.display = 'none';
+      var d = document.createElement('div');
+      d.className = 'err';
+      d.textContent = 'Promise error: ' + (e.reason?.message || e.reason);
+      document.getElementById('loading').appendChild(d);
+    };
+
+    // ── Mostra FAB dopo che l'app è montata e user è loggato ──
+    // Osserva il DOM: quando sparisce il pannello login e appare la sidebar, l'utente è dentro
+    (function() {
+      var fab = document.getElementById('site-fab');
+      var toast = document.getElementById('sync-toast');
+      var shown = false;
+
+      // Intercept localStorage.setItem per mostrare toast quando la webapp sincronizza
+      var origSet = localStorage.setItem.bind(localStorage);
+      localStorage.setItem = function(key, value) {
+        origSet(key, value);
+        if (key === 'fm_admin_data' && shown) {
+          toast.style.opacity = '1';
+          clearTimeout(toast._t);
+          toast._t = setTimeout(function(){ toast.style.opacity = '0'; }, 2500);
+        }
+      };
+
+      // Mostra il FAB quando la sidebar desktop (class sidebar-desktop) è nel DOM
+      var observer = new MutationObserver(function() {
+        if (!shown && document.querySelector('.sidebar-desktop')) {
+          shown = true;
+          fab.style.display = 'flex';
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+    })();
+  </script>
+
+  <script src="./app.js" onerror="document.getElementById('status').textContent='ERRORE: app.js non trovato (404). Carica il file su GitHub!'"></script>
+
+  <script>
+    (function() {
+      document.getElementById('status').textContent = 'Avvio React...';
+      var rootEl = document.getElementById('root');
+      var loadingEl = document.getElementById('loading');
+      try {
+        if (window.__BOOT_ERROR) throw window.__BOOT_ERROR;
+        var AppComponent = window.__AppComponent;
+        if (!AppComponent) throw new Error('App non trovato - app.js caricato ma App non definita');
+        var root = ReactDOM.createRoot(rootEl);
+        root.render(React.createElement(AppComponent));
+        loadingEl.style.opacity = '0';
+        loadingEl.style.transition = 'opacity 0.4s';
+        setTimeout(function() { loadingEl.style.display = 'none'; }, 450);
+      } catch(err) {
+        document.getElementById('spinner').style.display = 'none';
+        document.getElementById('status').textContent = '⚠️ Errore avvio';
+        var d = document.createElement('div');
+        d.className = 'err';
+        d.textContent = 'ERRORE:\n' + (err.stack || err.message || String(err));
+        loadingEl.appendChild(d);
+      }
+    })();
+  </script>
+</body>
+</html>
