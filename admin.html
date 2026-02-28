@@ -468,7 +468,18 @@
 
   <!-- Topbar -->
   <div class="topbar">
-    <div class="topbar-title" id="panel-title">Dashboard</div>
+    <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+      <button id="back-btn" onclick="showPanel('dashboard')"
+        style="display:none;align-items:center;gap:6px;padding:7px 13px;
+               border:1.5px solid #dde1e7;border-radius:8px;background:#fff;
+               color:#1a4fa0;font-size:13px;font-weight:600;cursor:pointer;
+               white-space:nowrap;transition:all 0.15s;font-family:inherit;"
+        onmouseover="this.style.background='#eef2fb';this.style.borderColor='#1a4fa0'"
+        onmouseout="this.style.background='#fff';this.style.borderColor='#dde1e7'">
+        ← Dashboard
+      </button>
+      <div class="topbar-title" id="panel-title">Dashboard</div>
+    </div>
     <div class="topbar-actions">
       <button class="btn-preview" onclick="window.open('index.html','_blank')">👁 Vedi Sito Live</button>
       <button class="btn-logout" onclick="logout()">Esci</button>
@@ -756,19 +767,33 @@ function saveData() {
 // ─────────────── VISIBILITY ───────────────
 
 function toggleItem(section, idx) {
-  DATA[section][idx].visible = DATA[section][idx].visible === false ? true : false;
-  if (section === 'corsi')        renderCorsi();
-  if (section === 'complementari') renderComp();
-  if (section === 'concerti')      renderConcerti();
-  if (section === 'attivita')      renderVisibilita();
-  saveData();
+  try {
+    const attuale = DATA[section][idx].visible !== false;
+    DATA[section][idx].visible = !attuale;
+    saveData();
+    if (section === 'corsi')         renderCorsi();
+    if (section === 'complementari') renderComp();
+    if (section === 'concerti')      renderConcerti();
+    if (section === 'attivita')      renderVisibilita();
+    showToast((DATA[section][idx].visible ? '✅ Elemento visibile' : '🙈 Elemento nascosto'));
+  } catch(e) {
+    console.error('toggleItem error:', e);
+  }
 }
 
 function toggleSezione(key) {
-  if (!DATA.sezioni) DATA.sezioni = {};
-  DATA.sezioni[key] = DATA.sezioni[key] === false ? true : false;
-  renderVisibilita();
-  saveData();
+  try {
+    if (!DATA.sezioni) DATA.sezioni = {};
+    // legge lo stato corrente: se non è esplicitamente false, è visibile (true)
+    const attuale = DATA.sezioni[key] !== false;
+    DATA.sezioni[key] = !attuale; // toggle
+    saveData();
+    renderVisibilita();
+    showToast((DATA.sezioni[key] ? '✅ Sezione visibile sul sito' : '🙈 Sezione nascosta dal sito'));
+  } catch(e) {
+    console.error('toggleSezione error:', e);
+    showToast('Errore: ' + e.message);
+  }
 }
 
 function renderVisibilita() {
@@ -787,15 +812,20 @@ function renderVisibilita() {
   grid.innerHTML = SEZIONI_DEF.map(s => {
     const on = sezioni[s.key] !== false;
     return `
-    <div class="sezione-card ${on ? 'sec-on' : 'sec-off'}" onclick="toggleSezione('${s.key}')">
+    <div class="sezione-card ${on ? 'sec-on' : 'sec-off'}">
       <div class="sc-left">
         <span class="sc-icon">${s.icon}</span>
         <div class="sc-info">
           <span class="sc-name">${s.nome}</span>
-          <span class="sc-desc">${s.desc}</span>
+          <span class="sc-desc">${s.desc} — attualmente <strong>${on ? 'visibile' : 'nascosta'}</strong></span>
         </div>
       </div>
-      <div class="sc-switch ${on ? 'sw-on' : 'sw-off'}"></div>
+      <button onclick="toggleSezione('${s.key}')"
+        style="padding:8px 18px;border-radius:20px;border:2px solid;cursor:pointer;
+               font-size:13px;font-weight:700;font-family:inherit;transition:all 0.18s;
+               ${on ? 'background:#eafaf1;border-color:#27ae60;color:#1e8449;' : 'background:#fdf2f2;border-color:#e74c3c;color:#c0392b;'}">
+        ${on ? '👁 Visibile' : '🙈 Nascosta'}
+      </button>
     </div>`;
   }).join('');
 
@@ -839,26 +869,39 @@ function showPanel(id) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
   document.getElementById('panel-' + id).classList.add('active');
-  document.querySelectorAll('.sidebar-item').forEach(i => { if(i.textContent.toLowerCase().includes(panelTitles[id].split(' ')[0].toLowerCase())) i.classList.add('active'); });
-  document.querySelector('.sidebar-item[onclick*="' + id + '"]').classList.add('active');
-  document.getElementById('panel-title').textContent = panelTitles[id];
+  try {
+    document.querySelector('.sidebar-item[onclick*="' + id + '"]').classList.add('active');
+  } catch(e) {}
+  document.getElementById('panel-title').textContent = panelTitles[id] || id;
+  // Mostra/nascondi back button
+  const backBtn = document.getElementById('back-btn');
+  if (backBtn) backBtn.style.display = (id === 'dashboard') ? 'none' : 'inline-flex';
+  // Render pannello visibilità quando viene aperto
+  if (id === 'visibilita') renderVisibilita();
   updateStats();
 }
 
 // ─────────────── RENDER ───────────────
 function renderAll() {
   // Migrazione: aggiungi visible:true agli item se mancante (dati salvati in precedenza)
+  let needsSave = false;
   ['corsi','complementari','concerti'].forEach(key => {
-    if (DATA[key]) DATA[key].forEach(item => { if (item.visible === undefined) item.visible = true; });
+    if (DATA[key]) DATA[key].forEach(item => { if (item.visible === undefined) { item.visible = true; needsSave = true; } });
   });
-  if (!DATA.sezioni) DATA.sezioni = { corsi:true, complementari:true, concerti:true, attivita:true, social:true, contatti:true };
-  if (!DATA.attivita) DATA.attivita = [
+  if (!DATA.sezioni) {
+    DATA.sezioni = { corsi:true, complementari:true, concerti:true, attivita:true, social:true, contatti:true };
+    needsSave = true;
+  }
+  if (!DATA.attivita) {
+    needsSave = true;
+    DATA.attivita = [
     { titolo:'Ensemble e Orchestra', desc:'Ensemble da camera, orchestra giovanile e band rock.', visible:true },
     { titolo:'Saggi di Fine Anno', desc:'Esibizione annuale degli allievi.', visible:true },
     { titolo:'Open Day & Prove Libere', desc:'Giornate aperte alla comunità.', visible:true },
     { titolo:'Workshop Tematici', desc:'Incontri intensivi su temi musicali.', visible:true },
     { titolo:'Coro Associativo', desc:"Il coro misto aperto a tutti i livelli.", visible:true },
   ];
+  if (needsSave) saveData(); // Salva migrazione prima di rendere
   renderCorsi(); renderComp(); renderConcerti();
   loadContatti(); loadTesti();
   renderVisibilita();
