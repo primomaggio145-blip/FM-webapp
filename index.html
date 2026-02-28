@@ -1447,22 +1447,34 @@
     }
   }
 
-  // ── 6. SEZIONI — mostra/nascondi intere sezioni ──
+  // ── 6. SEZIONI — visibilità + ordine ──────────────────────
   try {
-    const S = DATA.sezioni || {};
-    const sectionIds = ['corsi','complementari','concerti','attivita','social','contatti'];
-    sectionIds.forEach(key => {
+    const S  = DATA.sezioni || {};
+    const ORD = DATA.ordine || ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'];
+
+    // 6a. Riordina le sezioni nel DOM
+    const parent = document.body;
+    const footer = document.querySelector('footer');
+    ORD.forEach(key => {
+      const sec = document.getElementById(key);
+      if (sec) parent.insertBefore(sec, footer); // sposta prima del footer, in ordine
+    });
+
+    // 6b. Visibilità sezioni principali
+    const ALL_IDS = ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'];
+    ALL_IDS.forEach(key => {
       const sec = document.getElementById(key);
       if (!sec) return;
-      // Nascondi solo se il valore è ESPLICITAMENTE false (boolean)
-      const nascosta = (S[key] === false || S[key] === 'false');
+      const nascosta = S[key] === false;
       sec.style.display = nascosta ? 'none' : '';
-      // Nascondi anche il link nella navbar
-      const navLink = document.querySelector('a[href="#' + key + '"]') ||
-                      document.querySelector('.nav-link[href="#' + key + '"]');
-      if (navLink) navLink.style.display = nascosta ? 'none' : '';
     });
-  } catch(e) { console.warn('Sezioni visibility error:', e); }
+
+    // 6c. Sub-sezioni speciali
+    // stats_box — "Una comunità in continua crescita"
+    const statsBox = document.getElementById('stats-box');
+    if (statsBox) statsBox.style.display = (S.stats_box === false) ? 'none' : '';
+
+  } catch(e) { console.warn('Sezioni/ordine error:', e); }
 
   // ── 7. ATTIVITÀ — aggiorna lista attività ──
   if (DATA.attivita) {
