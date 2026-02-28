@@ -808,7 +808,30 @@ function saveData() {
   localStorage.setItem('fm_admin_data', JSON.stringify(DATA));
   localStorage.setItem('fm_last_save', new Date().toISOString());
   updateLastSave();
+  // Genera e salva il CSS di visibilità — iniettato nell'<head> del sito
+  applyVisCSS();
   showToast('Salvato! Il sito è aggiornato.');
+}
+
+function applyVisCSS() {
+  try {
+    const S = DATA.sezioni || {};
+    const ordine = DATA.ordine || [];
+    let css = '';
+    // Sezioni nascoste
+    const SECTION_IDS = ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'];
+    SECTION_IDS.forEach(id => {
+      if (S[id] === false) css += '#' + id + '{display:none!important}\n';
+    });
+    // Sub-sezioni speciali
+    if (S.stats_box === false) css += '#stats-box{display:none!important}\n';
+    // Ordine sezioni via CSS order (flex) — alternativa robusta
+    // (non si può riordinare sezioni statiche con solo CSS, lo facciamo in JS sotto)
+    localStorage.setItem('fm_vis_css', css);
+    // Aggiorna anche il CSS live nella pagina admin (feedback immediato)
+    let styleEl = document.getElementById('fm-vis-preview');
+    if (!styleEl) { styleEl = document.createElement('style'); styleEl.id = 'fm-vis-preview'; document.head.appendChild(styleEl); }
+  } catch(e) { console.warn('applyVisCSS:', e); }
 }
 
 // ─────────────── VISIBILITY ───────────────
@@ -1054,7 +1077,7 @@ function renderAll() {
       { titolo:'Coro Associativo', desc:"Il coro misto aperto a tutti i livelli.", visible:true },
     ];
   }
-  if (needsSave) saveData();
+  if (needsSave) saveData(); else applyVisCSS();
   renderCorsi(); renderComp(); renderConcerti();
   loadContatti(); loadTesti();
   renderVisibilita();
