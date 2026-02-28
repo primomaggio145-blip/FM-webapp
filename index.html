@@ -1286,11 +1286,13 @@
 
 (function() {
   const KEY = 'fm_admin_data';
-  const raw = localStorage.getItem(KEY);
+  let raw;
+  try { raw = localStorage.getItem(KEY); } catch(e) { return; }
   if (!raw) return; // No admin data yet → keep static HTML
 
   let DATA;
-  try { DATA = JSON.parse(raw); } catch(e) { return; }
+  try { DATA = JSON.parse(raw); } catch(e) { console.warn('Admin data parse error:', e); return; }
+  if (!DATA || typeof DATA !== 'object') return;
 
   const monthsIT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
 
@@ -1446,29 +1448,21 @@
   }
 
   // ── 6. SEZIONI — mostra/nascondi intere sezioni ──
-  if (DATA.sezioni) {
-    const S = DATA.sezioni;
-    const sectionMap = {
-      corsi: document.getElementById('corsi'),
-      complementari: document.getElementById('complementari'),
-      concerti: document.getElementById('concerti'),
-      attivita: document.getElementById('attivita'),
-      social: document.getElementById('social'),
-      contatti: document.getElementById('contatti'),
-    };
-    Object.entries(sectionMap).forEach(([key, sec]) => {
-      if (sec) sec.style.display = (S[key] === false) ? 'none' : '';
+  try {
+    const S = DATA.sezioni || {};
+    const sectionIds = ['corsi','complementari','concerti','attivita','social','contatti'];
+    sectionIds.forEach(key => {
+      const sec = document.getElementById(key);
+      if (!sec) return;
+      // Nascondi solo se il valore è ESPLICITAMENTE false (boolean)
+      const nascosta = (S[key] === false || S[key] === 'false');
+      sec.style.display = nascosta ? 'none' : '';
+      // Nascondi anche il link nella navbar
+      const navLink = document.querySelector('a[href="#' + key + '"]') ||
+                      document.querySelector('.nav-link[href="#' + key + '"]');
+      if (navLink) navLink.style.display = nascosta ? 'none' : '';
     });
-    // Aggiorna anche i link di navigazione nella navbar
-    const navLinks = document.querySelectorAll('nav a[href], .nav-link');
-    navLinks.forEach(link => {
-      const href = link.getAttribute('href') || '';
-      const secKey = href.replace('#','');
-      if (sectionMap[secKey] && S[secKey] === false) {
-        link.style.display = 'none';
-      }
-    });
-  }
+  } catch(e) { console.warn('Sezioni visibility error:', e); }
 
   // ── 7. ATTIVITÀ — aggiorna lista attività ──
   if (DATA.attivita) {
