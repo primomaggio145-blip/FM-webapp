@@ -2,6 +2,20 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
+<!-- ── VISIBILITY CSS INJECT — deve essere il primo script ── -->
+<script>
+(function(){
+  try {
+    var css = localStorage.getItem('fm_vis_css');
+    if (css) {
+      var s = document.createElement('style');
+      s.id = 'fm-vis-css';
+      s.textContent = css;
+      document.head.appendChild(s);
+    }
+  } catch(e) {}
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Futuro Musica — Associazione Artistico Musicale</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet">
@@ -1447,34 +1461,17 @@
     }
   }
 
-  // ── 6. SEZIONI — visibilità + ordine ──────────────────────
+  // ── 6. ORDINE sezioni (visibilità gestita da CSS nell'<head>) ──
   try {
-    const S  = DATA.sezioni || {};
     const ORD = DATA.ordine || ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'];
-
-    // 6a. Riordina le sezioni nel DOM
-    const parent = document.body;
     const footer = document.querySelector('footer');
-    ORD.forEach(key => {
-      const sec = document.getElementById(key);
-      if (sec) parent.insertBefore(sec, footer); // sposta prima del footer, in ordine
-    });
-
-    // 6b. Visibilità sezioni principali
-    const ALL_IDS = ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'];
-    ALL_IDS.forEach(key => {
-      const sec = document.getElementById(key);
-      if (!sec) return;
-      const nascosta = S[key] === false;
-      sec.style.display = nascosta ? 'none' : '';
-    });
-
-    // 6c. Sub-sezioni speciali
-    // stats_box — "Una comunità in continua crescita"
-    const statsBox = document.getElementById('stats-box');
-    if (statsBox) statsBox.style.display = (S.stats_box === false) ? 'none' : '';
-
-  } catch(e) { console.warn('Sezioni/ordine error:', e); }
+    if (footer) {
+      ORD.forEach(key => {
+        const sec = document.getElementById(key);
+        if (sec) document.body.insertBefore(sec, footer);
+      });
+    }
+  } catch(e) { console.warn('Ordine sezioni error:', e); }
 
   // ── 7. ATTIVITÀ — aggiorna lista attività ──
   if (DATA.attivita) {
