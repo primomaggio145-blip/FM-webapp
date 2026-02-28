@@ -1338,7 +1338,8 @@
 
   // ── 2. CORSI PRINCIPALI ──
   if (DATA.corsi && el('corsi-grid')) {
-    el('corsi-grid').innerHTML = DATA.corsi.map((c, i) => `
+    const visibleCorsi = DATA.corsi.filter(c => c.visible !== false);
+    el('corsi-grid').innerHTML = visibleCorsi.map((c, i) => `
       <div class="corso-card reveal">
         <div class="corso-photo-wrap">
           <img class="corso-photo" src="${c.foto}" alt="Corso di ${c.nome}"
@@ -1357,7 +1358,8 @@
 
   // ── 3. CORSI COMPLEMENTARI ──
   if (DATA.complementari && el('comp-grid')) {
-    el('comp-grid').innerHTML = DATA.complementari.map((c, i) => `
+    const visibleComp = DATA.complementari.filter(c => c.visible !== false);
+    el('comp-grid').innerHTML = visibleComp.map((c, i) => `
       <div class="comp-card reveal">
         <div class="comp-photo-wrap">
           <img class="comp-photo" src="${c.foto}" alt="${c.nome}"
@@ -1372,7 +1374,7 @@
 
   // ── 4. CONCERTI ──
   if (DATA.concerti && el('concerti-grid')) {
-    const sorted = [...DATA.concerti].sort((a,b) => new Date(a.data) - new Date(b.data));
+    const sorted = [...DATA.concerti].filter(c => c.visible !== false).sort((a,b) => new Date(a.data) - new Date(b.data));
     const concertiHTML = sorted.map((ev, i) => {
       const dt = ev.data ? new Date(ev.data + 'T00:00:00') : null;
       const day   = dt ? dt.getDate() : '--';
@@ -1443,7 +1445,48 @@
     }
   }
 
-  // ── 6. Re-run IntersectionObserver on new cards ──
+  // ── 6. SEZIONI — mostra/nascondi intere sezioni ──
+  if (DATA.sezioni) {
+    const S = DATA.sezioni;
+    const sectionMap = {
+      corsi: document.getElementById('corsi'),
+      complementari: document.getElementById('complementari'),
+      concerti: document.getElementById('concerti'),
+      attivita: document.getElementById('attivita'),
+      social: document.getElementById('social'),
+      contatti: document.getElementById('contatti'),
+    };
+    Object.entries(sectionMap).forEach(([key, sec]) => {
+      if (sec) sec.style.display = (S[key] === false) ? 'none' : '';
+    });
+    // Aggiorna anche i link di navigazione nella navbar
+    const navLinks = document.querySelectorAll('nav a[href], .nav-link');
+    navLinks.forEach(link => {
+      const href = link.getAttribute('href') || '';
+      const secKey = href.replace('#','');
+      if (sectionMap[secKey] && S[secKey] === false) {
+        link.style.display = 'none';
+      }
+    });
+  }
+
+  // ── 7. ATTIVITÀ — aggiorna lista attività ──
+  if (DATA.attivita) {
+    const attList = document.querySelector('#attivita .attivita-list');
+    if (attList) {
+      const visAtt = DATA.attivita.filter(a => a.visible !== false);
+      attList.innerHTML = visAtt.map((a, i) => `
+        <div class="attivita-item ${i===0?'active':''}" onclick="setActiveAttivita(this)">
+          <span class="attivita-num">0${i+1}</span>
+          <div class="attivita-info">
+            <h3>${a.titolo}</h3>
+            <p>${a.desc}</p>
+          </div>
+        </div>`).join('');
+    }
+  }
+
+  // ── 8. Re-run IntersectionObserver on new cards ──
   const observer = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
   }, { threshold: 0.08 });
