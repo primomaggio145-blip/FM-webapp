@@ -305,6 +305,91 @@
     .concerto-row { grid-template-columns: 1fr; }
     .concerto-header { display: none; }
   }
+
+  /* ── VISIBILITY SYSTEM ─────────────────────────────────── */
+  .vis-toggle-btn {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 13px; border-radius: 20px; border: 1.5px solid;
+    cursor: pointer; font-size: 12px; font-weight: 600;
+    transition: all 0.18s; font-family: inherit; letter-spacing: 0.02em;
+  }
+  .vis-toggle-btn.on  { background: #eafaf1; border-color: #27ae60; color: #1e8449; }
+  .vis-toggle-btn.off { background: #fdf2f2; border-color: #e74c3c; color: #c0392b; }
+  .vis-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .vis-toggle-btn.on  .vis-dot { background: #27ae60; }
+  .vis-toggle-btn.off .vis-dot { background: #e74c3c; }
+
+  .card-top-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px 10px 16px;
+    border-bottom: 1px solid #f0f0f0; background: #fafafa;
+    border-radius: 12px 12px 0 0; flex-shrink: 0;
+  }
+  .card-top-name { font-size: 13px; font-weight: 700; color: #333; }
+  .edit-card.card-hidden { opacity: 0.4; }
+  .edit-card.card-hidden .card-photo-preview { filter: grayscale(1); }
+
+  .concerto-row-vis {
+    display: flex; align-items: center; gap: 0;
+  }
+  .concerto-vis-cell {
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 6px;
+  }
+  .vis-icon-btn {
+    background: none; border: none; cursor: pointer; font-size: 1.05rem;
+    padding: 4px 6px; border-radius: 6px; transition: background 0.15s; line-height: 1;
+    title: attr(title);
+  }
+  .vis-icon-btn:hover { background: #f0f0f0; }
+  .concerto-row.row-hidden { opacity: 0.4; background: #fff5f5 !important; }
+
+  /* Attività panel */
+  .attivita-admin-list { display: flex; flex-direction: column; gap: 10px; }
+  .attivita-admin-row {
+    display: grid; grid-template-columns: auto 1fr auto;
+    gap: 12px; align-items: start;
+    background: #fff; border: 1.5px solid #e8e8e8; border-radius: 10px; padding: 14px 16px;
+    transition: all 0.2s;
+  }
+  .attivita-admin-row.row-hidden { opacity: 0.4; border-color: #f5c6c6; background: #fff8f8; }
+  .attivita-drag { color: #bbb; cursor: grab; font-size: 1.1rem; padding-top: 2px; }
+  .attivita-fields { display: flex; flex-direction: column; gap: 6px; }
+  .attivita-fields input { border: 1px solid #e0e0e0; border-radius: 6px; padding: 6px 10px; font-size: 13px; width: 100%; }
+  .attivita-fields textarea { border: 1px solid #e0e0e0; border-radius: 6px; padding: 6px 10px; font-size: 12px; width: 100%; resize: vertical; }
+
+  /* Sezioni panel */
+  .sezioni-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
+  @media (max-width: 600px) { .sezioni-grid { grid-template-columns: 1fr; } }
+  .sezione-card {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 18px 20px; border-radius: 12px; border: 2px solid;
+    cursor: pointer; transition: all 0.2s; user-select: none;
+  }
+  .sezione-card.sec-on  { border-color: #27ae60; background: #eafaf1; }
+  .sezione-card.sec-off { border-color: #e74c3c; background: #fdf2f2; }
+  .sezione-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+  .sc-left { display: flex; align-items: center; gap: 14px; }
+  .sc-icon { font-size: 1.5rem; }
+  .sc-info { display: flex; flex-direction: column; gap: 2px; }
+  .sc-name { font-size: 14px; font-weight: 700; color: #222; }
+  .sc-desc { font-size: 11px; color: #888; }
+  .sc-switch {
+    width: 44px; height: 24px; border-radius: 24px; flex-shrink: 0;
+    transition: background 0.25s; position: relative;
+    border: none;
+  }
+  .sc-switch.sw-on  { background: #27ae60; }
+  .sc-switch.sw-off { background: #e74c3c; }
+  .sc-switch::after {
+    content: ''; position: absolute; top: 2px; width: 20px; height: 20px;
+    border-radius: 50%; background: white;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25); transition: left 0.25s;
+  }
+  .sc-switch.sw-on::after  { left: calc(100% - 22px); }
+  .sc-switch.sw-off::after { left: 2px; }
+  /* ─────────────────────────────────────────────────────── */
+
 </style>
 </head>
 <body>
@@ -354,6 +439,9 @@
       </div>
       <div class="sidebar-item" onclick="showPanel('testi')">
         <span class="sidebar-item-icon">✏️</span> Testi del Sito
+      </div>
+      <div class="sidebar-item" onclick="showPanel('visibilita')">
+        <span class="sidebar-item-icon">👁</span> Visibilità
       </div>
     </div>
     <div style="padding: 12px 16px; margin-top: auto; border-top: 1px solid rgba(255,255,255,0.08);">
@@ -444,7 +532,7 @@
         <p>Aggiungi, modifica o rimuovi gli eventi in calendario. Vengono mostrati in ordine di data.</p>
       </div>
       <div class="concerto-header">
-        <span>Data</span><span>Ora</span><span>Titolo evento</span><span>Luogo</span><span>Ingresso</span><span></span>
+        <span>Data</span><span>Ora</span><span>Titolo evento</span><span>Luogo</span><span>Ingresso</span><span title="Visibilità">👁</span><span></span>
       </div>
       <div class="concerti-list" id="concerti-list"></div>
       <button class="btn-add-event" onclick="addConcerto()">+ Aggiungi evento</button>
@@ -486,6 +574,21 @@
           <div class="form-group"><label>URL profilo Instagram</label><input type="url" id="ig-url" placeholder="https://instagram.com/futuromusica"></div>
         </div>
         <button class="btn-save" onclick="saveContatti()" style="padding:13px 36px;">Salva Contatti</button>
+      </div>
+    </div>
+
+    <!-- VISIBILITÀ -->
+    <div class="panel" id="panel-visibilita">
+      <div class="panel-header">
+        <h2>Visibilità Sezioni</h2>
+        <p>Attiva o disattiva intere sezioni del sito. I contenuti rimangono salvati — puoi riabilitarli quando vuoi.</p>
+      </div>
+      <div class="sezioni-grid" id="sezioni-vis-grid"></div>
+
+      <div style="margin-top:32px;">
+        <h3 style="font-size:1rem;margin-bottom:6px;color:#333;">Attività Interne</h3>
+        <p style="font-size:12px;color:#888;margin-bottom:14px;">Mostra o nascondi le singole voci nell'elenco Attività del sito.</p>
+        <div class="attivita-admin-list" id="attivita-vis-list"></div>
       </div>
     </div>
 
@@ -562,30 +665,41 @@ const ADMIN_PASSWORD = 'futuromusica2025'; // ← cambia questa password!
 
 const DEFAULT_DATA = {
   corsi: [
-    { nome: 'Pianoforte', desc: 'Dal solfeggio alle grandi opere classiche e contemporanee. Lezioni individuali con metodo personalizzato.', livelli: 'Principiante, Intermedio, Avanzato', foto: 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=600&q=80&fit=crop' },
-    { nome: 'Chitarra', desc: 'Classica, acustica ed elettrica. Tecnica, armonia, improvvisazione e repertorio moderno e tradizionale.', livelli: 'Principiante, Intermedio, Avanzato', foto: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=600&q=80&fit=crop' },
-    { nome: 'Violino', desc: "Tecnica d'arco, postura, intonazione e interpretazione musicale. Repertorio classico e contemporaneo.", livelli: 'Base, Avanzato', foto: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80&fit=crop' },
-    { nome: 'Ottoni & Fiati', desc: 'Tromba, trombone, flauto, clarinetto e sassofono. Tecnica respiratoria, repertorio orchestrale e jazz.', livelli: 'Principiante, Avanzato', foto: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&q=80&fit=crop' },
-    { nome: 'Batteria & Percussioni', desc: "Ritmica, coordinazione, stili (rock, jazz, latino) e musica d'insieme. Per bambini e adulti.", livelli: 'Principiante, Intermedio', foto: 'https://images.unsplash.com/photo-1519892300165-cb5542fb47c7?w=600&q=80&fit=crop' },
-    { nome: 'Canto', desc: 'Tecnica vocale, respirazione, interpretazione, repertorio lirico e pop. Individuale e corale.', livelli: 'Tutti i livelli', foto: 'https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=600&q=80&fit=crop' },
+    { nome: 'Pianoforte', desc: 'Dal solfeggio alle grandi opere classiche e contemporanee. Lezioni individuali con metodo personalizzato.', livelli: 'Principiante, Intermedio, Avanzato', foto: 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Chitarra', desc: 'Classica, acustica ed elettrica. Tecnica, armonia, improvvisazione e repertorio moderno e tradizionale.', livelli: 'Principiante, Intermedio, Avanzato', foto: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Violino', desc: "Tecnica d'arco, postura, intonazione e interpretazione musicale. Repertorio classico e contemporaneo.", livelli: 'Base, Avanzato', foto: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Ottoni & Fiati', desc: 'Tromba, trombone, flauto, clarinetto e sassofono. Tecnica respiratoria, repertorio orchestrale e jazz.', livelli: 'Principiante, Avanzato', foto: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Batteria & Percussioni', desc: "Ritmica, coordinazione, stili (rock, jazz, latino) e musica d'insieme. Per bambini e adulti.", livelli: 'Principiante, Intermedio', foto: 'https://images.unsplash.com/photo-1519892300165-cb5542fb47c7?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Canto', desc: 'Tecnica vocale, respirazione, interpretazione, repertorio lirico e pop. Individuale e corale.', livelli: 'Tutti i livelli', foto: 'https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=600&q=80&fit=crop', visible: true },
   ],
   complementari: [
-    { nome: 'Teoria Musicale', desc: 'Solfeggio, armonia, analisi. Le fondamenta teoriche per comprendere e comunicare la musica.', foto: 'https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=500&q=80&fit=crop' },
-    { nome: 'Produzione Musicale', desc: 'DAW, campionatori, arrangiamento digitale. Crea e produci musica con gli strumenti moderni.', foto: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=500&q=80&fit=crop' },
-    { nome: "Musica d'Insieme", desc: "Suonare in ensemble misti: comunicazione, ascolto reciproco e spirito di squadra musicale.", foto: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=500&q=80&fit=crop' },
-    { nome: 'Storia della Musica', desc: 'Dal Medioevo al contemporaneo: un viaggio culturale attraverso i secoli della grande musica.', foto: 'https://images.unsplash.com/photo-1446057032654-9d8885db76c6?w=500&q=80&fit=crop' },
-    { nome: 'Dizione e Fonetica', desc: 'Per cantanti e strumentisti: tecnica di respirazione, dizione italiana e interpretazione del testo.', foto: 'https://images.unsplash.com/photo-1501612780327-45045538702b?w=500&q=80&fit=crop' },
-    { nome: 'Psicologia del Musicista', desc: "Gestione dell'ansia da palcoscenico, concentrazione e studio efficace.", foto: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=500&q=80&fit=crop' },
-    { nome: 'Musica Leggera & Pop', desc: 'Armonia moderna, cifre, accompagnamento. Il percorso per suonare la musica di oggi.', foto: 'https://images.unsplash.com/photo-1487215078519-e21cc028cb29?w=500&q=80&fit=crop' },
-    { nome: 'Preparazione Esami', desc: 'Preparazione specifica per Conservatorio, esami di diploma e certificazioni ufficiali.', foto: 'https://images.unsplash.com/photo-1434873740857-1bc5653afda8?w=500&q=80&fit=crop' },
+    { nome: 'Teoria Musicale', desc: 'Solfeggio, armonia, analisi. Le fondamenta teoriche per comprendere e comunicare la musica.', foto: 'https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Produzione Musicale', desc: 'DAW, campionatori, arrangiamento digitale. Crea e produci musica con gli strumenti moderni.', foto: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=500&q=80&fit=crop', visible: true },
+    { nome: "Musica d'Insieme", desc: "Suonare in ensemble misti: comunicazione, ascolto reciproco e spirito di squadra musicale.", foto: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Storia della Musica', desc: 'Dal Medioevo al contemporaneo: un viaggio culturale attraverso i secoli della grande musica.', foto: 'https://images.unsplash.com/photo-1446057032654-9d8885db76c6?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Dizione e Fonetica', desc: 'Per cantanti e strumentisti: tecnica di respirazione, dizione italiana e interpretazione del testo.', foto: 'https://images.unsplash.com/photo-1501612780327-45045538702b?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Psicologia del Musicista', desc: "Gestione dell'ansia da palcoscenico, concentrazione e studio efficace.", foto: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Musica Leggera & Pop', desc: 'Armonia moderna, cifre, accompagnamento. Il percorso per suonare la musica di oggi.', foto: 'https://images.unsplash.com/photo-1487215078519-e21cc028cb29?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Preparazione Esami', desc: 'Preparazione specifica per Conservatorio, esami di diploma e certificazioni ufficiali.', foto: 'https://images.unsplash.com/photo-1434873740857-1bc5653afda8?w=500&q=80&fit=crop', visible: true },
   ],
   concerti: [
-    { data: '2025-03-15', ora: '20:30', titolo: 'Serata di Musica da Camera', luogo: 'Aula Magna, Sede Associazione', ingresso: 'Ingresso libero', badge: 'Ensemble' },
-    { data: '2025-03-28', ora: '21:00', titolo: 'Jazz Night — Docenti in Concerto', luogo: 'Teatro Comunale', ingresso: '8€', badge: 'Jazz' },
-    { data: '2025-04-12', ora: '16:00', titolo: 'Primavera Musicale — Saggio Allievi', luogo: 'Auditorium Civico', ingresso: 'Ingresso libero', badge: 'Saggio' },
-    { data: '2025-05-03', ora: '18:30', titolo: 'Orchestra Giovanile — Concerto di Primavera', luogo: 'Piazza Centrale', ingresso: 'Ingresso libero', badge: 'Orchestra' },
-    { data: '2025-06-20', ora: '17:00', titolo: 'Grande Saggio di Fine Anno', luogo: 'Teatro Principale', ingresso: 'Ingresso su invito', badge: 'Fine Anno' },
+    { data: '2025-03-15', ora: '20:30', titolo: 'Serata di Musica da Camera', luogo: 'Aula Magna, Sede Associazione', ingresso: 'Ingresso libero', badge: 'Ensemble', visible: true },
+    { data: '2025-03-28', ora: '21:00', titolo: 'Jazz Night — Docenti in Concerto', luogo: 'Teatro Comunale', ingresso: '8€', badge: 'Jazz', visible: true },
+    { data: '2025-04-12', ora: '16:00', titolo: 'Primavera Musicale — Saggio Allievi', luogo: 'Auditorium Civico', ingresso: 'Ingresso libero', badge: 'Saggio', visible: true },
+    { data: '2025-05-03', ora: '18:30', titolo: 'Orchestra Giovanile — Concerto di Primavera', luogo: 'Piazza Centrale', ingresso: 'Ingresso libero', badge: 'Orchestra', visible: true },
+    { data: '2025-06-20', ora: '17:00', titolo: 'Grande Saggio di Fine Anno', luogo: 'Teatro Principale', ingresso: 'Ingresso su invito', badge: 'Fine Anno', visible: true },
   ],
+  attivita: [
+    { titolo: 'Ensemble e Orchestra', desc: 'Ensemble da camera, orchestra giovanile e band rock: suonare insieme è la vera essenza della musica.', visible: true },
+    { titolo: 'Saggi di Fine Anno', desc: 'Ogni anno uno spettacolo dedicato agli allievi: crescita sul palcoscenico e condivisione con le famiglie.', visible: true },
+    { titolo: 'Open Day & Prove Libere', desc: 'Giornate aperte alla comunità per conoscere la scuola e provare gli strumenti gratuitamente.', visible: true },
+    { titolo: 'Workshop Tematici', desc: 'Incontri intensivi su improvvisazione, teoria, home recording e molto altro ancora.', visible: true },
+    { titolo: 'Coro Associativo', desc: "Il coro misto aperto a tutti i livelli: un'esperienza di armonia collettiva e musica corale.", visible: true },
+  ],
+  sezioni: {
+    corsi: true, complementari: true, concerti: true,
+    attivita: true, social: true, contatti: true
+  },
   contatti: {
     addr1: 'Via della Musica, 12', city: 'Città', prov: 'CS',
     phone: '+39 000 000 0000', email: 'info@futuromusica.it',
@@ -638,6 +752,78 @@ function saveData() {
   updateLastSave();
   showToast('Salvato! Il sito è aggiornato.');
 }
+
+// ─────────────── VISIBILITY ───────────────
+
+function toggleItem(section, idx) {
+  DATA[section][idx].visible = DATA[section][idx].visible === false ? true : false;
+  if (section === 'corsi')        renderCorsi();
+  if (section === 'complementari') renderComp();
+  if (section === 'concerti')      renderConcerti();
+  if (section === 'attivita')      renderVisibilita();
+  saveData();
+}
+
+function toggleSezione(key) {
+  if (!DATA.sezioni) DATA.sezioni = {};
+  DATA.sezioni[key] = DATA.sezioni[key] === false ? true : false;
+  renderVisibilita();
+  saveData();
+}
+
+function renderVisibilita() {
+  // ── Griglia sezioni ──
+  const SEZIONI_DEF = [
+    { key:'corsi',         icon:'🎹', nome:'Corsi Principali',    desc:'Sezione con i 6 corsi principali' },
+    { key:'complementari', icon:'📖', nome:'Corsi Complementari', desc:'Sezione con gli 8 corsi extra' },
+    { key:'concerti',      icon:'🎼', nome:'Concerti & Eventi',   desc:'Calendario eventi e concerti' },
+    { key:'attivita',      icon:'🎭', nome:'Attività Interne',    desc:'Ensemble, saggi, workshop...' },
+    { key:'social',        icon:'📸', nome:'Galleria Social',     desc:'Feed Instagram / Facebook' },
+    { key:'contatti',      icon:'📍', nome:'Contatti & Orari',    desc:'Indirizzo, telefono, mappa' },
+  ];
+  const sezioni = DATA.sezioni || {};
+  const grid = document.getElementById('sezioni-vis-grid');
+  if (!grid) return;
+  grid.innerHTML = SEZIONI_DEF.map(s => {
+    const on = sezioni[s.key] !== false;
+    return `
+    <div class="sezione-card ${on ? 'sec-on' : 'sec-off'}" onclick="toggleSezione('${s.key}')">
+      <div class="sc-left">
+        <span class="sc-icon">${s.icon}</span>
+        <div class="sc-info">
+          <span class="sc-name">${s.nome}</span>
+          <span class="sc-desc">${s.desc}</span>
+        </div>
+      </div>
+      <div class="sc-switch ${on ? 'sw-on' : 'sw-off'}"></div>
+    </div>`;
+  }).join('');
+
+  // ── Lista attività ──
+  if (!DATA.attivita) DATA.attivita = [
+    { titolo:'Ensemble e Orchestra', desc:'Ensemble da camera, orchestra giovanile e band rock.', visible:true },
+    { titolo:'Saggi di Fine Anno', desc:'Esibizione annuale degli allievi.', visible:true },
+    { titolo:'Open Day & Prove Libere', desc:'Giornate aperte alla comunità.', visible:true },
+    { titolo:'Workshop Tematici', desc:'Incontri intensivi su temi musicali.', visible:true },
+    { titolo:'Coro Associativo', desc:"Il coro misto aperto a tutti i livelli.", visible:true },
+  ];
+  const attList = document.getElementById('attivita-vis-list');
+  if (!attList) return;
+  attList.innerHTML = DATA.attivita.map((a, i) => {
+    const vis = a.visible !== false;
+    return `
+    <div class="attivita-admin-row ${vis ? '' : 'row-hidden'}">
+      <span class="attivita-drag">⠿</span>
+      <div class="attivita-fields">
+        <input type="text" value="${a.titolo}" placeholder="Titolo" onchange="DATA.attivita[${i}].titolo=this.value">
+        <textarea rows="2" placeholder="Descrizione" onchange="DATA.attivita[${i}].desc=this.value">${a.desc}</textarea>
+      </div>
+      <button class="vis-toggle-btn ${vis ? 'on' : 'off'}" style="flex-shrink:0;margin-top:2px;" onclick="toggleItem('attivita',${i})">
+        <span class="vis-dot"></span>${vis ? '👁' : '🙈'}
+      </button>
+    </div>`;
+  }).join('');
+}
 function updateLastSave() {
   const ts = localStorage.getItem('fm_last_save');
   const el = document.getElementById('last-save-info');
@@ -648,7 +834,7 @@ function updateLastSave() {
 }
 
 // ─────────────── NAVIGATION ───────────────
-const panelTitles = { dashboard:'Dashboard', corsi:'Corsi Principali', complementari:'Corsi Complementari', concerti:'Concerti & Eventi', contatti:'Contatti & Orari', testi:'Testi del Sito' };
+const panelTitles = { dashboard:'Dashboard', corsi:'Corsi Principali', complementari:'Corsi Complementari', concerti:'Concerti & Eventi', contatti:'Contatti & Orari', testi:'Testi del Sito', visibilita:'Visibilità Sezioni' };
 function showPanel(id) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
@@ -660,18 +846,42 @@ function showPanel(id) {
 }
 
 // ─────────────── RENDER ───────────────
-function renderAll() { renderCorsi(); renderComp(); renderConcerti(); loadContatti(); loadTesti(); updateStats(); }
+function renderAll() {
+  // Migrazione: aggiungi visible:true agli item se mancante (dati salvati in precedenza)
+  ['corsi','complementari','concerti'].forEach(key => {
+    if (DATA[key]) DATA[key].forEach(item => { if (item.visible === undefined) item.visible = true; });
+  });
+  if (!DATA.sezioni) DATA.sezioni = { corsi:true, complementari:true, concerti:true, attivita:true, social:true, contatti:true };
+  if (!DATA.attivita) DATA.attivita = [
+    { titolo:'Ensemble e Orchestra', desc:'Ensemble da camera, orchestra giovanile e band rock.', visible:true },
+    { titolo:'Saggi di Fine Anno', desc:'Esibizione annuale degli allievi.', visible:true },
+    { titolo:'Open Day & Prove Libere', desc:'Giornate aperte alla comunità.', visible:true },
+    { titolo:'Workshop Tematici', desc:'Incontri intensivi su temi musicali.', visible:true },
+    { titolo:'Coro Associativo', desc:"Il coro misto aperto a tutti i livelli.", visible:true },
+  ];
+  renderCorsi(); renderComp(); renderConcerti();
+  loadContatti(); loadTesti();
+  renderVisibilita();
+  updateStats();
+}
 
 function renderCorsi() {
   const grid = document.getElementById('corsi-grid');
-  grid.innerHTML = DATA.corsi.map((c, i) => `
-    <div class="edit-card">
+  grid.innerHTML = DATA.corsi.map((c, i) => {
+    const vis = c.visible !== false;
+    return `
+    <div class="edit-card ${vis ? '' : 'card-hidden'}">
+      <div class="card-top-bar">
+        <span class="card-top-name">${c.nome}</span>
+        <button class="vis-toggle-btn ${vis ? 'on' : 'off'}" onclick="toggleItem('corsi',${i})">
+          <span class="vis-dot"></span>${vis ? '👁 Visibile' : '🙈 Nascosto'}
+        </button>
+      </div>
       <div class="card-photo-preview ${c.foto ? '' : 'no-img'}" onclick="openPhotoModal('corsi', ${i})">
         ${c.foto ? `<img src="${c.foto}" alt="${c.nome}" onerror="this.parentElement.classList.add('no-img')">` : ''}
         <div class="photo-overlay"><span>📷</span>Cambia foto</div>
       </div>
       <div class="card-body">
-        <div class="card-title">${c.nome}</div>
         <div class="form-group">
           <label>Descrizione</label>
           <textarea rows="3" onchange="DATA.corsi[${i}].desc=this.value">${c.desc}</textarea>
@@ -687,19 +897,27 @@ function renderCorsi() {
         </div>
         <button class="btn-save" style="width:100%;padding:10px;margin-top:4px;" onclick="saveData()">Salva</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderComp() {
   const grid = document.getElementById('comp-grid');
-  grid.innerHTML = DATA.complementari.map((c, i) => `
-    <div class="edit-card">
+  grid.innerHTML = DATA.complementari.map((c, i) => {
+    const vis = c.visible !== false;
+    return `
+    <div class="edit-card ${vis ? '' : 'card-hidden'}">
+      <div class="card-top-bar">
+        <span class="card-top-name">${c.nome}</span>
+        <button class="vis-toggle-btn ${vis ? 'on' : 'off'}" onclick="toggleItem('complementari',${i})">
+          <span class="vis-dot"></span>${vis ? '👁 Visibile' : '🙈 Nascosto'}
+        </button>
+      </div>
       <div class="card-photo-preview ${c.foto ? '' : 'no-img'}" onclick="openPhotoModal('comp', ${i})">
         ${c.foto ? `<img src="${c.foto}" alt="${c.nome}" onerror="this.parentElement.classList.add('no-img')">` : ''}
         <div class="photo-overlay"><span>📷</span>Cambia foto</div>
       </div>
       <div class="card-body">
-        <div class="card-title">${c.nome}</div>
         <div class="form-group">
           <label>Descrizione</label>
           <textarea rows="3" onchange="DATA.complementari[${i}].desc=this.value">${c.desc}</textarea>
@@ -711,20 +929,25 @@ function renderComp() {
         </div>
         <button class="btn-save" style="width:100%;padding:10px;margin-top:4px;" onclick="saveData()">Salva</button>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function renderConcerti() {
   const list = document.getElementById('concerti-list');
-  list.innerHTML = DATA.concerti.map((c, i) => `
-    <div class="concerto-row">
+  list.innerHTML = DATA.concerti.map((c, i) => {
+    const vis = c.visible !== false;
+    return `
+    <div class="concerto-row ${vis ? '' : 'row-hidden'}">
       <input type="date" value="${c.data}" onchange="DATA.concerti[${i}].data=this.value">
       <input type="text" value="${c.ora}" placeholder="20:30" onchange="DATA.concerti[${i}].ora=this.value">
       <input type="text" value="${c.titolo}" placeholder="Titolo evento" onchange="DATA.concerti[${i}].titolo=this.value">
       <input type="text" value="${c.luogo}" placeholder="Luogo" onchange="DATA.concerti[${i}].luogo=this.value">
       <input type="text" value="${c.ingresso}" placeholder="es. Ingresso libero" onchange="DATA.concerti[${i}].ingresso=this.value">
+      <button class="vis-icon-btn" onclick="toggleItem('concerti',${i})" title="${vis ? 'Nascondi dal sito' : 'Mostra sul sito'}">${vis ? '👁' : '🙈'}</button>
       <button class="btn-delete" onclick="deleteConcerto(${i})" title="Elimina">✕</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   updateStats();
 }
 
