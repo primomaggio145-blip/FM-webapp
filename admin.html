@@ -895,13 +895,14 @@ function renderAll() {
   if (!DATA.attivita) {
     needsSave = true;
     DATA.attivita = [
-    { titolo:'Ensemble e Orchestra', desc:'Ensemble da camera, orchestra giovanile e band rock.', visible:true },
-    { titolo:'Saggi di Fine Anno', desc:'Esibizione annuale degli allievi.', visible:true },
-    { titolo:'Open Day & Prove Libere', desc:'Giornate aperte alla comunità.', visible:true },
-    { titolo:'Workshop Tematici', desc:'Incontri intensivi su temi musicali.', visible:true },
-    { titolo:'Coro Associativo', desc:"Il coro misto aperto a tutti i livelli.", visible:true },
-  ];
-  if (needsSave) saveData(); // Salva migrazione prima di rendere
+      { titolo:'Ensemble e Orchestra', desc:'Ensemble da camera, orchestra giovanile e band rock.', visible:true },
+      { titolo:'Saggi di Fine Anno', desc:'Esibizione annuale degli allievi.', visible:true },
+      { titolo:'Open Day & Prove Libere', desc:'Giornate aperte alla comunità.', visible:true },
+      { titolo:'Workshop Tematici', desc:'Incontri intensivi su temi musicali.', visible:true },
+      { titolo:'Coro Associativo', desc:"Il coro misto aperto a tutti i livelli.", visible:true },
+    ];
+  }
+  if (needsSave) saveData();
   renderCorsi(); renderComp(); renderConcerti();
   loadContatti(); loadTesti();
   renderVisibilita();
