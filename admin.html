@@ -390,6 +390,57 @@
   .sc-switch.sw-off::after { left: 2px; }
   /* ─────────────────────────────────────────────────────── */
 
+
+  /* ── ORDINE & VISIBILITÀ PANEL ───────────────────────── */
+  .ov-panel { display:flex; flex-direction:column; gap:6px; }
+  .ov-row {
+    display:grid; grid-template-columns:28px 1fr auto auto;
+    align-items:center; gap:10px;
+    background:#fff; border:1.5px solid #e8e8e8; border-radius:10px;
+    padding:12px 14px; transition:all 0.18s;
+  }
+  .ov-row.sec-off { background:#fdf6f6; border-color:#f5c6c6; opacity:.75; }
+  .ov-row.sec-fixed { background:#f8f9ff; border-color:#d0d8f0; }
+  .ov-drag { color:#bbb; cursor:grab; font-size:1rem; text-align:center; user-select:none; }
+  .ov-drag:active { cursor:grabbing; }
+  .ov-row.dragging { opacity:.4; border-style:dashed; }
+  .ov-row.drag-over { border-color:#1a4fa0; background:#eef3fb; }
+  .ov-info { display:flex; align-items:center; gap:10px; min-width:0; }
+  .ov-icon { font-size:1.2rem; flex-shrink:0; }
+  .ov-text { display:flex; flex-direction:column; gap:1px; }
+  .ov-name { font-size:13px; font-weight:700; color:#222; }
+  .ov-desc { font-size:11px; color:#999; }
+  .ov-order-btns { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
+  .ov-order-btn {
+    width:26px; height:22px; border:1px solid #dde; border-radius:5px;
+    background:#f8f9fa; cursor:pointer; font-size:11px; display:flex;
+    align-items:center; justify-content:center; transition:all 0.12s; padding:0;
+    color:#555;
+  }
+  .ov-order-btn:hover { background:#e8eaf6; border-color:#9fa8da; color:#1a4fa0; }
+  .ov-order-btn:disabled { opacity:.3; cursor:default; }
+  .ov-toggle {
+    padding:6px 14px; border-radius:16px; border:1.5px solid;
+    cursor:pointer; font-size:12px; font-weight:700; font-family:inherit;
+    transition:all 0.15s; white-space:nowrap; flex-shrink:0;
+  }
+  .ov-toggle.on  { background:#eafaf1; border-color:#27ae60; color:#1e8449; }
+  .ov-toggle.off { background:#fdf2f2; border-color:#e74c3c; color:#c0392b; }
+
+  /* Sub-rows */
+  .ov-subrow {
+    display:grid; grid-template-columns:50px 1fr auto;
+    align-items:center; gap:10px;
+    background:#f9f9f9; border:1px dashed #e0e0e0; border-radius:8px;
+    padding:8px 12px 8px 22px; margin:-2px 0 0 14px; transition:all 0.18s;
+  }
+  .ov-subrow.sec-off { background:#fdf6f6; border-color:#f5c6c6; opacity:.75; }
+  .ov-sub-label { font-size:11px; color:#aaa; }
+  .ov-sub-name { font-size:12px; font-weight:600; color:#444; }
+
+  /* Panel visibilita layout */
+  #panel-visibilita { max-width: 720px; }
+  /* ─────────────────────────────────────────────────────── */
 </style>
 </head>
 <body>
@@ -588,19 +639,13 @@
       </div>
     </div>
 
-    <!-- VISIBILITÀ -->
+    <!-- VISIBILITÀ & ORDINE -->
     <div class="panel" id="panel-visibilita">
       <div class="panel-header">
-        <h2>Visibilità Sezioni</h2>
-        <p>Attiva o disattiva intere sezioni del sito. I contenuti rimangono salvati — puoi riabilitarli quando vuoi.</p>
+        <h2>Ordine &amp; Visibilità Sezioni</h2>
+        <p>Trascina le sezioni per cambiarle di posto sul sito. Usa i pulsanti ▲▼ o il drag &amp; drop. Attiva/disattiva con il toggle.</p>
       </div>
-      <div class="sezioni-grid" id="sezioni-vis-grid"></div>
-
-      <div style="margin-top:32px;">
-        <h3 style="font-size:1rem;margin-bottom:6px;color:#333;">Attività Interne</h3>
-        <p style="font-size:12px;color:#888;margin-bottom:14px;">Mostra o nascondi le singole voci nell'elenco Attività del sito.</p>
-        <div class="attivita-admin-list" id="attivita-vis-list"></div>
-      </div>
+      <div id="sezioni-vis-grid"></div>
     </div>
 
     <!-- TESTI -->
@@ -708,9 +753,11 @@ const DEFAULT_DATA = {
     { titolo: 'Coro Associativo', desc: "Il coro misto aperto a tutti i livelli: un'esperienza di armonia collettiva e musica corale.", visible: true },
   ],
   sezioni: {
-    corsi: true, complementari: true, concerti: true,
-    attivita: true, social: true, contatti: true
+    home: true, corsi: true, attivita: true, concerti: true,
+    complementari: true, social: true, 'area-riservata': true, contatti: true,
+    stats_box: true
   },
+  ordine: ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'],
   contatti: {
     addr1: 'Via della Musica, 12', city: 'Città', prov: 'CS',
     phone: '+39 000 000 0000', email: 'info@futuromusica.it',
@@ -784,75 +831,172 @@ function toggleItem(section, idx) {
 function toggleSezione(key) {
   try {
     if (!DATA.sezioni) DATA.sezioni = {};
-    // legge lo stato corrente: se non è esplicitamente false, è visibile (true)
     const attuale = DATA.sezioni[key] !== false;
-    DATA.sezioni[key] = !attuale; // toggle
+    DATA.sezioni[key] = !attuale;
     saveData();
     renderVisibilita();
-    showToast((DATA.sezioni[key] ? '✅ Sezione visibile sul sito' : '🙈 Sezione nascosta dal sito'));
-  } catch(e) {
-    console.error('toggleSezione error:', e);
-    showToast('Errore: ' + e.message);
-  }
+    showToast(DATA.sezioni[key] ? '✅ Visibile sul sito' : '🙈 Nascosta dal sito');
+  } catch(e) { console.error('toggleSezione:', e); }
 }
 
+function moveSezione(idx, dir) {
+  if (!DATA.ordine) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= DATA.ordine.length) return;
+  const tmp = DATA.ordine[idx];
+  DATA.ordine[idx] = DATA.ordine[newIdx];
+  DATA.ordine[newIdx] = tmp;
+  saveData();
+  renderVisibilita();
+}
+
+// ══════════════════════════════════════════════════════════════
+// NUOVA renderVisibilita — Ordine + Visibilità completo
+// ══════════════════════════════════════════════════════════════
 function renderVisibilita() {
-  // ── Griglia sezioni ──
-  const SEZIONI_DEF = [
-    { key:'corsi',         icon:'🎹', nome:'Corsi Principali',    desc:'Sezione con i 6 corsi principali' },
-    { key:'complementari', icon:'📖', nome:'Corsi Complementari', desc:'Sezione con gli 8 corsi extra' },
-    { key:'concerti',      icon:'🎼', nome:'Concerti & Eventi',   desc:'Calendario eventi e concerti' },
-    { key:'attivita',      icon:'🎭', nome:'Attività Interne',    desc:'Ensemble, saggi, workshop...' },
-    { key:'social',        icon:'📸', nome:'Galleria Social',     desc:'Feed Instagram / Facebook' },
-    { key:'contatti',      icon:'📍', nome:'Contatti & Orari',    desc:'Indirizzo, telefono, mappa' },
-  ];
-  const sezioni = DATA.sezioni || {};
-  const grid = document.getElementById('sezioni-vis-grid');
-  if (!grid) return;
-  grid.innerHTML = SEZIONI_DEF.map(s => {
-    const on = sezioni[s.key] !== false;
-    return `
-    <div class="sezione-card ${on ? 'sec-on' : 'sec-off'}">
-      <div class="sc-left">
-        <span class="sc-icon">${s.icon}</span>
-        <div class="sc-info">
-          <span class="sc-name">${s.nome}</span>
-          <span class="sc-desc">${s.desc} — attualmente <strong>${on ? 'visibile' : 'nascosta'}</strong></span>
+  const SEZIONI_META = {
+    'home':          { icon:'🏠', nome:'Hero / Home',         desc:'Prima schermata del sito', fixed:true },
+    'corsi':         { icon:'🎹', nome:'Corsi Principali',    desc:'I 6 strumenti principali' },
+    'attivita':      { icon:'🎭', nome:'Attività Interne',    desc:'Ensemble, saggi, workshop...' },
+    'concerti':      { icon:'🎼', nome:'Concerti & Eventi',   desc:'Calendario eventi' },
+    'complementari': { icon:'📖', nome:'Corsi Complementari', desc:'Gli 8 corsi extra' },
+    'social':        { icon:'📸', nome:'Galleria Social',     desc:'Feed social e community' },
+    'area-riservata':{ icon:'🔑', nome:'Area Riservata',      desc:'Accesso webapp/login' },
+    'contatti':      { icon:'📍', nome:'Contatti & Orari',    desc:'Indirizzo, telefono, mappa' },
+  };
+
+  // Sub-sezioni (elementi dentro una sezione principale)
+  const SUB_SEZIONI = {
+    'home':     [{ key:'stats_box', nome:'"Una comunità in continua crescita"', desc:'Il box statistiche 150+ studenti' }],
+    'attivita': [], // le attività individuali sono gestite sotto
+  };
+
+  const S = DATA.sezioni || {};
+  const ordine = DATA.ordine || Object.keys(SEZIONI_META);
+  const container = document.getElementById('sezioni-vis-grid');
+  if (!container) return;
+
+  let html = '<div class="ov-panel" id="ov-drag-list">';
+  ordine.forEach((key, idx) => {
+    const meta = SEZIONI_META[key];
+    if (!meta) return;
+    const on = S[key] !== false;
+    const fixed = !!meta.fixed;
+    const subs = SUB_SEZIONI[key] || [];
+
+    html += `
+    <div class="ov-row ${on ? '' : 'sec-off'} ${fixed ? 'sec-fixed' : ''}"
+         draggable="${fixed ? 'false' : 'true'}"
+         data-key="${key}" data-idx="${idx}"
+         ondragstart="ovDragStart(event,${idx})"
+         ondragover="ovDragOver(event)"
+         ondrop="ovDrop(event,${idx})"
+         ondragleave="ovDragLeave(event)"
+         ondragend="ovDragEnd(event)">
+      <span class="ov-drag">${fixed ? '📌' : '⠿'}</span>
+      <div class="ov-info">
+        <span class="ov-icon">${meta.icon}</span>
+        <div class="ov-text">
+          <span class="ov-name">${meta.nome}</span>
+          <span class="ov-desc">${meta.desc}</span>
         </div>
       </div>
-      <button onclick="toggleSezione('${s.key}')"
-        style="padding:8px 18px;border-radius:20px;border:2px solid;cursor:pointer;
-               font-size:13px;font-weight:700;font-family:inherit;transition:all 0.18s;
-               ${on ? 'background:#eafaf1;border-color:#27ae60;color:#1e8449;' : 'background:#fdf2f2;border-color:#e74c3c;color:#c0392b;'}">
+      <div class="ov-order-btns">
+        <button class="ov-order-btn" onclick="moveSezione(${idx},-1)" ${idx<=0 || fixed ? 'disabled' : ''} title="Sposta su">▲</button>
+        <button class="ov-order-btn" onclick="moveSezione(${idx},+1)" ${idx>=ordine.length-1 || fixed ? 'disabled' : ''} title="Sposta giù">▼</button>
+      </div>
+      <button class="ov-toggle ${on ? 'on' : 'off'}" onclick="toggleSezione('${key}')" ${fixed ? 'disabled style="opacity:.5;cursor:default;"' : ''}>
         ${on ? '👁 Visibile' : '🙈 Nascosta'}
       </button>
     </div>`;
-  }).join('');
 
-  // ── Lista attività ──
-  if (!DATA.attivita) DATA.attivita = [
-    { titolo:'Ensemble e Orchestra', desc:'Ensemble da camera, orchestra giovanile e band rock.', visible:true },
-    { titolo:'Saggi di Fine Anno', desc:'Esibizione annuale degli allievi.', visible:true },
-    { titolo:'Open Day & Prove Libere', desc:'Giornate aperte alla comunità.', visible:true },
-    { titolo:'Workshop Tematici', desc:'Incontri intensivi su temi musicali.', visible:true },
-    { titolo:'Coro Associativo', desc:"Il coro misto aperto a tutti i livelli.", visible:true },
-  ];
-  const attList = document.getElementById('attivita-vis-list');
-  if (!attList) return;
-  attList.innerHTML = DATA.attivita.map((a, i) => {
-    const vis = a.visible !== false;
-    return `
-    <div class="attivita-admin-row ${vis ? '' : 'row-hidden'}">
-      <span class="attivita-drag">⠿</span>
-      <div class="attivita-fields">
-        <input type="text" value="${a.titolo}" placeholder="Titolo" onchange="DATA.attivita[${i}].titolo=this.value">
-        <textarea rows="2" placeholder="Descrizione" onchange="DATA.attivita[${i}].desc=this.value">${a.desc}</textarea>
+    // Sub-rows
+    subs.forEach(sub => {
+      const subOn = S[sub.key] !== false;
+      html += `
+    <div class="ov-subrow ${subOn ? '' : 'sec-off'}">
+      <span class="ov-sub-label">└ dentro</span>
+      <div class="ov-text">
+        <span class="ov-sub-name">${sub.nome}</span>
+        <span class="ov-desc">${sub.desc}</span>
       </div>
-      <button class="vis-toggle-btn ${vis ? 'on' : 'off'}" style="flex-shrink:0;margin-top:2px;" onclick="toggleItem('attivita',${i})">
-        <span class="vis-dot"></span>${vis ? '👁' : '🙈'}
+      <button class="ov-toggle ${subOn ? 'on' : 'off'}" onclick="toggleSezione('${sub.key}')">
+        ${subOn ? '👁' : '🙈'}
       </button>
     </div>`;
-  }).join('');
+    });
+  });
+  html += '</div>';
+
+  // Attività individuali
+  if (!DATA.attivita) DATA.attivita = [
+    { titolo:'Ensemble e Orchestra', desc:'Ensemble da camera, orchestra giovanile e band rock.', visible:true },
+    { titolo:'Saggi di Fine Anno',   desc:'Esibizione annuale degli allievi.', visible:true },
+    { titolo:'Open Day & Prove Libere', desc:'Giornate aperte alla comunità.', visible:true },
+    { titolo:'Workshop Tematici',    desc:'Incontri intensivi su temi musicali.', visible:true },
+    { titolo:'Coro Associativo',     desc:"Il coro misto aperto a tutti i livelli.", visible:true },
+  ];
+
+  html += `
+  <div style="margin-top:28px; padding-top:20px; border-top:2px solid #f0f0f0;">
+    <h3 style="font-size:.95rem;font-weight:700;color:#333;margin-bottom:4px;">🎭 Attività Interne — voci singole</h3>
+    <p style="font-size:11px;color:#999;margin-bottom:14px;">Nascondi singole attività mantenendo la sezione visibile.</p>
+    <div class="attivita-admin-list">`;
+
+  DATA.attivita.forEach((a, i) => {
+    const vis = a.visible !== false;
+    html += `
+      <div class="attivita-admin-row ${vis ? '' : 'row-hidden'}">
+        <span class="attivita-drag">⠿</span>
+        <div class="attivita-fields">
+          <input type="text" value="${a.titolo.replace(/"/g,'&quot;')}" placeholder="Titolo" onchange="DATA.attivita[${i}].titolo=this.value;saveData()">
+          <textarea rows="2" placeholder="Descrizione" onchange="DATA.attivita[${i}].desc=this.value;saveData()">${a.desc}</textarea>
+        </div>
+        <button class="vis-toggle-btn ${vis ? 'on' : 'off'}" style="flex-shrink:0;margin-top:2px;" onclick="toggleItem('attivita',${i})">
+          <span class="vis-dot"></span>${vis ? '👁' : '🙈'}
+        </button>
+      </div>`;
+  });
+
+  html += '</div></div>';
+  container.innerHTML = html;
+}
+
+// ── Drag & Drop per riordinamento ──────────────────────────────
+let _ovDragIdx = null;
+
+function ovDragStart(e, idx) {
+  _ovDragIdx = idx;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function ovDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.ov-row').forEach(r => r.classList.remove('drag-over'));
+}
+function ovDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+function ovDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over');
+}
+function ovDrop(e, toIdx) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (_ovDragIdx === null || _ovDragIdx === toIdx) return;
+  // Non spostare "home" (fixed)
+  const fromKey = DATA.ordine[_ovDragIdx];
+  const toKey   = DATA.ordine[toIdx];
+  const FIXED = ['home'];
+  if (FIXED.includes(fromKey) || FIXED.includes(toKey)) return;
+  // Riordina
+  const item = DATA.ordine.splice(_ovDragIdx, 1)[0];
+  DATA.ordine.splice(toIdx, 0, item);
+  _ovDragIdx = null;
+  saveData();
+  renderVisibilita();
 }
 function updateLastSave() {
   const ts = localStorage.getItem('fm_last_save');
@@ -864,7 +1008,7 @@ function updateLastSave() {
 }
 
 // ─────────────── NAVIGATION ───────────────
-const panelTitles = { dashboard:'Dashboard', corsi:'Corsi Principali', complementari:'Corsi Complementari', concerti:'Concerti & Eventi', contatti:'Contatti & Orari', testi:'Testi del Sito', visibilita:'Visibilità Sezioni' };
+const panelTitles = { dashboard:'Dashboard', corsi:'Corsi Principali', complementari:'Corsi Complementari', concerti:'Concerti & Eventi', contatti:'Contatti & Orari', testi:'Testi del Sito', visibilita:'Ordine & Visibilità' };
 function showPanel(id) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
@@ -889,7 +1033,15 @@ function renderAll() {
     if (DATA[key]) DATA[key].forEach(item => { if (item.visible === undefined) { item.visible = true; needsSave = true; } });
   });
   if (!DATA.sezioni) {
-    DATA.sezioni = { corsi:true, complementari:true, concerti:true, attivita:true, social:true, contatti:true };
+    DATA.sezioni = { home:true, corsi:true, attivita:true, concerti:true, complementari:true, social:true, 'area-riservata':true, contatti:true, stats_box:true };
+    needsSave = true;
+  } else {
+    // Migra sezioni vecchie: aggiungi chiavi mancanti
+    const defaults = { home:true, 'area-riservata':true, stats_box:true };
+    Object.entries(defaults).forEach(([k,v]) => { if (DATA.sezioni[k] === undefined) { DATA.sezioni[k] = v; needsSave = true; } });
+  }
+  if (!DATA.ordine) {
+    DATA.ordine = ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'];
     needsSave = true;
   }
   if (!DATA.attivita) {
