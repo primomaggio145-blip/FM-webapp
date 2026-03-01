@@ -442,6 +442,8 @@
   #panel-visibilita { max-width: 720px; }
   /* ─────────────────────────────────────────────────────── */
 </style>
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 
@@ -519,7 +521,8 @@
 
   <!-- Topbar -->
   <div class="topbar">
-    <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+    <div style="display:flex;align-items:center;gap:10px;min-width:0;flex-wrap:wrap;">
+      <span id="db-status" style="font-size:11px;color:#888;padding:3px 8px;background:#f5f5f5;border-radius:10px;white-space:nowrap;">⚫ Locale</span>
       <button id="back-btn" onclick="showPanel('dashboard')"
         style="display:none;align-items:center;gap:6px;padding:7px 13px;
                border:1.5px solid #dde1e7;border-radius:8px;background:#fff;
@@ -532,6 +535,12 @@
       <div class="topbar-title" id="panel-title">Dashboard</div>
     </div>
     <div class="topbar-actions">
+      <button onclick="generateSite()"
+        style="padding:8px 16px;background:#1a4fa0;color:#fff;border:none;border-radius:8px;
+               font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.2s;"
+        onmouseover="this.style.background='#1240880'" onmouseout="this.style.background='#1a4fa0'">
+        📥 Genera index.html
+      </button>
       <button class="btn-preview" onclick="window.open('index.html','_blank')">👁 Vedi Sito Live</button>
       <button class="btn-logout" onclick="logout()">Esci</button>
     </div>
@@ -542,6 +551,20 @@
 
     <!-- DASHBOARD -->
     <div class="panel active" id="panel-dashboard">
+      <!-- Banner stato Supabase -->
+      <div id="supabase-banner" style="
+        display:none; margin-bottom:20px; padding:16px 20px;
+        border-radius:12px; border:1.5px solid #fbbf24; background:#fffbeb;
+        font-size:13px; line-height:1.6;">
+        <strong style="color:#92400e;">⚙️ Supabase non configurato</strong><br>
+        <span style="color:#78350f;">
+          Per sincronizzare le modifiche su tutti i dispositivi, apri <code>admin.html</code>,
+          cerca le righe <code>SUPABASE_URL</code> e <code>SUPABASE_KEY</code> e inserisci
+          le tue credenziali da <a href="https://supabase.com" target="_blank">supabase.com</a>
+          → Settings → API.
+        </span>
+      </div>
+
       <div class="panel-header">
         <h2>Benvenuto nel Pannello Admin</h2>
         <p>Gestisci tutti i contenuti del sito da qui. Quando hai finito, clicca <strong>Pubblica Sito</strong> per scaricare il file aggiornato.</p>
@@ -643,8 +666,32 @@
     <div class="panel" id="panel-visibilita">
       <div class="panel-header">
         <h2>Ordine &amp; Visibilità Sezioni</h2>
-        <p>Trascina le sezioni per cambiarle di posto sul sito. Usa i pulsanti ▲▼ o il drag &amp; drop. Attiva/disattiva con il toggle.</p>
+        <p>Nascondi o riordina le sezioni del sito. Quando hai finito, clicca il pulsante qui sotto per scaricare il file aggiornato da caricare su GitHub.</p>
       </div>
+
+      <!-- BANNER GENERA -->
+      <div style="background:linear-gradient(135deg,#1a4fa0,#2563c7);border-radius:14px;
+                  padding:20px 24px;margin-bottom:28px;display:flex;align-items:center;
+                  justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div>
+          <div style="color:#fff;font-size:14px;font-weight:700;margin-bottom:4px;">
+            📥 Come applicare le modifiche
+          </div>
+          <div style="color:rgba(255,255,255,0.75);font-size:12px;line-height:1.5;">
+            Le impostazioni vengono salvate qui. Per renderle visibili su <strong style="color:#fff;">tutti i dispositivi</strong>,<br>
+            clicca il pulsante → scarica il file → caricalo su GitHub al posto del vecchio index.html.
+          </div>
+        </div>
+        <button id="gen-btn" onclick="generateSite()"
+          style="padding:12px 22px;background:#fff;border:none;border-radius:10px;
+                 font-size:14px;font-weight:700;color:#1a4fa0;cursor:pointer;
+                 white-space:nowrap;transition:all 0.2s;flex-shrink:0;"
+          onmouseover="this.style.background='#e8f0fe'"
+          onmouseout="this.style.background='#fff'">
+          📥 Genera e Scarica index.html
+        </button>
+      </div>
+
       <div id="sezioni-vis-grid"></div>
     </div>
 
@@ -719,6 +766,31 @@ const SITE_TEMPLATE = JSON.parse(document.getElementById('d-template').textConte
 // ─────────────── DATA ───────────────
 const ADMIN_PASSWORD = 'futuromusica2025'; // ← cambia questa password!
 
+// ─── SUPABASE CONFIG ────────────────────────────────────────────────
+// Sostituisci con i tuoi valori da Supabase → Settings → API
+const SUPABASE_URL = 'https://XXXXX.supabase.co';  // ← Project URL
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIs...';    // ← anon public key
+
+// Client globale (inizializzato dopo login)
+let db = null;
+let DB_READY = false;
+
+function initSupabase() {
+  try {
+    if (!window.supabase || SUPABASE_URL.includes('XXXXX')) {
+      console.warn('Supabase non configurato — uso localStorage come fallback');
+      return false;
+    }
+    db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    DB_READY = true;
+    console.log('✅ Supabase connesso');
+    return true;
+  } catch(e) {
+    console.warn('Supabase init error:', e);
+    return false;
+  }
+}
+
 const DEFAULT_DATA = {
   corsi: [
     { nome: 'Pianoforte', desc: 'Dal solfeggio alle grandi opere classiche e contemporanee. Lezioni individuali con metodo personalizzato.', livelli: 'Principiante, Intermedio, Avanzato', foto: 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=600&q=80&fit=crop', visible: true },
@@ -777,13 +849,18 @@ let DATA = JSON.parse(JSON.stringify(DEFAULT_DATA));
 let currentPhotoTarget = null; // { type: 'corsi'|'comp', index: n }
 
 // ─────────────── AUTH ───────────────
-function doLogin() {
+async function doLogin() {
   const pwd = document.getElementById('pwd-input').value;
   if (pwd === ADMIN_PASSWORD) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('admin-app').style.display = 'block';
-    loadData();
+    // Mostra spinner
+    document.getElementById('panel-title').textContent = 'Caricamento...';
+    initSupabase();
+    await loadData();
     renderAll();
+    // Avvia realtime se Supabase disponibile
+    if (DB_READY) startRealtime();
   } else {
     document.getElementById('login-error').style.display = 'block';
     document.getElementById('pwd-input').value = '';
@@ -797,50 +874,262 @@ function logout() {
 }
 
 // ─────────────── LOCAL STORAGE ───────────────
-function loadData() {
+async function loadData() {
+  if (DB_READY) {
+    try {
+      await loadDataFromSupabase();
+      return;
+    } catch(e) {
+      console.warn('Supabase load failed, fallback a localStorage:', e);
+    }
+  }
+  // Fallback localStorage
   const saved = localStorage.getItem('fm_admin_data');
   if (saved) {
     try { DATA = JSON.parse(saved); } catch(e) { DATA = JSON.parse(JSON.stringify(DEFAULT_DATA)); }
   }
   updateLastSave();
 }
-function saveData() {
+
+async function loadDataFromSupabase() {
+  const [corsiRes, compRes, concertiRes, cfgRes, attivitaRes] = await Promise.all([
+    db.from('corsi').select('*').order('nome'),
+    db.from('corsi_complementari').select('*').order('ordine'),
+    db.from('concerti').select('*').order('data'),
+    db.from('sito_config').select('*'),
+    db.from('sito_attivita').select('*').order('ordine'),
+  ]);
+
+  // Mappa corsi → formato DATA
+  DATA.corsi = (corsiRes.data || []).map(r => ({
+    nome: r.nome, desc: r.descrizione || '', livelli: r.livelli || '', foto: r.foto || '', visible: r.visible !== false, _id: r.id
+  }));
+
+  // Complementari
+  DATA.complementari = (compRes.data || []).map(r => ({
+    nome: r.nome, desc: r.descrizione || '', foto: r.foto || '', visible: r.visible !== false, _id: r.id
+  }));
+
+  // Concerti
+  DATA.concerti = (concertiRes.data || []).map(r => ({
+    data: r.data || '', ora: r.ora || '', titolo: r.titolo || '', luogo: r.luogo || '',
+    ingresso: r.ingresso || 'Ingresso libero', badge: r.badge || 'Evento', visible: r.visible !== false, _id: r.id
+  }));
+
+  // Config → testi + contatti + sezioni
+  const cfg = {};
+  (cfgRes.data || []).forEach(r => { cfg[r.chiave] = r.valore; });
+
+  DATA.testi = {
+    hero_sub: cfg.hero_sub || '', hero_desc: cfg.hero_desc || '',
+    corsi_desc: cfg.corsi_desc || '', attivita_desc: cfg.attivita_desc || '',
+    stat_studenti: cfg.stat_studenti || '150+', stat_docenti: cfg.stat_docenti || '20+',
+    stat_anni: cfg.stat_anni || '30', anno_fond: cfg.anno_fond || '1995'
+  };
+  DATA.contatti = {
+    addr1: cfg.contatti_indirizzo || '', city: (cfg.contatti_citta || '').split(' ')[0] || '',
+    prov: (cfg.contatti_citta || '').replace(/.*\(|\)/g,'') || '',
+    phone: cfg.contatti_phone || '', email: cfg.contatti_email || '',
+    orari_lv: cfg.contatti_orari_lv || '', orari_sab: cfg.contatti_orari_sab || '',
+    orari_note: cfg.contatti_orari_note || '', fb_url: cfg.fb_url || '#', ig_url: cfg.ig_url || '#'
+  };
+  try { DATA.sezioni = JSON.parse(cfg.sezioni_visibili || '{}'); } catch(e) { DATA.sezioni = {}; }
+  try { DATA.ordine  = JSON.parse(cfg.sezioni_ordine  || '[]'); } catch(e) { DATA.ordine  = []; }
+
+  // Attività
+  DATA.attivita = (attivitaRes.data || []).map(r => ({
+    titolo: r.titolo, desc: r.descrizione || '', visible: r.visible !== false, _id: r.id
+  }));
+
+  updateLastSave();
+  console.log('✅ Dati caricati da Supabase');
+}
+async function saveData() {
+  // Salva sempre in localStorage come backup
   localStorage.setItem('fm_admin_data', JSON.stringify(DATA));
   localStorage.setItem('fm_last_save', new Date().toISOString());
   updateLastSave();
-  // Genera e salva il CSS di visibilità — iniettato nell'<head> del sito
-  applyVisCSS();
-  showToast('Salvato! Il sito è aggiornato.');
+
+  if (!DB_READY) {
+    showToast('Salvato in locale. Configura Supabase per sincronizzare su tutti i dispositivi.');
+    return;
+  }
+
+  try {
+    await saveDataToSupabase();
+    showToast('✅ Salvato su Supabase — modifiche visibili su tutti i dispositivi!');
+  } catch(e) {
+    console.error('Supabase save error:', e);
+    showToast('⚠ Salvato in locale (Supabase non raggiungibile)', true);
+  }
 }
 
-function applyVisCSS() {
+async function saveDataToSupabase() {
+  // ── Corsi principali ──
+  for (let i = 0; i < DATA.corsi.length; i++) {
+    const c = DATA.corsi[i];
+    if (c._id) {
+      await db.from('corsi').update({ nome: c.nome, descrizione: c.desc, livelli: c.livelli, foto: c.foto, visible: c.visible }).eq('id', c._id);
+    } else {
+      const { data } = await db.from('corsi').insert({ nome: c.nome, descrizione: c.desc, livelli: c.livelli, foto: c.foto, visible: c.visible }).select().single();
+      if (data) DATA.corsi[i]._id = data.id;
+    }
+  }
+
+  // ── Corsi complementari ──
+  for (let i = 0; i < DATA.complementari.length; i++) {
+    const c = DATA.complementari[i];
+    if (c._id) {
+      await db.from('corsi_complementari').update({ nome: c.nome, descrizione: c.desc, foto: c.foto, visible: c.visible, ordine: i }).eq('id', c._id);
+    } else {
+      const { data } = await db.from('corsi_complementari').insert({ nome: c.nome, descrizione: c.desc, foto: c.foto, visible: c.visible, ordine: i }).select().single();
+      if (data) DATA.complementari[i]._id = data.id;
+    }
+  }
+
+  // ── Concerti ──
+  for (let i = 0; i < DATA.concerti.length; i++) {
+    const c = DATA.concerti[i];
+    const fields = { titolo: c.titolo, data: c.data, ora: c.ora, luogo: c.luogo, ingresso: c.ingresso, badge: c.badge, visible: c.visible };
+    if (c._id) {
+      await db.from('concerti').update(fields).eq('id', c._id);
+    } else {
+      const { data } = await db.from('concerti').insert(fields).select().single();
+      if (data) DATA.concerti[i]._id = data.id;
+    }
+  }
+
+  // ── Sito config (testi + contatti + sezioni + ordine) ──
+  const t = DATA.testi || {};
+  const ct = DATA.contatti || {};
+  const updates = [
+    { chiave: 'hero_sub',           valore: t.hero_sub || '' },
+    { chiave: 'hero_desc',          valore: t.hero_desc || '' },
+    { chiave: 'corsi_desc',         valore: t.corsi_desc || '' },
+    { chiave: 'attivita_desc',      valore: t.attivita_desc || '' },
+    { chiave: 'stat_studenti',      valore: t.stat_studenti || '' },
+    { chiave: 'stat_docenti',       valore: t.stat_docenti || '' },
+    { chiave: 'stat_anni',          valore: t.stat_anni || '' },
+    { chiave: 'anno_fond',          valore: t.anno_fond || '' },
+    { chiave: 'contatti_indirizzo', valore: ct.addr1 || '' },
+    { chiave: 'contatti_citta',     valore: (ct.city || '') + (ct.prov ? ' (' + ct.prov + ')' : '') },
+    { chiave: 'contatti_phone',     valore: ct.phone || '' },
+    { chiave: 'contatti_email',     valore: ct.email || '' },
+    { chiave: 'contatti_orari_lv',  valore: ct.orari_lv || '' },
+    { chiave: 'contatti_orari_sab', valore: ct.orari_sab || '' },
+    { chiave: 'contatti_orari_note',valore: ct.orari_note || '' },
+    { chiave: 'sezioni_visibili',   valore: JSON.stringify(DATA.sezioni || {}) },
+    { chiave: 'sezioni_ordine',     valore: JSON.stringify(DATA.ordine || []) },
+  ];
+  for (const u of updates) {
+    await db.from('sito_config').upsert({ ...u, updated_at: new Date().toISOString() }, { onConflict: 'chiave' });
+  }
+
+  // ── Attività ──
+  for (let i = 0; i < (DATA.attivita || []).length; i++) {
+    const a = DATA.attivita[i];
+    if (a._id) {
+      await db.from('sito_attivita').update({ titolo: a.titolo, descrizione: a.desc, visible: a.visible, ordine: i }).eq('id', a._id);
+    } else {
+      const { data } = await db.from('sito_attivita').insert({ titolo: a.titolo, descrizione: a.desc, visible: a.visible, ordine: i }).select().single();
+      if (data) DATA.attivita[i]._id = data.id;
+    }
+  }
+}
+
+// ── Realtime Supabase — aggiorna UI quando qualcuno salva dal sito ──
+function startRealtime() {
+  if (!DB_READY) return;
   try {
-    const S = DATA.sezioni || {};
-    const ordine = DATA.ordine || [];
-    let css = '';
-    // Sezioni nascoste
-    const SECTION_IDS = ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'];
-    SECTION_IDS.forEach(id => {
-      if (S[id] === false) css += '#' + id + '{display:none!important}\n';
-    });
-    // Sub-sezioni speciali
-    if (S.stats_box === false) css += '#stats-box{display:none!important}\n';
-    // Ordine sezioni via CSS order (flex) — alternativa robusta
-    // (non si può riordinare sezioni statiche con solo CSS, lo facciamo in JS sotto)
-    localStorage.setItem('fm_vis_css', css);
-    // Aggiorna anche il CSS live nella pagina admin (feedback immediato)
-    let styleEl = document.getElementById('fm-vis-preview');
-    if (!styleEl) { styleEl = document.createElement('style'); styleEl.id = 'fm-vis-preview'; document.head.appendChild(styleEl); }
-  } catch(e) { console.warn('applyVisCSS:', e); }
+    db.channel('admin-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sito_config' }, async () => {
+        await loadDataFromSupabase();
+        renderAll();
+        showToast('🔄 Dati aggiornati da un altro dispositivo');
+      })
+      .subscribe((status) => {
+        const indicator = document.getElementById('db-status');
+        if (indicator) {
+          indicator.textContent = status === 'SUBSCRIBED' ? '🟢 Supabase connesso' : '🟡 Connessione...';
+        }
+      });
+  } catch(e) { console.warn('Realtime error:', e); }
+}
+
+// Genera il blocco CSS di visibilità da iniettare in index.html
+function buildVisCSS() {
+  const S = DATA.sezioni || {};
+  const SECTION_IDS = ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'];
+  let css = '';
+  SECTION_IDS.forEach(id => {
+    if (S[id] === false) css += '  #' + id + ' { display: none !important; }\n';
+  });
+  if (S.stats_box === false) css += '  #stats-box { display: none !important; }\n';
+  return css;
+}
+
+// Scarica index.html aggiornato con visibilità e ordine incorporati
+async function generateSite() {
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Generando...';
+  try {
+    // Legge il file index.html dalla stessa cartella
+    const resp = await fetch('./index.html?nocache=' + Date.now());
+    if (!resp.ok) throw new Error('Impossibile leggere index.html: ' + resp.status);
+    let html = await resp.text();
+
+    // ── A. Inietta il CSS di visibilità nel <style id="fm-vis"> ──
+    const visCss = buildVisCSS();
+    html = html.replace(
+      /<style id="fm-vis">[\s\S]*?<\/style>/,
+      '<style id="fm-vis">\n' + (visCss || '  /* tutte le sezioni visibili */') + '<\/style>'
+    );
+
+    // ── B. Riordina le sezioni nel HTML ──
+    const ordine = DATA.ordine || ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'];
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    const footer = doc.querySelector('footer');
+    if (footer) {
+      ordine.forEach(key => {
+        const sec = doc.getElementById(key);
+        if (sec) footer.parentNode.insertBefore(sec, footer);
+      });
+    }
+
+    // ── C. Inietta i dati admin (testi, corsi, concerti) ──
+    // Aggiorna anche il blocco fm-admin-data inline per avere testi live
+    const serializer = new XMLSerializer();
+    html = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;
+
+    // ── D. Scarica il file ──
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = 'index.html';
+    a.click();
+    URL.revokeObjectURL(url);
+
+    btn.disabled = false;
+    btn.textContent = '📥 Genera e Scarica index.html';
+    showToast('✅ index.html generato! Caricalo su GitHub per applicare le modifiche.');
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = '📥 Genera e Scarica index.html';
+    showToast('❌ Errore: ' + e.message);
+    console.error(e);
+  }
 }
 
 // ─────────────── VISIBILITY ───────────────
 
-function toggleItem(section, idx) {
+async function toggleItem(section, idx) {
   try {
     const attuale = DATA[section][idx].visible !== false;
     DATA[section][idx].visible = !attuale;
-    saveData();
+    await saveData();
     if (section === 'corsi')         renderCorsi();
     if (section === 'complementari') renderComp();
     if (section === 'concerti')      renderConcerti();
@@ -851,12 +1140,12 @@ function toggleItem(section, idx) {
   }
 }
 
-function toggleSezione(key) {
+async function toggleSezione(key) {
   try {
     if (!DATA.sezioni) DATA.sezioni = {};
     const attuale = DATA.sezioni[key] !== false;
     DATA.sezioni[key] = !attuale;
-    saveData();
+    await saveData();
     renderVisibilita();
     showToast(DATA.sezioni[key] ? '✅ Visibile sul sito' : '🙈 Nascosta dal sito');
   } catch(e) { console.error('toggleSezione:', e); }
@@ -1077,11 +1366,17 @@ function renderAll() {
       { titolo:'Coro Associativo', desc:"Il coro misto aperto a tutti i livelli.", visible:true },
     ];
   }
-  if (needsSave) saveData(); else applyVisCSS();
+  if (needsSave) saveData();
   renderCorsi(); renderComp(); renderConcerti();
   loadContatti(); loadTesti();
   renderVisibilita();
   updateStats();
+  // Mostra banner se Supabase non configurato
+  const banner = document.getElementById('supabase-banner');
+  if (banner) banner.style.display = DB_READY ? 'none' : 'block';
+  // Aggiorna indicatore stato
+  const dbInd = document.getElementById('db-status');
+  if (dbInd) dbInd.textContent = DB_READY ? '🟢 Supabase connesso' : '⚫ Solo locale';
 }
 
 function renderCorsi() {
@@ -1171,12 +1466,19 @@ function renderConcerti() {
 }
 
 function addConcerto() {
-  DATA.concerti.push({ data: '', ora: '', titolo: 'Nuovo Evento', luogo: '', ingresso: 'Ingresso libero', badge: 'Evento' });
+  DATA.concerti.push({ data: '', ora: '', titolo: 'Nuovo Evento', luogo: '', ingresso: 'Ingresso libero', badge: 'Evento', visible: true });
   renderConcerti();
   saveData();
 }
-function deleteConcerto(i) {
-  if(confirm('Eliminare questo evento?')) { DATA.concerti.splice(i, 1); renderConcerti(); saveData(); }
+async function deleteConcerto(i) {
+  if (!confirm('Eliminare questo evento?')) return;
+  const concerto = DATA.concerti[i];
+  if (DB_READY && concerto._id) {
+    try { await db.from('concerti').delete().eq('id', concerto._id); } catch(e) { console.warn(e); }
+  }
+  DATA.concerti.splice(i, 1);
+  renderConcerti();
+  await saveData();
 }
 
 function loadContatti() {
@@ -1192,7 +1494,7 @@ function loadContatti() {
   document.getElementById('fb-url').value = c.fb_url || '';
   document.getElementById('ig-url').value = c.ig_url || '';
 }
-function saveContatti() {
+async function saveContatti() {
   DATA.contatti = {
     addr1: document.getElementById('addr1').value,
     city: document.getElementById('addr-city').value,
@@ -1205,7 +1507,7 @@ function saveContatti() {
     fb_url: document.getElementById('fb-url').value,
     ig_url: document.getElementById('ig-url').value
   };
-  saveData();
+  await saveData();
 }
 
 function loadTesti() {
@@ -1219,7 +1521,7 @@ function loadTesti() {
   document.getElementById('stat-anni').value = t.stat_anni || '';
   document.getElementById('anno-fond').value = t.anno_fond || '';
 }
-function saveTesti() {
+async function saveTesti() {
   DATA.testi = {
     hero_sub: document.getElementById('hero-sub').value,
     hero_desc: document.getElementById('hero-desc').value,
@@ -1230,7 +1532,7 @@ function saveTesti() {
     stat_anni: document.getElementById('stat-anni').value,
     anno_fond: document.getElementById('anno-fond').value
   };
-  saveData();
+  await saveData();
 }
 
 function updateStats() {
