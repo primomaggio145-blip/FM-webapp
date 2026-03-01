@@ -12,8 +12,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 // ─── CONFIGURAZIONE ────────────────────────────────────────────────
-const SUPABASE_URL  = 'https://XXXXX.supabase.co';   // ← sostituisci
-const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIs...';     // ← anon public key
+const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';   // ← sostituisci
+const SUPABASE_KEY  = 'sb_publishable_hoDexm3CUGWCnH6OrjbQ7Q_zMutnDcO';     // ← anon public key
 
 // ─── CLIENT ────────────────────────────────────────────────────────
 // Carica la libreria Supabase (già inclusa via CDN in webapp.html/admin.html)
