@@ -441,6 +441,45 @@
   /* Panel visibilita layout */
   #panel-visibilita { max-width: 720px; }
   /* ─────────────────────────────────────────────────────── */
+
+  /* ── CARD DRAG & DELETE ────────────────────────────────── */
+  .edit-card { position: relative; transition: opacity 0.2s, transform 0.15s; }
+  .edit-card.dragging { opacity: 0.35; transform: scale(0.97); }
+  .edit-card.drag-over-card { outline: 2.5px dashed #1a4fa0; outline-offset: 3px; }
+
+  .card-top-bar {
+    cursor: default;
+    display: grid;
+    grid-template-columns: 28px 1fr auto auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .card-drag-handle {
+    color: #bbb; cursor: grab; font-size: 1.1rem; text-align: center;
+    padding: 2px; border-radius: 4px; transition: color 0.15s;
+    line-height: 1; user-select: none;
+  }
+  .card-drag-handle:hover { color: #666; background: #f0f0f0; }
+  .card-drag-handle:active { cursor: grabbing; }
+
+  .btn-delete-corso {
+    background: none; border: 1.5px solid #fca5a5; border-radius: 8px;
+    color: #dc2626; cursor: pointer; font-size: 13px; padding: 4px 10px;
+    transition: all 0.15s; white-space: nowrap; font-family: inherit;
+  }
+  .btn-delete-corso:hover { background: #fef2f2; border-color: #dc2626; }
+
+  .btn-add-corso {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 20px; border-radius: 10px;
+    background: #eef3fb; border: 2px dashed #1a4fa0;
+    color: #1a4fa0; font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: inherit; transition: all 0.18s;
+    margin-bottom: 20px;
+  }
+  .btn-add-corso:hover { background: #dce8fa; }
+  /* ─────────────────────────────────────────────────────── */
+
 </style>
   <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -598,6 +637,9 @@
         <h2>Corsi Principali</h2>
         <p>Modifica la foto e la descrizione di ogni corso. Clicca sull'immagine per cambiarla.</p>
       </div>
+      <button class="btn-add-corso" onclick="addCorso('corsi')">
+        ＋ Aggiungi Corso Principale
+      </button>
       <div class="cards-grid" id="corsi-grid"></div>
     </div>
 
@@ -607,6 +649,9 @@
         <h2>Corsi Complementari</h2>
         <p>Modifica foto e descrizioni dei corsi complementari.</p>
       </div>
+      <button class="btn-add-corso" onclick="addCorso('complementari')">
+        ＋ Aggiungi Corso Complementare
+      </button>
       <div class="cards-grid" id="comp-grid"></div>
     </div>
 
@@ -793,22 +838,22 @@ function initSupabase() {
 
 const DEFAULT_DATA = {
   corsi: [
-    { nome: 'Pianoforte', desc: 'Dal solfeggio alle grandi opere classiche e contemporanee. Lezioni individuali con metodo personalizzato.', livelli: 'Principiante, Intermedio, Avanzato', foto: 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=600&q=80&fit=crop', visible: true },
-    { nome: 'Chitarra', desc: 'Classica, acustica ed elettrica. Tecnica, armonia, improvvisazione e repertorio moderno e tradizionale.', livelli: 'Principiante, Intermedio, Avanzato', foto: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=600&q=80&fit=crop', visible: true },
-    { nome: 'Violino', desc: "Tecnica d'arco, postura, intonazione e interpretazione musicale. Repertorio classico e contemporaneo.", livelli: 'Base, Avanzato', foto: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80&fit=crop', visible: true },
-    { nome: 'Ottoni & Fiati', desc: 'Tromba, trombone, flauto, clarinetto e sassofono. Tecnica respiratoria, repertorio orchestrale e jazz.', livelli: 'Principiante, Avanzato', foto: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&q=80&fit=crop', visible: true },
-    { nome: 'Batteria & Percussioni', desc: "Ritmica, coordinazione, stili (rock, jazz, latino) e musica d'insieme. Per bambini e adulti.", livelli: 'Principiante, Intermedio', foto: 'https://images.unsplash.com/photo-1519892300165-cb5542fb47c7?w=600&q=80&fit=crop', visible: true },
-    { nome: 'Canto', desc: 'Tecnica vocale, respirazione, interpretazione, repertorio lirico e pop. Individuale e corale.', livelli: 'Tutti i livelli', foto: 'https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Pianoforte',           desc: 'Dal solfeggio alle grandi opere classiche e contemporanee. Lezioni individuali con metodo personalizzato.',              livelli: 'Principiante, Intermedio, Avanzato', foto: 'https://images.unsplash.com/photo-1520523839897-bd0b52f945a0?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Chitarra',             desc: 'Classica, acustica ed elettrica. Tecnica, armonia, improvvisazione e repertorio moderno e tradizionale.',               livelli: 'Principiante, Intermedio, Avanzato', foto: 'https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Violino',              desc: "Tecnica d'arco, postura, intonazione e interpretazione musicale. Repertorio classico e contemporaneo.",                  livelli: 'Base, Avanzato',                   foto: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Ottoni & Fiati',       desc: 'Tromba, trombone, flauto, clarinetto e sassofono. Tecnica respiratoria, repertorio orchestrale e jazz.',                livelli: 'Principiante, Avanzato',           foto: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Batteria & Percussioni', desc: "Ritmica, coordinazione, stili (rock, jazz, latino) e musica d'insieme. Per bambini e adulti.",                        livelli: 'Principiante, Intermedio',         foto: 'https://images.unsplash.com/photo-1519892300165-cb5542fb47c7?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Canto',                desc: 'Tecnica vocale, respirazione, interpretazione, repertorio lirico e pop. Individuale e corale.',                         livelli: 'Tutti i livelli',                  foto: 'https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=600&q=80&fit=crop', visible: true },
+    { nome: 'Teoria Musicale',      desc: 'Solfeggio, armonia, analisi. Le fondamenta teoriche per comprendere e comunicare la musica.',                           livelli: 'Tutti i livelli',                  foto: 'https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=600&q=80&fit=crop', visible: true },
+    { nome: "Musica d'Insieme",     desc: "Suonare in ensemble misti: comunicazione, ascolto reciproco e spirito di squadra musicale.",                            livelli: 'Base, Intermedio',                 foto: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=600&q=80&fit=crop', visible: true },
   ],
   complementari: [
-    { nome: 'Teoria Musicale', desc: 'Solfeggio, armonia, analisi. Le fondamenta teoriche per comprendere e comunicare la musica.', foto: 'https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=500&q=80&fit=crop', visible: true },
-    { nome: 'Produzione Musicale', desc: 'DAW, campionatori, arrangiamento digitale. Crea e produci musica con gli strumenti moderni.', foto: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=500&q=80&fit=crop', visible: true },
-    { nome: "Musica d'Insieme", desc: "Suonare in ensemble misti: comunicazione, ascolto reciproco e spirito di squadra musicale.", foto: 'https://images.unsplash.com/photo-1465847899084-d164df4dedc6?w=500&q=80&fit=crop', visible: true },
-    { nome: 'Storia della Musica', desc: 'Dal Medioevo al contemporaneo: un viaggio culturale attraverso i secoli della grande musica.', foto: 'https://images.unsplash.com/photo-1446057032654-9d8885db76c6?w=500&q=80&fit=crop', visible: true },
-    { nome: 'Dizione e Fonetica', desc: 'Per cantanti e strumentisti: tecnica di respirazione, dizione italiana e interpretazione del testo.', foto: 'https://images.unsplash.com/photo-1501612780327-45045538702b?w=500&q=80&fit=crop', visible: true },
-    { nome: 'Psicologia del Musicista', desc: "Gestione dell'ansia da palcoscenico, concentrazione e studio efficace.", foto: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=500&q=80&fit=crop', visible: true },
-    { nome: 'Musica Leggera & Pop', desc: 'Armonia moderna, cifre, accompagnamento. Il percorso per suonare la musica di oggi.', foto: 'https://images.unsplash.com/photo-1487215078519-e21cc028cb29?w=500&q=80&fit=crop', visible: true },
-    { nome: 'Preparazione Esami', desc: 'Preparazione specifica per Conservatorio, esami di diploma e certificazioni ufficiali.', foto: 'https://images.unsplash.com/photo-1434873740857-1bc5653afda8?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Produzione Musicale',    desc: 'DAW, campionatori, arrangiamento digitale. Crea e produci musica con gli strumenti moderni.',                       foto: 'https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Storia della Musica',    desc: 'Dal Medioevo al contemporaneo: un viaggio culturale attraverso i secoli della grande musica.',                      foto: 'https://images.unsplash.com/photo-1446057032654-9d8885db76c6?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Dizione e Fonetica',     desc: 'Per cantanti e strumentisti: tecnica di respirazione, dizione italiana e interpretazione del testo.',               foto: 'https://images.unsplash.com/photo-1501612780327-45045538702b?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Psicologia del Musicista', desc: "Gestione dell'ansia da palcoscenico, concentrazione e studio efficace.",                                         foto: 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Musica Leggera & Pop',   desc: 'Armonia moderna, cifre, accompagnamento. Il percorso per suonare la musica di oggi.',                              foto: 'https://images.unsplash.com/photo-1487215078519-e21cc028cb29?w=500&q=80&fit=crop', visible: true },
+    { nome: 'Preparazione Esami',     desc: 'Preparazione specifica per Conservatorio, esami di diploma e certificazioni ufficiali.',                           foto: 'https://images.unsplash.com/photo-1434873740857-1bc5653afda8?w=500&q=80&fit=crop', visible: true },
   ],
   concerti: [
     { data: '2025-03-15', ora: '20:30', titolo: 'Serata di Musica da Camera', luogo: 'Aula Magna, Sede Associazione', ingresso: 'Ingresso libero', badge: 'Ensemble', visible: true },
@@ -1151,6 +1196,83 @@ async function toggleSezione(key) {
   } catch(e) { console.error('toggleSezione:', e); }
 }
 
+// ─────────────── DRAG & DROP CORSI ─────────────────────────────
+let _cardDragType = null;
+let _cardDragIdx  = null;
+
+function cardDragStart(e, type, idx) {
+  _cardDragType = type;
+  _cardDragIdx  = idx;
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function cardDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.edit-card').forEach(c => c.classList.remove('drag-over-card'));
+}
+function cardDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over-card');
+}
+function cardDragLeave(e) {
+  e.currentTarget.classList.remove('drag-over-card');
+}
+function cardDrop(e, type, toIdx) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over-card');
+  if (_cardDragType !== type || _cardDragIdx === null || _cardDragIdx === toIdx) return;
+  const arr = DATA[type];
+  const item = arr.splice(_cardDragIdx, 1)[0];
+  arr.splice(toIdx, 0, item);
+  _cardDragIdx = null;
+  _cardDragType = null;
+  if (type === 'corsi')         renderCorsi();
+  if (type === 'complementari') renderComp();
+  saveData();
+}
+
+// ─────────────── AGGIUNGI / ELIMINA CORSO ───────────────────────
+function addCorso(type) {
+  const isComp = type === 'complementari';
+  const nuovo = {
+    nome: isComp ? 'Nuovo Corso Complementare' : 'Nuovo Corso',
+    desc: '',
+    livelli: isComp ? '' : 'Tutti i livelli',
+    foto: '',
+    visible: true
+  };
+  if (isComp) delete nuovo.livelli;
+  DATA[type].push(nuovo);
+  if (type === 'corsi')         renderCorsi();
+  if (type === 'complementari') renderComp();
+  saveData();
+  // Scrolla all'ultima card aggiunta
+  setTimeout(() => {
+    const cards = document.querySelectorAll('#' + (isComp ? 'comp' : 'corsi') + '-grid .edit-card');
+    if (cards.length) cards[cards.length-1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 150);
+}
+
+async function deleteCorso(type, idx) {
+  const nome = DATA[type][idx].nome;
+  if (!confirm(`Eliminare definitivamente "${nome}"?
+Questa operazione non può essere annullata.`)) return;
+  // Elimina da Supabase se presente
+  const item = DATA[type][idx];
+  if (DB_READY && item._id) {
+    try {
+      const table = type === 'corsi' ? 'corsi' : 'corsi_complementari';
+      await db.from(table).delete().eq('id', item._id);
+    } catch(e) { console.warn('Delete from Supabase failed:', e); }
+  }
+  DATA[type].splice(idx, 1);
+  if (type === 'corsi')         renderCorsi();
+  if (type === 'complementari') renderComp();
+  await saveData();
+  showToast(`"${nome}" eliminato.`);
+}
+
 function moveSezione(idx, dir) {
   if (!DATA.ordine) return;
   const newIdx = idx + dir;
@@ -1384,18 +1506,31 @@ function renderCorsi() {
   grid.innerHTML = DATA.corsi.map((c, i) => {
     const vis = c.visible !== false;
     return `
-    <div class="edit-card ${vis ? '' : 'card-hidden'}">
+    <div class="edit-card ${vis ? '' : 'card-hidden'}"
+         draggable="true"
+         data-type="corsi" data-idx="${i}"
+         ondragstart="cardDragStart(event,'corsi',${i})"
+         ondragover="cardDragOver(event)"
+         ondrop="cardDrop(event,'corsi',${i})"
+         ondragleave="cardDragLeave(event)"
+         ondragend="cardDragEnd(event)">
       <div class="card-top-bar">
+        <span class="card-drag-handle" title="Trascina per riordinare">⠿</span>
         <span class="card-top-name">${c.nome}</span>
         <button class="vis-toggle-btn ${vis ? 'on' : 'off'}" onclick="toggleItem('corsi',${i})">
           <span class="vis-dot"></span>${vis ? '👁 Visibile' : '🙈 Nascosto'}
         </button>
+        <button class="btn-delete-corso" onclick="deleteCorso('corsi',${i})" title="Elimina corso">🗑</button>
       </div>
       <div class="card-photo-preview ${c.foto ? '' : 'no-img'}" onclick="openPhotoModal('corsi', ${i})">
         ${c.foto ? `<img src="${c.foto}" alt="${c.nome}" onerror="this.parentElement.classList.add('no-img')">` : ''}
         <div class="photo-overlay"><span>📷</span>Cambia foto</div>
       </div>
       <div class="card-body">
+        <div class="form-group">
+          <label>Nome corso</label>
+          <input type="text" value="${c.nome}" onchange="DATA.corsi[${i}].nome=this.value">
+        </div>
         <div class="form-group">
           <label>Descrizione</label>
           <textarea rows="3" onchange="DATA.corsi[${i}].desc=this.value">${c.desc}</textarea>
@@ -1420,18 +1555,31 @@ function renderComp() {
   grid.innerHTML = DATA.complementari.map((c, i) => {
     const vis = c.visible !== false;
     return `
-    <div class="edit-card ${vis ? '' : 'card-hidden'}">
+    <div class="edit-card ${vis ? '' : 'card-hidden'}"
+         draggable="true"
+         data-type="complementari" data-idx="${i}"
+         ondragstart="cardDragStart(event,'complementari',${i})"
+         ondragover="cardDragOver(event)"
+         ondrop="cardDrop(event,'complementari',${i})"
+         ondragleave="cardDragLeave(event)"
+         ondragend="cardDragEnd(event)">
       <div class="card-top-bar">
+        <span class="card-drag-handle" title="Trascina per riordinare">⠿</span>
         <span class="card-top-name">${c.nome}</span>
         <button class="vis-toggle-btn ${vis ? 'on' : 'off'}" onclick="toggleItem('complementari',${i})">
           <span class="vis-dot"></span>${vis ? '👁 Visibile' : '🙈 Nascosto'}
         </button>
+        <button class="btn-delete-corso" onclick="deleteCorso('complementari',${i})" title="Elimina corso">🗑</button>
       </div>
       <div class="card-photo-preview ${c.foto ? '' : 'no-img'}" onclick="openPhotoModal('comp', ${i})">
         ${c.foto ? `<img src="${c.foto}" alt="${c.nome}" onerror="this.parentElement.classList.add('no-img')">` : ''}
         <div class="photo-overlay"><span>📷</span>Cambia foto</div>
       </div>
       <div class="card-body">
+        <div class="form-group">
+          <label>Nome corso</label>
+          <input type="text" value="${c.nome}" onchange="DATA.complementari[${i}].nome=this.value">
+        </div>
         <div class="form-group">
           <label>Descrizione</label>
           <textarea rows="3" onchange="DATA.complementari[${i}].desc=this.value">${c.desc}</textarea>
