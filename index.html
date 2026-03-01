@@ -2,20 +2,8 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<!-- ── VISIBILITY CSS INJECT — deve essere il primo script ── -->
-<script>
-(function(){
-  try {
-    var css = localStorage.getItem('fm_vis_css');
-    if (css) {
-      var s = document.createElement('style');
-      s.id = 'fm-vis-css';
-      s.textContent = css;
-      document.head.appendChild(s);
-    }
-  } catch(e) {}
-})();
-</script>
+<!-- ── VISIBILITY CSS — generato dall'admin, non modificare ── -->
+<style id="fm-vis">/* fm-vis-placeholder */</style>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Futuro Musica — Associazione Artistico Musicale</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet">
@@ -1291,119 +1279,75 @@
   document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
 </script>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════
-//  FUTURO MUSICA — Dynamic content loader
-//  Reads data saved by admin.html from localStorage
-//  and renders it live on the public site.
+//  FUTURO MUSICA — Sito Pubblico
+//  Legge i dati da Supabase e aggiorna il sito in tempo reale
+//  Fallback: se Supabase non disponibile, usa localStorage (admin locale)
 // ═══════════════════════════════════════════════════════
 
-(function() {
-  const KEY = 'fm_admin_data';
-  let raw;
-  try { raw = localStorage.getItem(KEY); } catch(e) { return; }
-  if (!raw) return; // No admin data yet → keep static HTML
-
-  let DATA;
-  try { DATA = JSON.parse(raw); } catch(e) { console.warn('Admin data parse error:', e); return; }
-  if (!DATA || typeof DATA !== 'object') return;
+(async function() {
+  const SUPABASE_URL = 'https://XXXXX.supabase.co';  // ← sostituisci
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIs...';    // ← anon public key
 
   const monthsIT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-
-  // ── Helper ──
   function el(id) { return document.getElementById(id); }
-  function qs(sel) { return document.querySelector(sel); }
-  function qsAll(sel) { return document.querySelectorAll(sel); }
 
-  // ── 1. TESTI HERO ──
-  if (DATA.testi) {
-    const t = DATA.testi;
-    if (el('hero-sub') && t.hero_sub) el('hero-sub').textContent = t.hero_sub;
-    if (el('hero-desc') && t.hero_desc) el('hero-desc').textContent = t.hero_desc;
-    if (el('hero-since') && t.stat_anni) {
-      el('hero-since').innerHTML = `<strong>${t.stat_anni}</strong> anni di musica`;
-    }
-    // Corsi section desc
-    const corsiDesc = document.querySelector('#corsi .section-desc');
-    if (corsiDesc && t.corsi_desc) corsiDesc.textContent = t.corsi_desc;
-    // Attività section desc
-    const attDesc = document.querySelector('#attivita .section-desc');
-    if (attDesc && t.attivita_desc) attDesc.textContent = t.attivita_desc;
-    // Anno fondazione (hero eyebrow)
-    const eyebrow = document.querySelector('.hero-eyebrow');
-    if (eyebrow && t.anno_fond) {
-      eyebrow.textContent = `Associazione Artistico Musicale · dal ${t.anno_fond}`;
-    }
-    // Stats box
-    if (el('stats-box') && (t.stat_studenti || t.stat_anni || t.anno_fond)) {
-      const h3 = el('stats-box').querySelector('h3');
-      if (h3 && t.anno_fond) h3.innerHTML = `Una comunità che <span>suona insieme</span> dal ${t.anno_fond}`;
-    }
-    // Stats numbers
-    if (el('stats-numbers') && t.stat_studenti) {
-      el('stats-numbers').innerHTML = `
-        <div class="stat-item"><div class="stat-num">${t.stat_studenti}</div><div class="stat-label">Studenti</div></div>
-        <div class="stat-item"><div class="stat-num">${t.stat_docenti}</div><div class="stat-label">Docenti</div></div>
-        <div class="stat-item"><div class="stat-num">${t.stat_anni}</div><div class="stat-label">Anni</div></div>`;
-    }
-    // Footer anno
-    document.querySelectorAll('footer').forEach(footer => {
-      footer.innerHTML = footer.innerHTML.replace(/© \d{4}/g, `© ${new Date().getFullYear()}`);
-    });
-  }
+  // ── Helpers render ──────────────────────────────────────────────
 
-  // ── 2. CORSI PRINCIPALI ──
-  if (DATA.corsi && el('corsi-grid')) {
-    const visibleCorsi = DATA.corsi.filter(c => c.visible !== false);
-    el('corsi-grid').innerHTML = visibleCorsi.map((c, i) => `
+  function renderCorsi(corsi) {
+    if (!el('corsi-grid')) return;
+    const visible = corsi.filter(c => c.visible !== false);
+    if (!visible.length) return;
+    el('corsi-grid').innerHTML = visible.map(c => `
       <div class="corso-card reveal">
         <div class="corso-photo-wrap">
-          <img class="corso-photo" src="${c.foto}" alt="Corso di ${c.nome}"
+          <img class="corso-photo" src="${c.foto || ''}" alt="Corso di ${c.nome}"
                onerror="this.parentElement.classList.add('no-photo')">
           <span class="corso-photo-badge">📷 dal nostro profilo</span>
         </div>
         <div class="corso-card-body">
           <h3 class="corso-name">${c.nome}</h3>
-          <p class="corso-desc">${c.desc}</p>
+          <p class="corso-desc">${c.descrizione || c.desc || ''}</p>
           <div class="corso-levels">
-            ${c.livelli.split(',').map(l => `<span class="level-badge">${l.trim()}</span>`).join('')}
+            ${(c.livelli||'').split(',').map(l => `<span class="level-badge">${l.trim()}</span>`).join('')}
           </div>
         </div>
       </div>`).join('');
   }
 
-  // ── 3. CORSI COMPLEMENTARI ──
-  if (DATA.complementari && el('comp-grid')) {
-    const visibleComp = DATA.complementari.filter(c => c.visible !== false);
-    el('comp-grid').innerHTML = visibleComp.map((c, i) => `
+  function renderComplementari(comp) {
+    if (!el('comp-grid')) return;
+    const visible = comp.filter(c => c.visible !== false);
+    if (!visible.length) return;
+    el('comp-grid').innerHTML = visible.map(c => `
       <div class="comp-card reveal">
         <div class="comp-photo-wrap">
-          <img class="comp-photo" src="${c.foto}" alt="${c.nome}"
+          <img class="comp-photo" src="${c.foto || ''}" alt="${c.nome}"
                onerror="this.parentElement.classList.add('no-photo')">
         </div>
         <div class="comp-card-body">
           <h3 class="comp-name">${c.nome}</h3>
-          <p class="comp-desc">${c.desc}</p>
+          <p class="comp-desc">${c.descrizione || c.desc || ''}</p>
         </div>
       </div>`).join('');
   }
 
-  // ── 4. CONCERTI ──
-  if (DATA.concerti && el('concerti-grid')) {
-    const sorted = [...DATA.concerti].filter(c => c.visible !== false).sort((a,b) => new Date(a.data) - new Date(b.data));
-    const concertiHTML = sorted.map((ev, i) => {
+  function renderConcerti(concerti) {
+    if (!el('concerti-grid')) return;
+    const sorted = [...concerti].filter(c => c.visible !== false).sort((a,b) => new Date(a.data) - new Date(b.data));
+    if (!sorted.length) return;
+    const colors = ['var(--blue)','var(--red)','var(--blue-dark)'];
+    const html = sorted.map((ev, i) => {
       const dt = ev.data ? new Date(ev.data + 'T00:00:00') : null;
-      const day   = dt ? dt.getDate() : '--';
-      const month = dt ? monthsIT[dt.getMonth()] : '---';
-      const year  = dt ? dt.getFullYear() : '----';
-      const colors = ['var(--blue)','var(--red)','var(--blue-dark)'];
       return `
       <div class="concerto-card reveal">
         <div class="concerto-top">
           <div class="concerto-date" style="background:${colors[i%3]}">
-            <div class="day">${day}</div>
-            <div class="month">${month}</div>
-            <div class="year">${year}</div>
+            <div class="day">${dt ? dt.getDate() : '--'}</div>
+            <div class="month">${dt ? monthsIT[dt.getMonth()] : '---'}</div>
+            <div class="year">${dt ? dt.getFullYear() : '----'}</div>
           </div>
           <div class="concerto-head">
             <h3 class="concerto-title">${ev.titolo}</h3>
@@ -1411,106 +1355,186 @@
           </div>
         </div>
         <div class="concerto-meta">
-          <span>🕐 ore ${ev.ora}</span>
-          <span>📍 ${ev.luogo}</span>
-          <span>🎟 ${ev.ingresso}</span>
+          <span>🕐 ore ${ev.ora || ''}</span>
+          <span>📍 ${ev.luogo || ''}</span>
+          <span>🎟 ${ev.ingresso || 'Ingresso libero'}</span>
         </div>
       </div>`;
     }).join('');
-    // Keep the last static card (the "seguici sui social" card)
     const lastCard = el('concerti-grid').lastElementChild;
-    el('concerti-grid').innerHTML = concertiHTML;
+    el('concerti-grid').innerHTML = html;
     if (lastCard) el('concerti-grid').appendChild(lastCard);
   }
 
-  // ── 5. CONTATTI ──
-  if (DATA.contatti && el('contatti-info')) {
-    const c = DATA.contatti;
+  function renderAttivita(attivita) {
+    const list = document.querySelector('#attivita .attivita-list');
+    if (!list) return;
+    const visible = attivita.filter(a => a.visible !== false);
+    if (!visible.length) return;
+    list.innerHTML = visible.map((a, i) => `
+      <div class="attivita-item ${i===0?'active':''}" onclick="setActiveAttivita(this)">
+        <span class="attivita-num">0${i+1}</span>
+        <div class="attivita-info">
+          <h3>${a.titolo}</h3>
+          <p>${a.descrizione || a.desc || ''}</p>
+        </div>
+      </div>`).join('');
+  }
+
+  function renderContatti(cfg) {
+    if (!el('contatti-info')) return;
     el('contatti-info').innerHTML = `
       <span class="section-eyebrow">Dove siamo</span>
       <h2>Vieni a trovarci</h2>
       <div style="width:40px;height:3px;background:rgba(255,255,255,.3);margin-bottom:28px;"></div>
-      <div class="contact-item">
-        <div class="contact-icon">📍</div>
-        <div class="contact-info-text"><h4>Indirizzo</h4><p>${c.addr1}<br>${c.city} (${c.prov})</p></div>
-      </div>
-      <div class="contact-item">
-        <div class="contact-icon">📞</div>
-        <div class="contact-info-text"><h4>Telefono</h4><p>${c.phone}</p></div>
-      </div>
-      <div class="contact-item">
-        <div class="contact-icon">✉️</div>
-        <div class="contact-info-text"><h4>Email</h4><p>${c.email}</p></div>
-      </div>
-      <div class="contact-item">
-        <div class="contact-icon">🕐</div>
+      <div class="contact-item"><div class="contact-icon">📍</div>
+        <div class="contact-info-text"><h4>Indirizzo</h4>
+          <p>${cfg.contatti_indirizzo || ''}<br>${cfg.contatti_citta || ''}</p></div></div>
+      <div class="contact-item"><div class="contact-icon">📞</div>
+        <div class="contact-info-text"><h4>Telefono</h4><p>${cfg.contatti_phone || ''}</p></div></div>
+      <div class="contact-item"><div class="contact-icon">✉️</div>
+        <div class="contact-info-text"><h4>Email</h4><p>${cfg.contatti_email || ''}</p></div></div>
+      <div class="contact-item"><div class="contact-icon">🕐</div>
         <div class="contact-info-text"><h4>Orari Segreteria</h4>
-          <p>Lun – Ven: ${c.orari_lv}<br>Sabato: ${c.orari_sab}</p>
-        </div>
-      </div>`;
-    // Social links
-    if (el('social-links')) {
-      el('social-links').innerHTML = `
-        <a class="social-btn" href="${c.fb_url || '#'}" target="_blank" rel="noopener">𝒇 Facebook</a>
-        <a class="social-btn" href="${c.ig_url || '#'}" target="_blank" rel="noopener">◈ Instagram</a>`;
-    }
-    if (el('footer-social')) {
-      el('footer-social').innerHTML = `
-        <a href="${c.fb_url || '#'}" title="Facebook" target="_blank">𝒇</a>
-        <a href="${c.ig_url || '#'}" title="Instagram" target="_blank">◈</a>`;
-    }
+          <p>Lun – Ven: ${cfg.contatti_orari_lv || ''}<br>Sabato: ${cfg.contatti_orari_sab || ''}</p></div></div>`;
   }
 
-  // ── 6. ORDINE sezioni (visibilità gestita da CSS nell'<head>) ──
-  try {
-    const ORD = DATA.ordine || ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'];
+  function applySezioni(vis, ordine) {
+    // Visibilità
+    const IDS = ['home','corsi','attivita','concerti','complementari','social','area-riservata','contatti'];
+    IDS.forEach(id => {
+      const sec = document.getElementById(id);
+      if (sec) sec.style.display = (vis[id] === false) ? 'none' : '';
+    });
+    if (el('stats-box')) el('stats-box').style.display = (vis.stats_box === false) ? 'none' : '';
+    // Ordine
     const footer = document.querySelector('footer');
-    if (footer) {
-      ORD.forEach(key => {
-        const sec = document.getElementById(key);
+    if (footer && ordine && ordine.length) {
+      ordine.forEach(id => {
+        const sec = document.getElementById(id);
         if (sec) document.body.insertBefore(sec, footer);
       });
     }
-  } catch(e) { console.warn('Ordine sezioni error:', e); }
+  }
 
-  // ── 7. ATTIVITÀ — aggiorna lista attività ──
-  if (DATA.attivita) {
-    const attList = document.querySelector('#attivita .attivita-list');
-    if (attList) {
-      const visAtt = DATA.attivita.filter(a => a.visible !== false);
-      attList.innerHTML = visAtt.map((a, i) => `
-        <div class="attivita-item ${i===0?'active':''}" onclick="setActiveAttivita(this)">
-          <span class="attivita-num">0${i+1}</span>
-          <div class="attivita-info">
-            <h3>${a.titolo}</h3>
-            <p>${a.desc}</p>
-          </div>
-        </div>`).join('');
+  function applyTesti(cfg) {
+    if (el('hero-sub') && cfg.hero_sub) el('hero-sub').textContent = cfg.hero_sub;
+    if (el('hero-desc') && cfg.hero_desc) el('hero-desc').textContent = cfg.hero_desc;
+    if (el('stats-numbers') && cfg.stat_studenti) {
+      el('stats-numbers').innerHTML = `
+        <div class="stat-item"><div class="stat-num">${cfg.stat_studenti}</div><div class="stat-label">Studenti</div></div>
+        <div class="stat-item"><div class="stat-num">${cfg.stat_docenti}</div><div class="stat-label">Docenti</div></div>
+        <div class="stat-item"><div class="stat-num">${cfg.stat_anni}</div><div class="stat-label">Anni</div></div>`;
     }
   }
 
-  // ── 8. Re-run IntersectionObserver on new cards ──
-  const observer = new IntersectionObserver(entries => {
+  // ── CARICAMENTO DA SUPABASE ──────────────────────────────────────
+  async function loadFromSupabase() {
+    try {
+      const { createClient } = window.supabase;
+      if (!createClient || SUPABASE_URL.includes('XXXXX')) throw new Error('Supabase non configurato');
+      const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+      // Carica tutto in parallelo
+      const [corsiRes, compRes, concertiRes, attivitaRes, cfgRes] = await Promise.all([
+        db.from('corsi').select('*').order('nome'),
+        db.from('corsi_complementari').select('*').order('ordine'),
+        db.from('concerti').select('*').order('data'),
+        db.from('sito_attivita').select('*').order('ordine'),
+        db.from('sito_config').select('*'),
+      ]);
+
+      // Trasforma config in oggetto
+      const cfg = {};
+      (cfgRes.data || []).forEach(r => { cfg[r.chiave] = r.valore; });
+
+      const vis   = cfg.sezioni_visibili  ? JSON.parse(cfg.sezioni_visibili)  : {};
+      const ordine = cfg.sezioni_ordine   ? JSON.parse(cfg.sezioni_ordine)    : [];
+
+      // Render
+      if (corsiRes.data)   renderCorsi(corsiRes.data);
+      if (compRes.data)    renderComplementari(compRes.data);
+      if (concertiRes.data) renderConcerti(concertiRes.data);
+      if (attivitaRes.data) renderAttivita(attivitaRes.data);
+      renderContatti(cfg);
+      applyTesti(cfg);
+      applySezioni(vis, ordine);
+
+      // Realtime — aggiorna automaticamente senza reload
+      db.channel('site-updates')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'corsi' }, async () => {
+          const { data } = await db.from('corsi').select('*').order('nome');
+          if (data) renderCorsi(data);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'concerti' }, async () => {
+          const { data } = await db.from('concerti').select('*').order('data');
+          if (data) renderConcerti(data);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sito_config' }, async () => {
+          const { data } = await db.from('sito_config').select('*');
+          const c2 = {};
+          (data||[]).forEach(r => { c2[r.chiave] = r.valore; });
+          applyTesti(c2);
+          const v2 = c2.sezioni_visibili ? JSON.parse(c2.sezioni_visibili) : {};
+          const o2 = c2.sezioni_ordine   ? JSON.parse(c2.sezioni_ordine)   : [];
+          applySezioni(v2, o2);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'sito_attivita' }, async () => {
+          const { data } = await db.from('sito_attivita').select('*').order('ordine');
+          if (data) renderAttivita(data);
+        })
+        .subscribe();
+
+      console.log('✅ Sito caricato da Supabase con realtime attivo');
+
+    } catch(e) {
+      console.warn('Supabase non disponibile, uso fallback localStorage:', e.message);
+      loadFromLocalStorage();
+    }
+  }
+
+  // ── FALLBACK: localStorage (compatibilità admin.html locale) ─────
+  function loadFromLocalStorage() {
+    try {
+      const raw = localStorage.getItem('fm_admin_data');
+      if (!raw) return;
+      const DATA = JSON.parse(raw);
+      if (!DATA) return;
+      if (DATA.corsi)         renderCorsi(DATA.corsi.map(c => ({...c, descrizione: c.desc})));
+      if (DATA.complementari) renderComplementari(DATA.complementari.map(c => ({...c, descrizione: c.desc})));
+      if (DATA.concerti)      renderConcerti(DATA.concerti);
+      if (DATA.attivita)      renderAttivita(DATA.attivita.map(a => ({...a, descrizione: a.desc})));
+      if (DATA.testi)         applyTesti({ hero_sub: DATA.testi.hero_sub, hero_desc: DATA.testi.hero_desc, stat_studenti: DATA.testi.stat_studenti, stat_docenti: DATA.testi.stat_docenti, stat_anni: DATA.testi.stat_anni });
+      const vis = DATA.sezioni || {};
+      const ordine = DATA.ordine || [];
+      applySezioni(vis, ordine);
+    } catch(e) { console.warn('localStorage fallback error:', e); }
+  }
+
+  // ── Avvio ────────────────────────────────────────────────────────
+  await loadFromSupabase();
+
+  // ── IntersectionObserver per animazioni reveal ───────────────────
+  const obs = new IntersectionObserver(entries => {
     entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
   }, { threshold: 0.08 });
-  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+  document.querySelectorAll('.reveal').forEach(e => obs.observe(e));
 
-  // ── 7. Admin badge (hidden, appears on hover bottom-right) ──
+  // ── Admin badge (hover angolo basso-dx) ─────────────────────────
   const badge = document.createElement('a');
-  badge.href = 'admin.html';
-  badge.id = 'admin-badge';
-  badge.title = 'Pannello Admin';
-  badge.textContent = '⚙';
-  badge.style.cssText = `
-    position:fixed; bottom:20px; right:20px; z-index:9000;
-    width:40px; height:40px; background:rgba(26,79,160,0.15);
-    border:1px solid rgba(26,79,160,0.2); border-radius:50%;
-    display:flex; align-items:center; justify-content:center;
-    color:rgba(26,79,160,0.3); font-size:1.1rem; text-decoration:none;
-    transition:all 0.3s; cursor:pointer;
-    opacity:0; pointer-events:none;`;
+  badge.href = 'admin.html'; badge.id = 'admin-badge'; badge.title = 'Pannello Admin'; badge.textContent = '⚙';
+  badge.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9000;width:40px;height:40px;background:rgba(26,79,160,0.15);border:1px solid rgba(26,79,160,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;color:rgba(26,79,160,0.3);font-size:1.1rem;text-decoration:none;transition:all 0.3s;cursor:pointer;opacity:0;pointer-events:none;';
   document.body.appendChild(badge);
-  // Show on hover bottom-right corner
-  document.addEventListener('mousemove', (e) => {
-    const nearCorner = e.clientX > window.innerWidth-120 && e.clientY > window.innerHeight-120;
-    badge.style.opacity = nearCorner
+  document.addEventListener('mousemove', e => {
+    const near = e.clientX > window.innerWidth-120 && e.clientY > window.innerHeight-120;
+    badge.style.opacity = near ? '1' : '0';
+    badge.style.pointerEvents = near ? 'auto' : 'none';
+    badge.style.background = near ? 'rgba(26,79,160,0.9)' : 'rgba(26,79,160,0.15)';
+    badge.style.color = near ? '#fff' : 'rgba(26,79,160,0.3)';
+  });
+
+})();
+</script>
+
+</body>
+</html>
