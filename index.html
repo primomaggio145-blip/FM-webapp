@@ -1057,41 +1057,15 @@
       <h2>Seguici, <span>condividi la musica</span></h2>
       <p>Foto di concerti, video di masterclass, live session e aggiornamenti sugli eventi. La nostra community cresce ogni giorno.</p>
       <div class="social-links" id="social-links">
-        <div class="social-btn">𝒇 Facebook</div>
-        <div class="social-btn">◈ Instagram</div>
-        
-      </div>
-      <div class="fb-note">
-        📌 <strong>Integrazione Facebook:</strong> il feed di foto e video verrà collegato automaticamente alla tua pagina Facebook tramite API. Basta inserire il <em>Page ID</em> della tua pagina.
+        <a class="social-btn" href="#" id="fb-link" target="_blank" rel="noopener">𝒇 Facebook</a>
+        <a class="social-btn" href="#" id="ig-link" target="_blank" rel="noopener">◈ Instagram</a>
       </div>
     </div>
     <div>
-      <!-- GALLERY: sostituire src con URL delle vostre foto da FB/Instagram -->
-      <div class="gallery-grid">
-        <div class="gallery-item">
-          <img src="https://images.unsplash.com/photo-1514320291840-2e0a9bf2a9ae?w=600&q=80&fit=crop" alt="Concerto" onerror="this.style.display='none'">
-          <span class="gallery-label">📷 Facebook</span>
-        </div>
-        <div class="gallery-item">
-          <img src="https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=300&q=80&fit=crop" alt="Musica" onerror="this.style.display='none'">
-          <span class="gallery-label">📷 Instagram</span>
-        </div>
-        <div class="gallery-item">
-          <img src="https://images.unsplash.com/photo-1444628838545-ac4016a5418a?w=300&q=80&fit=crop" alt="Studenti" onerror="this.style.display='none'">
-        </div>
-        <div class="gallery-item">
-          <img src="https://images.unsplash.com/photo-1507838153414-b4b713384a76?w=300&q=80&fit=crop" alt="Lezione" onerror="this.style.display='none'">
-          <span class="gallery-label">📷 Facebook</span>
-        </div>
-        <div class="gallery-item">
-          <img src="https://images.unsplash.com/photo-1501386761578-eaa54b6ba39c?w=300&q=80&fit=crop" alt="Saggio" onerror="this.style.display='none'">
-        </div>
-        <div class="gallery-item">
-          <img src="https://images.unsplash.com/photo-1476136236990-838240be4859?w=300&q=80&fit=crop" alt="Workshop" onerror="this.style.display='none'">
-          <span class="gallery-label">📷 Instagram</span>
-        </div>
+      <div class="gallery-grid" id="gallery-grid">
+        <!-- Popolato dinamicamente da Supabase / admin -->
       </div>
-      <p style="text-align:center;color:rgba(255,255,255,0.3);font-size:0.7rem;margin-top:10px;letter-spacing:0.1em;text-transform:uppercase;">Galleria aggiornata con le tue foto da Facebook & Instagram</p>
+      <p style="text-align:center;color:rgba(255,255,255,0.3);font-size:0.7rem;margin-top:10px;letter-spacing:0.1em;text-transform:uppercase;">Galleria aggiornata con le nostre foto</p>
     </div>
   </div>
 </section>
@@ -1381,6 +1355,42 @@
       </div>`).join('');
   }
 
+  function renderGallery(socialData) {
+    const grid = document.getElementById('gallery-grid');
+    if (!grid) return;
+
+    // Link profili
+    const fbLink = document.getElementById('fb-link');
+    const igLink = document.getElementById('ig-link');
+    if (fbLink && socialData.fb_url) fbLink.href = socialData.fb_url;
+    if (igLink && socialData.ig_url) igLink.href = socialData.ig_url;
+
+    const posts = (socialData.posts || []).filter(p => p.visible !== false);
+    if (!posts.length) return;
+
+    const tipoIcon = { foto:'📷', reel:'🎬', storia:'⏱' };
+    const fonteLabel = { facebook:'Facebook', instagram:'Instagram' };
+
+    grid.innerHTML = posts.map(p => {
+      const icon  = tipoIcon[p.tipo]  || '📷';
+      const fonte = fonteLabel[p.fonte] || 'Social';
+      const link  = p.url && p.url !== '#' ? p.url : null;
+      const inner = `
+        <img src="${p.img}" alt="${p.caption || ''}"
+             style="width:100%;height:100%;object-fit:cover;transition:transform 0.4s;"
+             onerror="this.parentElement.parentElement.style.display='none'">
+        <span class="gallery-label">${icon} ${fonte}</span>
+        ${p.caption ? `<span style="position:absolute;bottom:0;left:0;right:0;padding:8px 10px;
+          background:linear-gradient(transparent,rgba(0,0,0,0.7));color:#fff;font-size:11px;
+          opacity:0;transition:opacity 0.25s;pointer-events:none;" class="post-cap">${p.caption}</span>` : ''}`;
+      return link
+        ? `<a href="${link}" target="_blank" rel="noopener" class="gallery-item" style="display:block;position:relative;overflow:hidden;cursor:pointer;"
+             onmouseover="this.querySelector('img').style.transform='scale(1.08)';const c=this.querySelector('.post-cap');if(c)c.style.opacity='1'"
+             onmouseout="this.querySelector('img').style.transform='';const c=this.querySelector('.post-cap');if(c)c.style.opacity='0'">${inner}</a>`
+        : `<div class="gallery-item" style="position:relative;overflow:hidden;">${inner}</div>`;
+    }).join('');
+  }
+
   function renderContatti(cfg) {
     if (!el('contatti-info')) return;
     el('contatti-info').innerHTML = `
@@ -1457,6 +1467,11 @@
       if (concertiRes.data) renderConcerti(concertiRes.data);
       if (attivitaRes.data) renderAttivita(attivitaRes.data);
       renderContatti(cfg);
+      // Social gallery — legge da sito_config chiave 'social_posts'
+      try {
+        const socialCfg = cfg.social_posts ? JSON.parse(cfg.social_posts) : null;
+        if (socialCfg) renderGallery(socialCfg);
+      } catch(e) {}
       applyTesti(cfg);
       applySezioni(vis, ordine);
 
@@ -1504,6 +1519,7 @@
       if (DATA.complementari) renderComplementari(DATA.complementari.map(c => ({...c, descrizione: c.desc})));
       if (DATA.concerti)      renderConcerti(DATA.concerti);
       if (DATA.attivita)      renderAttivita(DATA.attivita.map(a => ({...a, descrizione: a.desc})));
+      if (DATA.social)        renderGallery(DATA.social);
       if (DATA.testi)         applyTesti({ hero_sub: DATA.testi.hero_sub, hero_desc: DATA.testi.hero_desc, stat_studenti: DATA.testi.stat_studenti, stat_docenti: DATA.testi.stat_docenti, stat_anni: DATA.testi.stat_anni });
       const vis = DATA.sezioni || {};
       const ordine = DATA.ordine || [];
