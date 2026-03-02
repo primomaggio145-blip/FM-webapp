@@ -844,9 +844,11 @@
         Aggiungi manualmente i contenuti che vuoi mostrare: copia l'<strong>URL dell'immagine</strong> del post
         da Facebook o Instagram, incollala nel campo "URL immagine" e il link al post originale nel campo "Link al post".
         Quando un visitatore clicca sulla foto viene portato direttamente al post sui social.<br><br>
-        <strong>Suggerimento:</strong> su Instagram clicca su un post → "Apri in nuova scheda" → copia l'URL dell'immagine
-        con click destro. Su Facebook analogamente. I <code>Reel</code> e le <code>Storie</code> puoi
-        distinguerli con il badge tipo.
+        <strong>Suggerimento:</strong> Le foto da Instagram e Facebook spesso non si caricano direttamente per via delle restrizioni di sicurezza.
+        Per il massimo risultato usa immagini caricate su
+        <a href="https://imgur.com" target="_blank" style="color:#1a4fa0;">Imgur</a> o
+        <a href="https://cloudinary.com" target="_blank" style="color:#1a4fa0;">Cloudinary</a> (gratuiti).
+        Se inserisci solo il link al post senza immagine, il sito mostrerà comunque un riquadro cliccabile con didascalia e logo social.
       </div>
 
       <!-- ID e link profili -->
@@ -1221,8 +1223,14 @@ async function saveDataToSupabase() {
     if (c._id) {
       await db.from('corsi').update({ nome: c.nome, descrizione: c.desc, livelli: c.livelli, foto: c.foto, visible: c.visible }).eq('id', c._id);
     } else {
-      const { data } = await db.from('corsi').insert({ nome: c.nome, descrizione: c.desc, livelli: c.livelli, foto: c.foto, visible: c.visible }).select().single();
+      // id è TEXT PRIMARY KEY senza default → lo generiamo noi
+      const newId = 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+      const { data, error } = await db.from('corsi').insert({
+        id: newId, nome: c.nome, descrizione: c.desc || '',
+        livelli: c.livelli || 'Tutti i livelli', foto: c.foto || '', visible: c.visible, tipo: 'individuale'
+      }).select().single();
       if (data) DATA.corsi[i]._id = data.id;
+      if (error) console.warn('Errore insert corso:', error.message);
     }
   }
 
@@ -1574,25 +1582,30 @@ function cardDrop(e, type, toIdx) {
 }
 
 // ─────────────── AGGIUNGI / ELIMINA CORSO ───────────────────────
-function addCorso(type) {
+async function addCorso(type) {
   const isComp = type === 'complementari';
   const nuovo = {
     nome: isComp ? 'Nuovo Corso Complementare' : 'Nuovo Corso',
     desc: '',
-    livelli: isComp ? '' : 'Tutti i livelli',
     foto: '',
-    visible: true
+    visible: true,
+    // _tmpId serve per il match durante il primo salvataggio su Supabase (corsi usa text PK)
+    _tmpId: 'new_' + Date.now()
   };
-  if (isComp) delete nuovo.livelli;
+  if (!isComp) nuovo.livelli = 'Tutti i livelli';
   DATA[type].push(nuovo);
   if (type === 'corsi')         renderCorsi();
   if (type === 'complementari') renderComp();
-  saveData();
+  updateStats();
+  await saveData();
+  // Re-render dopo salvataggio così la card riflette l'_id reale da Supabase
+  if (type === 'corsi')         renderCorsi();
+  if (type === 'complementari') renderComp();
   // Scrolla all'ultima card aggiunta
   setTimeout(() => {
     const cards = document.querySelectorAll('#' + (isComp ? 'comp' : 'corsi') + '-grid .edit-card');
     if (cards.length) cards[cards.length-1].scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, 150);
+  }, 200);
 }
 
 async function deleteCorso(type, idx) {
@@ -2026,8 +2039,12 @@ async function saveTesti() {
 }
 
 function updateStats() {
-  const sc = document.getElementById('stat-concerti');
-  if(sc) sc.textContent = DATA.concerti.length;
+  const sc  = document.getElementById('stat-concerti');
+  const sk  = document.getElementById('stat-corsi');
+  const sco = document.getElementById('stat-comp');
+  if(sc)  sc.textContent  = DATA.concerti.length;
+  if(sk)  sk.textContent  = (DATA.corsi || []).length;
+  if(sco) sco.textContent = (DATA.complementari || []).length;
 }
 
 // ─────────────── PHOTO MODAL ───────────────
