@@ -5338,13 +5338,17 @@ const CalRepertorioTab = ({ repertorio, lessons, onAdd, onEdit, onDelete, canEdi
 };
 
 // ─── FORM LEZIONE COLLETTIVA ─────────────────────────────────────────────────
-const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, onSave, onClose }) => {
-  const docenti = _docentiRaw || [];
+const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose }) => {
+  const docenti    = _docentiRaw    || [];
+  const repertorio = _repertorioRaw || [];
   const collettivi = courses.filter(c => c.type === "collettivo");
 
   const [step,        setStep]       = useState(1);      // 1=corso  2=dettagli+allievi
   const [selCourse,   setSelCourse]  = useState(null);
   const [selStudents, setSelStudents]= useState([]);      // id[] allievi selezionati
+  const [repertorioIds, setRepertorioIds] = useState([]); // brani aggiunti alla lezione
+  const [showBranoForm, setShowBranoForm] = useState(false);
+  const [newBranoForm, setNewBranoForm]   = useState({ title:'', composer:'', period:'', tonality:'', type:'collettivo', difficulty:'', notes:'' });
   const [form, setForm] = useState({
     date:      yyyymmdd(today),
     hour:      "15:00",
@@ -5357,6 +5361,8 @@ const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, onSave, 
   });
   const [err, setErr] = useState({});
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const setNB = (k,v) => setNewBranoForm(p=>({...p,[k]:v}));
 
   // Docenti assegnati al corso selezionato
   const courseDocenti = selCourse
@@ -5418,7 +5424,9 @@ const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, onSave, 
       student:    selCourse.name,
       instrument: "Vari",
       // array allievi — la vera struttura collettiva
-      students:   studObjs,
+      students:      studObjs,
+      // brani aggiunti durante la lezione collettiva
+      repertorioIds: repertorioIds,
     });
   };
 
@@ -5648,7 +5656,104 @@ const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, onSave, 
         )
       )
 
-      , React.createElement('div', { style: {padding:"14px 22px", borderTop:`1px solid ${C.border}`,
+      , React.createElement('div', { style: {padding:"0 22px 14px", borderTop:"none"}, __self: this}
+        , React.createElement('label', { style: {fontSize:11, color:C.textMuted, letterSpacing:"0.07em",
+            textTransform:"uppercase", display:"block", marginBottom:8}, __self: this}, "Brani per questa lezione" )
+
+        , React.createElement('select', {
+            value: "",
+            onChange: e => {
+              const id = e.target.value;
+              if(!id) return;
+              if(!repertorioIds.includes(id)) setRepertorioIds(p => [...p, id]);
+            },
+            style: {background:C.bg, border:"1px solid " + C.border, borderRadius:8,
+              color:C.textMuted, fontSize:13, padding:"10px 14px", width:"100%",
+              fontFamily:"'DM Sans',sans-serif", appearance:"none", cursor:"pointer"}, __self: this}
+          , React.createElement('option', { value:"", __self: this},
+              repertorio.length === 0 ? "Nessun brano nel catalogo" : "+ Aggiungi brano dal catalogo..." )
+          , repertorio.map(b =>
+              !repertorioIds.includes(b.id) && React.createElement('option', { key:b.id, value:b.id, __self: this},
+                b.title + " — " + b.composer + (b.tonality ? " (" + b.tonality + ")" : "") )
+            )
+        )
+
+        , repertorioIds.length > 0 && React.createElement('div', {
+            style: {display:"flex", flexDirection:"column", gap:5, marginTop:8}, __self: this}
+          , repertorioIds.map(id => {
+              const b = repertorio.find(r => r.id === id);
+              if(!b) return null;
+              return React.createElement('div', { key:id, style:{display:"flex", alignItems:"center", gap:10,
+                padding:"8px 12px", borderRadius:8, background:C.purpleBg,
+                border:"1px solid " + C.purpleBorder}, __self: this}
+                , React.createElement(Ic, { n:"note", size:13, stroke:C.purple, __self: this})
+                , React.createElement('div', { style:{flex:1, fontSize:13, fontWeight:500, color:C.purple,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}, __self: this},
+                    b.title,
+                    React.createElement('span', {style:{fontWeight:400, color:C.textMuted, fontSize:11}},
+                    " — " + b.composer))
+                , React.createElement('button', { onClick: () => setRepertorioIds(p => p.filter(i=>i!==id)),
+                    style:{background:"none", border:"none", cursor:"pointer", color:C.textDim,
+                      fontSize:16, lineHeight:1, padding:"0 2px", fontFamily:"inherit"}, __self: this}, "×")
+              );
+            })
+        )
+
+        , !showBranoForm && React.createElement('button', {
+            onClick: () => setShowBranoForm(true),
+            style: {marginTop:8, fontSize:12, color:C.blue, background:"none", border:"none",
+              cursor:"pointer", fontFamily:"'DM Sans',sans-serif", padding:"4px 0", textAlign:"left"}, __self: this},
+            "+ Crea nuovo brano nel catalogo" )
+
+        , showBranoForm && React.createElement('div', {
+            style:{marginTop:10, padding:14, background:C.bg, border:"1px solid " + C.border,
+              borderRadius:10, display:"flex", flexDirection:"column", gap:10}, __self: this}
+          , React.createElement('div', {style:{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10}, __self: this}
+            , React.createElement('input', { placeholder:"Titolo *", value:newBranoForm.title,
+                onChange:function(e){setNB("title",e.target.value);},
+                style:{background:C.surface, border:"1px solid " + (newBranoForm.title ? C.border : C.red),
+                  borderRadius:7, color:C.text, fontSize:13, padding:"8px 12px",
+                  fontFamily:"'DM Sans',sans-serif", width:"100%", boxSizing:"border-box"}, __self: this})
+            , React.createElement('input', { placeholder:"Compositore", value:newBranoForm.composer,
+                onChange:function(e){setNB("composer",e.target.value);},
+                style:{background:C.surface, border:"1px solid " + C.border, borderRadius:7,
+                  color:C.text, fontSize:13, padding:"8px 12px",
+                  fontFamily:"'DM Sans',sans-serif", width:"100%", boxSizing:"border-box"}, __self: this})
+            , React.createElement('input', { placeholder:"Tonalità (es. Do maggiore)", value:newBranoForm.tonality,
+                onChange:function(e){setNB("tonality",e.target.value);},
+                style:{background:C.surface, border:"1px solid " + C.border, borderRadius:7,
+                  color:C.text, fontSize:13, padding:"8px 12px",
+                  fontFamily:"'DM Sans',sans-serif", width:"100%", boxSizing:"border-box"}, __self: this})
+            , React.createElement('input', { placeholder:"Periodo (es. Romantico)", value:newBranoForm.period,
+                onChange:function(e){setNB("period",e.target.value);},
+                style:{background:C.surface, border:"1px solid " + C.border, borderRadius:7,
+                  color:C.text, fontSize:13, padding:"8px 12px",
+                  fontFamily:"'DM Sans',sans-serif", width:"100%", boxSizing:"border-box"}, __self: this})
+          )
+          , React.createElement('div', {style:{display:"flex", gap:8}, __self: this}
+            , React.createElement('button', {
+                onClick: function() {
+                  if(!newBranoForm.title.trim()) return;
+                  var newId = uid();
+                  var newBrano = Object.assign({ id:newId }, newBranoForm, { type:"collettivo", lezioni:0 });
+                  if(onAddBrano) onAddBrano(newBrano);
+                  setRepertorioIds(function(p){ return [...p, newId]; });
+                  setNewBranoForm({ title:"", composer:"", period:"", tonality:"", type:"collettivo", difficulty:"", notes:"" });
+                  setShowBranoForm(false);
+                },
+                style:{flex:1, padding:"8px 14px", background:C.blue, border:"none", borderRadius:8,
+                  color:C.bg, fontSize:13, fontWeight:600, cursor:"pointer",
+                  fontFamily:"'DM Sans',sans-serif"}, __self: this}, "Aggiungi al catalogo" )
+            , React.createElement('button', {
+                onClick: function(){ setShowBranoForm(false); setNewBranoForm({title:"",composer:"",period:"",tonality:"",type:"collettivo",difficulty:"",notes:""}); },
+                style:{padding:"8px 14px", background:"none", border:"1px solid " + C.border, borderRadius:8,
+                  color:C.textMuted, fontSize:13, cursor:"pointer",
+                  fontFamily:"'DM Sans',sans-serif"}, __self: this}, "Annulla" )
+          )
+        )
+      )
+
+      , React.createElement('div', { style: {padding:"14px 22px", borderTop:"1px solid " + C.border,
         display:"flex", justifyContent:"space-between", alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5649}}
         , React.createElement(Btn, { variant: "secondary", onClick: () => setStep(1), __self: this, __source: {fileName: _jsxFileName, lineNumber: 5651}}
           , React.createElement(Ic, { n: "left", size: 14, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5652}}), "Indietro"
@@ -5820,7 +5925,7 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
-const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, docenti:_propDocentiRaw }) => {
+const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
   const propStudents = _propStudentsRaw || [];
@@ -5871,7 +5976,39 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         : l
       ));
     };
-    const handleAddCollective  = (lesson) => { setLessons(p => [...p, lesson]); closeModal(); };
+    const handleAddCollective = (lesson) => {
+      setLessons(p => [...p, lesson]);
+
+      // --- Propaga i brani al repertorio di ogni allievo ---
+      if (lesson.repertorioIds && lesson.repertorioIds.length > 0 && lesson.students && lesson.students.length > 0) {
+        const lessonStudentIds = lesson.students.map(s => s.id);
+        propSetStudents && propSetStudents(allStudents =>
+          allStudents.map(stu => {
+            if (!lessonStudentIds.includes(stu.id)) return stu;
+            const existing = (stu.repertorio || []).map(r => r.id);
+            const toAdd = lesson.repertorioIds
+              .filter(id => !existing.includes(id))
+              .map(id => {
+                const b = (window.__repertorio__ || []).find(r => r.id === id);
+                return b ? {
+                  id: b.id,
+                  titolo: b.title || b.titolo || "",
+                  compositore: b.composer || b.compositore || "",
+                  periodo: b.period || b.periodo || "",
+                  tonalita: b.tonality || b.tonalita || "",
+                  stato: "in studio",
+                  note: ""
+                } : null;
+              })
+              .filter(Boolean);
+            if (toAdd.length === 0) return stu;
+            return { ...stu, repertorio: [...(stu.repertorio || []), ...toAdd] };
+          })
+        );
+      }
+
+      closeModal();
+    };
     const handleEdit       = (data)      => { setLessons(p => p.map(l => l.id === data.id ? {...l,...data} : l)); closeModal(); };
     const handleDelete     = ()          => { setLessons(p => p.filter(l => l.id !== _optionalChain([selLesson, 'optionalAccess', _54 => _54.id]))); closeModal(); };
     const handleAttendance = (id, val) => {
@@ -6165,6 +6302,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               courses: propCourses,
               students: propStudents,
               docenti: propDocenti,
+              repertorio: repertorio,
+              onAddBrano: b => setRepertorio(p=>[...p,b]),
               onSave: handleAddCollective,
               onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6162}})
           )
@@ -10811,7 +10950,7 @@ function App() {
     docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti,
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
-    calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
+    calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, config: sharedConfig, setConfig: setSharedConfig, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
     repertorio:  React.createElement(RepertorioView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
