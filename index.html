@@ -404,13 +404,35 @@
   }
   .gallery-grid {
     display: grid; grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 130px); gap: 4px;
+    gap: 4px; align-items: start;
+  }
+  /* Altezza fissa solo per le card normali (non embed) */
+  .gallery-grid > *:not(.gallery-item-embed) {
+    height: 130px;
   }
   .gallery-item {
     background: rgba(255,255,255,0.07);
     display: flex; align-items: center; justify-content: center;
     overflow: hidden; cursor: pointer; position: relative; transition: all 0.3s;
     font-size: 2.5rem;
+  }
+  /* Post con embed ufficiale Instagram/Facebook */
+  .gallery-item-embed {
+    background: #fff;
+    border-radius: 6px;
+    overflow: hidden;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0;
+    min-height: 200px;
+  }
+  .gallery-item-embed .instagram-media,
+  .gallery-item-embed .fb-post {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: unset !important;
+    margin: 0 !important;
   }
   .gallery-item:hover { background: rgba(255,255,255,0.13); }
   .gallery-item:nth-child(1) { grid-column: 1/3; grid-row: 1/3; font-size: 4rem; }
@@ -1392,7 +1414,18 @@
       </div>`;
     }
 
+    // Se ci sono post con embed, li raccogliamo per processarli dopo il render
+    let hasEmbeds = false;
+
     grid.innerHTML = posts.map(p => {
+      // ── Caso EMBED ufficiale ────────────────────────────────────
+      if (p._mode === 'embed' && p.embed && p.embed.trim()) {
+        hasEmbeds = true;
+        // Estrai solo il <blockquote> dall'embed code (rimuove lo script tag se presente)
+        const embedClean = p.embed.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').trim();
+        return `<div class="gallery-item gallery-item-embed">${embedClean}</div>`;
+      }
+
       const link = p.url && p.url !== '#' ? p.url : null;
       const hasImg = p.img && p.img.trim() !== '';
       const icon = tipoIcon[p.tipo] || '📷';
@@ -1438,6 +1471,20 @@
                style="position:relative;overflow:hidden;"
                onmouseover="${hoverIn}" onmouseout="${hoverOut}">${inner}</div>`;
     }).join('');
+
+    // Processa gli embed Instagram/Facebook dopo l'inserimento nel DOM
+    if (hasEmbeds) {
+      if (window.instgrm && window.instgrm.Embeds) {
+        window.instgrm.Embeds.process();
+      } else {
+        // Se lo script non è ancora caricato, aspetta e riprova
+        setTimeout(() => {
+          if (window.instgrm && window.instgrm.Embeds) window.instgrm.Embeds.process();
+          // Per Facebook embeds
+          if (window.FB && window.FB.XFBML) window.FB.XFBML.parse(document.getElementById('gallery-grid'));
+        }, 1500);
+      }
+    }
   }
 
   function renderContatti(cfg) {
@@ -1601,5 +1648,7 @@
 })();
 </script>
 
+  <!-- Instagram/Facebook Embeds -->
+  <script async src="//www.instagram.com/embed.js" id="ig-embed-js"></script>
 </body>
 </html>
