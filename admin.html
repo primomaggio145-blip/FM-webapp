@@ -976,19 +976,69 @@
 
 <!-- Photo URL Modal -->
 <div class="photo-modal-overlay" id="photo-modal">
-  <div class="photo-modal">
+  <div class="photo-modal" style="max-width:500px;">
     <span class="photo-modal-close" onclick="closePhotoModal()">✕</span>
     <h3>Cambia Foto</h3>
-    <p>Incolla qui l'URL della foto da Facebook o Instagram.<br>
-    <strong>Come fare:</strong> clicca sulla foto sui social → tasto destro → "Copia indirizzo immagine".</p>
-    <div class="photo-preview-box" id="modal-preview">
+
+    <!-- Tab switcher -->
+    <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:16px;">
+      <button id="tab-upload" onclick="switchPhotoTab('upload')"
+        style="flex:1;padding:9px 0;font-size:12px;font-weight:700;border:none;cursor:pointer;
+               background:#1a4fa0;color:#fff;font-family:inherit;transition:all .15s;">
+        ⬆ Carica dal PC
+      </button>
+      <button id="tab-url" onclick="switchPhotoTab('url')"
+        style="flex:1;padding:9px 0;font-size:12px;font-weight:700;border:none;cursor:pointer;
+               background:var(--surface);color:var(--text-muted);font-family:inherit;transition:all .15s;">
+        🔗 URL immagine
+      </button>
+    </div>
+
+    <!-- Pannello Upload -->
+    <div id="pane-upload">
+      <div id="drop-zone"
+        onclick="document.getElementById('file-input-foto').click()"
+        ondragover="event.preventDefault();this.style.borderColor='#1a4fa0'"
+        ondragleave="this.style.borderColor='var(--border)'"
+        ondrop="handleFileDrop(event)"
+        style="border:2px dashed var(--border);border-radius:10px;padding:32px 20px;
+               text-align:center;cursor:pointer;transition:border-color .2s;background:var(--surface);">
+        <div style="font-size:2.2rem;margin-bottom:8px;">📁</div>
+        <div style="font-size:13px;font-weight:600;color:var(--text);">Clicca o trascina qui una foto</div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:5px;">JPG, PNG, WebP — max 10MB</div>
+      </div>
+      <input type="file" id="file-input-foto" accept="image/*" style="display:none"
+        onchange="handleFileSelect(this)">
+      <div id="upload-progress" style="display:none;margin-top:12px;">
+        <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;">
+          <div id="upload-bar" style="height:100%;width:0%;background:#1a4fa0;transition:width .3s;border-radius:3px;"></div>
+        </div>
+        <div id="upload-status" style="font-size:11px;color:var(--text-muted);margin-top:6px;text-align:center;"></div>
+      </div>
+      <div style="margin-top:10px;padding:9px 13px;background:var(--bg);border-radius:7px;
+                  border:1px solid var(--border);font-size:11px;color:var(--text-dim);line-height:1.6;">
+        📌 Le foto vengono caricate su <strong>Imgur</strong> (gratuito, nessun account necessario).
+        Il link viene salvato automaticamente.
+      </div>
+    </div>
+
+    <!-- Pannello URL -->
+    <div id="pane-url" style="display:none;">
+      <p style="font-size:12px;color:var(--text-muted);margin:0 0 10px;line-height:1.6;">
+        Incolla il link diretto a un'immagine da Imgur, Unsplash, Cloudinary o qualsiasi altro host.
+      </p>
+      <div class="form-group" style="margin:0;">
+        <label>URL Foto</label>
+        <input type="url" id="modal-url-input" placeholder="https://..." oninput="previewModalPhoto(this.value)">
+      </div>
+    </div>
+
+    <!-- Anteprima comune -->
+    <div class="photo-preview-box" id="modal-preview" style="margin-top:14px;">
       <span style="color:var(--gray);font-size:0.8rem;">Anteprima foto</span>
     </div>
-    <div class="form-group">
-      <label>URL Foto</label>
-      <input type="url" id="modal-url-input" placeholder="https://..." oninput="previewModalPhoto(this.value)">
-    </div>
-    <div class="photo-modal-actions">
+
+    <div class="photo-modal-actions" style="margin-top:14px;">
       <button class="btn-save" onclick="confirmPhotoChange()">Salva Foto</button>
       <button class="btn-cancel" onclick="closePhotoModal()">Annulla</button>
     </div>
@@ -1126,7 +1176,7 @@ function logout() {
 }
 
 // ─────────────── LOCAL STORAGE ───────────────
-async function loadData() {
+async async function loadData() {
   if (DB_READY) {
     try {
       await loadDataFromSupabase();
@@ -1577,6 +1627,92 @@ function postDrop(e, toIdx) {
   saveData();
 }
 
+// ─────────────── UPLOAD FOTO (Imgur anonimo) ─────────────────────
+
+function switchPhotoTab(tab) {
+  const isUp = tab === 'upload';
+  document.getElementById('pane-upload').style.display = isUp ? '' : 'none';
+  document.getElementById('pane-url').style.display    = isUp ? 'none' : '';
+  const tu = document.getElementById('tab-upload');
+  const tl = document.getElementById('tab-url');
+  tu.style.background = isUp ? '#1a4fa0' : 'var(--surface)';
+  tu.style.color      = isUp ? '#fff'    : 'var(--text-muted)';
+  tl.style.background = isUp ? 'var(--surface)' : '#1a4fa0';
+  tl.style.color      = isUp ? 'var(--text-muted)' : '#fff';
+}
+
+function handleFileDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').style.borderColor = 'var(--border)';
+  const file = e.dataTransfer.files[0];
+  if (file && file.type.startsWith('image/')) uploadToImgur(file);
+  else showToast('Seleziona un file immagine (JPG, PNG, WebP)', true);
+}
+function handleFileSelect(input) {
+  const file = input.files[0];
+  if (file) uploadToImgur(file);
+  input.value = ''; // reset per permettere riupload dello stesso file
+}
+
+async function uploadToImgur(file) {
+  if (file.size > 10 * 1024 * 1024) { showToast('File troppo grande (max 10MB)', true); return; }
+  const prog = document.getElementById('upload-progress');
+  const bar  = document.getElementById('upload-bar');
+  const sta  = document.getElementById('upload-status');
+  prog.style.display = '';
+  bar.style.width = '15%';
+  bar.style.background = '#1a4fa0';
+  sta.textContent = 'Lettura file...';
+
+  try {
+    // Converti in base64
+    const b64 = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload  = () => res(reader.result.split(',')[1]);
+      reader.onerror = rej;
+      reader.readAsDataURL(file);
+    });
+    bar.style.width = '40%';
+    sta.textContent = 'Caricamento su Imgur...';
+
+    const resp = await fetch('https://api.imgur.com/3/image', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Client-ID 546c25a59c58ad7',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ image: b64, type: 'base64', title: 'Futuro Musica' })
+    });
+
+    bar.style.width = '80%';
+    const data = await resp.json();
+
+    if (data.success && data.data && data.data.link) {
+      bar.style.width = '100%';
+      bar.style.background = '#27ae60';
+      sta.textContent = '✓ Caricata con successo!';
+      const url = data.data.link;
+      // Popola il campo URL e mostra anteprima
+      document.getElementById('modal-url-input').value = url;
+      previewModalPhoto(url);
+      switchPhotoTab('url');
+      setTimeout(() => {
+        prog.style.display = 'none';
+        bar.style.width = '0%';
+        bar.style.background = '#1a4fa0';
+        sta.textContent = '';
+      }, 2000);
+    } else {
+      throw new Error(data.data?.error || 'Risposta non valida da Imgur');
+    }
+  } catch(e) {
+    bar.style.background = '#dc2626';
+    bar.style.width = '100%';
+    sta.textContent = 'Errore: ' + e.message + '. Usa il tab "URL immagine" con un link manuale.';
+    console.error('Imgur upload error:', e);
+  }
+}
+
 // ─────────────── DRAG & DROP CORSI ─────────────────────────────
 let _cardDragType = null;
 let _cardDragIdx  = null;
@@ -1927,7 +2063,14 @@ function renderCorsi() {
           <input type="text" value="${c.livelli}" onchange="DATA.corsi[${i}].livelli=this.value">
         </div>
         <div class="form-group">
-          <label>URL Foto</label>
+          <label style="display:flex;align-items:center;justify-content:space-between;">
+            URL Foto
+            <button onclick="openPhotoModal('corsi',${i})"
+              style="font-size:11px;padding:3px 10px;background:#1a4fa0;color:#fff;border:none;
+                     border-radius:6px;cursor:pointer;font-family:inherit;font-weight:600;">
+              📸 Carica foto
+            </button>
+          </label>
           <input type="url" value="${c.foto}" placeholder="https://..." onchange="DATA.corsi[${i}].foto=this.value; renderCorsi()">
           <div class="url-hint">📷 Copia dal tuo profilo Facebook o Instagram</div>
         </div>
@@ -1972,7 +2115,14 @@ function renderComp() {
           <textarea rows="3" onchange="DATA.complementari[${i}].desc=this.value">${c.desc}</textarea>
         </div>
         <div class="form-group">
-          <label>URL Foto</label>
+          <label style="display:flex;align-items:center;justify-content:space-between;">
+            URL Foto
+            <button onclick="openPhotoModal('complementari',${i})"
+              style="font-size:11px;padding:3px 10px;background:#1a4fa0;color:#fff;border:none;
+                     border-radius:6px;cursor:pointer;font-family:inherit;font-weight:600;">
+              📸 Carica foto
+            </button>
+          </label>
           <input type="url" value="${c.foto}" placeholder="https://..." onchange="DATA.complementari[${i}].foto=this.value; renderComp()">
           <div class="url-hint">📷 Copia dal tuo profilo Facebook o Instagram</div>
         </div>
