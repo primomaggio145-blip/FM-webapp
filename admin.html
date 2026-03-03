@@ -1215,6 +1215,7 @@ async function loadDataFromSupabase() {
   // Concerti
   DATA.concerti = (concertiRes.data || []).map(r => ({
     data: r.data || '', ora: r.ora || '', titolo: r.titolo || '', luogo: r.luogo || '',
+    maps_url: r.maps_url || '',
     ingresso: r.ingresso || 'Ingresso libero', badge: r.badge || 'Evento', visible: r.visible !== false, _id: r.id
   }));
 
@@ -1301,7 +1302,7 @@ async function saveDataToSupabase() {
   // ── Concerti ──
   for (let i = 0; i < DATA.concerti.length; i++) {
     const c = DATA.concerti[i];
-    const fields = { titolo: c.titolo, data: c.data, ora: c.ora, luogo: c.luogo, ingresso: c.ingresso, badge: c.badge, visible: c.visible };
+    const fields = { titolo: c.titolo, data: c.data, ora: c.ora, luogo: c.luogo, maps_url: c.maps_url || '', ingresso: c.ingresso, badge: c.badge, visible: c.visible };
     if (c._id) {
       await db.from('concerti').update(fields).eq('id', c._id);
     } else {
@@ -2141,8 +2142,20 @@ function renderConcerti() {
       <input type="date" value="${c.data}" onchange="DATA.concerti[${i}].data=this.value">
       <input type="text" value="${c.ora}" placeholder="20:30" onchange="DATA.concerti[${i}].ora=this.value">
       <input type="text" value="${c.titolo}" placeholder="Titolo evento" onchange="DATA.concerti[${i}].titolo=this.value">
-      <input type="text" value="${c.luogo}" placeholder="Luogo" onchange="DATA.concerti[${i}].luogo=this.value">
+      <input type="text" value="${c.luogo}" placeholder="Luogo" onchange="DATA.concerti[${i}].luogo=this.value; autoFillMaps(${i})">
       <input type="text" value="${c.ingresso}" placeholder="es. Ingresso libero" onchange="DATA.concerti[${i}].ingresso=this.value">
+      <div style="display:flex;align-items:center;gap:6px;grid-column:1/-3;">
+        <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;">📍 Link mappa:</span>
+        <input type="url" value="${c.maps_url||''}" placeholder="https://maps.google.com/... (compilato auto dal luogo)"
+          onchange="DATA.concerti[${i}].maps_url=this.value"
+          style="flex:1;font-size:11px;padding:4px 8px;">
+        <button onclick="autoFillMaps(${i})" title="Genera link Google Maps dal luogo"
+          style="white-space:nowrap;font-size:11px;padding:4px 10px;background:#1a4fa0;color:#fff;
+                 border:none;border-radius:6px;cursor:pointer;font-family:inherit;">
+          🗺 Genera
+        </button>
+        ${c.maps_url ? `<a href="${c.maps_url}" target="_blank" style="font-size:11px;color:#1a4fa0;">Apri ↗</a>` : ''}
+      </div>
       <button class="vis-icon-btn" onclick="toggleItem('concerti',${i})" title="${vis ? 'Nascondi dal sito' : 'Mostra sul sito'}">${vis ? '👁' : '🙈'}</button>
       <button class="btn-delete" onclick="deleteConcerto(${i})" title="Elimina">✕</button>
     </div>`;
@@ -2150,8 +2163,17 @@ function renderConcerti() {
   updateStats();
 }
 
+function autoFillMaps(i) {
+  const luogo = DATA.concerti[i].luogo || '';
+  if (!luogo.trim()) return;
+  // Genera URL Google Maps dalla stringa luogo
+  const query = encodeURIComponent(luogo);
+  DATA.concerti[i].maps_url = `https://www.google.com/maps/search/?api=1&query=${query}`;
+  renderConcerti();
+}
+
 function addConcerto() {
-  DATA.concerti.push({ data: '', ora: '', titolo: 'Nuovo Evento', luogo: '', ingresso: 'Ingresso libero', badge: 'Evento', visible: true });
+  DATA.concerti.push({ data: '', ora: '', titolo: 'Nuovo Evento', luogo: '', maps_url: '', ingresso: 'Ingresso libero', badge: 'Evento', visible: true });
   renderConcerti();
   saveData();
 }
