@@ -768,6 +768,9 @@
         ＋ Aggiungi Corso Principale
       </button>
       <div class="cards-grid" id="corsi-grid"></div>
+      <button class="btn-save" onclick="saveData()" style="width:100%;margin-top:18px;padding:11px;">
+        💾 Salva modifiche Corsi Principali
+      </button>
     </div>
 
     <!-- CORSI COMPLEMENTARI -->
@@ -780,6 +783,9 @@
         ＋ Aggiungi Corso Complementare
       </button>
       <div class="cards-grid" id="comp-grid"></div>
+      <button class="btn-save" onclick="saveData()" style="width:100%;margin-top:18px;padding:11px;">
+        💾 Salva modifiche Corsi Complementari
+      </button>
     </div>
 
     <!-- CONCERTI -->
@@ -793,6 +799,9 @@
       </div>
       <div class="concerti-list" id="concerti-list"></div>
       <button class="btn-add-event" onclick="addConcerto()">+ Aggiungi evento</button>
+      <button class="btn-save" onclick="saveData()" style="width:100%;margin-top:14px;padding:11px;">
+        💾 Salva modifiche Concerti & Eventi
+      </button>
     </div>
 
     <!-- CONTATTI -->
@@ -901,6 +910,9 @@
       </div>
 
       <div class="posts-grid-admin" id="posts-grid"></div>
+      <button class="btn-save" onclick="saveSocial()" style="width:100%;margin-top:18px;padding:11px;">
+        💾 Salva tutti i contenuti Social & Gallery
+      </button>
     </div>
 
     <!-- VISIBILITÀ & ORDINE -->
@@ -1576,13 +1588,30 @@ function renderPosts() {
 
 async function saveSocial() {
   if (!DATA.social) DATA.social = {};
-  // Leggi campi form (nel caso non fossero stati già aggiornati via onchange)
+  // Leggi campi form link social
   const get = id => { const e = document.getElementById(id); return e ? e.value : ''; };
   DATA.social.fb_page_id = get('fb-page-id');
   DATA.social.fb_url     = get('fb-url-field');
   DATA.social.ig_handle  = get('ig-handle-field');
   DATA.social.ig_url     = get('ig-url-field');
+  // Leggi valori post dalla DOM (textarea/input non sempre triggerano onchange)
+  const grid = document.getElementById('posts-grid');
+  if (grid && DATA.social.posts) {
+    const cards = grid.querySelectorAll('.post-card-admin');
+    cards.forEach((card, i) => {
+      if (!DATA.social.posts[i]) return;
+      const ta = card.querySelector('textarea');
+      if (ta) DATA.social.posts[i].embed = ta.value;
+      const imgInput     = card.querySelector('input[id^="img-input"]');
+      const urlInputs    = card.querySelectorAll('input[type="url"]');
+      const captionInput = card.querySelector('input[type="text"]');
+      if (imgInput)            DATA.social.posts[i].img     = imgInput.value;
+      if (urlInputs[1])        DATA.social.posts[i].url     = urlInputs[1].value;
+      if (captionInput)        DATA.social.posts[i].caption = captionInput.value;
+    });
+  }
   await saveData();
+  showToast('\u2705 Social & Gallery salvato!');
 }
 
 function addPost() {
