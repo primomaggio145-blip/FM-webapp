@@ -5019,7 +5019,7 @@ const BranoFormInline = ({ initial, onSave, onClose, compact=false }) => {
   const handleSave = () => {
     const e = {};
     if(!f.title.trim())    e.title    = "Titolo obbligatorio";
-    if(!f.composer.trim()) e.composer = "Compositore obbligatorio";
+    // compositore facoltativo
     if(Object.keys(e).length){ setErr(e); return; }
     onSave(f);
   };
@@ -5096,9 +5096,9 @@ const CalRepertorioTab = ({ repertorio, lessons, onAdd, onEdit, onDelete, canEdi
   const [filterComp, setFC]      = useState("");
   const [expanded,   setExpanded]= useState(null); // id del brano espanso
 
-  const usageCount    = id => _lessonsRep.filter(l => (l.repertorioIds||[]).includes(id)).length;
-  const allieviOfBrano= id => _studBranoRep.filter(s => (s.repertorio||[]).some(r => r.id === id));
-  const allieviCount  = id => allieviOfBrano(id).length;
+  const usageCount    = id => (lessons||[]).filter(l => (l.repertorioIds||[]).includes(id)).length;
+  const allieviOfBrano= id => [];
+  const allieviCount  = id => 0;
 
   // Lista compositori unici per dropdown
   const composers = [...new Set(repertorio.map(b => b.composer))].sort();
@@ -7590,7 +7590,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn})=>{
   const validate=()=>{
     const e={};
     if(!f.title.trim())    e.title="Titolo obbligatorio";
-    if(!f.composer.trim()) e.composer="Compositore obbligatorio";
+    // compositore facoltativo
     return e;
   };
   const handleSave=()=>{
@@ -7917,6 +7917,9 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
   const setBrani = propSetBrani || _setBraniLocal;
   const _studBranoRep = (_propStudentsRep||[]).filter(s=>s.status==="attivo"||!s.status);
   const _lessonsRep   = _propLessonsRep || [];
+  const usageCount    = id => _lessonsRep.filter(l => (l.repertorioIds||[]).includes(id)).length;
+  const allieviOfBrano= id => _studBranoRep.filter(s => (s.repertorio||[]).some(r => r.id === id));
+  const allieviCount  = id => allieviOfBrano(id).length;
     const [tab,       setTab]      = useState("catalogo"); // catalogo | allievi
     const [layout,    setLayout]   = useState("grid");     // grid | list
     const [search,    setSearch]   = useState("");
