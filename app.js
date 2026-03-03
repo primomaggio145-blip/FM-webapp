@@ -5974,7 +5974,43 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
   
     const [nextLessonCreated, setNextLessonCreated] = useState(null);
 
-    const handleAdd        = (data)      => { setLessons(p => [...p, {...data, id:uid()}]); closeModal(); };
+    const handleAdd = (data) => {
+      const lessonId = uid();
+      setLessons(p => [...p, { ...data, id: lessonId }]);
+
+      // Propaga i brani selezionati al repertorio dello studente
+      if (data.repertorioIds && data.repertorioIds.length > 0 && data.student) {
+        propSetStudents && propSetStudents(allStudents =>
+          allStudents.map(stu => {
+            // Cerca lo studente per nome (il form individuale usa il nome come identificatore)
+            const stuName = stu.name || stu.nome || '';
+            if (stuName !== data.student) return stu;
+
+            const existing = (stu.repertorio || []).map(r => r.id);
+            const toAdd = data.repertorioIds
+              .filter(id => !existing.includes(id))
+              .map(id => {
+                const b = (window.__repertorio__ || []).find(r => r.id === id);
+                return b ? {
+                  id:          b.id,
+                  titolo:      b.title      || b.titolo      || '',
+                  compositore: b.composer   || b.compositore || '',
+                  periodo:     b.period     || b.periodo     || '',
+                  tonalita:    b.tonality   || b.tonalita    || '',
+                  stato:       'in studio',
+                  note:        ''
+                } : null;
+              })
+              .filter(Boolean);
+
+            if (toAdd.length === 0) return stu;
+            return { ...stu, repertorio: [...(stu.repertorio || []), ...toAdd] };
+          })
+        );
+      }
+
+      closeModal();
+    };
     const handleAddProva   = (data)      => { setLessons(p => [...p, data]); closeModal(); };
     const handleIscrizioneProva = (id, studentName, iscritto) => {
       setLessons(p => p.map(l => l.id === id
@@ -6015,7 +6051,41 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
       closeModal();
     };
-    const handleEdit       = (data)      => { setLessons(p => p.map(l => l.id === data.id ? {...l,...data} : l)); closeModal(); };
+    const handleEdit = (data) => {
+      setLessons(p => p.map(l => l.id === data.id ? { ...l, ...data } : l));
+
+      // Propaga eventuali nuovi brani al repertorio dello studente
+      if (data.repertorioIds && data.repertorioIds.length > 0 && data.student) {
+        propSetStudents && propSetStudents(allStudents =>
+          allStudents.map(stu => {
+            const stuName = stu.name || stu.nome || '';
+            if (stuName !== data.student) return stu;
+
+            const existing = (stu.repertorio || []).map(r => r.id);
+            const toAdd = data.repertorioIds
+              .filter(id => !existing.includes(id))
+              .map(id => {
+                const b = (window.__repertorio__ || []).find(r => r.id === id);
+                return b ? {
+                  id:          b.id,
+                  titolo:      b.title      || b.titolo      || '',
+                  compositore: b.composer   || b.compositore || '',
+                  periodo:     b.period     || b.periodo     || '',
+                  tonalita:    b.tonality   || b.tonalita    || '',
+                  stato:       'in studio',
+                  note:        ''
+                } : null;
+              })
+              .filter(Boolean);
+
+            if (toAdd.length === 0) return stu;
+            return { ...stu, repertorio: [...(stu.repertorio || []), ...toAdd] };
+          })
+        );
+      }
+
+      closeModal();
+    };
     const handleDelete     = ()          => { setLessons(p => p.filter(l => l.id !== _optionalChain([selLesson, 'optionalAccess', _54 => _54.id]))); closeModal(); };
     const handleAttendance = (id, val) => {
       setLessons(prev => {
