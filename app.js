@@ -4178,8 +4178,14 @@ const INIT_LESSONS = (() => {
 // ─── FORM LEZIONE ─────────────────────────────────────────────────────────────
 const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"Nessuna", notes:"", exercises:"", repertorioIds:[] };
 
-const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano }) => {
+const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw }) => {
   const repertorio = _repertorioRaw || [];
+  // Lista allievi dinamica: usa quella passata come prop, con fallback alla lista statica
+  const dynamicStudents = (_studentsRaw || [])
+    .filter(s => s.status === 'attivo' || !s.status)
+    .map(s => s.name || s.nome || '')
+    .filter(Boolean)
+    .sort();
   const [showBranoForm, setShowBranoForm] = useState(false);
   const [f, setF] = useState(initial || emptyLesson);
   const [err, setErr] = useState({});
@@ -4229,7 +4235,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
         , React.createElement(Sel, { label: "Orario *" , value: f.hour, onChange: e => set("hour", e.target.value), options: hours, error: err.hour, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4227}})
 
         , React.createElement(SDiv, { label: "Chi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4229}})
-        , React.createElement(Sel, { label: "Allievo *" ,    value: f.student,    onChange: e => set("student", e.target.value),    options: STUDENTS_LIST, error: err.student, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4230}})
+        , React.createElement(Sel, { label: "Allievo *" ,    value: f.student,    onChange: e => set("student", e.target.value),    options: dynamicStudents.length > 0 ? dynamicStudents : STUDENTS_LIST, error: err.student, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4230}})
         , React.createElement(Sel, { label: "Strumento *" ,  value: f.instrument, onChange: e => set("instrument", e.target.value), options: INSTRUMENTS,   error: err.instrument, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4231}})
         , React.createElement(Sel, { label: "Insegnante *" , value: f.teacher,    onChange: e => set("teacher", e.target.value),    options: TEACHERS,      error: err.teacher, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4232}})
         , React.createElement(Sel, { label: "Sala",         value: f.room,       onChange: e => set("room", e.target.value),       options: ROOMS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4233}})
@@ -6273,12 +6279,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
         , modal === "add" && (
           React.createElement(Modal, { title: "Nuova lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6136}}
-            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
+            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
           )
         )
         , modal === "edit" && selLesson && (
           React.createElement(Modal, { title: "Modifica lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6141}}
-            , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
+            , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
           )
         )
         , modal === "detail" && selLesson && (
