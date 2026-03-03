@@ -7810,9 +7810,10 @@ const BranoDrawer = ({brano,lezioniCount,allieviList,onClose,onEdit,onDelete})=>
 };
 
 // ─── VISTA ALLIEVO ───────────────────────────────────────────────────────────
-const AllievoBraniView = ({allievo,brani,onBack})=>{
+const AllievoBraniView = ({allievo,brani,allStudents,lessons,onBack})=>{
   const isMobile = useIsMobile();
-  const suoiBrani=brani.filter(b=>(b.allievi||[]).includes(allievo));
+  const _stu = (allStudents||[]).find(s=>(s.name||s.nome||"")=== allievo);
+  const suoiBrani = _stu ? brani.filter(b=>(_stu.repertorio||[]).some(r=>r.id===b.id)) : brani.filter(b=>(b.allievi||[]).includes(allievo));
   const individuali=suoiBrani.filter(b=>b.tipo==="individuale");
   const collettivi=suoiBrani.filter(b=>b.tipo==="collettivo");
 
@@ -7983,6 +7984,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
             React.createElement(AllievoBraniView, {
               allievo: allievoPOV,
               brani: brani,
+              allStudents: _studBranoRep,
+              lessons: _lessonsRep,
               onBack: ()=>setAllievoPOV(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7744}}
             )
           ) : (
@@ -8119,11 +8122,11 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                                       paddingTop:8,borderTop:`1px solid ${C.border}20`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7879}}
                                       , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7881}}
                                         , React.createElement(Ic, { n: "users", size: 12, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7882}})
-                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7883}}, (b.allievi||[]).length, " alliev" , (b.allievi||[]).length===1?"o":"i")
+                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7883}}, allieviCount(b.id), " alliev" , allieviCount(b.id)===1?"o":"i")
                                       )
                                       , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7885}}
                                         , React.createElement(Ic, { n: "calendar", size: 12, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7886}})
-                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7887}}, b.lezioni||0, " lezioni" )
+                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7887}}, usageCount(b.id), " lezioni" )
                                       )
                                     )
                                   )
@@ -8167,11 +8170,11 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                                       paddingTop:8,borderTop:`1px solid ${C.border}20`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7927}}
                                       , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7929}}
                                         , React.createElement(Ic, { n: "users", size: 12, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7930}})
-                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7931}}, (b.allievi||[]).length, " partecipanti" )
+                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7931}}, allieviCount(b.id), " partecipanti" )
                                       )
                                       , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7933}}
                                         , React.createElement(Ic, { n: "calendar", size: 12, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7934}})
-                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7935}}, b.lezioni||0, " lezioni" )
+                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7935}}, usageCount(b.id), " lezioni" )
                                       )
                                     )
                                   )
@@ -8217,8 +8220,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                               , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7978}}
                                 , b.periodo&&React.createElement('span', { style: {fontSize:11,color:p.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7979}}, b.periodo)
                               )
-                              , React.createElement('span', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7981}}, (b.allievi||[]).length)
-                              , React.createElement('span', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7982}}, b.lezioni||0)
+                              , React.createElement('span', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7981}}, allieviCount(b.id))
+                              , React.createElement('span', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7982}}, usageCount(b.id))
                               , React.createElement(Ic, { n: "right", size: 14, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7983}})
                             )
                           );
