@@ -7910,7 +7910,7 @@ const AllievoBraniView = ({allievo,brani,onBack})=>{
 // APP
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep }) => {
+const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep }) => {
   const isMobile = useIsMobile();
   const [_braniLocal, _setBraniLocal] = useState(INIT_BRANI);
   const brani    = propBrani    || _braniLocal;
@@ -7933,7 +7933,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     const closeModal=()=>{setModal(null);setSelBrano(null);};
   
     // ── CRUD ──
-    const aggiungiBrano=(f)=>{setBrani(p=>[...p,{...f,id:uid(),lezioni:0}]);closeModal();showToast("Brano aggiunto");};
+    const aggiungiBrano=(f)=>{setBrani(p=>[...p,{...f,id:uid()}]);closeModal();showToast("Brano aggiunto");};
     const modificaBrano=(f)=>{setBrani(p=>p.map(b=>b.id===selBrano.id?{...b,...f}:b));closeModal();setDrawer(null);showToast("Brano aggiornato");};
     const eliminaBrano=()=>{
       setBrani(p=>p.filter(b=>b.id!==selBrano.id));
@@ -7954,7 +7954,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     const collettivi= filtrati.filter(b=>b.tipo==="collettivo");
   
     // ── STATS ──
-    const totLezioni=brani.reduce((s,b)=>s+(b.lezioni||0),0);
+    const totLezioni=_lessonsRep.length;
     const braniAvanzati=brani.filter(b=>b.difficulty==="Avanzato"||b.difficulty==="Professionale").length;
   
     return(
