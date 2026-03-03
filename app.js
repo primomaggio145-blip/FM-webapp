@@ -2575,7 +2575,7 @@ const CourseForm = ({ initial, onSave, onClose, docenti:_docentiRaw }) => {
           , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2573}}, "Tipo corso" )
           , React.createElement('div', { style: {display:"flex",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2574}}
             , [["individuale","solo","Individuale","1 allievo per lezione",C.gold,"#2e2308",C.goldDim],["collettivo","group","Collettivo","Più allievi insieme",C.purple,C.purpleBg,C.purpleBorder]].map(([val,icon,lbl,sub,col,bg,border])=>(
-              React.createElement('button', { key: val, onClick: ()=>set("type",val), style: {flex:1,padding:"14px 16px",borderRadius:10,border:`2px solid ${f.type===val?col:C.border}`,background:f.type===val?bg:C.bg,cursor:"pointer",display:"flex",alignItems:"center",gap:10,transition:"all 0.15s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2576}}
+              React.createElement('button', { key: val, onClick: ()=>set("tipo",val), style: {flex:1,padding:"14px 16px",borderRadius:10,border:`2px solid ${f.type===val?col:C.border}`,background:f.type===val?bg:C.bg,cursor:"pointer",display:"flex",alignItems:"center",gap:10,transition:"all 0.15s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2576}}
                 , React.createElement(Ic, { n: icon, size: 18, color: f.type===val?col:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2577}})
                 , React.createElement('div', { style: {textAlign:"left"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2578}}
                   , React.createElement('div', { style: {fontSize:13,fontWeight:500,color:f.type===val?col:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2579}}, lbl)
@@ -3005,7 +3005,7 @@ const StudentForm = ({ initial, onSave, onClose, courses }) => {
         , React.createElement(Sel, { label: "Tipo quota" , value: f.feeType, onChange: e=>set("feeType",e.target.value), options: ["fisso","variabile"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3003}})
 
         , React.createElement('div', { style: {gridColumn:"1/-1",marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3005}}
-          , React.createElement(Textarea, { label: "Note", value: f.notes, onChange: e=>set("notes",e.target.value), placeholder: "Note aggiuntive sull'allievo..."  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 3006}})
+          , React.createElement(Textarea, { label: "Note", value: f.note, onChange: e=>set("note",e.target.value), placeholder: "Note aggiuntive sull'allievo..."  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 3006}})
         )
       )
       , React.createElement('div', { style: {padding:"16px 24px",borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"flex-end",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3009}}
@@ -4288,7 +4288,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
                     fontFamily:"'DM Sans',sans-serif", appearance:"none", cursor:"pointer"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4264}}
                   , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4275}}, repertorio.length === 0 ? "Nessun brano nel catalogo" : "+ Aggiungi brano al repertorio...")
                   , ["individuale","collettivo"].map(tipo => {
-                    const group = repertorio.filter(b => b.type === tipo && !(f.repertorioIds||[]).includes(b.id));
+                    const group = repertorio.filter(b => (b.tipo||b.type) === tipo && !(f.repertorioIds||[]).includes(b.id));
                     if(group.length === 0) return null;
                     return (
                       React.createElement('optgroup', { key: tipo, label: tipo === "individuale" ? "── Individuali ──" : "── Collettivi ──", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4280}}
@@ -4308,9 +4308,9 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
                     , (f.repertorioIds||[]).map(id => {
                       const b = repertorio.find(r => r.id === id);
                       if(!b) return null;
-                      const typeHex = b.type === "collettivo" ? C.purple : C.gold;
-                      const typeBg  = b.type === "collettivo" ? C.purpleBg : "#2e2308";
-                      const typeBd  = b.type === "collettivo" ? C.purpleBorder : C.goldDim;
+                      const typeHex = (b.tipo||b.type) === "collettivo" ? C.purple : C.gold;
+                      const typeBg  = (b.tipo||b.type) === "collettivo" ? C.purpleBg : "#2e2308";
+                      const typeBd  = (b.tipo||b.type) === "collettivo" ? C.purpleBorder : C.goldDim;
                       return (
                         React.createElement('div', { key: id, style: {display:"flex", alignItems:"center", gap:10,
                           padding:"8px 12px", borderRadius:8,
@@ -4368,7 +4368,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
                       , React.createElement(BranoFormInline, {
                         onSave: b => {
                           const newId = "r_"+Date.now();
-                          const newBrano = {...b, id:newId};
+                          const newBrano = {...b, id:newId, tipo: b.tipo||b.type||"individuale", note: b.note||b.notes||""};
                           // Salva nel ref locale per handleSave
                           newlyCreatedBraniRef.current[newId] = newBrano;
                           onAddBrano(newBrano);
@@ -5009,7 +5009,7 @@ const MonthView = ({ year, month, lessons, onSelect, onDayClick }) => {
 // ════════════════════════════════════════════════════════════════════════════════
 // REPERTORIO
 // ════════════════════════════════════════════════════════════════════════════════
-const emptyBrano = { title:"", composer:"", tonality:"", difficulty:"Intermedio", type:"individuale", notes:"" };
+const emptyBrano = { title:"", composer:"", tonality:"", difficulty:"Intermedio", tipo:"individuale", note:"" };
 
 const BranoFormInline = ({ initial, onSave, onClose, compact=false }) => {
   const [f, setF] = useState(initial || emptyBrano);
@@ -5036,11 +5036,11 @@ const BranoFormInline = ({ initial, onSave, onClose, compact=false }) => {
           , React.createElement('div', { style: {display:"flex", gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5020}}
             , [["individuale","solo",C.gold,"#2e2308",C.goldDim],["collettivo","group",C.purple,C.purpleBg,C.purpleBorder]].map(([val,icon,fg,bg,bd]) => (
               React.createElement('button', { key: val, onClick: ()=>set("type",val), style: {flex:1, padding:"12px 14px", borderRadius:10,
-                border:`2px solid ${f.type===val?fg:C.border}`, background:f.type===val?bg:C.bg,
+                border:`2px solid ${f.tipo===val?fg:C.border}`, background:f.tipo===val?bg:C.bg,
                 cursor:"pointer", display:"flex", alignItems:"center", gap:10, transition:"all 0.15s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5022}}
-                , React.createElement(Ic, { n: icon, size: 16, stroke: f.type===val?fg:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5025}})
+                , React.createElement(Ic, { n: icon, size: 16, stroke: f.tipo===val?fg:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5025}})
                 , React.createElement('div', { style: {textAlign:"left"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5026}}
-                  , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:f.type===val?fg:C.text, textTransform:"capitalize"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5027}}, val)
+                  , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:f.tipo===val?fg:C.text, textTransform:"capitalize"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5027}}, val)
                   , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5028}}, val==="individuale"?"Studio personale":"Ensemble / orchestra")
                 )
               )
@@ -5749,7 +5749,7 @@ const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, repertor
                 onClick: function() {
                   if(!newBranoForm.title.trim()) return;
                   var newId = uid();
-                  var newBrano = Object.assign({ id:newId }, newBranoForm, { type:"collettivo", lezioni:0 });
+                  var newBrano = Object.assign({ id:newId }, newBranoForm, { tipo:"collettivo", type:"collettivo", lezioni:0 });
                   if(onAddBrano) onAddBrano(newBrano);
                   setRepertorioIds(function(p){ return [...p, newId]; });
                   setNewBranoForm({ title:"", composer:"", period:"", tonality:"", type:"collettivo", difficulty:"", notes:"" });
@@ -5989,7 +5989,26 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       const lessonId = uid();
       setLessons(p => [...p, { ...data, id: lessonId }]);
 
-      // Propaga i brani selezionati al repertorio dello studente
+      // ── 1. Aggiungi i brani NUOVI al catalogo globale (sharedRepertorio) ──
+      if (data._newBrani && Object.keys(data._newBrani).length > 0) {
+        const nuoviBrani = Object.values(data._newBrani).map(b => ({
+          id:         b.id,
+          title:      b.title      || b.titolo      || '',
+          composer:   b.composer   || b.compositore || '',
+          tonality:   b.tonality   || b.tonalita    || '',
+          difficulty: b.difficulty || 'Intermedio',
+          tipo:       b.tipo       || b.type        || 'individuale',
+          note:       b.note       || b.notes       || '',
+          lezioni:    0,
+        }));
+        setRepertorio(prev => {
+          const existingIds = new Set(prev.map(r => r.id));
+          const toAdd = nuoviBrani.filter(b => !existingIds.has(b.id));
+          return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+        });
+      }
+
+      // ── 2. Propaga tutti i brani selezionati al repertorio dello studente ──
       if (data.repertorioIds && data.repertorioIds.length > 0 && data.student) {
         propSetStudents && propSetStudents(allStudents =>
           allStudents.map(stu => {
@@ -6000,7 +6019,6 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             const toAdd = data.repertorioIds
               .filter(id => !existing.includes(id))
               .map(id => {
-                // Prima controlla i brani appena creati nel form (non ancora in window.__repertorio__)
                 const fresh = data._newBrani && data._newBrani[id];
                 const b = fresh || (window.__repertorio__ || []).find(r => r.id === id);
                 if (!b) return null;
@@ -6067,7 +6085,26 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const handleEdit = (data) => {
       setLessons(p => p.map(l => l.id === data.id ? { ...l, ...data } : l));
 
-      // Propaga eventuali nuovi brani al repertorio dello studente
+      // ── 1. Aggiungi i brani NUOVI al catalogo globale ──
+      if (data._newBrani && Object.keys(data._newBrani).length > 0) {
+        const nuoviBrani = Object.values(data._newBrani).map(b => ({
+          id:         b.id,
+          title:      b.title      || b.titolo      || '',
+          composer:   b.composer   || b.compositore || '',
+          tonality:   b.tonality   || b.tonalita    || '',
+          difficulty: b.difficulty || 'Intermedio',
+          tipo:       b.tipo       || b.type        || 'individuale',
+          note:       b.note       || b.notes       || '',
+          lezioni:    0,
+        }));
+        setRepertorio(prev => {
+          const existingIds = new Set(prev.map(r => r.id));
+          const toAdd = nuoviBrani.filter(b => !existingIds.has(b.id));
+          return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+        });
+      }
+
+      // ── 2. Propaga eventuali nuovi brani al repertorio dello studente ──
       if (data.repertorioIds && data.repertorioIds.length > 0 && data.student) {
         propSetStudents && propSetStudents(allStudents =>
           allStudents.map(stu => {
@@ -7910,9 +7947,11 @@ const AllievoBraniView = ({allievo,brani,onBack})=>{
 // APP
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const RepertorioView = () => {
+const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani }) => {
   const isMobile = useIsMobile();
-  const [brani,     setBrani]    = useState(INIT_BRANI);
+  const [_braniLocal, _setBraniLocal] = useState(INIT_BRANI);
+  const brani    = propBrani    || _braniLocal;
+  const setBrani = propSetBrani || _setBraniLocal;
     const [tab,       setTab]      = useState("catalogo"); // catalogo | allievi
     const [layout,    setLayout]   = useState("grid");     // grid | list
     const [search,    setSearch]   = useState("");
@@ -10982,7 +11021,7 @@ function App() {
   const [sharedCourses,        setSharedCourses]        = useState(INIT_COURSES);
   const [sharedDocenti,        setSharedDocenti]        = useState(INIT_DOCENTI_EXT);
   const [sharedLessons,        setSharedLessons]        = useState(INIT_LESSONS);
-  const [sharedRepertorio,     setSharedRepertorio]     = useState(INIT_REPERTORIO);
+  const [sharedRepertorio,     setSharedRepertorio]     = useState(INIT_BRANI);
   const [sharedConfig,         setSharedConfig]         = useState(CONFIG_DEFAULT);
   const [sharedAnniScolastici, setSharedAnniScolastici] = useState(INIT_ANNI_SCOLASTICI);
   const [sharedEntrate,         setSharedEntrate]         = useState(INIT_ENTRATE_QUOTE);
