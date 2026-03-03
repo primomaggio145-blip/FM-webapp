@@ -7599,7 +7599,8 @@ const INIT_BRANI = [
 ];
 
 // ─── FORM BRANO ──────────────────────────────────────────────────────────────
-const BranoForm = ({initial,onSave,onClose})=>{
+const BranoForm = ({initial,onSave,onClose,students:_studBranoIn})=>{
+  const _studBrano = (_studBranoIn||[]);
   const empty={title:"",composer:"",periodo:"",tonality:"",difficulty:"Intermedio",
     tipo:"individuale",note:"",allievi:[],insegnante:""};
   const [f,setF]=useState(initial||empty);
@@ -7627,9 +7628,9 @@ const BranoForm = ({initial,onSave,onClose})=>{
       , React.createElement('div', { style: {padding:"20px 22px",display:"flex",flexDirection:"column",gap:14,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7358}}
         , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7359}}
           , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7360}}
-            , React.createElement(Field, { label: "Titolo *" , value: f.title, onChange: e=>set("title",e.target.value), error: err.title, placeholder: "Es. Notturno Op.9 n.2"   , __self: this, __source: {fileName: _jsxFileName, lineNumber: 7361}})
+            , React.createElement(Input, { label: "Titolo *" , value: f.title, onChange: e=>set("title",e.target.value), error: err.title, placeholder: "Es. Notturno Op.9 n.2"   , __self: this, __source: {fileName: _jsxFileName, lineNumber: 7361}})
           )
-          , React.createElement(Field, { label: "Compositore *" , value: f.composer, onChange: e=>set("composer",e.target.value), error: err.composer, placeholder: "Es. Chopin" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 7363}})
+          , React.createElement(Input, { label: "Compositore *" , value: f.composer, onChange: e=>set("composer",e.target.value), error: err.composer, placeholder: "Es. Chopin" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 7363}})
           , React.createElement(Sel, { label: "Periodo", value: f.periodo, onChange: e=>set("periodo",e.target.value),
             options: PERIODI.map(p=>({value:p.id,label:p.id})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7364}})
           , React.createElement(Sel, { label: "Tonalità / Scala"  , value: f.tonality, onChange: e=>set("tonality",e.target.value), options: TONALITY_OPTS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7366}})
@@ -7672,7 +7673,7 @@ const BranoForm = ({initial,onSave,onClose})=>{
               , (f.allievi||[]).length, ")"
           )
           , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7405}}
-            , ALLIEVI.map(a=>{
+            , _studBrano.map(a=>{
               const sel=(f.allievi||[]).includes(a);
               return(
                 React.createElement('button', { key: a, onClick: ()=>toggleAllievo(a),
@@ -7947,11 +7948,12 @@ const AllievoBraniView = ({allievo,brani,onBack})=>{
 // APP
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani }) => {
+const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep }) => {
   const isMobile = useIsMobile();
   const [_braniLocal, _setBraniLocal] = useState(INIT_BRANI);
   const brani    = propBrani    || _braniLocal;
   const setBrani = propSetBrani || _setBraniLocal;
+  const _studBranoRep = (_propStudentsRep||[]).filter(s=>s.status==="attivo"||!s.status).map(s=>s.name||s.nome||"").filter(Boolean).sort();
     const [tab,       setTab]      = useState("catalogo"); // catalogo | allievi
     const [layout,    setLayout]   = useState("grid");     // grid | list
     const [search,    setSearch]   = useState("");
@@ -8263,7 +8265,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani }) => {
                 /* ── TAB ALLIEVI ── */
                 , tab==="allievi"&&(
                   React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7994}}
-                    , ALLIEVI.map((a,i)=>{
+                    , _studBranoRep.map((a,i)=>{
                       const suoiBrani=brani.filter(b=>(b.allievi||[]).includes(a));
                       const totLez=suoiBrani.reduce((s,b)=>s+(b.lezioni||0),0);
                       const ind=suoiBrani.filter(b=>b.tipo==="individuale").length;
@@ -8317,12 +8319,12 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani }) => {
         /* ── MODALI ── */
         , modal==="add"&&(
           React.createElement(Modal, { title: "Nuovo brano" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8048}}
-            , React.createElement(BranoForm, { onSave: aggiungiBrano, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8049}})
+            , React.createElement(BranoForm, { onSave: aggiungiBrano, onClose: closeModal, students: _studBranoRep, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8049}})
           )
         )
         , modal==="edit"&&selBrano&&(
           React.createElement(Modal, { title: "Modifica brano" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8053}}
-            , React.createElement(BranoForm, { initial: selBrano, onSave: modificaBrano, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8054}})
+            , React.createElement(BranoForm, { initial: selBrano, onSave: modificaBrano, onClose: closeModal, students: _studBranoRep, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8054}})
           )
         )
         , modal==="confirm_delete"&&selBrano&&(
@@ -11083,7 +11085,7 @@ function App() {
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, config: sharedConfig, setConfig: setSharedConfig, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
-    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
+    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
     sitoWeb:     null,
