@@ -1356,6 +1356,14 @@
     const colors = ['var(--blue)','var(--red)','var(--blue-dark)'];
     const html = sorted.map((ev, i) => {
       const dt = ev.data ? new Date(ev.data + 'T00:00:00') : null;
+      // Calcola il link luogo FUORI dal template per evitare backtick annidati
+      const mapsUrl = ev.maps_url || (ev.luogo ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(ev.luogo) : '');
+      const luogoHtml = mapsUrl
+        ? '<a href="' + mapsUrl + '" target="_blank" rel="noopener" ' +
+          'style="color:inherit;text-decoration:none;border-bottom:1px dashed rgba(255,255,255,0.5);transition:border-color 0.2s;" ' +
+          'onmouseover="this.style.borderBottomColor=\'rgba(255,255,255,1)\'" ' +
+          'onmouseout="this.style.borderBottomColor=\'rgba(255,255,255,0.5)\'">📍 ' + (ev.luogo || '') + '</a>'
+        : '📍 ' + (ev.luogo || '');
       return `
       <div class="concerto-card reveal">
         <div class="concerto-top">
@@ -1371,16 +1379,7 @@
         </div>
         <div class="concerto-meta">
           <span>🕐 ore ${ev.ora || ''}</span>
-          <span>${ev.maps_url
-            ? `<a href="${ev.maps_url}" target="_blank" rel="noopener"
-                 style="color:inherit;text-decoration:none;border-bottom:1px dashed rgba(255,255,255,0.4);
-                        transition:border-color 0.2s;"
-                 onmouseover="this.style.borderBottomColor='rgba(255,255,255,0.9)'"
-                 onmouseout="this.style.borderBottomColor='rgba(255,255,255,0.4)'">
-                📍 ${ev.luogo || ''}
-               </a>`
-            : `📍 ${ev.luogo || ''}`
-          }</span>
+          <span>${luogoHtml}</span>
           <span>🎟 ${ev.ingresso || 'Ingresso libero'}</span>
         </div>
       </div>`;
