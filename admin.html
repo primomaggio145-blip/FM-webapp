@@ -1151,7 +1151,7 @@ let DATA = JSON.parse(JSON.stringify(DEFAULT_DATA));
 let currentPhotoTarget = null; // { type: 'corsi'|'comp', index: n }
 
 // ─────────────── AUTH ───────────────
-async async function doLogin() {
+async function doLogin() {
   const pwd = document.getElementById('pwd-input').value;
   if (pwd === ADMIN_PASSWORD) {
     document.getElementById('login-screen').style.display = 'none';
@@ -1176,7 +1176,7 @@ function logout() {
 }
 
 // ─────────────── LOCAL STORAGE ───────────────
-async async function loadData() {
+async function loadData() {
   if (DB_READY) {
     try {
       await loadDataFromSupabase();
