@@ -1151,7 +1151,7 @@ let DATA = JSON.parse(JSON.stringify(DEFAULT_DATA));
 let currentPhotoTarget = null; // { type: 'corsi'|'comp', index: n }
 
 // ─────────────── AUTH ───────────────
-async function doLogin() {
+async async function doLogin() {
   const pwd = document.getElementById('pwd-input').value;
   if (pwd === ADMIN_PASSWORD) {
     document.getElementById('login-screen').style.display = 'none';
@@ -1358,7 +1358,7 @@ async function saveDataToSupabase() {
 }
 
 // ── Realtime Supabase — aggiorna UI quando qualcuno salva dal sito ──
-function startRealtime() {
+async function startRealtime() {
   if (!DB_READY) return;
   try {
     db.channel('admin-realtime')
