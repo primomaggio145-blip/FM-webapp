@@ -1371,7 +1371,16 @@
         </div>
         <div class="concerto-meta">
           <span>🕐 ore ${ev.ora || ''}</span>
-          <span>📍 ${ev.luogo || ''}</span>
+          <span>${ev.maps_url
+            ? `<a href="${ev.maps_url}" target="_blank" rel="noopener"
+                 style="color:inherit;text-decoration:none;border-bottom:1px dashed rgba(255,255,255,0.4);
+                        transition:border-color 0.2s;"
+                 onmouseover="this.style.borderBottomColor='rgba(255,255,255,0.9)'"
+                 onmouseout="this.style.borderBottomColor='rgba(255,255,255,0.4)'">
+                📍 ${ev.luogo || ''}
+               </a>`
+            : `📍 ${ev.luogo || ''}`
+          }</span>
           <span>🎟 ${ev.ingresso || 'Ingresso libero'}</span>
         </div>
       </div>`;
