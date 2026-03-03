@@ -5939,7 +5939,7 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
-const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw }) => {
+const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
   const propStudents = _propStudentsRaw || [];
@@ -5947,6 +5947,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
   const [_lessons, _setLessons] = useState(INIT_LESSONS);
   const lessons    = _nullishCoalesce(propLessons, () => ( _lessons));
   const setLessons = _nullishCoalesce(propSetLessons, () => ( _setLessons));
+  // Usa il repertorio condiviso dall'app root; fallback a stato locale se non passato
+  const [_repertorioLocal, _setRepertorioLocal] = useState(INIT_REPERTORIO);
+  const repertorio    = propRepertorio    || _repertorioLocal;
+  const setRepertorio = propSetRepertorio || _setRepertorioLocal;
     const [viewMode,  setViewMode]  = useState("day");
     const [curDate,   setCurDate]   = useState(new Date(today));
     const [modal,     setModal]     = useState(null);
@@ -5954,7 +5958,6 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const [addDate,   setAddDate]   = useState(null);
     const [role,      setRole]      = useState("admin"); // admin | docente | allievo
     const currentStudent = "Sofia Marchetti"; // in produzione verrà dal sistema di login
-    const [repertorio,  setRepertorio] = useState(INIT_REPERTORIO);
     const [appView,     setAppView]    = useState("calendario"); // calendario | repertorio
   
     const closeModal = () => { setModal(null); setSelLesson(null); setAddDate(null); setNextLessonCreated(null); };
@@ -10979,6 +10982,7 @@ function App() {
   const [sharedCourses,        setSharedCourses]        = useState(INIT_COURSES);
   const [sharedDocenti,        setSharedDocenti]        = useState(INIT_DOCENTI_EXT);
   const [sharedLessons,        setSharedLessons]        = useState(INIT_LESSONS);
+  const [sharedRepertorio,     setSharedRepertorio]     = useState(INIT_REPERTORIO);
   const [sharedConfig,         setSharedConfig]         = useState(CONFIG_DEFAULT);
   const [sharedAnniScolastici, setSharedAnniScolastici] = useState(INIT_ANNI_SCOLASTICI);
   const [sharedEntrate,         setSharedEntrate]         = useState(INIT_ENTRATE_QUOTE);
@@ -11038,9 +11042,9 @@ function App() {
     docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti,
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
-    calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
+    calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, config: sharedConfig, setConfig: setSharedConfig, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
-    repertorio:  React.createElement(RepertorioView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
+    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
     sitoWeb:     null,
