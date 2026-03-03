@@ -5096,7 +5096,9 @@ const CalRepertorioTab = ({ repertorio, lessons, onAdd, onEdit, onDelete, canEdi
   const [filterComp, setFC]      = useState("");
   const [expanded,   setExpanded]= useState(null); // id del brano espanso
 
-  const usageCount = id => lessons.filter(l => (l.repertorioIds||[]).includes(id)).length;
+  const usageCount    = id => _lessonsRep.filter(l => (l.repertorioIds||[]).includes(id)).length;
+  const allieviOfBrano= id => _studBranoRep.filter(s => (s.repertorio||[]).some(r => r.id === id));
+  const allieviCount  = id => allieviOfBrano(id).length;
 
   // Lista compositori unici per dropdown
   const composers = [...new Set(repertorio.map(b => b.composer))].sort();
@@ -7548,69 +7550,42 @@ const INSEGNANTI = ["Prof. Rossi","Prof. Bianchi","Prof. Verde","Prof. Marino"];
 // ─── DATI DEMO ───────────────────────────────────────────────────────────────
 const INIT_BRANI = [
   {id:"b1",  title:"Notturno in Mi♭ maggiore Op.9 n.2",  composer:"Frédéric Chopin",    periodo:"Romantico",  tonality:"Mi♭ maggiore", difficulty:"Avanzato",      tipo:"individuale",
-   note:"Celebre notturno, richiede fraseggio cantabile e tocco morbido. Fondamentale lavorare sul rubato.",
-   allievi:["Sofia Marchetti","Alessandro Gallo"], insegnante:"Prof. Rossi",
-   lezioni:7, dataPrima:"2024-10-15", dataUltima:"2025-05-20"},
+   note:"Celebre notturno, richiede fraseggio cantabile e tocco morbido. Fondamentale lavorare sul rubato.", dataPrima:"2024-10-15", dataUltima:"2025-05-20"},
 
   {id:"b2",  title:"Invenzione n.1 in Do maggiore BWV 772", composer:"Johann S. Bach",     periodo:"Barocco",    tonality:"Do maggiore",  difficulty:"Intermedio",    tipo:"individuale",
-   note:"Contrappunto a due voci. Attenzione all'indipendenza delle mani.",
-   allievi:["Luca Ferrara","Emma Conti"], insegnante:"Prof. Rossi",
-   lezioni:5, dataPrima:"2025-01-10", dataUltima:"2025-04-28"},
+   note:"Contrappunto a due voci. Attenzione all'indipendenza delle mani.", dataPrima:"2025-01-10", dataUltima:"2025-04-28"},
 
   {id:"b3",  title:"Partita n.2 in Re minore BWV 1004",   composer:"Johann S. Bach",     periodo:"Barocco",    tonality:"Re minore",    difficulty:"Professionale", tipo:"individuale",
-   note:"Per violino solo. Chaconne finale è uno dei pezzi più impegnativi del repertorio violinistico.",
-   allievi:["Emma Conti"], insegnante:"Prof. Rossi",
-   lezioni:12, dataPrima:"2024-09-01", dataUltima:"2025-05-22"},
+   note:"Per violino solo. Chaconne finale è uno dei pezzi più impegnativi del repertorio violinistico.", dataPrima:"2024-09-01", dataUltima:"2025-05-22"},
 
   {id:"b4",  title:"Sonata K.331 in La maggiore",          composer:"W.A. Mozart",        periodo:"Classico",   tonality:"La maggiore",  difficulty:"Intermedio",    tipo:"individuale",
-   note:"Tema con variazioni, Rondò alla Turca nel finale. Classico del repertorio pianistico.",
-   allievi:["Giulia Romano","Sofia Marchetti"], insegnante:"Prof. Bianchi",
-   lezioni:8, dataPrima:"2025-02-01", dataUltima:"2025-05-15"},
+   note:"Tema con variazioni, Rondò alla Turca nel finale. Classico del repertorio pianistico.", dataPrima:"2025-02-01", dataUltima:"2025-05-15"},
 
   {id:"b5",  title:"Standard Jazz ii-V-I in Do maggiore",  composer:"Traditional",        periodo:"Jazz/Blues",  tonality:"Do maggiore", difficulty:"Intermedio",    tipo:"individuale",
-   note:"Progressione fondamentale jazz. Lavorare su voicings e improvvisazione.",
-   allievi:["Marco Ricci","Davide Russo"], insegnante:"Prof. Verde",
-   lezioni:4, dataPrima:"2025-03-10", dataUltima:"2025-05-18"},
+   note:"Progressione fondamentale jazz. Lavorare su voicings e improvvisazione.", dataPrima:"2025-03-10", dataUltima:"2025-05-18"},
 
   {id:"b6",  title:"Studio op.10 n.1 in Do maggiore",      composer:"Frédéric Chopin",    periodo:"Romantico",  tonality:"Do maggiore",  difficulty:"Professionale", tipo:"individuale",
-   note:"Studio per l'estensione della mano destra. Tecnica impegnativa.",
-   allievi:["Sofia Marchetti"], insegnante:"Prof. Rossi",
-   lezioni:3, dataPrima:"2025-04-05", dataUltima:"2025-05-10"},
+   note:"Studio per l'estensione della mano destra. Tecnica impegnativa.", dataPrima:"2025-04-05", dataUltima:"2025-05-10"},
 
   {id:"b7",  title:"Ode alla Gioia (Sinfonia n.9)",         composer:"Ludwig van Beethoven",periodo:"Classico",  tonality:"Re maggiore",  difficulty:"Elementare",    tipo:"collettivo",
-   note:"Arrangiamento per orchestra scolastica. Eseguito al saggio di fine anno.",
-   allievi:["Sofia Marchetti","Luca Ferrara","Emma Conti","Marco Ricci","Giulia Romano","Alessandro Gallo"], insegnante:"Prof. Rossi",
-   lezioni:15, dataPrima:"2025-01-15", dataUltima:"2025-05-22"},
+   note:"Arrangiamento per orchestra scolastica. Eseguito al saggio di fine anno.", dataPrima:"2025-01-15", dataUltima:"2025-05-22"},
 
   {id:"b8",  title:"Canon in Re",                           composer:"Johann Pachelbel",   periodo:"Barocco",   tonality:"Re maggiore",  difficulty:"Elementare",    tipo:"collettivo",
-   note:"Ensemble d'archi. Buona introduzione al suonare in gruppo.",
-   allievi:["Emma Conti","Giulia Romano","Chiara Esposito"], insegnante:"Prof. Bianchi",
-   lezioni:6, dataPrima:"2025-02-20", dataUltima:"2025-04-30"},
+   note:"Ensemble d'archi. Buona introduzione al suonare in gruppo.", dataPrima:"2025-02-20", dataUltima:"2025-04-30"},
 
   {id:"b9",  title:"Greensleeves",                          composer:"Traditional",        periodo:"Folk/Pop",   tonality:"Re minore",    difficulty:"Principiante",  tipo:"collettivo",
-   note:"Arrangiamento corale. Ottimo per i principianti.",
-   allievi:["Chiara Esposito","Davide Russo"], insegnante:"Prof. Verde",
-   lezioni:3, dataPrima:"2025-03-01", dataUltima:"2025-04-10"},
+   note:"Arrangiamento corale. Ottimo per i principianti.", dataPrima:"2025-03-01", dataUltima:"2025-04-10"},
 
   {id:"b10", title:"Preludio in Do maggiore BWV 846",       composer:"Johann S. Bach",     periodo:"Barocco",   tonality:"Do maggiore",  difficulty:"Elementare",    tipo:"individuale",
-   note:"Dal Clavicembalo Ben Temperato. Ottimo esercizio per la fluidità.",
-   allievi:["Alessandro Gallo","Davide Russo"], insegnante:"Prof. Rossi",
-   lezioni:4, dataPrima:"2026-02-10", dataUltima:"2025-05-01"},
+   note:"Dal Clavicembalo Ben Temperato. Ottimo esercizio per la fluidità.", dataPrima:"2026-02-10", dataUltima:"2025-05-01"},
 ];
 
 // ─── FORM BRANO ──────────────────────────────────────────────────────────────
 const BranoForm = ({initial,onSave,onClose,students:_studBranoIn})=>{
-  const _studBrano = (_studBranoIn||[]);
-  const empty={title:"",composer:"",periodo:"",tonality:"",difficulty:"Intermedio",
-    tipo:"individuale",note:"",allievi:[],insegnante:""};
+  const empty={title:"",composer:"",periodo:"",tonality:"",difficulty:"Intermedio",tipo:"individuale",note:""};
   const [f,setF]=useState(initial||empty);
   const [err,setErr]=useState({});
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
-
-  const toggleAllievo=(a)=>{
-    const arr=f.allievi||[];
-    set("allievi",arr.includes(a)?arr.filter(x=>x!==a):[...arr,a]);
-  };
 
   const validate=()=>{
     const e={};
@@ -7664,33 +7639,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn})=>{
           )
         )
 
-        /* Insegnante */
-        , React.createElement(Sel, { label: "Insegnante responsabile" , value: f.insegnante, onChange: e=>set("insegnante",e.target.value), options: INSEGNANTI, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7398}})
 
-        /* Allievi */
-        , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7401}}
-          , React.createElement('div', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:9}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7402}}, "Allievi assegnati ("
-              , (f.allievi||[]).length, ")"
-          )
-          , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7405}}
-            , _studBrano.map(a=>{
-              const sel=(f.allievi||[]).includes(a);
-              return(
-                React.createElement('button', { key: a, onClick: ()=>toggleAllievo(a),
-                  style: {display:"flex",alignItems:"center",gap:8,padding:"7px 10px",
-                    borderRadius:8,border:`1.5px solid ${sel?C.gold:C.border}`,
-                    background:sel?C.goldBg:C.bg,cursor:"pointer",transition:"all .12s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7409}}
-                  , React.createElement('div', { style: {width:14,height:14,borderRadius:3,border:`2px solid ${sel?C.gold:C.border}`,
-                    background:sel?C.gold:"transparent",flexShrink:0,display:"flex",
-                    alignItems:"center",justifyContent:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7413}}
-                    , sel&&React.createElement(Ic, { n: "check", size: 9, stroke: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7416}})
-                  )
-                  , React.createElement('span', { style: {fontSize:12,color:sel?C.gold:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7418}}, a)
-                )
-              );
-            })
-          )
-        )
 
         /* Note */
         , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7426}}
@@ -7712,7 +7661,9 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn})=>{
 };
 
 // ─── DRAWER DETTAGLIO BRANO ──────────────────────────────────────────────────
-const BranoDrawer = ({brano,onClose,onEdit,onDelete})=>{
+const BranoDrawer = ({brano,lezioniCount,allieviList,onClose,onEdit,onDelete})=>{
+  const _lezCount = lezioniCount || 0;
+  const _allieviL = allieviList  || [];
   const d=diffById(brano.difficulty);
   const p=periodoById(brano.periodo);
   const isCol=brano.tipo==="collettivo";
@@ -7762,8 +7713,8 @@ const BranoDrawer = ({brano,onClose,onEdit,onDelete})=>{
           /* Statistiche */
           , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7493}}
             , [
-              {label:"Lezioni totali",   val:brano.lezioni||0, hex:C.gold},
-              {label:"Allievi assegnati",val:(brano.allievi||[]).length, hex:typeHex},
+              {label:"Lezioni totali",   val:_lezCount, hex:C.gold},
+              {label:"Allievi assegnati",val:_allieviL.length, hex:typeHex},
               {label:"Settimane attivo", val:brano.dataPrima?Math.round((new Date()-new Date(brano.dataPrima))/(7*86400000)):0, hex:C.blue},
             ].map(s=>(
               React.createElement('div', { key: s.label, style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",textAlign:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7499}}
@@ -7828,6 +7779,17 @@ const BranoDrawer = ({brano,onClose,onEdit,onDelete})=>{
             React.createElement('div', { style: {background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:10,padding:"14px 16px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7558}}
               , React.createElement('div', { style: {fontSize:10,color:C.gold,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:7}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7559}}, "Note tecniche" )
               , React.createElement('div', { style: {fontSize:13,color:C.text,lineHeight:1.65}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7560}}, brano.note)
+            )
+          )
+          , _allieviL.length > 0 && (
+            React.createElement('div', { style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 16px"} }
+              , React.createElement('div', { style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10} }, "Allievi")
+              , React.createElement('div', { style: {display:"flex",gap:6,flexWrap:"wrap"} }
+                , _allieviL.map(nome=>React.createElement('span', { key: nome,
+                    style: {fontSize:12,padding:"3px 10px",borderRadius:4,background:typeHex+"18",color:typeHex,border:`1px solid ${typeHex}40`} }
+                  , nome
+                ))
+              )
             )
           )
         )
@@ -7953,7 +7915,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
   const [_braniLocal, _setBraniLocal] = useState(INIT_BRANI);
   const brani    = propBrani    || _braniLocal;
   const setBrani = propSetBrani || _setBraniLocal;
-  const _studBranoRep = (_propStudentsRep||[]).filter(s=>s.status==="attivo"||!s.status).map(s=>s.name||s.nome||"").filter(Boolean).sort();
+  const _studBranoRep = (_propStudentsRep||[]).filter(s=>s.status==="attivo"||!s.status);
+  const _lessonsRep   = _propLessonsRep || [];
     const [tab,       setTab]      = useState("catalogo"); // catalogo | allievi
     const [layout,    setLayout]   = useState("grid");     // grid | list
     const [search,    setSearch]   = useState("");
@@ -8266,12 +8229,13 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                 , tab==="allievi"&&(
                   React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7994}}
                     , _studBranoRep.map((a,i)=>{
-                      const suoiBrani=brani.filter(b=>(b.allievi||[]).includes(a));
-                      const totLez=suoiBrani.reduce((s,b)=>s+(b.lezioni||0),0);
+                      const stuName=a.name||a.nome||"";
+                      const suoiBrani=brani.filter(b=>(a.repertorio||[]).some(r=>r.id===b.id));
+                      const totLez=suoiBrani.reduce((acc,b)=>acc+_lessonsRep.filter(l=>(l.repertorioIds||[]).includes(b.id)).length,0);
                       const ind=suoiBrani.filter(b=>b.tipo==="individuale").length;
                       const col=suoiBrani.filter(b=>b.tipo==="collettivo").length;
                       return(
-                        React.createElement('div', { key: a, className: "card-anim", onClick: ()=>setAllievoPOV(a),
+                        React.createElement('div', { key: stuName, className: "card-anim", onClick: ()=>setAllievoPOV(stuName),
                           style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
                             padding:"18px 18px",cursor:"pointer",transition:"all .15s"},
                           onMouseEnter: e=>{e.currentTarget.style.borderColor=C.gold+"50";e.currentTarget.style.background=C.surfaceHover;},
@@ -8310,6 +8274,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         , drawer&&(
           React.createElement(BranoDrawer, {
             brano: drawer,
+            lezioniCount: usageCount(drawer.id),
+            allieviList: allieviOfBrano(drawer.id).map(s=>s.name||s.nome||""),
             onClose: ()=>setDrawer(null),
             onEdit: (b)=>{setSelBrano(b);setDrawer(null);setModal("edit");},
             onDelete: (b)=>{setSelBrano(b);setModal("confirm_delete");}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8038}}
@@ -8319,12 +8285,12 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         /* ── MODALI ── */
         , modal==="add"&&(
           React.createElement(Modal, { title: "Nuovo brano" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8048}}
-            , React.createElement(BranoForm, { onSave: aggiungiBrano, onClose: closeModal, students: _studBranoRep, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8049}})
+            , React.createElement(BranoForm, { onSave: aggiungiBrano, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8049}})
           )
         )
         , modal==="edit"&&selBrano&&(
           React.createElement(Modal, { title: "Modifica brano" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8053}}
-            , React.createElement(BranoForm, { initial: selBrano, onSave: modificaBrano, onClose: closeModal, students: _studBranoRep, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8054}})
+            , React.createElement(BranoForm, { initial: selBrano, onSave: modificaBrano, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8054}})
           )
         )
         , modal==="confirm_delete"&&selBrano&&(
@@ -11085,7 +11051,7 @@ function App() {
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, config: sharedConfig, setConfig: setSharedConfig, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
-    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
+    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
     sitoWeb:     null,
