@@ -4186,6 +4186,10 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     .map(s => s.name || s.nome || '')
     .filter(Boolean)
     .sort();
+
+  // Ref che mappa id → brano appena creato in questa sessione del form
+  // Usato da handleSave per includere i brani nel payload senza dipendere da window.__repertorio__
+  const newlyCreatedBraniRef = React.useRef({});
   const [showBranoForm, setShowBranoForm] = useState(false);
   const [f, setF] = useState(initial || emptyLesson);
   const [err, setErr] = useState({});
@@ -4210,7 +4214,9 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
   const handleSave = () => {
     const e = validate();
     if(Object.keys(e).length){ setErr(e); return; }
-    onSave(f);
+    // Allega i brani appena creati al payload così handleAdd può costruire
+    // le entry student.repertorio senza dipendere da window.__repertorio__
+    onSave({ ...f, _newBrani: newlyCreatedBraniRef.current });
   };
 
   const ATT_STYLES = {
@@ -4363,6 +4369,8 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
                         onSave: b => {
                           const newId = "r_"+Date.now();
                           const newBrano = {...b, id:newId};
+                          // Salva nel ref locale per handleSave
+                          newlyCreatedBraniRef.current[newId] = newBrano;
                           onAddBrano(newBrano);
                           set("repertorioIds", [...(f.repertorioIds||[]), newId]);
                           setShowBranoForm(false);
@@ -5982,7 +5990,6 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       if (data.repertorioIds && data.repertorioIds.length > 0 && data.student) {
         propSetStudents && propSetStudents(allStudents =>
           allStudents.map(stu => {
-            // Cerca lo studente per nome (il form individuale usa il nome come identificatore)
             const stuName = stu.name || stu.nome || '';
             if (stuName !== data.student) return stu;
 
@@ -5990,16 +5997,19 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             const toAdd = data.repertorioIds
               .filter(id => !existing.includes(id))
               .map(id => {
-                const b = (window.__repertorio__ || []).find(r => r.id === id);
-                return b ? {
-                  id:          b.id,
+                // Prima controlla i brani appena creati nel form (non ancora in window.__repertorio__)
+                const fresh = data._newBrani && data._newBrani[id];
+                const b = fresh || (window.__repertorio__ || []).find(r => r.id === id);
+                if (!b) return null;
+                return {
+                  id,
                   titolo:      b.title      || b.titolo      || '',
                   compositore: b.composer   || b.compositore || '',
                   periodo:     b.period     || b.periodo     || '',
                   tonalita:    b.tonality   || b.tonalita    || '',
                   stato:       'in studio',
                   note:        ''
-                } : null;
+                };
               })
               .filter(Boolean);
 
@@ -6065,16 +6075,18 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             const toAdd = data.repertorioIds
               .filter(id => !existing.includes(id))
               .map(id => {
-                const b = (window.__repertorio__ || []).find(r => r.id === id);
-                return b ? {
-                  id:          b.id,
+                const fresh = data._newBrani && data._newBrani[id];
+                const b = fresh || (window.__repertorio__ || []).find(r => r.id === id);
+                if (!b) return null;
+                return {
+                  id,
                   titolo:      b.title      || b.titolo      || '',
                   compositore: b.composer   || b.compositore || '',
                   periodo:     b.period     || b.periodo     || '',
                   tonalita:    b.tonality   || b.tonalita    || '',
                   stato:       'in studio',
                   note:        ''
-                } : null;
+                };
               })
               .filter(Boolean);
 
