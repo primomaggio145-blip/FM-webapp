@@ -7813,7 +7813,7 @@ const BranoDrawer = ({brano,lezioniCount,allieviList,onClose,onEdit,onDelete})=>
 const AllievoBraniView = ({allievo,brani,allStudents,lessons,onBack})=>{
   const isMobile = useIsMobile();
   const _stu = (allStudents||[]).find(s=>(s.name||s.nome||"")=== allievo);
-  const suoiBrani = _stu ? brani.filter(b=>(_stu.repertorio||[]).some(r=>r.id===b.id)) : brani.filter(b=>(b.allievi||[]).includes(allievo));
+  const suoiBrani = _stu ? brani.filter(b=>(_stu.repertorio||[]).some(r=>r.id===b.id)) : brani.filter(b=>([]||[]).includes(allievo));
   const individuali=suoiBrani.filter(b=>b.tipo==="individuale");
   const collettivi=suoiBrani.filter(b=>b.tipo==="collettivo");
 
@@ -7866,7 +7866,7 @@ const AllievoBraniView = ({allievo,brani,allStudents,lessons,onBack})=>{
                   , React.createElement('div', { style: {display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7633}}
                     , React.createElement(DiffBadge, { diff: b.difficulty, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7634}})
                     , b.periodo&&React.createElement('span', { style: {background:p.hex+"18",color:p.hex,border:`1px solid ${p.hex}30`,borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7635}}, b.periodo)
-                    , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7636}}, b.lezioni, " lez." )
+                    , React.createElement('span', { style: {fontSize:11,color:C.textDim} }, (lessons||[]).filter(l=>(l.repertorioIds||[]).includes(b.id)).length, " lez." )
                   )
                 )
               );
@@ -7889,11 +7889,6 @@ const AllievoBraniView = ({allievo,brani,allStudents,lessons,onBack})=>{
                   , React.createElement('div', { style: {flex:1,minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7656}}
                     , React.createElement('div', { style: {fontSize:14,fontWeight:600,marginBottom:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7657}}, b.title)
                     , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7658}}, b.composer)
-                    , (b.allievi||[]).length>1&&(
-                      React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7660}}, "Con: "
-                         , b.allievi.filter(a=>a!==allievo).slice(0,3).join(", "), b.allievi.length>4?` +${b.allievi.length-4} altri`:""
-                      )
-                    )
                   )
                   , React.createElement(DiffBadge, { diff: b.difficulty, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7665}})
                 )
