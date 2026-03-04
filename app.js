@@ -2926,7 +2926,8 @@ const validate = f => {
   return e;
 };
 
-const StudentForm = ({ initial, onSave, onClose, courses }) => {
+const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt }) => {
+  const _teacherOpts = (_docentiFSt||[]).map(d=>({value:d.nome||d.name||"",label:d.nome||d.name||""}));
   const [f, setF] = useState(initial || emptyStudent);
   const [errors, setErrors] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
@@ -2996,7 +2997,7 @@ const StudentForm = ({ initial, onSave, onClose, courses }) => {
         )
 
         , React.createElement(SectionDivider, { label: "Didattica", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2996}})
-        , React.createElement(Sel, { label: "Insegnante *" , value: f.teacher, onChange: e=>set("teacher",e.target.value), options: TEACHERS, error: errors.teacher, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2997}})
+        , React.createElement(Sel, { label: "Insegnante *" , value: f.teacher, onChange: e=>set("teacher",e.target.value), options: _teacherOpts.length>0 ? _teacherOpts : TEACHERS, error: errors.teacher, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2997}})
         , React.createElement(Sel, { label: "Livello", value: f.level, onChange: e=>set("level",e.target.value), options: LEVELS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2998}})
         , React.createElement(Sel, { label: "Stato", value: f.status, onChange: e=>set("status",e.target.value), options: ["attivo","inattivo","sospeso"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 2999}})
 
@@ -3854,7 +3855,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete }) =
 // APP ROOT
 // ════════════════════════════════════════════════════════════════════════════════
 
-const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig }) => {
+const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, docenti:propDocentiAV }) => {
   const isMobile = useIsMobile();
   const [_students, _setStudents] = useState(INIT_STUDENTS);
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
@@ -3908,8 +3909,8 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
           )
         )
       )
-      , modal==="add"    && React.createElement(Modal, { title: "Nuovo allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}, React.createElement(StudentForm, { onSave: handleAddStudent, onClose: closeModal, courses: courses, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}))
-      , modal==="edit"   && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
+      , modal==="add"    && React.createElement(Modal, { title: "Nuovo allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}, React.createElement(StudentForm, { onSave: handleAddStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}))
+      , modal==="edit"   && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
       , modal==="delete" && selected && React.createElement(ConfirmDelete, { label: selected.name, description: "Questa azione è irreversibile."   , onConfirm: handleDeleteStudent, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3911}})
     )
   );
@@ -4178,7 +4179,8 @@ const INIT_LESSONS = (() => {
 // ─── FORM LEZIONE ─────────────────────────────────────────────────────────────
 const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"Nessuna", notes:"", exercises:"", repertorioIds:[] };
 
-const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw }) => {
+const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes }) => {
+  const _teacherOptsLes = (_docentiFLes||[]).map(d=>({value:d.nome||d.name||"",label:d.nome||d.name||""}));
   const repertorio = _repertorioRaw || [];
   // Lista allievi dinamica: usa quella passata come prop, con fallback alla lista statica
   const dynamicStudents = (_studentsRaw || [])
@@ -4243,7 +4245,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
         , React.createElement(SDiv, { label: "Chi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4229}})
         , React.createElement(Sel, { label: "Allievo *" ,    value: f.student,    onChange: e => set("student", e.target.value),    options: dynamicStudents.length > 0 ? dynamicStudents : STUDENTS_LIST, error: err.student, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4230}})
         , React.createElement(Sel, { label: "Strumento *" ,  value: f.instrument, onChange: e => set("instrument", e.target.value), options: INSTRUMENTS,   error: err.instrument, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4231}})
-        , React.createElement(Sel, { label: "Insegnante *" , value: f.teacher,    onChange: e => set("teacher", e.target.value),    options: TEACHERS,      error: err.teacher, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4232}})
+        , React.createElement(Sel, { label: "Insegnante *" , value: f.teacher,    onChange: e => set("teacher", e.target.value),    options: _teacherOptsLes.length>0 ? _teacherOptsLes : TEACHERS, error: err.teacher, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4232}})
         , React.createElement(Sel, { label: "Sala",         value: f.room,       onChange: e => set("room", e.target.value),       options: ROOMS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4233}})
 
         , React.createElement(SDiv, { label: "Contenuto", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4235}})
@@ -6403,12 +6405,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
         , modal === "add" && (
           React.createElement(Modal, { title: "Nuova lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6136}}
-            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
+            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
           )
         )
         , modal === "edit" && selLesson && (
           React.createElement(Modal, { title: "Modifica lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6141}}
-            , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
+            , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
           )
         )
         , modal === "detail" && selLesson && (
@@ -7765,7 +7767,7 @@ const BranoDrawer = ({brano,lezioniCount,allieviList,onClose,onEdit,onDelete})=>
                       border:`1.5px solid ${typeHex}40`,display:"flex",alignItems:"center",
                       justifyContent:"center",flexShrink:0,
                       fontFamily:"'Cormorant Garamond',serif",fontSize:13,fontWeight:600,color:typeHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7543}}
-                      , a.split(" ").map(p=>p[0]).join("").slice(0,2)
+                      , stuName.split(" ").map(p=>p[0]).join("").slice(0,2)
                     )
                     , React.createElement('span', { style: {fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7549}}, a)
                   )
@@ -8245,10 +8247,10 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                             , React.createElement('div', { style: {width:44,height:44,borderRadius:"50%",background:`${C.gold}18`,
                               border:`2px solid ${C.goldDim}`,display:"flex",alignItems:"center",justifyContent:"center",
                               fontFamily:"'Cormorant Garamond',serif",fontSize:17,fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8007}}
-                              , a.split(" ").map(p=>p[0]).join("").slice(0,2)
+                              , stuName.split(" ").map(p=>p[0]).join("").slice(0,2)
                             )
                             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 8012}}
-                              , React.createElement('div', { style: {fontSize:13,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8013}}, a)
+                              , React.createElement('div', { style: {fontSize:13,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8013}}, stuName)
                               , React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8014}}, suoiBrani.length, " brani" )
                             )
                           )
@@ -10131,7 +10133,7 @@ const INIT_DOCENTI_EXT = [
   { id:"d4", nome:"Prof.ssa Lia Marino", teacherKey:"Prof. Marino",  email:"l.marino@accademia.it",   phone:"366 3344556", strumenti:"Canto · Solfeggio",      bio:"Soprano lirico, docente di tecnica vocale e teoria musicale.",  tariffaOra:35, contratto:"Tempo indeterminato", dataInizio:"2017-09-01", colore:C.purple  },
 ];
 
-const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo }) => {
+const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView }) => {
   const isMobile = useIsMobile();
   const students = _studentsRaw || [];
   const lessons = _lessonsRaw || [];
@@ -10140,7 +10142,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const [modal,     setModal]     = useState(null); // null | "new" | "edit" | "del"
   const [draft,     setDraft]     = useState({});
 
-  const initDoc = { nome:"", email:"", phone:"", strumenti:"", bio:"", tariffaOra:35, contratto:"Collaborazione", dataInizio:"", colore:C.gold };
+  const initDoc = { nome:"", email:"", phone:"", strumenti:"", bio:"", tariffaOra:35, contratto:"Collaborazione", dataInizio:"", colore:C.gold, corsi:[] };
 
   const openNew  = () => { setDraft({...initDoc}); setModal("new"); };
   const openEdit = (d) => { setDraft({...d}); setModal("edit"); };
@@ -10196,6 +10198,16 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           , React.createElement(Input, { label: "Email", type: "email", value: draft.email||"", onChange: e=>setDraft(p=>({...p,email:e.target.value})), placeholder: "nome@accademia.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 9939}})
           , React.createElement(Input, { label: "Telefono", value: draft.phone||"", onChange: e=>setDraft(p=>({...p,phone:e.target.value})), placeholder: "333 0000000" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 9940}})
           , React.createElement(Input, { label: "Strumenti", value: draft.strumenti||"", onChange: e=>setDraft(p=>({...p,strumenti:e.target.value})), placeholder: "Pianoforte · Chitarra"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 9941}})
+          , React.createElement('div', { style:{gridColumn:"1/-1"} }
+            , React.createElement('label', { style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8} }, "Corsi insegnati")
+            , React.createElement('div', { style:{display:"flex",flexWrap:"wrap",gap:6} }
+              , (_coursesDocView||[]).map(corso=>{ const sel=(draft.corsi||[]).includes(corso.id); return(
+                React.createElement('button', { key:corso.id, type:"button", onClick:()=>setDraft(p=>({...p,corsi:sel?(p.corsi||[]).filter(x=>x!==corso.id):[...(p.corsi||[]),corso.id]})),
+                  style:{padding:"4px 12px",borderRadius:6,border:`1.5px solid ${sel?C.gold:C.border}`,background:sel?C.goldBg:C.bg,color:sel?C.gold:C.textMuted,cursor:"pointer",fontSize:12,transition:"all .12s"} }
+                , corso.name)
+              );})
+            )
+          )
           , React.createElement(Input, { label: "Tariffa oraria (€)"  , type: "number", value: draft.tariffaOra||35, onChange: e=>setDraft(p=>({...p,tariffaOra:+e.target.value})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9942}})
           , React.createElement(Sel, { label: "Tipo contratto" , value: draft.contratto||"", onChange: e=>setDraft(p=>({...p,contratto:e.target.value})),
             options: ["Tempo indeterminato","Tempo determinato","Collaborazione","Partita IVA"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 9943}})
@@ -11046,8 +11058,8 @@ function App() {
     dashboard:   React.createElement(DashboardView, { appUser: user, onNavigate: setView,
                    config: sharedConfig, setConfig: setSharedConfig,
                    anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
-    allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
-    docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti,
+    allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
+    docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses,
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
