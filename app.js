@@ -543,6 +543,7 @@ const RICEVUTA_STYLE_DEFAULT = {
   showFooter: true,
   showDataNascita: true,
   notePersonalizzate: "",
+  firmaPresidenteUrl: "",
 };
 
 const RicevutaModal = ({ entrata, student, config, onClose }) => {
@@ -566,10 +567,11 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
       ? `<tr><td class="k">Data di nascita</td><td class="v">${new Date(student.birthdate+"T00:00:00").toLocaleDateString("it-IT")}</td></tr>` : "";
     const meseRow = stile.showCompetenza!==false && meseLabel ? `<tr><td class="k">Competenza</td><td class="v">${meseLabel}</td></tr>` : "";
     const noteRow = stile.noteFooter ? `<tr><td class="k">Note</td><td class="v">${stile.noteFooter}</td></tr>` : "";
+    const firmaImg = stile.firmaPresidenteUrl ? `<img src="${stile.firmaPresidenteUrl}" style="height:42px;max-width:160px;object-fit:contain;display:block;margin:0 auto 4px;" alt="firma">` : `<div class="firma-line"></div>`;
     const firmeHtml = stile.showFirme!==false ? `
       <div class="firma-wrap">
         <div class="firma-box"><div class="firma-line"></div><div class="firma-lbl">${stile.labelPagante||"Il pagante"}</div></div>
-        <div class="firma-box"><div class="firma-line"></div><div class="firma-lbl">${stile.labelCassiere||"Il cassiere / responsabile"}</div></div>
+        <div class="firma-box">${firmaImg}<div class="firma-lbl">${stile.labelCassiere||"Il cassiere / responsabile"}</div></div>
       </div>` : "";
     const footerHtml = stile.showFooter!==false ? `<div class="footer">${cfg.notaRicevuta||"Ricevuta non fiscale"}<br>${cfg.nomeScuola||""} · ${cfg.annoScolastico||""}${stile.noteFooter?"<br>"+stile.noteFooter:""}</div>` : "";
 
@@ -698,7 +700,11 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
           )
           /* Firme */
           , stile.showFirme && React.createElement('div', {style:{display:"flex",justifyContent:"space-between",marginTop:36}}
-            , [stile.labelPagante||"Il pagante", stile.labelCassiere||"Il cassiere / responsabile"].map(l=>React.createElement('div', {key:l, style:{textAlign:"center",width:160}}
+            , [
+                {label:stile.labelPagante||"Il pagante", img:null},
+                {label:stile.labelCassiere||"Il cassiere / responsabile", img:stile.firmaPresidenteUrl}
+              ].map(({label:l,img})=>React.createElement('div', {key:l, style:{textAlign:"center",width:160}}
+                , img && React.createElement('img',{src:img,style:{height:32,objectFit:"contain",display:"block",margin:"0 auto 2px"}})
                 , React.createElement('div', {style:{borderTop:"1px solid #333",marginBottom:5}})
                 , React.createElement('div', {style:{fontSize:10,color:"#888",textTransform:"uppercase",letterSpacing:".08em"}}, l)
               ))
@@ -2186,6 +2192,27 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                 )
                 , React.createElement(SF, {label:"Etichetta firma sinistra", k:"labelPagante", placeholder:"Il pagante"})
                 , React.createElement(SF, {label:"Etichetta firma destra",   k:"labelCassiere", placeholder:"Il cassiere / responsabile"})
+                , React.createElement('div', {style:{marginBottom:12}}
+                  , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:6,letterSpacing:".06em",textTransform:"uppercase"}}, "Immagine firma cassiere/presidente")
+                  , rs.firmaPresidenteUrl && React.createElement('div', {style:{marginBottom:8,display:"flex",alignItems:"center",gap:8}}
+                    , React.createElement('img',{src:rs.firmaPresidenteUrl, style:{height:40,borderRadius:4,border:`1px solid ${C.border}`,objectFit:"contain",background:"#fff",padding:3}})
+                    , React.createElement('button',{onClick:()=>setRS("firmaPresidenteUrl",""),
+                        style:{fontSize:11,color:C.red,background:"none",border:"none",cursor:"pointer",padding:0}}, "✕ Rimuovi")
+                  )
+                  , React.createElement('label', {style:{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"8px 12px",borderRadius:8,
+                      border:`1px dashed ${C.border}`,background:C.bg,color:C.textMuted,fontSize:12}}
+                    , React.createElement(Ic,{n:"upload",size:13,stroke:C.textMuted})
+                    , rs.firmaPresidenteUrl ? "Cambia immagine firma" : "Carica PNG/JPG..."
+                    , React.createElement('input',{type:"file",accept:"image/*",style:{display:"none"},
+                        onChange:e=>{
+                          const fi=e.target.files[0]; if(!fi)return;
+                          const rd=new FileReader();
+                          rd.onload=ev=>setRS("firmaPresidenteUrl",ev.target.result);
+                          rd.readAsDataURL(fi);
+                        }})
+                  )
+                  , React.createElement('div',{style:{fontSize:10,color:C.textDim,marginTop:4}}, "Apparirà sopra la firma del cassiere nella ricevuta stampata")
+                )
                 , React.createElement('div', {style:{marginBottom:4}}
                   , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:4,letterSpacing:".06em",textTransform:"uppercase"}}, "Note aggiuntive footer")
                   , React.createElement('textarea', {value:rs.noteFooter||"", onChange:e=>setRS("noteFooter",e.target.value),
@@ -2298,7 +2325,7 @@ const CONFIG_DEFAULT = {
   },
 };
 
-const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni }) => {
+const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, docenti:propDocentiDash, lessons:propLessonsDash, onQuickAction }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
     const [panels,  setPanels]  = useState({});  // pannelli visibili (default = tutti on)
     const [_config,  _setConfig]  = useState(CONFIG_DEFAULT);
@@ -2312,20 +2339,25 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const isVisible = id => panels[id] !== false;
   
     // Calcoli KPI
-    const entrMese = useMemo(()=>{
-      const base=[120,100,120,100,115].reduce((t,v)=>t+v,0);
-      const altri=1570-base;
-      return base+altri;
-    },[]);
-    const uscMese    = 3300;
-    const saldoAnno  = FIN_MENSILE.reduce((t,d)=>t+(d.entr-d.usc),0);
-    const lezioniSettimana = 34;
-    const allieviAttivi    = ALLIEVI.filter(a=>a.stato!=="sospeso").length;
-    const lezioniOggi      = LEZIONI_OGGI.length;
-    const oraNum  = t => { const [h,m]=t.split(":").map(Number); return h*60+m; };
+    // KPI calcolati live sotto
+    // KPI live — usano props se disponibili, fallback a dati statici
+    const _students = propStudentsDash || [];
+    const _docenti  = propDocentiDash  || [];
+    const _entrate  = propEntrateDash  || [];
+    const _lessons  = propLessonsDash  || [];
+    const allieviAttivi    = _students.filter(a=>a.status==="attivo"||a.stato==="attivo").length;
+    const morosi           = _students.filter(a=>a.status==="scaduto"||a.stato==="scaduto").length;
+    const oraNum  = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
     const nowMins = oggi.getHours()*60+oggi.getMinutes();
-    const lezComplete = LEZIONI_OGGI.filter(l=>oraNum(l.ora)+l.durata<=nowMins).length;
-    const morosi  = ALLIEVI.filter(a=>a.stato==="scaduto").length;
+    const lezioniOggi      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(oggi);}).length;
+    const lezComplete      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(oggi)&&oraNum(l.time||l.ora||"0:0")+(l.duration||l.durata||0)<=nowMins;}).length;
+    const lezioniSettimana = _lessons.filter(l=>{if(!l.recurring&&!l.ricorrente) return false; const d=new Date(l.date||l.data||oggi); return d<=oggi&&(!l.endDate||new Date(l.endDate)>=oggi);}).length || _lessons.length;
+    const meseCorrente = oggi.getMonth()+1;
+    const annoCorrente = oggi.getFullYear();
+    const entrMeseLiveLive = _entrate.filter(e=>e.mese===meseCorrente&&e.anno===annoCorrente).reduce((t,e)=>t+(e.importo||0),0);
+    const uscMeseLiveLive  = _entrate.filter(e=>e.tipo==="uscita"&&e.mese===meseCorrente&&e.anno===annoCorrente).reduce((t,e)=>t+(e.importo||0),0);
+    const saldoAnnoLiveLive = _entrate.filter(e=>e.anno===annoCorrente&&e.tipo!=="uscita").reduce((t,e)=>t+(e.importo||0),0)
+                        - _entrate.filter(e=>e.anno===annoCorrente&&e.tipo==="uscita").reduce((t,e)=>t+(e.importo||0),0);
   
     // Render logo navbar
     const LogoMark = () => {
@@ -2437,15 +2469,18 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                 )
                 , React.createElement('div', { style: {padding:"14px 16px",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2203}}
                   , [
-                    {icon:"receipt",  label:"Registra pagamento",    hex:C.green,  bg:C.greenBg,  bd:C.greenBorder,  nav:"contabilita"},
-                    {icon:"calendar", label:"Aggiungi lezione",       hex:C.teal,   bg:C.tealBg,   bd:C.tealBorder,   nav:"calendario"},
-                    {icon:"user",     label:"Nuovo allievo",          hex:C.gold,   bg:C.goldBg,   bd:C.goldDim,      nav:"allievi"},
-                    {icon:"down",     label:"Registra spesa",         hex:C.red,    bg:C.redBg,    bd:C.redBorder,    nav:"contabilita"},
-                    
-                    {icon:"music",    label:"Vai al repertorio",      hex:C.blue,   bg:C.blueBg,   bd:C.blueBorder,   nav:"repertorio"},
-                    {icon:"flag",     label:"Crea evento/concerto",   hex:C.purple, bg:C.purpleBg, bd:C.purpleBorder, nav:"concerti"},
+                    {icon:"receipt",  label:"Registra pagamento",    hex:C.green,  bg:C.greenBg,  bd:C.greenBorder,  action:"addEntrata"},
+                    {icon:"calendar", label:"Aggiungi lezione",       hex:C.teal,   bg:C.tealBg,   bd:C.tealBorder,   action:"addLezione"},
+                    {icon:"user",     label:"Nuovo allievo",          hex:C.gold,   bg:C.goldBg,   bd:C.goldDim,      action:"addAllievo"},
+                    {icon:"down",     label:"Registra spesa",         hex:C.red,    bg:C.redBg,    bd:C.redBorder,    action:"addSpesa"},
+                    {icon:"music",    label:"Nuovo brano",            hex:C.blue,   bg:C.blueBg,   bd:C.blueBorder,   action:"addBrano"},
+                    {icon:"flag",     label:"Crea evento/concerto",   hex:C.purple, bg:C.purpleBg, bd:C.purpleBorder, action:"addEvento"},
                   ].map(a=>(
-                    React.createElement('button', { key: a.label, onClick: ()=>onNavigate(a.nav),
+                    React.createElement('button', { key: a.label, onClick: ()=>{ if(onQuickAction&&a.action){
+                          onQuickAction(a.action);
+                          const navMap={addAllievo:"allievi",addLezione:"calendario",addBrano:"repertorio",addEvento:"concerti",addEntrata:"contabilita",addSpesa:"contabilita"};
+                          if(navMap[a.action]) onNavigate(navMap[a.action]);
+                        } else if(a.nav){ onNavigate(a.nav); } },
                       className: "quick-action",
                       style: {display:"flex",alignItems:"center",gap:10,padding:"12px 16px",
                         background:a.bg,border:`1px solid ${a.bd}`,borderRadius:10,
@@ -4088,7 +4123,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete }) =
 // APP ROOT
 // ════════════════════════════════════════════════════════════════════════════════
 
-const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, docenti:propDocentiAV }) => {
+const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV }) => {
   const isMobile = useIsMobile();
   const [_students, _setStudents] = useState(INIT_STUDENTS);
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
@@ -4104,6 +4139,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const [modal,    setModal]    = useState(null);
 
   const closeModal = () => setModal(null);
+  React.useEffect(()=>{ if(qaAV==="addAllievo"){ setModal("add"); if(clearQaAV)clearQaAV(); } },[qaAV]);
 
   const handleAddStudent    = d  => { setStudents(p=>[...p,{...d,id:uid(),lessons:[]}]); closeModal(); };
   const handleEditStudent   = d  => { setStudents(p=>p.map(s=>s.id===d.id?{...s,...d}:s)); if(_optionalChain([selected, 'optionalAccess', _43 => _43.id])===d.id) setSelected(p=>({...p,...d})); closeModal(); };
@@ -6168,7 +6204,7 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
-const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio }) => {
+const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, quickAction:qaCV, clearQuickAction:clearQaCV }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
   const propStudents = _propStudentsRaw || [];
@@ -6190,7 +6226,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const [appView,     setAppView]    = useState("calendario"); // calendario | repertorio
   
     const closeModal = () => { setModal(null); setSelLesson(null); setAddDate(null); setNextLessonCreated(null); };
-  
+  React.useEffect(()=>{ if(qaCV==="addLezione"){ setModal("add"); if(clearQaCV)clearQaCV(); } },[qaCV]);
+
     const navigate = (dir) => {
       const d = new Date(curDate);
       if(viewMode === "day")   d.setDate(d.getDate()+dir);
@@ -6689,7 +6726,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 // ─── COSTANTI ─────────────────────────────────────────────────────────────────
 const ANNO_ATT = new Date().getFullYear();
 const MESE_ATT = new Date().getMonth();
-const CATEGORIE = [
+const CATEGORIE_DEFAULT = [
   { id:"docenti",       label:"Compensi docenti",   hex:C.gold,   bg:C.goldBg,    bd:C.goldDim    },
   { id:"pulizie",       label:"Pulizie",             hex:C.teal,   bg:C.tealBg,    bd:C.tealBorder },
   { id:"rappresentanza",label:"Rappresentanza",      hex:C.purple, bg:C.purpleBg,  bd:C.purpleBorder},
@@ -6698,7 +6735,7 @@ const CATEGORIE = [
   { id:"manutenzione",  label:"Manutenzione",        hex:C.red,    bg:C.redBg,     bd:C.redBorder  },
   { id:"altro",         label:"Altro",               hex:C.textMuted,bg:C.surface, bd:C.border     },
 ];
-const catById = id => CATEGORIE.find(c=>c.id===id)||CATEGORIE[CATEGORIE.length-1];
+const catById = id => CATEGORIE_DEFAULT.find(c=>c.id===id)||CATEGORIE_DEFAULT[CATEGORIE_DEFAULT.length-1];
 
 const METODI_PAG = ["Bonifico bancario","Contanti","Carta / POS","PayPal / Satispay","Assegno"];
 
@@ -6816,7 +6853,10 @@ const INIT_ENTRATE_QUOTE = (()=>{
 })();
 
 // ─── FORM SPESA ───────────────────────────────────────────────────────────────
-const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp }) => {
+const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_catSpeseForm, onAddCategoria }) => {
+  const CATEGORIE = _catSpeseForm || CATEGORIE_DEFAULT;
+  const [nuovaCat, setNuovaCat] = useState("");
+  const [showAddCat, setShowAddCat] = useState(false);
   const [f, setF] = useState(initial || {
     categoria:"docenti", desc:"", importo:"",
     mese:MESE_ATT, anno:ANNO_ATT,
@@ -6856,8 +6896,8 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp }) => {
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 6358}}
           , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6359}}, "Categoria")
           , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6360}}
-            , CATEGORIE.map(c=>(
-              React.createElement('button', { key: c.id, onClick: ()=>set("categoria",c.id),
+            , [...CATEGORIE, ...(showAddCat?[]:[{id:"__new__",label:"+ Nuova",hex:C.textMuted,bg:"transparent",bd:C.border}])].map(c=>(
+              React.createElement('button', { key: c.id, onClick: ()=>c.id==="__new__"?setShowAddCat(true):set("categoria",c.id),
                 style: {padding:"8px 6px",borderRadius:8,border:`2px solid ${f.categoria===c.id?c.hex:C.border}`,
                   background:f.categoria===c.id?c.bg:C.bg,cursor:"pointer",fontSize:11,textAlign:"center",
                   color:f.categoria===c.id?c.hex:C.textMuted,fontFamily:"'DM Sans',sans-serif",
@@ -6874,6 +6914,25 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp }) => {
             options: [{value:"",label:"— seleziona docente —"},...(_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI).map(d=>({value:d.id,label:d.nome||d.name}))], __self: this, __source: {fileName: _jsxFileName, lineNumber: 6375}})
         )
 
+        , showAddCat && React.createElement('div', {style:{display:"flex",gap:8,alignItems:"center",marginTop:8,gridColumn:"1/-1"}}
+          , React.createElement('input', {autoFocus:true, value:nuovaCat, onChange:e=>setNuovaCat(e.target.value),
+              placeholder:"Nome nuova categoria...",
+              style:{flex:1,background:C.bg,border:`1px solid ${C.gold}`,borderRadius:8,color:C.text,fontSize:12,padding:"7px 11px",fontFamily:"'DM Sans',sans-serif"}})
+          , React.createElement('button', {onClick:()=>{
+              const id="cat_"+Date.now(); const label=nuovaCat.trim();
+              if(!label)return;
+              const newCat={id,label,hex:C.teal,bg:C.tealBg,bd:C.tealBorder};
+              if(onAddCategoria)onAddCategoria(newCat);
+              set("categoria",id);
+              setNuovaCat(""); setShowAddCat(false);
+            }, style:{padding:"7px 14px",borderRadius:8,border:"none",background:C.gold,color:C.bg,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}
+            , "Aggiungi"
+          )
+          , React.createElement('button', {onClick:()=>setShowAddCat(false),
+              style:{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"none",color:C.textMuted,fontSize:12,cursor:"pointer"}}
+            , "✕"
+          )
+        )
         , React.createElement(Input, { label: "Descrizione *" , value: f.desc, onChange: e=>set("desc",e.target.value), error: err.desc, placeholder: "Es. Bolletta luce gennaio, Spartiti..."    , __self: this, __source: {fileName: _jsxFileName, lineNumber: 6379}})
 
         , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6381}}
@@ -7149,7 +7208,7 @@ const ReportView = ({ spese, entrate }) => {
 // ════════════════════════════════════════════════════════════════════════════════
 
 // ─── FORM QUOTA ──────────────────────────────────────────────────────────────
-const CAT_ENTRATE = [
+const CAT_ENTRATE_DEFAULT = [
   { id:"quota",        label:"Quota mensile",     icon:"receipt", student:true  },
   { id:"iscrizione",   label:"Iscrizione annuale", icon:"star",    student:true  },
   { id:"concerto",     label:"Concerto",           icon:"music",   student:false },
@@ -7157,7 +7216,9 @@ const CAT_ENTRATE = [
   { id:"altro",        label:"Altro",              icon:"plus",    student:false },
 ];
 
-const EntrataForm = ({ students, initial, onSave, onClose }) => {
+const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrForm, onAddCategoriaEntr }) => {
+  const [nuovaCatE, setNuovaCatE] = React.useState("");
+  const [showAddCatE, setShowAddCatE] = React.useState(false);
   const MESI_ALL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
                     "Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const [f, setF] = useState(initial || {
@@ -7169,7 +7230,8 @@ const EntrataForm = ({ students, initial, onSave, onClose }) => {
   const [err, setErr] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
 
-  const catObj     = CAT_ENTRATE.find(c=>c.id===f.categoria)||CAT_ENTRATE[0];
+  const CAT_ENTRATE_USE = _catEntrForm || CAT_ENTRATE_DEFAULT;
+  const catObj     = CAT_ENTRATE_USE.find(c=>c.id===f.categoria)||CAT_ENTRATE_USE[0];
   const needStudent = catObj.student;
   const selStudent  = needStudent ? students.find(s=>s.id===Number(f.studentId)) : null;
 
@@ -7217,19 +7279,37 @@ const EntrataForm = ({ students, initial, onSave, onClose }) => {
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 6719}}
           , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6720}}, "Categoria *" )
           , React.createElement('div', { style: {display:"flex",gap:6,flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6721}}
-            , CAT_ENTRATE.map(c=>{
+            , [...CAT_ENTRATE_USE,...(!showAddCatE?[{id:"__new__e__",label:"+ Nuova",icon:"plus",student:false}]:[])].map(c=>{
               const isS=f.categoria===c.id;
               return (
-                React.createElement('button', { key: c.id, onClick: ()=>{set("categoria",c.id); if(!c.student){set("studentId","");}},
+                React.createElement('button', { key: c.id, onClick: ()=>{if(c.id==="__new__e__"){setShowAddCatE(true);return;} set("categoria",c.id); if(!c.student){set("studentId","");}},
                   style: {display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:20,
                     border:`2px solid ${isS?C.green:C.border}`,background:isS?C.greenBg:C.bg,
                     color:isS?C.green:C.textMuted,cursor:"pointer",fontSize:12,
                     fontFamily:"'DM Sans',sans-serif",fontWeight:isS?600:400,transition:"all 0.12s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6725}}
-                  , React.createElement(Ic, { n: c.icon, size: 12, stroke: isS?C.green:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6730}})
+                  , React.createElement(Ic, { n: c.icon||"plus", size: 12, stroke: isS?C.green:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6730}})
                   , c.label
                 )
               );
             })
+          )
+          , showAddCatE && React.createElement('div', {style:{display:"flex",gap:8,alignItems:"center",marginTop:8}}
+            , React.createElement('input', {autoFocus:true, value:nuovaCatE, onChange:e=>setNuovaCatE(e.target.value),
+                placeholder:"Nome nuova categoria entrate...",
+                style:{flex:1,background:C.bg,border:`1px solid ${C.green}`,borderRadius:8,color:C.text,fontSize:12,padding:"7px 11px",fontFamily:"'DM Sans',sans-serif"}})
+            , React.createElement('button', {onClick:()=>{
+                const id="cate_"+Date.now(); const label=nuovaCatE.trim();
+                if(!label)return;
+                const newCat={id,label,icon:"euro",student:false};
+                if(onAddCategoriaEntr)onAddCategoriaEntr(newCat);
+                set("categoria",id); setNuovaCatE(""); setShowAddCatE(false);
+              }, style:{padding:"7px 14px",borderRadius:8,border:"none",background:C.gold,color:C.bg,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",fontWeight:500}}
+              , "Aggiungi"
+            )
+            , React.createElement('button', {onClick:()=>setShowAddCatE(false),
+                style:{padding:"7px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:"none",color:C.textMuted,fontSize:12,cursor:"pointer"}}
+              , "✕"
+            )
           )
         )
 
@@ -7328,7 +7408,14 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota }) => (
   )
 );
 
-const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV }) => {
+const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV, quickAction, clearQuickAction }) => {
+  const [catSpese,   setCatSpese]   = useState(CATEGORIE_DEFAULT);
+  const [catEntrate, setCatEntrate] = useState(CAT_ENTRATE_DEFAULT);
+  // Handle quick action from dashboard
+  React.useEffect(()=>{
+    if(quickAction==="addEntrata"){ setModal("addEntrata"); if(clearQuickAction)clearQuickAction(); }
+    else if(quickAction==="addSpesa"){ setModal("addSpesa"); if(clearQuickAction)clearQuickAction(); }
+  },[quickAction]);
   const isMobile = useIsMobile();
   const [_entrate, _setEntrate] = useState(INIT_ENTRATE_QUOTE);
   const entrate    = _nullishCoalesce(propEntrate, () => ( _entrate));
@@ -7719,10 +7806,10 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
           )
         )
 
-        , modal==="add"    && React.createElement(Modal, { title: "Registra spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}, React.createElement(SpesaForm, { onSave: handleAdd, onClose: closeModal, docenti: propDocentiCV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}))
-        , modal==="edit"   && selSpesa && React.createElement(Modal, { title: "Modifica spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}, React.createElement(SpesaForm, { initial: selSpesa, docenti: propDocentiCV||[], onSave: handleEdit, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}))
+        , modal==="add"    && React.createElement(Modal, { title: "Registra spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}, React.createElement(SpesaForm, { onSave: handleAdd, onClose: closeModal, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}))
+        , modal==="edit"   && selSpesa && React.createElement(Modal, { title: "Modifica spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}, React.createElement(SpesaForm, { initial: selSpesa, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), onSave: handleEdit, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}))
         , modal==="delete" && selSpesa && React.createElement(ConfirmDel, { label: selSpesa.desc, onConfirm: handleDel, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7232}})
-        , modal==="addq"   && React.createElement(Modal, { title: "Nuova entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}, React.createElement(EntrataForm, { students: students, onSave: handleAddQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}))
+        , modal==="addq"   && React.createElement(Modal, { title: "Nuova entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}, React.createElement(EntrataForm, { students: students, onSave: handleAddQ, onClose: closeModal, categorie: catEntrate, onAddCategoriaEntr: (cat)=>setCatEntrate(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}))
         , modal==="editq"  && selQuota && React.createElement(Modal, { title: "Modifica entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}, React.createElement(EntrataForm, { students: students, initial: selQuota, onSave: handleEditQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}))
         , modal==="deleteq"&& selQuota && React.createElement(ConfirmDel, { label: selQuota.desc, onConfirm: handleDelQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7235}})
         , modal==="ricevuta" && selQuota && (
@@ -10919,7 +11006,6 @@ const NAV_ITEMS = [
   { id:"contabilita", label:"Contabilità",  icon:"euro"     },
   { id:"repertorio",  label:"Repertorio",   icon:"music"    },
   { id:"utenti",      label:"Utenti",       icon:"shield"   },
-  { id:"sitoWeb",     label:"Sito Web",      icon:"map"     },
 ];
 
 const Sidebar = ({ current, setView, user, onLogout }) => {
@@ -10954,7 +11040,7 @@ const Sidebar = ({ current, setView, user, onLogout }) => {
           , NAV_ITEMS.map(item => {
             const active = current === item.id;
             return (
-              React.createElement('button', { key: item.id, onClick: ()=>{ if(item.id==='sitoWeb'){window.open('index.html','_blank');}else{setView(item.id);}},
+              React.createElement('button', { key: item.id, onClick: ()=>{ setView(item.id);},
                 style: {width:"100%",display:"flex",alignItems:"center",gap:10,
                   padding:"9px 12px",borderRadius:9,border:"none",cursor:"pointer",
                   background:active?C.goldBg:"transparent",
@@ -10968,6 +11054,29 @@ const Sidebar = ({ current, setView, user, onLogout }) => {
             );
           })
         )
+        /* ── Sezione strumenti con divider ── */
+        , React.createElement('div', { style: {padding:"6px 8px",borderTop:`1px solid ${C.border}`,flexShrink:0} }
+          , React.createElement('div', {style:{fontSize:9,color:C.textDim,letterSpacing:".1em",textTransform:"uppercase",padding:"6px 4px 4px"}}, "Strumenti")
+          , [
+              {id:"impostazioni", label:"Impostazioni",   icon:"settings"},
+              {id:"schedaScuola", label:"Scheda scuola",  icon:"flag"},
+              {id:"modulistica",  label:"Modulistica",    icon:"file"},
+            ].map(item=>{
+              const active=current===item.id;
+              return React.createElement('button', {key:item.id, onClick:()=>setView(item.id),
+                style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
+                  borderRadius:7,border:"none",cursor:"pointer",
+                  background:active?C.goldBg:"transparent",
+                  color:active?C.gold:C.textMuted,
+                  fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:active?500:400,
+                  textAlign:"left",transition:"all .15s",marginBottom:1,
+                  borderLeft:active?`2px solid ${C.gold}`:"2px solid transparent"}}
+                , React.createElement(Ic,{n:item.icon,size:14,stroke:active?C.gold:C.textMuted})
+                , item.label
+              );
+            })
+        )
+
         /* User profile */
         , React.createElement('div', { style: {padding:"12px 14px",borderTop:`1px solid ${C.border}`,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10621}}
           , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10,marginBottom:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10622}}
@@ -11085,6 +11194,7 @@ function App() {
   const [sharedLessons,        setSharedLessons]        = useState(INIT_LESSONS);
   const [sharedRepertorio,     setSharedRepertorio]     = useState(INIT_BRANI);
   const [sharedConfig,         setSharedConfig]         = useState(CONFIG_DEFAULT);
+  const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
   const [sharedAnniScolastici, setSharedAnniScolastici] = useState(INIT_ANNI_SCOLASTICI);
   const [sharedEntrate,         setSharedEntrate]         = useState(INIT_ENTRATE_QUOTE);
 
@@ -11138,17 +11248,23 @@ function App() {
   const views = {
     dashboard:   React.createElement(DashboardView, { appUser: user, onNavigate: setView,
                    config: sharedConfig, setConfig: setSharedConfig,
-                   anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
-    allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
+                   anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici,
+                   students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate,
+                   docenti: sharedDocenti, lessons: sharedLessons,
+                   onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
+    allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
     docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses,
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
-    calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
-    contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
+    calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
+    contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
     repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
-    sitoWeb:     null,
+    sitoWeb:       null,
+    impostazioni:  React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig }),
+    schedaScuola:  React.createElement(SchedaScuolaView, { config: sharedConfig }),
+    modulistica:   React.createElement(ModulisticaView, { }),
   };
 
   return (
@@ -11164,6 +11280,420 @@ function App() {
     )
   );
 }
+
+
+// ─── IMPOSTAZIONI VIEW (standalone page) ──────────────────────────────────────
+const ImpostazioniView = ({ config, setConfig }) => {
+  const [draft, setDraft] = useState(config||CONFIG_DEFAULT);
+  const setD = (k,v) => setDraft(p=>({...p,[k]:v}));
+  const setRS = (k,v) => setDraft(p=>({...p, ricevutaStyle:{...(p.ricevutaStyle||{}), [k]:v}}));
+  const rs = draft.ricevutaStyle || {};
+  const ac = rs.accentColor || "#c9a84c";
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = () => {
+    setConfig(draft);
+    setSaved(true);
+    setTimeout(()=>setSaved(false), 2000);
+  };
+
+  const SField = ({label, k, placeholder, type="text"}) => React.createElement('div', {style:{marginBottom:14}}
+    , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, label)
+    , React.createElement('input', {type, value:draft[k]||"", onChange:e=>setD(k,e.target.value),
+        placeholder, style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
+        color:C.text,fontSize:13,padding:"9px 13px",fontFamily:"'DM Sans',sans-serif"}})
+  );
+  const Toggle = ({k, label, sub}) => {
+    const val = rs[k]!==false;
+    return React.createElement('label', {style:{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:"6px 0"}}
+      , React.createElement('div', {onClick:()=>setRS(k,!val),
+          style:{width:34,height:20,borderRadius:10,background:val?ac:"#444",position:"relative",cursor:"pointer",transition:"background .15s",flexShrink:0,marginTop:2}}
+        , React.createElement('div', {style:{position:"absolute",top:3,left:val?15:3,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .15s"}})
+      )
+      , React.createElement('div', null
+        , React.createElement('div', {style:{fontSize:13,color:val?C.text:C.textMuted}}, label)
+        , sub && React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:1}}, sub)
+      )
+    );
+  };
+
+  const Section = ({title, icon, children}) => React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",marginBottom:20}}
+    , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
+      , React.createElement(Ic,{n:icon,size:14,stroke:C.gold})
+      , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:".08em",textTransform:"uppercase",color:C.gold}}, title)
+    )
+    , React.createElement('div', {style:{padding:"18px 20px"}}, children)
+  );
+
+  return React.createElement('div', {style:{maxWidth:800,margin:"0 auto",padding:"24px 24px"}}
+    , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}
+      , React.createElement('div', null
+        , React.createElement('h2', {style:{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:600,margin:0}}, "Impostazioni")
+        , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}}, "Configurazione generale del gestionale")
+      )
+      , React.createElement('button', {onClick:handleSave,
+          style:{display:"flex",alignItems:"center",gap:7,padding:"10px 20px",borderRadius:9,
+            border:"none",background:saved?C.green:C.gold,color:C.bg,cursor:"pointer",
+            fontSize:13,fontWeight:600,fontFamily:"'DM Sans',sans-serif",transition:"background .2s"}}
+        , React.createElement(Ic,{n:saved?"check":"check",size:14,stroke:C.bg})
+        , saved ? "Salvato!" : "Salva impostazioni"
+      )
+    )
+
+    , React.createElement(Section, {title:"Identità scuola", icon:"flag"}
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
+        , React.createElement(SField,{label:"Nome scuola", k:"nomeScuola", placeholder:"Accademia Musicale"})
+        , React.createElement(SField,{label:"Tipo ente", k:"tipoEnte", placeholder:"Associazione no-profit"})
+        , React.createElement(SField,{label:"Indirizzo", k:"indirizzo", placeholder:"Via..."})
+        , React.createElement(SField,{label:"Codice fiscale", k:"codiceFiscale", placeholder:"CF..."})
+        , React.createElement(SField,{label:"Partita IVA", k:"pIva", placeholder:"P.IVA..."})
+        , React.createElement(SField,{label:"Telefono", k:"telefono", placeholder:"+39..."})
+        , React.createElement(SField,{label:"Email", k:"email", placeholder:"info@..."})
+        , React.createElement(SField,{label:"Codice SDI", k:"sdi", placeholder:"SDI..."})
+        , React.createElement(SField,{label:"IBAN", k:"iban", placeholder:"IT..."})
+        , React.createElement(SField,{label:"Intestatario conto", k:"intestatarioConto", placeholder:"..."})
+        , React.createElement(SField,{label:"Anno scolastico", k:"annoScolastico", placeholder:"2024/2025"})
+        , React.createElement(SField,{label:"Nota ricevuta", k:"notaRicevuta", placeholder:"Ricevuta non fiscale..."})
+      )
+    )
+
+    , React.createElement(Section, {title:"Stile grafico app", icon:"palette"}
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
+        , React.createElement('div', {style:{marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Colore accento principale")
+          , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}
+            , ["#c9a84c","#2d6a8f","#6a4c93","#2a7d4f","#c0392b","#e67e22","#1a1a2e"].map(col=>
+                React.createElement('button', {key:col, onClick:()=>setD("accentColor",col),
+                  style:{width:28,height:28,borderRadius:"50%",background:col,
+                    border:(draft.accentColor||"#c9a84c")===col?"3px solid #fff":"2px solid transparent",
+                    outline:(draft.accentColor||"#c9a84c")===col?`2px solid ${col}`:"none",cursor:"pointer"}})
+              )
+          )
+          , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+            , React.createElement('input', {type:"color", value:draft.accentColor||"#c9a84c", onChange:e=>setD("accentColor",e.target.value),
+                style:{width:32,height:32,borderRadius:8,border:"none",cursor:"pointer",padding:0}})
+            , React.createElement('span',{style:{fontSize:12,color:C.textMuted}}, "Colore personalizzato")
+          )
+        )
+        , React.createElement('div', {style:{marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Tema")
+          , React.createElement('div', {style:{display:"flex",gap:8}}
+            , ["Scuro","Chiaro"].map(t=>React.createElement('button', {key:t, onClick:()=>setD("tema",t.toLowerCase()),
+                style:{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${(draft.tema||"scuro")===t.toLowerCase()?C.gold:C.border}`,
+                  background:(draft.tema||"scuro")===t.toLowerCase()?C.goldBg:C.bg,color:(draft.tema||"scuro")===t.toLowerCase()?C.gold:C.textMuted,
+                  cursor:"pointer",fontSize:12,fontFamily:"'DM Sans',sans-serif"}}, t))
+          )
+          , React.createElement('p',{style:{fontSize:11,color:C.textDim,marginTop:6}},"Nota: il cambio tema sarà applicato al prossimo caricamento")
+        )
+      )
+    )
+
+    , React.createElement(Section, {title:"Impostazioni ricevuta", icon:"receipt"}
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px",marginBottom:16}}
+        , React.createElement('div', {style:{marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Colore accento ricevuta")
+          , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:7,marginBottom:8}}
+            , ["#c9a84c","#2d6a8f","#6a4c93","#2a7d4f","#c0392b","#1a1a2e"].map(col=>
+                React.createElement('button', {key:col, onClick:()=>setRS("accentColor",col),
+                  style:{width:26,height:26,borderRadius:"50%",background:col,
+                    border:ac===col?"3px solid #fff":"2px solid transparent",
+                    outline:ac===col?`2px solid ${col}`:"none",cursor:"pointer"}})
+              )
+          )
+          , React.createElement('input', {type:"color", value:ac, onChange:e=>setRS("accentColor",e.target.value),
+              style:{width:30,height:30,borderRadius:6,border:"none",cursor:"pointer",padding:0}})
+        )
+        , React.createElement('div', {style:{marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Font intestazione ricevuta")
+          , ["Cormorant Garamond","Georgia","Times New Roman","Arial"].map(f=>
+              React.createElement('label', {key:f, style:{display:"flex",alignItems:"center",gap:7,cursor:"pointer",padding:"3px 0",fontSize:12,color:(rs.fontTitle||"Cormorant Garamond")===f?C.text:C.textMuted}}
+                , React.createElement('input', {type:"radio", checked:(rs.fontTitle||"Cormorant Garamond")===f, onChange:()=>setRS("fontTitle",f), style:{accentColor:ac}})
+                , React.createElement('span',{style:{fontFamily:f}}, f)
+              )
+            )
+        )
+      )
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:16}}
+        , React.createElement(Toggle,{k:"showIndirizzo",    label:"Indirizzo scuola"})
+        , React.createElement(Toggle,{k:"showDataNascita", label:"Data di nascita"})
+        , React.createElement(Toggle,{k:"showFirme",       label:"Spazio firme"})
+        , React.createElement(Toggle,{k:"showFooter",      label:"Footer"})
+        , React.createElement(Toggle,{k:"showCompetenza",  label:"Competenza"})
+        , React.createElement(Toggle,{k:"showMetodo",      label:"Metodo pagamento"})
+      )
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
+        , React.createElement('div', {style:{marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Etichetta firma sinistra")
+          , React.createElement('input', {value:rs.labelPagante||"Il pagante", onChange:e=>setRS("labelPagante",e.target.value),
+              style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 13px",fontFamily:"'DM Sans',sans-serif"}})
+        )
+        , React.createElement('div', {style:{marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Etichetta firma destra")
+          , React.createElement('input', {value:rs.labelCassiere||"Il cassiere / responsabile", onChange:e=>setRS("labelCassiere",e.target.value),
+              style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 13px",fontFamily:"'DM Sans',sans-serif"}})
+        )
+        , React.createElement('div', {style:{gridColumn:"1/-1",marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Firma presidente (immagine per stampa)")
+          , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:12}}
+            , rs.firmaPresidenteUrl && React.createElement('img', {src:rs.firmaPresidenteUrl, alt:"firma",
+                style:{height:50,maxWidth:180,objectFit:"contain",background:"#fff",borderRadius:6,border:`1px solid ${C.border}`,padding:4}})
+            , React.createElement('label', {style:{display:"flex",alignItems:"center",gap:7,padding:"8px 14px",borderRadius:8,
+                border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:"pointer",fontSize:12}}
+              , React.createElement(Ic,{n:"upload",size:13,stroke:C.textMuted})
+              , rs.firmaPresidenteUrl ? "Cambia immagine" : "Carica firma"
+              , React.createElement('input', {type:"file",accept:"image/*",style:{display:"none"},
+                  onChange:e=>{const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=ev=>setRS("firmaPresidenteUrl",ev.target.result); r.readAsDataURL(f);}})
+            )
+            , rs.firmaPresidenteUrl && React.createElement('button', {onClick:()=>setRS("firmaPresidenteUrl",""),
+                style:{background:"none",border:"none",cursor:"pointer",color:C.textDim,fontSize:11}}, "✕ Rimuovi")
+          )
+          , React.createElement('p',{style:{fontSize:11,color:C.textDim,marginTop:4}}, "La firma verrà stampata nello spazio «", rs.labelCassiere||"Il cassiere / responsabile", "»")
+        )
+        , React.createElement('div', {style:{gridColumn:"1/-1",marginBottom:4}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Note aggiuntive footer ricevuta")
+          , React.createElement('textarea', {value:rs.noteFooter||"", onChange:e=>setRS("noteFooter",e.target.value),
+              placeholder:"Es. IBAN IT00..., note legali...", rows:2,
+              style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,padding:"9px 13px",fontFamily:"'DM Sans',sans-serif",resize:"vertical"}})
+        )
+      )
+    )
+  );
+};
+
+// ─── SCHEDA SCUOLA VIEW ────────────────────────────────────────────────────────
+const SchedaScuolaView = ({ config }) => {
+  const cfg = config || CONFIG_DEFAULT;
+  const handlePrint = () => {
+    const w = window.open("","_blank","width=794,height=1123");
+    if(!w){ alert("Abilita i popup per stampare"); return; }
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Scheda Scuola — ${cfg.nomeScuola||""}</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@400;500;600&display=swap');
+      @page{margin:20mm 22mm;size:A4}
+      *{margin:0;padding:0;box-sizing:border-box}
+      body{font-family:'DM Sans',sans-serif;color:#1a1a2e;background:#fff;font-size:13px}
+      .header{border-bottom:2px solid #c9a84c;padding-bottom:16px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:flex-start}
+      .nome{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700}
+      .sub{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-top:3px}
+      .section{margin-bottom:24px}
+      .section-title{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.12em;margin-bottom:10px;padding-bottom:4px;border-bottom:1px solid #eee}
+      .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px}
+      .field label{font-size:10px;color:#888;display:block;margin-bottom:2px}
+      .field .val{font-size:13px;font-weight:600;color:#1a1a2e}
+      .iban-box{background:#f9f6f0;border:1px solid #c9a84c30;border-radius:8px;padding:14px 18px;margin-top:12px;text-align:center}
+      .iban-val{font-family:'Courier New',monospace;font-size:16px;font-weight:700;letter-spacing:.08em;color:#c9a84c;margin-bottom:3px}
+      .footer{margin-top:32px;padding-top:12px;border-top:1px solid #eee;font-size:10px;color:#999;text-align:center}
+    </style></head><body>
+    <div class="header">
+      <div>
+        <div class="nome">${cfg.nomeScuola||"Accademia Musicale"}</div>
+        <div class="sub">${cfg.tipoEnte||""}</div>
+      </div>
+      <div style="text-align:right;font-size:11px;color:#888">
+        <div>Anno scolastico</div>
+        <div style="font-size:14px;font-weight:600;color:#1a1a2e;margin-top:2px">${cfg.annoScolastico||""}</div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Dati identificativi</div>
+      <div class="grid">
+        ${cfg.codiceFiscale?`<div class="field"><label>Codice Fiscale</label><div class="val">${cfg.codiceFiscale}</div></div>`:""}
+        ${cfg.pIva?`<div class="field"><label>Partita IVA</label><div class="val">${cfg.pIva}</div></div>`:""}
+        ${cfg.sdi?`<div class="field"><label>Codice SDI</label><div class="val">${cfg.sdi}</div></div>`:""}
+        ${cfg.indirizzo?`<div class="field" style="grid-column:1/-1"><label>Sede legale</label><div class="val">${cfg.indirizzo}</div></div>`:""}
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-title">Recapiti</div>
+      <div class="grid">
+        ${cfg.telefono?`<div class="field"><label>Telefono</label><div class="val">${cfg.telefono}</div></div>`:""}
+        ${cfg.email?`<div class="field"><label>Email</label><div class="val">${cfg.email}</div></div>`:""}
+      </div>
+    </div>
+    ${cfg.iban?`<div class="section">
+      <div class="section-title">Dati bancari</div>
+      ${cfg.intestatarioConto?`<div class="field" style="margin-bottom:8px"><label>Intestatario conto</label><div class="val">${cfg.intestatarioConto}</div></div>`:""}
+      <div class="iban-box">
+        <div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">IBAN</div>
+        <div class="iban-val">${cfg.iban}</div>
+      </div>
+    </div>`:""}
+    <div class="footer">${cfg.nomeScuola||""} · ${cfg.notaRicevuta||"Ricevuta non fiscale"} · ${cfg.annoScolastico||""}</div>
+    <script>window.onload=function(){window.print();}<\/script>
+    </body></html>`);
+    w.document.close();
+  };
+
+  const cfg_rows = [
+    {label:"Nome", value:cfg.nomeScuola},
+    {label:"Tipo ente", value:cfg.tipoEnte},
+    {label:"Codice Fiscale", value:cfg.codiceFiscale},
+    {label:"Partita IVA", value:cfg.pIva},
+    {label:"Codice SDI", value:cfg.sdi},
+    {label:"Indirizzo", value:cfg.indirizzo},
+    {label:"Telefono", value:cfg.telefono},
+    {label:"Email", value:cfg.email},
+    {label:"IBAN", value:cfg.iban, mono:true},
+    {label:"Intestatario conto", value:cfg.intestatarioConto},
+    {label:"Anno scolastico", value:cfg.annoScolastico},
+  ].filter(r=>r.value);
+
+  return React.createElement('div', {style:{maxWidth:700,margin:"0 auto",padding:"24px"}}
+    , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}
+      , React.createElement('div', null
+        , React.createElement('h2', {style:{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:600,margin:0}}, "Scheda Scuola")
+        , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}}, "Riepilogo dati fiscali e contatto")
+      )
+      , React.createElement('button', {onClick:handlePrint,
+          style:{display:"flex",alignItems:"center",gap:7,padding:"10px 18px",borderRadius:9,
+            border:`1px solid ${C.goldDim}`,background:C.goldBg,color:C.gold,cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif"}}
+        , React.createElement(Ic,{n:"receipt",size:14,stroke:C.gold}), " Stampa scheda"
+      )
+    )
+    , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+      , React.createElement('div', {style:{padding:"18px 22px",background:`linear-gradient(135deg,${C.goldBg},transparent)`,borderBottom:`2px solid ${C.gold}`}}
+        , React.createElement('div', {style:{fontFamily:"'Cormorant Garamond',serif",fontSize:24,fontWeight:700}}, cfg.nomeScuola||"—")
+        , cfg.tipoEnte && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:2,letterSpacing:".08em",textTransform:"uppercase"}}, cfg.tipoEnte)
+        , cfg.annoScolastico && React.createElement('div', {style:{fontSize:12,color:C.textDim,marginTop:2}}, "Anno scolastico: ", React.createElement('strong',{style:{color:C.text}}, cfg.annoScolastico))
+      )
+      , cfg_rows.map((r,i)=>React.createElement('div', {key:r.label, style:{display:"flex",justifyContent:"space-between",
+          alignItems:"center",padding:"13px 22px",borderBottom:i<cfg_rows.length-1?`1px solid ${C.border}`:"none"}}
+          , React.createElement('span', {style:{fontSize:12,color:C.textMuted,minWidth:180}}, r.label)
+          , React.createElement('span', {style:{fontSize:13,fontWeight:600,fontFamily:r.mono?"'Courier New',monospace":"inherit",
+              color:r.label==="IBAN"?C.gold:C.text}}, r.value)
+        ))
+    )
+    , cfg_rows.length===0 && React.createElement('div', {style:{textAlign:"center",padding:"48px 0",color:C.textDim,border:`1px dashed ${C.border}`,borderRadius:12,marginTop:16}}
+      , React.createElement(Ic,{n:"flag",size:28,stroke:C.textDim})
+      , React.createElement('p',{style:{marginTop:12,fontSize:13}}, "Nessun dato configurato")
+      , React.createElement('p',{style:{fontSize:11,marginTop:4}}, "Vai in Impostazioni per compilare i dati della scuola")
+    )
+  );
+};
+
+// ─── MODULISTICA VIEW ─────────────────────────────────────────────────────────
+const ModulisticaView = () => {
+  const [docs, setDocs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("fm_modulistica")||"[]"); } catch{ return []; }
+  });
+  const [dragging, setDragging] = useState(false);
+
+  const saveDocs = (d) => {
+    setDocs(d);
+    try { localStorage.setItem("fm_modulistica", JSON.stringify(d)); } catch{}
+  };
+
+  const handleFiles = (files) => {
+    Array.from(files).forEach(file => {
+      const r = new FileReader();
+      r.onload = (e) => {
+        const newDoc = {
+          id: Date.now()+Math.random(),
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          data: e.target.result,
+          categoria: "generale",
+          uploadDate: new Date().toLocaleDateString("it-IT"),
+        };
+        setDocs(prev => {
+          const updated = [...prev, newDoc];
+          try { localStorage.setItem("fm_modulistica", JSON.stringify(updated)); } catch{}
+          return updated;
+        });
+      };
+      r.readAsDataURL(file);
+    });
+  };
+
+  const removeDoc = (id) => saveDocs(docs.filter(d=>d.id!==id));
+  const updateCat = (id, cat) => saveDocs(docs.map(d=>d.id===id?{...d,categoria:cat}:d));
+
+  const CATS = ["generale","iscrizione","regolamento","verbale","contratto","modulo","altro"];
+  const [filterCat, setFilterCat] = useState("tutti");
+  const filtered = filterCat==="tutti" ? docs : docs.filter(d=>d.categoria===filterCat);
+  const fmtSize = b => b>1024*1024 ? (b/1024/1024).toFixed(1)+" MB" : (b/1024).toFixed(0)+" KB";
+  const getIcon = t => t.includes("pdf")?"file":t.includes("image")?"image":t.includes("word")?"file":"file";
+
+  return React.createElement('div', {style:{maxWidth:900,margin:"0 auto",padding:"24px"}}
+    , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}
+      , React.createElement('div', null
+        , React.createElement('h2', {style:{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:600,margin:0}}, "Modulistica")
+        , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}}, docs.length, " documenti caricati")
+      )
+      , React.createElement('label', {style:{display:"flex",alignItems:"center",gap:8,padding:"10px 18px",borderRadius:9,
+          border:`1px solid ${C.border}`,background:C.goldBg,color:C.gold,cursor:"pointer",fontSize:13,fontFamily:"'DM Sans',sans-serif"}}
+        , React.createElement(Ic,{n:"upload",size:14,stroke:C.gold}), " Carica documenti"
+        , React.createElement('input', {type:"file",multiple:true,accept:".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg",style:{display:"none"},
+            onChange:e=>handleFiles(e.target.files)})
+      )
+    )
+
+    , React.createElement('div', {
+        onDragOver:e=>{e.preventDefault();setDragging(true);},
+        onDragLeave:()=>setDragging(false),
+        onDrop:e=>{e.preventDefault();setDragging(false);handleFiles(e.dataTransfer.files);},
+        style:{border:`2px dashed ${dragging?C.gold:C.border}`,borderRadius:12,padding:"24px",
+          textAlign:"center",marginBottom:20,transition:"all .2s",background:dragging?C.goldBg:C.surface}}
+      , React.createElement(Ic,{n:"upload",size:24,stroke:dragging?C.gold:C.textDim})
+      , React.createElement('p',{style:{marginTop:8,fontSize:13,color:dragging?C.gold:C.textDim}}, "Trascina qui i documenti, oppure usa il pulsante «Carica»")
+      , React.createElement('p',{style:{fontSize:11,color:C.textDim,marginTop:2}}, "PDF, Word, Excel, immagini")
+    )
+
+    , docs.length>0 && React.createElement('div', {style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}
+      , ["tutti",...CATS].map(cat=>React.createElement('button', {key:cat, onClick:()=>setFilterCat(cat),
+          style:{padding:"5px 12px",borderRadius:14,border:`1px solid ${filterCat===cat?C.gold:C.border}`,
+            background:filterCat===cat?C.goldBg:"transparent",color:filterCat===cat?C.gold:C.textMuted,
+            cursor:"pointer",fontSize:11,fontFamily:"'DM Sans',sans-serif",textTransform:"capitalize"}}
+        , cat==="tutti"?`Tutti (${docs.length})`:cat))
+    )
+
+    , filtered.length===0 && docs.length===0 && React.createElement('div', {style:{textAlign:"center",padding:"60px 0",color:C.textDim,border:`1px dashed ${C.border}`,borderRadius:12}}
+      , React.createElement(Ic,{n:"file",size:32,stroke:C.textDim})
+      , React.createElement('p',{style:{marginTop:12,fontSize:14}}, "Nessun documento caricato")
+      , React.createElement('p',{style:{fontSize:12,marginTop:4}}, "Carica regolamenti, moduli di iscrizione, verbali e altri documenti")
+    )
+
+    , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}
+      , filtered.map(doc=>React.createElement('div', {key:doc.id, style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}
+          , React.createElement('div', {style:{padding:"14px 16px",display:"flex",alignItems:"flex-start",gap:12}}
+            , React.createElement('div', {style:{width:40,height:40,borderRadius:10,background:C.goldBg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+              , React.createElement(Ic,{n:getIcon(doc.type),size:18,stroke:C.gold})
+            )
+            , React.createElement('div', {style:{flex:1,minWidth:0}}
+              , React.createElement('div', {style:{fontSize:13,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:2}}, doc.name)
+              , React.createElement('div', {style:{fontSize:11,color:C.textDim}}, fmtSize(doc.size), " · ", doc.uploadDate)
+              , React.createElement('select', {value:doc.categoria, onChange:e=>updateCat(doc.id,e.target.value),
+                  style:{marginTop:6,fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,
+                    color:C.textMuted,padding:"2px 6px",fontFamily:"'DM Sans',sans-serif",cursor:"pointer"}}
+                , CATS.map(c=>React.createElement('option',{key:c,value:c}, c.charAt(0).toUpperCase()+c.slice(1)))
+              )
+            )
+          )
+          , React.createElement('div', {style:{padding:"10px 16px",borderTop:`1px solid ${C.border}`,display:"flex",gap:8}}
+            , React.createElement('a', {href:doc.data, target:"_blank", rel:"noreferrer",
+                style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"7px 0",
+                  borderRadius:7,border:`1px solid ${C.border}`,color:C.textMuted,fontSize:11,textDecoration:"none",fontFamily:"'DM Sans',sans-serif"}}
+              , React.createElement(Ic,{n:"eye",size:12,stroke:C.textMuted}), " Visualizza"
+            )
+            , React.createElement('a', {href:doc.data, download:doc.name,
+                style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"7px 0",
+                  borderRadius:7,background:C.goldBg,border:`1px solid ${C.goldDim}`,color:C.gold,fontSize:11,textDecoration:"none",fontFamily:"'DM Sans',sans-serif"}}
+              , React.createElement(Ic,{n:"download",size:12,stroke:C.gold}), " Scarica"
+            )
+            , React.createElement('button', {onClick:()=>removeDoc(doc.id),
+                style:{padding:"7px 10px",borderRadius:7,border:`1px solid ${C.border}`,background:"none",
+                  color:C.textDim,cursor:"pointer"},
+                onMouseEnter:e=>{e.currentTarget.style.borderColor=C.red;e.currentTarget.style.color=C.red;},
+                onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textDim;}}
+              , React.createElement(Ic,{n:"trash",size:12,stroke:"currentColor"})
+            )
+          )
+        ))
+    )
+  );
+};
 
 // Espone App al bootstrap in index.html
 window.__AppComponent = App;
