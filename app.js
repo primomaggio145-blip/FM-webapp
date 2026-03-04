@@ -534,140 +534,261 @@ const PRINT_CSS = `
 .ric-firma-lbl  { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.08em; }
 `;
 
+const RICEVUTA_STYLE_DEFAULT = {
+  accentColor: "#c9a84c",
+  fontBody: "DM Sans",
+  fontTitle: "Cormorant Garamond",
+  showIndirizzo: true,
+  showFirme: true,
+  showFooter: true,
+  showDataNascita: true,
+  notePersonalizzate: "",
+};
+
 const RicevutaModal = ({ entrata, student, config, onClose }) => {
   const cfg = config || CONFIG_DEFAULT;
-  // Numero ricevuta: usa quello salvato sull'entrata, oppure genera al volo (legacy/anteprima)
+  const [stile, setStile] = React.useState(RICEVUTA_STYLE_DEFAULT);
+  const [showEditor, setShowEditor] = React.useState(false);
+  const setSt = (k,v) => setStile(p=>({...p,[k]:v}));
+
   const numRic = entrata.numRicevuta || (String(cfg.progressivoRicevute||1).padStart(3,"0") + "/" + (entrata.anno||new Date().getFullYear()));
-  // Intestatario: nomeRicevuta dell'allievo (genitore/tutore per minorenni), fallback al nome allievo
-  const intestatario = _optionalChain([student, 'optionalAccess', _2 => _2.nomeRicevuta, 'optionalAccess', _3 => _3.trim, 'call', _4 => _4()]) || _optionalChain([student, 'optionalAccess', _5 => _5.name]) || entrata.studentName || "—";
+  const intestatario = (student && student.nomeRicevuta && student.nomeRicevuta.trim()) || (student && student.name) || entrata.studentName || "—";
   const MESI_N = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const dataStampa = new Date().toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"});
   const dataPag    = entrata.data ? new Date(entrata.data+"T00:00:00").toLocaleDateString("it-IT") : dataStampa;
   const meseLabel  = entrata.mese ? MESI_N[entrata.mese-1]+" "+(entrata.anno||new Date().getFullYear()) : "";
   const importoStr = `€ ${(entrata.importo||0).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const ac = stile.accentColor;
+
+  // Genera HTML puro per la stampa in popup
+  const buildHtml = () => {
+    const indirizzoHtml = stile.showIndirizzo && cfg.indirizzo ? `<div style="font-size:11px;color:#666;margin-top:3px">${cfg.indirizzo}</div>` : "";
+    const cfHtml = cfg.codiceFiscale ? `<div style="font-size:11px;color:#666">CF: ${cfg.codiceFiscale}</div>` : "";
+    const nascitaRow = stile.showDataNascita && student && student.birthdate
+      ? `<tr><td class="k">Data di nascita</td><td class="v">${new Date(student.birthdate+"T00:00:00").toLocaleDateString("it-IT")}</td></tr>` : "";
+    const meseRow = meseLabel ? `<tr><td class="k">Competenza</td><td class="v">${meseLabel}</td></tr>` : "";
+    const noteRow = stile.notePersonalizzate ? `<tr><td class="k">Note</td><td class="v">${stile.notePersonalizzate}</td></tr>` : "";
+    const firmeHtml = stile.showFirme ? `
+      <div class="firma-wrap">
+        <div class="firma-box"><div class="firma-line"></div><div class="firma-lbl">Il pagante</div></div>
+        <div class="firma-box"><div class="firma-line"></div><div class="firma-lbl">Il cassiere / responsabile</div></div>
+      </div>` : "";
+    const footerHtml = stile.showFooter ? `<div class="footer">${cfg.notaRicevuta||"Ricevuta non fiscale"}<br>${cfg.nomeScuola||""} · ${cfg.annoScolastico||""}</div>` : "";
+
+    return `<!DOCTYPE html><html><head><meta charset="utf-8">
+    <title>Ricevuta ${numRic}</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=DM+Sans:wght@400;500;600&display=swap');
+      @page { margin: 18mm 20mm; size: A4; }
+      * { margin:0; padding:0; box-sizing:border-box; }
+      body { font-family:'${stile.fontBody}',Arial,sans-serif; color:#1a1a2e; background:#fff; }
+      .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:28px; border-bottom:2px solid ${ac}; padding-bottom:16px; }
+      .logo { font-family:'${stile.fontTitle}',Georgia,serif; font-size:22px; font-weight:700; }
+      .sub  { font-size:10px; color:#888; letter-spacing:.1em; text-transform:uppercase; margin-top:2px; }
+      .num-box { text-align:right; }
+      .num-lbl { font-size:10px; color:#888; letter-spacing:.1em; text-transform:uppercase; }
+      .num-val { font-family:'${stile.fontTitle}',Georgia,serif; font-size:28px; font-weight:700; color:${ac}; line-height:1; }
+      .num-date { font-size:11px; color:#888; margin-top:4px; }
+      table { width:100%; border-collapse:collapse; margin-bottom:24px; }
+      td { padding:9px 0; border-bottom:1px solid #eee; font-size:13px; vertical-align:middle; }
+      tr:last-child td { border-bottom:none; }
+      td.k { color:#666; width:50%; }
+      td.v { font-weight:600; text-align:right; }
+      .importo-box { text-align:center; margin:24px 0; padding:20px; border:2px solid ${ac}; border-radius:8px; background:${ac}12; }
+      .importo-val { font-family:'${stile.fontTitle}',Georgia,serif; font-size:44px; font-weight:700; color:${ac}; line-height:1; }
+      .importo-lbl { font-size:11px; color:#888; letter-spacing:.12em; text-transform:uppercase; margin-top:4px; }
+      .firma-wrap { display:flex; justify-content:space-between; margin-top:44px; }
+      .firma-box  { text-align:center; width:180px; }
+      .firma-line { border-top:1px solid #333; margin-bottom:6px; }
+      .firma-lbl  { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:.08em; }
+      .footer { font-size:10px; color:#888; text-align:center; margin-top:32px; padding-top:12px; border-top:1px solid #ddd; line-height:1.7; }
+    </style></head><body>
+    <div class="header">
+      <div>
+        <div class="logo">${cfg.nomeScuola||"Accademia Musicale"}</div>
+        <div class="sub">${cfg.tipoEnte||""}</div>
+        ${indirizzoHtml}${cfHtml}
+      </div>
+      <div class="num-box">
+        <div class="num-lbl">Ricevuta n°</div>
+        <div class="num-val">${numRic}</div>
+        <div class="num-date">del ${dataStampa}</div>
+      </div>
+    </div>
+    <table>
+      <tr><td class="k">Ricevuta da</td><td class="v">${intestatario}</td></tr>
+      ${nascitaRow}
+      <tr><td class="k">Data pagamento</td><td class="v">${dataPag}</td></tr>
+      <tr><td class="k">Descrizione</td><td class="v">${entrata.desc||"Quota mensile"}</td></tr>
+      ${meseRow}
+      <tr><td class="k">Metodo di pagamento</td><td class="v">${entrata.metodo||"—"}</td></tr>
+      ${noteRow}
+    </table>
+    <div class="importo-box">
+      <div class="importo-val">${importoStr}</div>
+      <div class="importo-lbl">Importo ricevuto</div>
+    </div>
+    ${firmeHtml}
+    ${footerHtml}
+    <script>window.onload=function(){window.print();}<\/script>
+    </body></html>`;
+  };
 
   const handlePrint = () => {
-    // inject print css once
-    if(!document.getElementById("ric-print-style")) {
-      const s = document.createElement("style");
-      s.id = "ric-print-style";
-      s.innerHTML = PRINT_CSS;
-      document.head.appendChild(s);
-    }
-    // create / update print root
-    let root = document.getElementById("ricevuta-print-root");
-    if(!root) { root = document.createElement("div"); root.id = "ricevuta-print-root"; document.body.appendChild(root); }
-    const indirizzoHtml = cfg.indirizzo ? '<div style="font-size:11px;color:#666;margin-top:4px">'+cfg.indirizzo+'</div>' : '';
-    const cfHtml = cfg.codiceFiscale ? '<div style="font-size:11px;color:#666">CF: '+cfg.codiceFiscale+'</div>' : '';
-    const nascitaHtml = _optionalChain([student, 'optionalAccess', _6 => _6.birthdate]) ? '<div class="ric-row"><span class="k">Data di nascita</span><span class="v">'+new Date(student.birthdate+'T00:00:00').toLocaleDateString('it-IT')+'</span></div>' : '';
-    const mesesHtml = meseLabel ? '<div class="ric-row"><span class="k">Competenza</span><span class="v">'+meseLabel+'</span></div>' : '';
-    root.innerHTML = `
-      <div class="ric-header">
-        <div>
-          <div class="ric-logo">${cfg.nomeScuola||'Accademia Musicale'}</div>
-          <div class="ric-scuola-sub">${cfg.tipoEnte||''}</div>
-          ${indirizzoHtml}
-          ${cfHtml}
-        </div>
-        <div class="ric-num">
-          <div class="lbl">Ricevuta n°</div>
-          <div class="num">${numRic}</div>
-          <div style="font-size:11px;color:#888;margin-top:4px">del ${dataStampa}</div>
-        </div>
-      </div>
-      <div class="ric-body">
-        <div class="ric-row"><span class="k">Ricevuta da</span><span class="v">${intestatario}</span></div>
-        ${nascitaHtml}
-        <div class="ric-row"><span class="k">Data pagamento</span><span class="v">${dataPag}</span></div>
-        <div class="ric-row"><span class="k">Descrizione</span><span class="v">${entrata.desc||'Quota mensile'}</span></div>
-        ${mesesHtml}
-        <div class="ric-row"><span class="k">Metodo di pagamento</span><span class="v">${entrata.metodo||'—'}</span></div>
-      </div>
-      <div class="ric-importo">
-        <div class="val">${importoStr}</div>
-        <div class="lbl">Importo ricevuto</div>
-      </div>
-      <div class="ric-firma">
-        <div class="ric-firma-box">
-          <div class="ric-firma-line"></div>
-          <div class="ric-firma-lbl">Il pagante</div>
-        </div>
-        <div class="ric-firma-box">
-          <div class="ric-firma-line"></div>
-          <div class="ric-firma-lbl">Il cassiere / responsabile</div>
-        </div>
-      </div>
-      <div class="ric-footer">${cfg.notaRicevuta||'Ricevuta non fiscale'}<br/>${cfg.nomeScuola} · ${cfg.annoScolastico||''}</div>
-    `;
-    window.print();
+    const w = window.open("","_blank","width=794,height=1123");
+    if(!w) { alert("Abilita i popup per stampare"); return; }
+    w.document.write(buildHtml());
+    w.document.close();
   };
 
   const rows = [
-    {k:"Ricevuta n°",         v: numRic},
-    {k:"Data stampa",          v: dataStampa},
-    {k:"Nominativo",           v: intestatario},
-    {k:"Data pagamento",       v: dataPag},
-    {k:"Descrizione",          v: entrata.desc||"Quota mensile"},
-    ...(meseLabel ? [{k:"Competenza",   v: meseLabel}] : []),
-    {k:"Metodo",               v: entrata.metodo||"—"},
+    {k:"Ricevuta n°", v:numRic},
+    {k:"Data stampa",  v:dataStampa},
+    {k:"Nominativo",   v:intestatario},
+    {k:"Data pagamento", v:dataPag},
+    {k:"Descrizione",  v:entrata.desc||"Quota mensile"},
+    ...(meseLabel ? [{k:"Competenza", v:meseLabel}] : []),
+    {k:"Metodo",       v:entrata.metodo||"—"},
+    ...(stile.notePersonalizzate ? [{k:"Note", v:stile.notePersonalizzate}] : []),
   ];
 
-  return (
-    React.createElement(Modal, { title: "Anteprima ricevuta" , onClose: onClose, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 614}}
-      , React.createElement('div', { style: {padding:"20px 24px",display:"flex",flexDirection:"column",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 615}}
+  const Toggle2 = ({checked, onChange, label}) => React.createElement('label', {style:{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:12,color:checked?C.text:C.textMuted}}
+    , React.createElement('div', {
+        onClick:()=>onChange(!checked),
+        style:{width:32,height:18,borderRadius:9,background:checked?ac:"#444",position:"relative",cursor:"pointer",transition:"background .15s",flexShrink:0}}
+      , React.createElement('div', {style:{position:"absolute",top:2,left:checked?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .15s"}})
+    )
+    , label
+  );
 
-        /* Preview card */
-        , React.createElement('div', { style: {background:"#fff",border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",
-          boxShadow:"0 4px 24px rgba(0,0,0,0.18)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 618}}
-          /* Header ricevuta */
-          , React.createElement('div', { style: {background:`linear-gradient(135deg,${C.goldBg},#fff)`,
-            borderBottom:`2px solid ${C.gold}`,padding:"18px 24px",
-            display:"flex",justifyContent:"space-between",alignItems:"flex-start"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 621}}
-            , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 624}}
-              , React.createElement('div', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:700,color:"#1a1a2e",lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 625}}
-                , cfg.nomeScuola
-              )
-              , cfg.tipoEnte && React.createElement('div', { style: {fontSize:10,color:"#888",letterSpacing:"0.1em",textTransform:"uppercase",marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 628}}, cfg.tipoEnte)
-              , cfg.indirizzo && React.createElement('div', { style: {fontSize:11,color:"#666",marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 629}}, cfg.indirizzo)
-              , cfg.codiceFiscale && React.createElement('div', { style: {fontSize:11,color:"#666"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 630}}, "CF: " , cfg.codiceFiscale)
+  return React.createElement(Modal, { title: "Ricevuta — anteprima e stampa", onClose, wide: true }
+    , React.createElement('div', {style:{display:"flex",gap:0,height:"min(80vh,700px)",overflow:"hidden"}}
+
+      /* ── ANTEPRIMA (sinistra) ── */
+      , React.createElement('div', {style:{flex:1,overflow:"auto",padding:"20px 24px",background:"#f0ede8"}}
+        , React.createElement('div', {style:{background:"#fff",borderRadius:10,overflow:"hidden",
+            boxShadow:"0 4px 32px rgba(0,0,0,0.22)",maxWidth:560,margin:"0 auto",padding:"24px 28px"}}
+          /* Header */
+          , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",
+              marginBottom:24,borderBottom:`2px solid ${ac}`,paddingBottom:14}}
+            , React.createElement('div', null
+              , React.createElement('div', {style:{fontFamily:`'${stile.fontTitle}',Georgia,serif`,fontSize:20,fontWeight:700,color:"#1a1a2e",lineHeight:1}}, cfg.nomeScuola)
+              , cfg.tipoEnte && React.createElement('div', {style:{fontSize:10,color:"#888",letterSpacing:".1em",textTransform:"uppercase",marginTop:2}}, cfg.tipoEnte)
+              , stile.showIndirizzo && cfg.indirizzo && React.createElement('div', {style:{fontSize:11,color:"#666",marginTop:3}}, cfg.indirizzo)
+              , cfg.codiceFiscale && React.createElement('div', {style:{fontSize:11,color:"#666"}}, "CF: ", cfg.codiceFiscale)
             )
-            , React.createElement('div', { style: {textAlign:"right"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 632}}
-              , React.createElement('div', { style: {fontSize:10,color:"#888",letterSpacing:"0.1em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 633}}, "Ricevuta n°" )
-              , React.createElement('div', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:700,color:C.gold,lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 634}}, numRic)
-              , React.createElement('div', { style: {fontSize:11,color:"#888",marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 635}}, "del " , dataStampa)
+            , React.createElement('div', {style:{textAlign:"right"}}
+              , React.createElement('div', {style:{fontSize:10,color:"#888",letterSpacing:".1em",textTransform:"uppercase"}}, "Ricevuta n°")
+              , React.createElement('div', {style:{fontFamily:`'${stile.fontTitle}',Georgia,serif`,fontSize:26,fontWeight:700,color:ac,lineHeight:1}}, numRic)
+              , React.createElement('div', {style:{fontSize:11,color:"#888",marginTop:2}}, "del ", dataStampa)
             )
           )
-          /* Body */
-          , React.createElement('div', { style: {padding:"0 24px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 639}}
-            , rows.map((r,i)=>(
-              React.createElement('div', { key: i, style: {display:"flex",justifyContent:"space-between",alignItems:"center",
-                padding:"10px 0",borderBottom:i<rows.length-1?"1px solid #eee":"none"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 641}}
-                , React.createElement('span', { style: {fontSize:12,color:"#666"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 643}}, r.k)
-                , React.createElement('span', { style: {fontSize:13,fontWeight:600,color:"#1a1a2e"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 644}}, r.v)
-              )
-            ))
+          /* Rows */
+          , React.createElement('div', {style:{marginBottom:20}}
+            , rows.map((r,i)=>React.createElement('div', {key:i, style:{display:"flex",justifyContent:"space-between",alignItems:"center",
+                padding:"8px 0",borderBottom:i<rows.length-1?"1px solid #eee":"none"}}
+                , React.createElement('span', {style:{fontSize:12,color:"#666"}}, r.k)
+                , React.createElement('span', {style:{fontSize:13,fontWeight:600,color:"#1a1a2e"}}, r.v)
+              ))
           )
           /* Importo */
-          , React.createElement('div', { style: {margin:"16px 24px",padding:"18px",textAlign:"center",
-            border:`2px solid ${C.gold}`,borderRadius:10,background:C.goldBg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 649}}
-            , React.createElement('div', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:38,fontWeight:700,color:C.gold,lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 651}}
-              , importoStr
-            )
-            , React.createElement('div', { style: {fontSize:10,color:"#888",letterSpacing:"0.12em",textTransform:"uppercase",marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 654}}, "Importo ricevuto" )
+          , React.createElement('div', {style:{textAlign:"center",margin:"20px 0",padding:"18px",
+              border:`2px solid ${ac}`,borderRadius:8,background:ac+"12"}}
+            , React.createElement('div', {style:{fontFamily:`'${stile.fontTitle}',Georgia,serif`,fontSize:36,fontWeight:700,color:ac,lineHeight:1}}, importoStr)
+            , React.createElement('div', {style:{fontSize:10,color:"#888",letterSpacing:".12em",textTransform:"uppercase",marginTop:4}}, "Importo ricevuto")
+          )
+          /* Firme */
+          , stile.showFirme && React.createElement('div', {style:{display:"flex",justifyContent:"space-between",marginTop:36}}
+            , ["Il pagante","Il cassiere / responsabile"].map(l=>React.createElement('div', {key:l, style:{textAlign:"center",width:160}}
+                , React.createElement('div', {style:{borderTop:"1px solid #333",marginBottom:5}})
+                , React.createElement('div', {style:{fontSize:10,color:"#888",textTransform:"uppercase",letterSpacing:".08em"}}, l)
+              ))
           )
           /* Footer */
-          , React.createElement('div', { style: {padding:"12px 24px 16px",borderTop:"1px solid #eee",textAlign:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 657}}
-            , React.createElement('div', { style: {fontSize:11,color:"#888",lineHeight:1.6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 658}}, cfg.notaRicevuta)
-            , React.createElement('div', { style: {fontSize:10,color:"#aaa",marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 659}}, cfg.nomeScuola, " · "  , cfg.annoScolastico)
+          , stile.showFooter && React.createElement('div', {style:{marginTop:24,paddingTop:10,borderTop:"1px solid #eee",textAlign:"center"}}
+            , React.createElement('div', {style:{fontSize:10,color:"#888",lineHeight:1.7}}, cfg.notaRicevuta)
+            , React.createElement('div', {style:{fontSize:10,color:"#aaa",marginTop:1}}, cfg.nomeScuola, " · ", cfg.annoScolastico)
+          )
+        )
+      )
+
+      /* ── PANNELLO EDITOR (destra) ── */
+      , React.createElement('div', {style:{width:220,flexShrink:0,borderLeft:`1px solid ${C.border}`,
+          background:C.surface,overflow:"auto",padding:"16px 14px",display:"flex",flexDirection:"column",gap:16}}
+
+        , React.createElement('div', {style:{fontSize:10,color:C.textMuted,letterSpacing:".1em",textTransform:"uppercase",fontWeight:600,marginBottom:4}}, "Stile ricevuta")
+
+        /* Colore accento */
+        , React.createElement('div', null
+          , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:6}}, "Colore principale")
+          , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
+            , ["#c9a84c","#2d6a8f","#6a4c93","#2a7d4f","#c0392b","#1a1a2e","#555555"].map(col=>
+                React.createElement('button', {key:col, onClick:()=>setSt("accentColor",col),
+                  style:{width:22,height:22,borderRadius:"50%",background:col,border:ac===col?"3px solid #fff":"2px solid transparent",
+                    outline:ac===col?`2px solid ${col}`:"none",cursor:"pointer",transition:"all .1s"}}
+                )
+              )
+          )
+          , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:6,marginTop:8}}
+            , React.createElement('input', {type:"color", value:ac, onChange:e=>setSt("accentColor",e.target.value),
+                style:{width:28,height:28,borderRadius:6,border:"none",cursor:"pointer",padding:0}})
+            , React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "Personalizzato")
           )
         )
 
-        , React.createElement('div', { style: {display:"flex",justifyContent:"flex-end",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 663}}
-          , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 664}}, "Chiudi")
-          , React.createElement(Btn, { onClick: handlePrint, __self: this, __source: {fileName: _jsxFileName, lineNumber: 665}}
-            , React.createElement(Ic, { n: "receipt", size: 14, stroke: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 666}}), "Stampa ricevuta"
-          )
+        /* Font titolo */
+        , React.createElement('div', null
+          , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:6}}, "Font intestazione")
+          , ["Cormorant Garamond","Georgia","Times New Roman","Arial"].map(f=>
+              React.createElement('label', {key:f, style:{display:"flex",alignItems:"center",gap:6,cursor:"pointer",
+                fontSize:11,color:stile.fontTitle===f?C.text:C.textMuted,marginBottom:4}}
+                , React.createElement('input', {type:"radio", checked:stile.fontTitle===f, onChange:()=>setSt("fontTitle",f),
+                    style:{accentColor:ac,cursor:"pointer"}})
+                , React.createElement('span', {style:{fontFamily:f}}, f)
+              )
+            )
         )
+
+        /* Elementi visibili */
+        , React.createElement('div', null
+          , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:8}}, "Elementi visibili")
+          , React.createElement(Toggle2, {checked:stile.showIndirizzo, onChange:v=>setSt("showIndirizzo",v), label:"Indirizzo"})
+          , React.createElement('div', {style:{height:6}})
+          , React.createElement(Toggle2, {checked:stile.showDataNascita, onChange:v=>setSt("showDataNascita",v), label:"Data di nascita"})
+          , React.createElement('div', {style:{height:6}})
+          , React.createElement(Toggle2, {checked:stile.showFirme, onChange:v=>setSt("showFirme",v), label:"Spazio firme"})
+          , React.createElement('div', {style:{height:6}})
+          , React.createElement(Toggle2, {checked:stile.showFooter, onChange:v=>setSt("showFooter",v), label:"Footer"})
+        )
+
+        /* Note personalizzate */
+        , React.createElement('div', null
+          , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:5}}, "Note aggiuntive")
+          , React.createElement('textarea', {
+              value: stile.notePersonalizzate,
+              onChange: e=>setSt("notePersonalizzate",e.target.value),
+              placeholder: "Testo libero da aggiungere...",
+              rows:3,
+              style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,
+                color:C.text,fontSize:11,padding:"7px 9px",fontFamily:"'DM Sans',sans-serif",resize:"vertical"}
+            })
+        )
+
+        /* Reset */
+        , React.createElement('button', {
+            onClick:()=>setStile(RICEVUTA_STYLE_DEFAULT),
+            style:{marginTop:"auto",padding:"7px 0",borderRadius:6,border:`1px solid ${C.border}`,
+              background:"none",color:C.textMuted,fontSize:11,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}
+          }, "↺ Ripristina default")
+      )
+    )
+
+    /* ── Footer modal ── */
+    , React.createElement('div', {style:{padding:"14px 24px",borderTop:`1px solid ${C.border}`,
+        display:"flex",justifyContent:"flex-end",gap:10,background:C.surface}}
+      , React.createElement(Btn, {variant:"secondary", onClick:onClose}, "Chiudi")
+      , React.createElement(Btn, {onClick:handlePrint}
+        , React.createElement(Ic,{n:"receipt",size:14,stroke:C.bg}), " Stampa ricevuta"
       )
     )
   );
@@ -10391,9 +10512,6 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}, s.instrument, s.level?" · "+s.level:"")
                     )
                     , React.createElement(Badge, {stato:s.status})
-                    , React.createElement('div', {style:{textAlign:"right",flexShrink:0}}
-                      , React.createElement('div', {style:{fontSize:13,fontWeight:600,color:C.gold}}, "€", s.monthlyFee, "/mese")
-                    )
                   )
                 )
           )
