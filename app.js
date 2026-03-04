@@ -2836,9 +2836,9 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
         )
         , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:12,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2835}}
           /* docenti assegnati — piccole icone */
-          , docenti.filter(d=>(d.corsi||[]).includes(c.id)).length > 0 && (
+          , docenti.filter(d=>(d.corsi||[]).includes(c.id)||(c.docenti||[]).includes(d.id)).length > 0 && (
             React.createElement('div', { style: {display:"flex",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2838}}
-              , docenti.filter(d=>(d.corsi||[]).includes(c.id)).slice(0,3).map((d,i)=>(
+              , docenti.filter(d=>(d.corsi||[]).includes(c.id)||(c.docenti||[]).includes(d.id)).slice(0,3).map((d,i)=>(
                 React.createElement('div', { key: d.id, title: d.nome, style: {width:22,height:22,borderRadius:"50%",background:`${d.colore||C.gold}25`,
                   border:`2px solid ${C.bg}`,marginLeft:i===0?0:-6,
                   display:"flex",alignItems:"center",justifyContent:"center",
@@ -2846,10 +2846,10 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
                   , initials(d.nome)
                 )
               ))
-              , docenti.filter(d=>(d.corsi||[]).includes(c.id)).length > 3 && (
+              , docenti.filter(d=>(d.corsi||[]).includes(c.id)||(c.docenti||[]).includes(d.id)).length > 3 && (
                 React.createElement('div', { style: {width:22,height:22,borderRadius:"50%",background:C.surfaceHover,border:`2px solid ${C.bg}`,
                   display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:C.textMuted,marginLeft:-6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2848}}, "+"
-                  , docenti.filter(d=>(d.corsi||[]).includes(c.id)).length-3
+                  , docenti.filter(d=>(d.corsi||[]).includes(c.id)||(c.docenti||[]).includes(d.id)).length-3
                 )
               )
             )
@@ -7448,8 +7448,20 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
               , React.createElement('p',{style:{marginTop:12}},"Nessun brano nel programma — modifica l'evento per aggiungerli")
             )
             , hasProg2 && prog.map((p,i)=>
-              React.createElement('div', {key:p.branoId||i, style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",marginBottom:10,display:"flex",gap:16,alignItems:"flex-start"}}
-                , React.createElement('div', {style:{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:700,color:C.gold,minWidth:40,textAlign:"center",lineHeight:1.1,paddingTop:2}}, i+1)
+              React.createElement('div', {key:p.branoId||i, style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",marginBottom:10,display:"flex",gap:12,alignItems:"flex-start"}}
+                , React.createElement('div', {style:{display:"flex",flexDirection:"column",alignItems:"center",gap:2,minWidth:44}}
+                  , React.createElement('div', {style:{fontFamily:"'Cormorant Garamond',serif",fontSize:26,fontWeight:700,color:C.gold,lineHeight:1,marginBottom:2}}, i+1)
+                  , React.createElement('button', {
+                      onClick:()=>{ const p2=[...(evento.programma||[])]; if(i===0)return; [p2[i],p2[i-1]]=[p2[i-1],p2[i]]; onUpdate({...evento,programma:p2}); },
+                      disabled:i===0,
+                      style:{background:"none",border:"none",cursor:i===0?"default":"pointer",padding:"1px 5px",color:i===0?C.border:C.textMuted,lineHeight:1,fontSize:15}
+                    }, "▲")
+                  , React.createElement('button', {
+                      onClick:()=>{ const p2=[...(evento.programma||[])]; if(i>=p2.length-1)return; [p2[i],p2[i+1]]=[p2[i+1],p2[i]]; onUpdate({...evento,programma:p2}); },
+                      disabled:i>=(evento.programma||[]).length-1,
+                      style:{background:"none",border:"none",cursor:i>=(evento.programma||[]).length-1?"default":"pointer",padding:"1px 5px",color:i>=(evento.programma||[]).length-1?C.border:C.textMuted,lineHeight:1,fontSize:15}
+                    }, "▼")
+                )
                 , React.createElement('div', {style:{flex:1}}
                   , React.createElement('div', {style:{fontSize:15,fontWeight:600,marginBottom:2}}, p.branoTitle||"")
                   , p.composer && React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:6}}, p.composer)
@@ -8530,28 +8542,33 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
                   , React.createElement('div', {style:{fontSize:13,fontWeight:600}}, prog.branoTitle)
                   , prog.composer && React.createElement('div', {style:{fontSize:11,color:C.textMuted}}, prog.composer)
                 )
-                , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:2,marginRight:4}}
-                  , React.createElement('button', {onClick:()=>moveBrano(pidx,-1),disabled:pidx===0,style:{background:"none",border:"none",cursor:pidx===0?"default":"pointer",padding:2,color:pidx===0?C.border:C.textMuted,lineHeight:1}}, "▲")
-                  , React.createElement('button', {onClick:()=>moveBrano(pidx,1),disabled:pidx===(f.programma||[]).length-1,style:{background:"none",border:"none",cursor:pidx===(f.programma||[]).length-1?"default":"pointer",padding:2,color:pidx===(f.programma||[]).length-1?C.border:C.textMuted,lineHeight:1}}, "▼")
-                )
+
                 , React.createElement('button', {onClick:()=>remBranoProg(prog.branoId),style:{background:"none",border:"none",cursor:"pointer",color:C.textDim,padding:4,display:"flex"},onMouseEnter:e=>e.currentTarget.style.color=C.red,onMouseLeave:e=>e.currentTarget.style.color=C.textDim}
                   , React.createElement(Ic,{n:"x",size:12,stroke:"currentColor"})
                 )
               )
               , React.createElement('div', {style:{paddingLeft:32}}
-                , React.createElement('div', {style:{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}, "Allievi esecutori:")
-                , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
-                  , students.map(s=>
-                    React.createElement('label', {key:s.id, style:{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:"3px 8px",borderRadius:6,
-                      background:(prog.allievi||[]).find(a=>a.studentId===s.id)?(tp.hex+"18"):C.surface,
-                      border:`1px solid ${(prog.allievi||[]).find(a=>a.studentId===s.id)?tp.hex:C.border}`,transition:"all .12s",fontSize:11}}
-                      , React.createElement('input', {type:"checkbox",checked:!!(prog.allievi||[]).find(a=>a.studentId===s.id),
-                          onChange:()=>toggleAllievoBrano(prog.branoId,s.id,s.name||s.nome||""),
-                          style:{accentColor:tp.hex,width:12,height:12,flexShrink:0}})
-                      , s.name||s.nome||""
+                , (() => {
+                  const conBrano = students.filter(s=>(s.repertorio||[]).some(r=>r.id===prog.branoId||r.titolo===prog.branoTitle));
+                  const lista = conBrano.length>0 ? conBrano : students;
+                  return React.createElement(React.Fragment, null
+                    , React.createElement('div', {style:{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}
+                      , conBrano.length>0 ? "Allievi esecutori:" : "Allievi esecutori (tutti):"
                     )
-                  )
-                )
+                    , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
+                      , lista.map(s=>
+                        React.createElement('label', {key:s.id, style:{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:"3px 8px",borderRadius:6,
+                          background:(prog.allievi||[]).find(a=>a.studentId===s.id)?(tp.hex+"18"):C.surface,
+                          border:`1px solid ${(prog.allievi||[]).find(a=>a.studentId===s.id)?tp.hex:C.border}`,transition:"all .12s",fontSize:11}}
+                          , React.createElement('input', {type:"checkbox",checked:!!(prog.allievi||[]).find(a=>a.studentId===s.id),
+                              onChange:()=>toggleAllievoBrano(prog.branoId,s.id,s.name||s.nome||""),
+                              style:{accentColor:tp.hex,width:12,height:12,flexShrink:0}})
+                          , s.name||s.nome||""
+                        )
+                      )
+                    )
+                  );
+                })()
               )
             )
           )
@@ -8746,52 +8763,49 @@ const EventoDetail = ({ evento, students, onEdit, onDelete, onBack, onUpdate }) 
         )
 
         /* PARTECIPANTI */
-        , tab==="partec" && (
-          React.createElement('div', { style: {maxWidth:680}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8629}}
-            , evento.partecipanti.length===0 ? (
-              React.createElement('div', { style: {textAlign:"center",padding:"56px 0",color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8631}}
-                , React.createElement(Ic, { n: "users", size: 36, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8632}})
-                , React.createElement('p', { style: {marginTop:12,fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8633}}, "Nessun partecipante" )
-                , React.createElement('p', { style: {fontSize:11,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8634}}, "Modifica l'evento per aggiungere allievi"    )
-              )
-            ) : (
-              React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8637}}
-                , evento.partecipanti.map((p,i)=>(
-                  React.createElement('div', { key: p.studentId, style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8639}}
-                    , React.createElement('div', { style: {padding:"12px 16px",display:"flex",alignItems:"center",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8640}}
-                      , React.createElement('span', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:18,fontWeight:600,
-                        color:C.textDim,width:28,textAlign:"right",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8641}}, i+1)
-                      , React.createElement('div', { style: {width:36,height:36,borderRadius:"50%",background:`${C.gold}20`,
-                        border:`1px solid ${C.goldDim}`,display:"flex",alignItems:"center",
-                        justifyContent:"center",fontSize:12,fontWeight:600,color:C.gold,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8643}}
-                        , initials(p.studentName)
-                      )
-                      , React.createElement('div', { style: {flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8648}}
-                        , React.createElement('div', { style: {fontSize:14,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8649}}, p.studentName)
-                        , React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8650}}
-                          , p.brani.length, " bran" , p.brani.length!==1?"i":"o", " in programma"
+        , tab==="partec" && (() => {
+          const hasProg3 = ["saggio","concerto","pubblico"].includes(evento.tipo);
+          const prog3    = evento.programma || [];
+          const parts3   = evento.partecipanti || [];
+          const byStudent = {};
+          prog3.forEach(p=>(p.allievi||[]).forEach(a=>{
+            if(!byStudent[a.studentId]) byStudent[a.studentId]={studentId:a.studentId,studentName:a.studentName,brani:[]};
+            byStudent[a.studentId].brani.push(p.branoTitle||"");
+          }));
+          const lista = hasProg3 ? Object.values(byStudent) : parts3;
+          return React.createElement('div', {style:{maxWidth:680}}
+            , lista.length===0
+              ? React.createElement('div', {style:{textAlign:"center",padding:"56px 0",color:C.textDim}}
+                  , React.createElement(Ic,{n:"users",size:36,stroke:C.textDim})
+                  , React.createElement('p',{style:{marginTop:12,fontSize:13}}, "Nessun partecipante")
+                  , React.createElement('p',{style:{fontSize:11,marginTop:4}}, "Modifica l'evento per aggiungere allievi")
+                )
+              : React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:8}}
+                  , lista.map((p,i)=>
+                    React.createElement('div', {key:p.studentId, style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}
+                      , React.createElement('div', {style:{padding:"12px 16px",display:"flex",alignItems:"center",gap:12}}
+                        , React.createElement('div', {style:{width:36,height:36,borderRadius:"50%",background:`${C.gold}20`,
+                            border:`1px solid ${C.goldDim}`,display:"flex",alignItems:"center",
+                            justifyContent:"center",fontSize:12,fontWeight:600,color:C.gold,flexShrink:0}}
+                          , initials(p.studentName)
+                        )
+                        , React.createElement('div', {style:{flex:1}}
+                          , React.createElement('div', {style:{fontSize:14,fontWeight:500}}, p.studentName)
+                          , hasProg3 && (p.brani||[]).length>0 && React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:2}}, (p.brani||[]).join(" · "))
                         )
                       )
-                    )
-                    , p.brani.length>0 && (
-                      React.createElement('div', { style: {padding:"8px 16px 12px 76px",borderTop:`1px solid ${C.border}20`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8656}}
-                        , p.brani.map((b,j)=>(
-                          React.createElement('div', { key: j, style: {display:"flex",alignItems:"center",gap:8,marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8658}}
-                            , React.createElement(Ic, { n: "music", size: 11, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8659}})
-                            , React.createElement('span', { style: {fontSize:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8660}}, b)
-                          )
-                        ))
+                      , hasProg3 && (p.brani||[]).length>0 && React.createElement('div', {style:{padding:"6px 16px 10px 64px",borderTop:`1px solid ${C.border}20`}}
+                        , (p.brani||[]).map((b,j)=>React.createElement('div', {key:j, style:{display:"flex",alignItems:"center",gap:7,marginBottom:3}}
+                            , React.createElement(Ic,{n:"music",size:10,stroke:C.gold})
+                            , React.createElement('span',{style:{fontSize:12}}, b)
+                          ))
                       )
                     )
                   )
-                ))
-              )
-            )
-          )
-        )
-
-        /* BIGLIETTERIA */
-        , tab==="biglietti" && (
+                )
+          );
+        })()
+, tab==="biglietti" && (
           React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8674}}
             /* Stats */
             , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(130px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8676}}
@@ -10006,10 +10020,10 @@ const UtentiView = () => {
 
 // ─── DATI DOCENTI ESTESI ──────────────────────────────────────────────────────
 const INIT_DOCENTI_EXT = [
-  { id:"d1", nome:"Prof. Marco Rossi",   teacherKey:"Prof. Rossi",   email:"m.rossi@accademia.it",    phone:"338 1122334", strumenti:"Pianoforte · Violino",   bio:"Diplomato al Conservatorio di Milano. 15 anni di esperienza.", tariffaOra:35, contratto:"Tempo indeterminato", dataInizio:"2015-09-01", colore:C.gold    },
-  { id:"d2", nome:"Prof. Luca Bianchi",  teacherKey:"Prof. Bianchi", email:"l.bianchi@accademia.it",  phone:"347 5566778", strumenti:"Chitarra · Flauto",      bio:"Specializzato in musica moderna e jazz. Masterclass annuali.", tariffaOra:35, contratto:"Tempo determinato",    dataInizio:"2018-01-15", colore:C.teal    },
-  { id:"d3", nome:"Prof. Mario Verde",   teacherKey:"Prof. Verde",   email:"m.verde@accademia.it",    phone:"333 9988776", strumenti:"Batteria · Percussioni", bio:"Batterista professionista, collabora con diverse orchestre.",   tariffaOra:35, contratto:"Collaborazione",        dataInizio:"2020-03-01", colore:C.blue    },
-  { id:"d4", nome:"Prof.ssa Lia Marino", teacherKey:"Prof. Marino",  email:"l.marino@accademia.it",   phone:"366 3344556", strumenti:"Canto · Solfeggio",      bio:"Soprano lirico, docente di tecnica vocale e teoria musicale.",  tariffaOra:35, contratto:"Tempo indeterminato", dataInizio:"2017-09-01", colore:C.purple  },
+  { id:"d1", corsi:["c1","c3","c7","c8","c10"], nome:"Prof. Marco Rossi",   teacherKey:"Prof. Rossi",   email:"m.rossi@accademia.it",    phone:"338 1122334", strumenti:"Pianoforte · Violino",   bio:"Diplomato al Conservatorio di Milano. 15 anni di esperienza.", tariffaOra:35, contratto:"Tempo indeterminato", dataInizio:"2015-09-01", colore:C.gold    },
+  { id:"d2", corsi:["c2","c4","c7","c10"], nome:"Prof. Luca Bianchi",  teacherKey:"Prof. Bianchi", email:"l.bianchi@accademia.it",  phone:"347 5566778", strumenti:"Chitarra · Flauto",      bio:"Specializzato in musica moderna e jazz. Masterclass annuali.", tariffaOra:35, contratto:"Tempo determinato",    dataInizio:"2018-01-15", colore:C.teal    },
+  { id:"d3", corsi:["c5","c8","c10"], nome:"Prof. Mario Verde",   teacherKey:"Prof. Verde",   email:"m.verde@accademia.it",    phone:"333 9988776", strumenti:"Batteria · Percussioni", bio:"Batterista professionista, collabora con diverse orchestre.",   tariffaOra:35, contratto:"Collaborazione",        dataInizio:"2020-03-01", colore:C.blue    },
+  { id:"d4", corsi:["c9","c10"], nome:"Prof.ssa Lia Marino", teacherKey:"Prof. Marino",  email:"l.marino@accademia.it",   phone:"366 3344556", strumenti:"Canto · Solfeggio",      bio:"Soprano lirico, docente di tecnica vocale e teoria musicale.",  tariffaOra:35, contratto:"Tempo indeterminato", dataInizio:"2017-09-01", colore:C.purple  },
 ];
 
 const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView }) => {
@@ -10357,88 +10371,36 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 
       /* ── ALLIEVI ── */
       , tab==="allievi" && (
-        React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10202}}
-          , React.createElement(MeseSelector, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10203}})
-          , React.createElement(GraficoAS, { tipo: "lezioni", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10204}})
-          /* Allievi con lezioni nel mese selezionato */
-          , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10206}}
-            , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10207}}
-              , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10208}}
-                , React.createElement(Ic, { n: "users", size: 14, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10209}})
-                , React.createElement('span', { style: {fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10210}}, "Allievi — "
-                    , MESI_LABEL_L[selMese.m-1], " " , selMese.y
+        React.createElement('div', null
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}
+              , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+                , React.createElement(Ic,{n:"users",size:14,stroke:C.textMuted})
+                , React.createElement('span', {style:{fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}}, "Allievi assegnati")
+              )
+              , React.createElement('span', {style:{fontSize:12,color:C.textDim}}, all.length, " allievi")
+            )
+            , all.length===0
+              ? React.createElement('div', {style:{textAlign:"center",padding:"48px 0",color:C.textMuted,fontSize:14}}, "Nessun allievo assegnato")
+              : all.map((s,i)=>
+                  React.createElement('div', {key:s.id, style:{display:"flex",alignItems:"center",gap:14,
+                    padding:"14px 18px",borderBottom:i<all.length-1?`1px solid ${C.border}`:"none"}}
+                    , React.createElement(Avatar, {initials:s.name.split(" ").map(p=>p[0]).join("").slice(0,2), hex:selected.colore, size:36})
+                    , React.createElement('div', {style:{flex:1}}
+                      , React.createElement('div', {style:{fontSize:14,fontWeight:500}}, s.name)
+                      , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}, s.instrument, s.level?" · "+s.level:"")
+                    )
+                    , React.createElement(Badge, {stato:s.status})
+                    , React.createElement('div', {style:{textAlign:"right",flexShrink:0}}
+                      , React.createElement('div', {style:{fontSize:13,fontWeight:600,color:C.gold}}, "€", s.monthlyFee, "/mese")
+                    )
+                  )
                 )
-              )
-              , React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10214}}
-                , [...new Set(lezSel.flatMap(l=>isColl(l)?(l.students||[]).map(s=>s.name):[l.student]))].length, " su "  , all.length, " totali"
-              )
-            )
-            , all.length===0 ? (
-              React.createElement('div', { style: {textAlign:"center",padding:"48px 0",color:C.textMuted,fontSize:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10219}}, "Nessun allievo assegnato"  )
-            ) : (
-              all.map((s,i)=>{
-                const lezS = lezSel.filter(l=>studentInLesson(l,s.name));
-                const attPres = lezS.filter(l=>l.attendance==="presente").length;
-                const attAss  = lezS.filter(l=>l.attendance==="assente").length;
-                const hasMese = lezS.length > 0;
-                return (
-                  React.createElement('div', { key: s.id, style: {display:"flex",alignItems:"center",gap:14,
-                    padding:"14px 18px",borderBottom:i<all.length-1?`1px solid ${C.border}`:"none",
-                    opacity: hasMese ? 1 : 0.45}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10227}}
-                    , React.createElement(Avatar, { initials: s.name.split(" ").map(p=>p[0]).join("").slice(0,2), hex: selected.colore, size: 36, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10230}})
-                    , React.createElement('div', { style: {flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10231}}
-                      , React.createElement('div', { style: {fontSize:14,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10232}}, s.name)
-                      , React.createElement('div', { style: {fontSize:12,color:C.textMuted,marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10233}}, s.instrument, " · "  , s.level)
-                    )
-                    , React.createElement('div', { style: {textAlign:"center",minWidth:60}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10235}}
-                      , React.createElement('div', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:600,color:hasMese?selected.colore:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10236}}, lezS.length)
-                      , React.createElement('div', { style: {fontSize:10,color:C.textDim,textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10237}}, "lezioni")
-                    )
-                    , hasMese && (
-                      React.createElement('div', { style: {display:"flex",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10240}}
-                        , attPres>0 && React.createElement('span', { style: {fontSize:11,background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`,borderRadius:4,padding:"2px 7px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10241}}, attPres, "P")
-                        , attAss>0  && React.createElement('span', { style: {fontSize:11,background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`,borderRadius:4,padding:"2px 7px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10242}}, attAss, "A")
-                      )
-                    )
-                    , React.createElement(Badge, { stato: s.status, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10245}})
-                    , React.createElement('div', { style: {textAlign:"right",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10246}}
-                      , React.createElement('div', { style: {fontSize:13,fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10247}}, "€", s.monthlyFee, "/mese")
-                    )
-                  )
-                );
-              })
-            )
-          )
-          /* Riepilogo tutti i mesi */
-          , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,marginTop:16,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10255}}
-            , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10256}}
-              , React.createElement('span', { style: {fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10257}}, "Riepilogo anno scolastico"  )
-            )
-            , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(5,1fr)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10259}}
-              , MESI_AS.map((x,i)=>{
-                const n = lezioniMese(selected,x.m,x.y).length;
-                const isS = x.m===selMese.m&&x.y===selMese.y;
-                const isF = isFuture(x);
-                return (
-                  React.createElement('div', { key: i, onClick: ()=>!isF&&setSelMese(x),
-                    style: {padding:"14px 16px",borderRight:i%5!==4?`1px solid ${C.border}`:"none",
-                      borderBottom:i<5?`1px solid ${C.border}`:"none",
-                      background:isS?`${selected.colore}15`:"transparent",
-                      cursor:isF?"default":"pointer",opacity:isF?0.4:1,
-                      transition:"background 0.15s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10265}}
-                    , React.createElement('div', { style: {fontSize:10,color:isS?selected.colore:C.textDim,textTransform:"uppercase",marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10271}}, MESI_LABEL_S[x.m-1])
-                    , React.createElement('div', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:22,fontWeight:600,color:isF?C.textDim:n>0?selected.colore:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10272}}, isF?"—":n)
-                    , React.createElement('div', { style: {fontSize:10,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10273}}, isF?"":n===1?"lezione":"lezioni")
-                  )
-                );
-              })
-            )
           )
         )
       )
 
-      /* ── LEZIONI ── */
-      , tab==="lezioni" && (
+, tab==="lezioni" && (
         React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10284}}
           , React.createElement(MeseSelector, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10285}})
           , React.createElement(GraficoAS, { tipo: "lezioni", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10286}})
