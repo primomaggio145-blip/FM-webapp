@@ -7690,7 +7690,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                           , e.note&&React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7185}}, e.note)
                         )
                         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7187}}
-                          , (()=>{const c=CAT_ENTRATE.find(x=>x.id===e.categoria)||{label:"Quota",icon:"receipt"};
+                          , (()=>{const c=catEntrate.find(x=>x.id===e.categoria)||{label:"Quota",icon:"receipt"};
                             return React.createElement('span', { style: {fontSize:11,padding:"2px 8px",borderRadius:10,background:C.greenBg,
                               color:C.green,border:`1px solid ${C.greenBorder}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7189}}, c.label);})()
                         )
