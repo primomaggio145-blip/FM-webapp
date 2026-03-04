@@ -547,9 +547,7 @@ const RICEVUTA_STYLE_DEFAULT = {
 
 const RicevutaModal = ({ entrata, student, config, onClose }) => {
   const cfg = config || CONFIG_DEFAULT;
-  const [stile, setStile] = React.useState(RICEVUTA_STYLE_DEFAULT);
-  const [showEditor, setShowEditor] = React.useState(false);
-  const setSt = (k,v) => setStile(p=>({...p,[k]:v}));
+  const stile = {...RICEVUTA_STYLE_DEFAULT, ...(cfg.ricevutaStyle||{})};
 
   const numRic = entrata.numRicevuta || (String(cfg.progressivoRicevute||1).padStart(3,"0") + "/" + (entrata.anno||new Date().getFullYear()));
   const intestatario = (student && student.nomeRicevuta && student.nomeRicevuta.trim()) || (student && student.name) || entrata.studentName || "—";
@@ -562,18 +560,18 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
 
   // Genera HTML puro per la stampa in popup
   const buildHtml = () => {
-    const indirizzoHtml = stile.showIndirizzo && cfg.indirizzo ? `<div style="font-size:11px;color:#666;margin-top:3px">${cfg.indirizzo}</div>` : "";
+    const indirizzoHtml = stile.showIndirizzo!==false && cfg.indirizzo ? `<div style="font-size:11px;color:#666;margin-top:3px">${cfg.indirizzo}</div>` : "";
     const cfHtml = cfg.codiceFiscale ? `<div style="font-size:11px;color:#666">CF: ${cfg.codiceFiscale}</div>` : "";
-    const nascitaRow = stile.showDataNascita && student && student.birthdate
+    const nascitaRow = stile.showDataNascita!==false && student && student.birthdate
       ? `<tr><td class="k">Data di nascita</td><td class="v">${new Date(student.birthdate+"T00:00:00").toLocaleDateString("it-IT")}</td></tr>` : "";
-    const meseRow = meseLabel ? `<tr><td class="k">Competenza</td><td class="v">${meseLabel}</td></tr>` : "";
-    const noteRow = stile.notePersonalizzate ? `<tr><td class="k">Note</td><td class="v">${stile.notePersonalizzate}</td></tr>` : "";
-    const firmeHtml = stile.showFirme ? `
+    const meseRow = stile.showCompetenza!==false && meseLabel ? `<tr><td class="k">Competenza</td><td class="v">${meseLabel}</td></tr>` : "";
+    const noteRow = stile.noteFooter ? `<tr><td class="k">Note</td><td class="v">${stile.noteFooter}</td></tr>` : "";
+    const firmeHtml = stile.showFirme!==false ? `
       <div class="firma-wrap">
-        <div class="firma-box"><div class="firma-line"></div><div class="firma-lbl">Il pagante</div></div>
-        <div class="firma-box"><div class="firma-line"></div><div class="firma-lbl">Il cassiere / responsabile</div></div>
+        <div class="firma-box"><div class="firma-line"></div><div class="firma-lbl">${stile.labelPagante||"Il pagante"}</div></div>
+        <div class="firma-box"><div class="firma-line"></div><div class="firma-lbl">${stile.labelCassiere||"Il cassiere / responsabile"}</div></div>
       </div>` : "";
-    const footerHtml = stile.showFooter ? `<div class="footer">${cfg.notaRicevuta||"Ricevuta non fiscale"}<br>${cfg.nomeScuola||""} · ${cfg.annoScolastico||""}</div>` : "";
+    const footerHtml = stile.showFooter!==false ? `<div class="footer">${cfg.notaRicevuta||"Ricevuta non fiscale"}<br>${cfg.nomeScuola||""} · ${cfg.annoScolastico||""}${stile.noteFooter?"<br>"+stile.noteFooter:""}</div>` : "";
 
     return `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Ricevuta ${numRic}</title>
@@ -616,12 +614,12 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
       </div>
     </div>
     <table>
-      <tr><td class="k">Ricevuta da</td><td class="v">${intestatario}</td></tr>
+      ${stile.showNominativo!==false?`<tr><td class="k">Ricevuta da</td><td class="v">${intestatario}</td></tr>`:""}
       ${nascitaRow}
-      <tr><td class="k">Data pagamento</td><td class="v">${dataPag}</td></tr>
-      <tr><td class="k">Descrizione</td><td class="v">${entrata.desc||"Quota mensile"}</td></tr>
+      ${stile.showDataPagamento!==false?`<tr><td class="k">Data pagamento</td><td class="v">${dataPag}</td></tr>`:""}
+      ${stile.showDescrizione!==false?`<tr><td class="k">Descrizione</td><td class="v">${entrata.desc||"Quota mensile"}</td></tr>`:""}
       ${meseRow}
-      <tr><td class="k">Metodo di pagamento</td><td class="v">${entrata.metodo||"—"}</td></tr>
+      ${stile.showMetodo!==false?`<tr><td class="k">Metodo di pagamento</td><td class="v">${entrata.metodo||"—"}</td></tr>`:""}
       ${noteRow}
     </table>
     <div class="importo-box">
@@ -662,9 +660,9 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
   );
 
   return React.createElement(Modal, { title: "Ricevuta — anteprima e stampa", onClose, wide: true }
-    , React.createElement('div', {style:{display:"flex",gap:0,height:"min(80vh,700px)",overflow:"hidden"}}
+    , React.createElement('div', {style:{display:"flex",gap:0,maxHeight:"75vh",overflow:"hidden"}}
 
-      /* ── ANTEPRIMA (sinistra) ── */
+      /* ── ANTEPRIMA ── */
       , React.createElement('div', {style:{flex:1,overflow:"auto",padding:"20px 24px",background:"#f0ede8"}}
         , React.createElement('div', {style:{background:"#fff",borderRadius:10,overflow:"hidden",
             boxShadow:"0 4px 32px rgba(0,0,0,0.22)",maxWidth:560,margin:"0 auto",padding:"24px 28px"}}
@@ -691,6 +689,7 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
                 , React.createElement('span', {style:{fontSize:13,fontWeight:600,color:"#1a1a2e"}}, r.v)
               ))
           )
+          /* Nota: stile globale gestito in Impostazioni > Ricevuta */
           /* Importo */
           , React.createElement('div', {style:{textAlign:"center",margin:"20px 0",padding:"18px",
               border:`2px solid ${ac}`,borderRadius:8,background:ac+"12"}}
@@ -699,7 +698,7 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
           )
           /* Firme */
           , stile.showFirme && React.createElement('div', {style:{display:"flex",justifyContent:"space-between",marginTop:36}}
-            , ["Il pagante","Il cassiere / responsabile"].map(l=>React.createElement('div', {key:l, style:{textAlign:"center",width:160}}
+            , [stile.labelPagante||"Il pagante", stile.labelCassiere||"Il cassiere / responsabile"].map(l=>React.createElement('div', {key:l, style:{textAlign:"center",width:160}}
                 , React.createElement('div', {style:{borderTop:"1px solid #333",marginBottom:5}})
                 , React.createElement('div', {style:{fontSize:10,color:"#888",textTransform:"uppercase",letterSpacing:".08em"}}, l)
               ))
@@ -712,75 +711,6 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
         )
       )
 
-      /* ── PANNELLO EDITOR (destra) ── */
-      , React.createElement('div', {style:{width:220,flexShrink:0,borderLeft:`1px solid ${C.border}`,
-          background:C.surface,overflow:"auto",padding:"16px 14px",display:"flex",flexDirection:"column",gap:16}}
-
-        , React.createElement('div', {style:{fontSize:10,color:C.textMuted,letterSpacing:".1em",textTransform:"uppercase",fontWeight:600,marginBottom:4}}, "Stile ricevuta")
-
-        /* Colore accento */
-        , React.createElement('div', null
-          , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:6}}, "Colore principale")
-          , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
-            , ["#c9a84c","#2d6a8f","#6a4c93","#2a7d4f","#c0392b","#1a1a2e","#555555"].map(col=>
-                React.createElement('button', {key:col, onClick:()=>setSt("accentColor",col),
-                  style:{width:22,height:22,borderRadius:"50%",background:col,border:ac===col?"3px solid #fff":"2px solid transparent",
-                    outline:ac===col?`2px solid ${col}`:"none",cursor:"pointer",transition:"all .1s"}}
-                )
-              )
-          )
-          , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:6,marginTop:8}}
-            , React.createElement('input', {type:"color", value:ac, onChange:e=>setSt("accentColor",e.target.value),
-                style:{width:28,height:28,borderRadius:6,border:"none",cursor:"pointer",padding:0}})
-            , React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "Personalizzato")
-          )
-        )
-
-        /* Font titolo */
-        , React.createElement('div', null
-          , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:6}}, "Font intestazione")
-          , ["Cormorant Garamond","Georgia","Times New Roman","Arial"].map(f=>
-              React.createElement('label', {key:f, style:{display:"flex",alignItems:"center",gap:6,cursor:"pointer",
-                fontSize:11,color:stile.fontTitle===f?C.text:C.textMuted,marginBottom:4}}
-                , React.createElement('input', {type:"radio", checked:stile.fontTitle===f, onChange:()=>setSt("fontTitle",f),
-                    style:{accentColor:ac,cursor:"pointer"}})
-                , React.createElement('span', {style:{fontFamily:f}}, f)
-              )
-            )
-        )
-
-        /* Elementi visibili */
-        , React.createElement('div', null
-          , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:8}}, "Elementi visibili")
-          , React.createElement(Toggle2, {checked:stile.showIndirizzo, onChange:v=>setSt("showIndirizzo",v), label:"Indirizzo"})
-          , React.createElement('div', {style:{height:6}})
-          , React.createElement(Toggle2, {checked:stile.showDataNascita, onChange:v=>setSt("showDataNascita",v), label:"Data di nascita"})
-          , React.createElement('div', {style:{height:6}})
-          , React.createElement(Toggle2, {checked:stile.showFirme, onChange:v=>setSt("showFirme",v), label:"Spazio firme"})
-          , React.createElement('div', {style:{height:6}})
-          , React.createElement(Toggle2, {checked:stile.showFooter, onChange:v=>setSt("showFooter",v), label:"Footer"})
-        )
-
-        /* Note personalizzate */
-        , React.createElement('div', null
-          , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:5}}, "Note aggiuntive")
-          , React.createElement('textarea', {
-              value: stile.notePersonalizzate,
-              onChange: e=>setSt("notePersonalizzate",e.target.value),
-              placeholder: "Testo libero da aggiungere...",
-              rows:3,
-              style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:6,
-                color:C.text,fontSize:11,padding:"7px 9px",fontFamily:"'DM Sans',sans-serif",resize:"vertical"}
-            })
-        )
-
-        /* Reset */
-        , React.createElement('button', {
-            onClick:()=>setStile(RICEVUTA_STYLE_DEFAULT),
-            style:{marginTop:"auto",padding:"7px 0",borderRadius:6,border:`1px solid ${C.border}`,
-              background:"none",color:C.textMuted,fontSize:11,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}
-          }, "↺ Ripristina default")
-      )
     )
 
     /* ── Footer modal ── */
@@ -1792,6 +1722,7 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
         , React.createElement('div', { style: {display:"flex",borderBottom:`1px solid ${C.border}`,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1669}}
           , [
             ["dashboard","grid",    "Dashboard"],
+            ["ricevuta","receipt",  "Ricevuta"],
             ...(isAdmin?[["admin","settings","Amministrazione"]]:  []),
           ].map(([v,ic,lbl])=>(
             React.createElement('button', { key: v, onClick: ()=>setTab(v),
@@ -2112,6 +2043,168 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
             )
           )
 
+          /* ── TAB RICEVUTA ── */
+          , tab==="ricevuta" && (() => {
+            const rs = draft.ricevutaStyle || {};
+            const setRS = (k,v) => setD("ricevutaStyle", {...(draft.ricevutaStyle||{}), [k]:v});
+            const ac = rs.accentColor || "#c9a84c";
+            const Toggle = ({k, label}) => {
+              const val = rs[k]!==false;
+              return React.createElement('label', {style:{display:"flex",alignItems:"center",gap:8,cursor:"pointer",
+                fontSize:13,color:val?C.text:C.textMuted,padding:"5px 0"}}
+                , React.createElement('div', {
+                    onClick:()=>setRS(k,!val),
+                    style:{width:34,height:20,borderRadius:10,background:val?ac:"#444",position:"relative",cursor:"pointer",transition:"background .15s",flexShrink:0}}
+                  , React.createElement('div', {style:{position:"absolute",top:3,left:val?15:3,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .15s"}})
+                )
+                , label
+              );
+            };
+            const SF = ({label, k, placeholder}) => React.createElement('div', {style:{marginBottom:12}}
+              , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:4,letterSpacing:".06em",textTransform:"uppercase"}}, label)
+              , React.createElement('input', {value:rs[k]||"", onChange:e=>setRS(k,e.target.value),
+                  placeholder, style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
+                  color:C.text,fontSize:13,padding:"9px 12px",fontFamily:"'DM Sans',sans-serif"}})
+            );
+
+            return React.createElement(React.Fragment, null
+              /* ANTEPRIMA */
+              , React.createElement('section', null
+                , React.createElement('div', {style:{fontSize:11,color:C.gold,letterSpacing:".1em",textTransform:"uppercase",marginBottom:12,display:"flex",alignItems:"center",gap:6}}
+                  , React.createElement(Ic,{n:"receipt",size:12,stroke:C.gold}), "Anteprima ricevuta"
+                )
+                , React.createElement('div', {style:{background:"#f0ede8",borderRadius:10,padding:"16px",marginBottom:4}}
+                  , React.createElement('div', {style:{background:"#fff",borderRadius:8,padding:"18px 22px",boxShadow:"0 2px 12px rgba(0,0,0,0.15)",fontSize:11}}
+                    , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:`2px solid ${ac}`,paddingBottom:10,marginBottom:12}}
+                      , React.createElement('div', null
+                        , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Cormorant Garamond"}',Georgia,serif`,fontSize:15,fontWeight:700,color:"#1a1a2e"}}, draft.nomeScuola||"Accademia Musicale")
+                        , draft.tipoEnte && React.createElement('div', {style:{fontSize:9,color:"#888",textTransform:"uppercase",letterSpacing:".08em",marginTop:1}}, draft.tipoEnte)
+                        , rs.showIndirizzo!==false && draft.indirizzo && React.createElement('div', {style:{fontSize:9,color:"#666",marginTop:2}}, draft.indirizzo)
+                      )
+                      , React.createElement('div', {style:{textAlign:"right"}}
+                        , React.createElement('div', {style:{fontSize:9,color:"#888",textTransform:"uppercase",letterSpacing:".08em"}}, "Ricevuta n°")
+                        , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Cormorant Garamond"}',serif`,fontSize:18,fontWeight:700,color:ac,lineHeight:1}}, "025/2026")
+                        , React.createElement('div', {style:{fontSize:9,color:"#888",marginTop:1}}, "del 04/03/2026")
+                      )
+                    )
+                    , [
+                        rs.showNominativo!==false   && ["Ricevuta da","Giulia Romano"],
+                        rs.showDataNascita!==false  && ["Data di nascita","30/09/2011"],
+                        rs.showDataPagamento!==false&& ["Data pagamento","11/02/2026"],
+                        rs.showDescrizione!==false  && ["Descrizione","Quota mensile Febbraio 2026"],
+                        rs.showCompetenza!==false   && ["Competenza","Febbraio 2026"],
+                        rs.showMetodo!==false       && ["Metodo di pagamento","Bonifico bancario"],
+                      ].filter(Boolean).map(([k,v],i,arr)=>
+                        React.createElement('div', {key:k, style:{display:"flex",justifyContent:"space-between",padding:"4px 0",
+                          borderBottom:i<arr.length-1?"1px solid #eee":"none"}}
+                          , React.createElement('span', {style:{color:"#888"}}, k)
+                          , React.createElement('span', {style:{fontWeight:600,color:"#1a1a2e"}}, v)
+                        )
+                      )
+                    , React.createElement('div', {style:{textAlign:"center",margin:"10px 0",padding:"10px",border:`2px solid ${ac}`,borderRadius:6,background:ac+"12"}}
+                      , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Cormorant Garamond"}',serif`,fontSize:22,fontWeight:700,color:ac}}, "€ 95,00")
+                      , React.createElement('div', {style:{fontSize:9,color:"#888",textTransform:"uppercase",letterSpacing:".1em",marginTop:2}}, "Importo ricevuto")
+                    )
+                    , rs.showFirme!==false && React.createElement('div', {style:{display:"flex",justifyContent:"space-between",marginTop:12,marginBottom:4}}
+                      , [rs.labelPagante||"Il pagante", rs.labelCassiere||"Il cassiere / responsabile"].map(l=>
+                          React.createElement('div', {key:l, style:{textAlign:"center",width:"42%"}}
+                            , React.createElement('div', {style:{borderTop:"1px solid #333",marginBottom:3}})
+                            , React.createElement('div', {style:{fontSize:9,color:"#888",textTransform:"uppercase",letterSpacing:".06em"}}, l)
+                          )
+                        )
+                    )
+                    , rs.showFooter!==false && React.createElement('div', {style:{marginTop:8,paddingTop:6,borderTop:"1px solid #eee",textAlign:"center",fontSize:9,color:"#888",lineHeight:1.6}}
+                      , draft.notaRicevuta||"Ricevuta non fiscale"
+                      , React.createElement('br', null)
+                      , draft.nomeScuola, " · ", draft.annoScolastico
+                      , rs.noteFooter && React.createElement(React.Fragment, null, React.createElement('br',null), rs.noteFooter)
+                    )
+                  )
+                )
+              )
+
+              /* COLORE E FONT */
+              , React.createElement('section', null
+                , React.createElement('div', {style:{fontSize:11,color:C.gold,letterSpacing:".1em",textTransform:"uppercase",marginBottom:12,display:"flex",alignItems:"center",gap:6}}
+                  , React.createElement(Ic,{n:"palette",size:12,stroke:C.gold}), "Stile grafico"
+                )
+                , React.createElement('div', {style:{marginBottom:12}}
+                  , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:8,letterSpacing:".06em",textTransform:"uppercase"}}, "Colore principale")
+                  , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}
+                    , ["#c9a84c","#2d6a8f","#6a4c93","#2a7d4f","#c0392b","#1a1a2e","#555555"].map(col=>
+                        React.createElement('button', {key:col, onClick:()=>setRS("accentColor",col),
+                          style:{width:26,height:26,borderRadius:"50%",background:col,border:ac===col?"3px solid #fff":"2px solid transparent",
+                            outline:ac===col?`2px solid ${col}`:"none",cursor:"pointer",transition:"all .1s"}}
+                        )
+                      )
+                  )
+                  , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+                    , React.createElement('input', {type:"color", value:ac, onChange:e=>setRS("accentColor",e.target.value),
+                        style:{width:32,height:32,borderRadius:8,border:"none",cursor:"pointer",padding:0}})
+                    , React.createElement('span', {style:{fontSize:12,color:C.textMuted}}, "Colore personalizzato: ", React.createElement('strong',{style:{color:C.text}}, ac))
+                  )
+                )
+                , React.createElement('div', {style:{marginBottom:4}}
+                  , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:8,letterSpacing:".06em",textTransform:"uppercase"}}, "Font intestazione")
+                  , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
+                    , ["Cormorant Garamond","Georgia","Times New Roman","Arial","Helvetica"].map(f=>
+                        React.createElement('button', {key:f, onClick:()=>setRS("fontTitle",f),
+                          style:{padding:"5px 12px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:f,
+                            border:`1px solid ${(rs.fontTitle||"Cormorant Garamond")===f?ac:C.border}`,
+                            background:(rs.fontTitle||"Cormorant Garamond")===f?ac+"18":C.bg,
+                            color:(rs.fontTitle||"Cormorant Garamond")===f?ac:C.textMuted}}
+                        , f)
+                      )
+                  )
+                )
+              )
+
+              /* CAMPI VISIBILI */
+              , React.createElement('section', null
+                , React.createElement('div', {style:{fontSize:11,color:C.gold,letterSpacing:".1em",textTransform:"uppercase",marginBottom:12,display:"flex",alignItems:"center",gap:6}}
+                  , React.createElement(Ic,{n:"list",size:12,stroke:C.gold}), "Campi da mostrare"
+                )
+                , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4}}
+                  , React.createElement(Toggle, {k:"showNumeroRicevuta",  label:"Numero ricevuta"})
+                  , React.createElement(Toggle, {k:"showDataStampa",      label:"Data stampa"})
+                  , React.createElement(Toggle, {k:"showNominativo",      label:"Nominativo"})
+                  , React.createElement(Toggle, {k:"showDataNascita",     label:"Data di nascita"})
+                  , React.createElement(Toggle, {k:"showDataPagamento",   label:"Data pagamento"})
+                  , React.createElement(Toggle, {k:"showDescrizione",     label:"Descrizione"})
+                  , React.createElement(Toggle, {k:"showCompetenza",      label:"Competenza"})
+                  , React.createElement(Toggle, {k:"showMetodo",          label:"Metodo di pagamento"})
+                  , React.createElement(Toggle, {k:"showIndirizzo",       label:"Indirizzo scuola"})
+                  , React.createElement(Toggle, {k:"showFirme",           label:"Spazio firme"})
+                  , React.createElement(Toggle, {k:"showFooter",          label:"Footer"})
+                )
+              )
+
+              /* TESTI PERSONALIZZATI */
+              , React.createElement('section', null
+                , React.createElement('div', {style:{fontSize:11,color:C.gold,letterSpacing:".1em",textTransform:"uppercase",marginBottom:12,display:"flex",alignItems:"center",gap:6}}
+                  , React.createElement(Ic,{n:"edit",size:12,stroke:C.gold}), "Testi personalizzati"
+                )
+                , React.createElement(SF, {label:"Etichetta firma sinistra", k:"labelPagante", placeholder:"Il pagante"})
+                , React.createElement(SF, {label:"Etichetta firma destra",   k:"labelCassiere", placeholder:"Il cassiere / responsabile"})
+                , React.createElement('div', {style:{marginBottom:4}}
+                  , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:4,letterSpacing:".06em",textTransform:"uppercase"}}, "Note aggiuntive footer")
+                  , React.createElement('textarea', {value:rs.noteFooter||"", onChange:e=>setRS("noteFooter",e.target.value),
+                      placeholder:"Testo libero sotto il footer (es. IBAN, riferimenti legali...)",
+                      rows:3, style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
+                        color:C.text,fontSize:12,padding:"9px 12px",fontFamily:"'DM Sans',sans-serif",resize:"vertical"}})
+                )
+              )
+
+              /* RESET */
+              , React.createElement('div', {style:{paddingTop:8}}
+                , React.createElement('button', {
+                    onClick:()=>setD("ricevutaStyle", CONFIG_DEFAULT.ricevutaStyle),
+                    style:{padding:"7px 14px",borderRadius:8,border:`1px solid ${C.border}`,
+                      background:"none",color:C.textMuted,fontSize:12,cursor:"pointer",fontFamily:"'DM Sans',sans-serif"}
+                  }, "↺ Ripristina impostazioni predefinite")
+              )
+            );
+          })()
           /* Messaggio non-admin */
           , tab==="admin" && !isAdmin && (
             React.createElement('div', { style: {display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
@@ -2184,6 +2277,25 @@ const CONFIG_DEFAULT = {
   inizioAnno:`${ANNO}-09-01`, fineAnno:`${ANNO+1}-06-30`, dataSaggio:`${ANNO+1}-06-07`,
   mesiAttivi:[0,1,2,3,4,8,9,10,11],
   progressivoRicevute:29,
+  ricevutaStyle: {
+    accentColor: "#c9a84c",
+    fontTitle: "Cormorant Garamond",
+    fontBody: "DM Sans",
+    showIndirizzo: true,
+    showDataNascita: true,
+    showFirme: true,
+    showFooter: true,
+    showNumeroRicevuta: true,
+    showDataStampa: true,
+    showNominativo: true,
+    showDataPagamento: true,
+    showDescrizione: true,
+    showCompetenza: true,
+    showMetodo: true,
+    noteFooter: "",
+    labelPagante: "Il pagante",
+    labelCassiere: "Il cassiere / responsabile",
+  },
 };
 
 const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni }) => {
