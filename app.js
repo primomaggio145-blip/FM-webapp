@@ -326,7 +326,7 @@ const uid = () => "id_" + Date.now() + "_" + Math.floor(Math.random()*10000);
 const initials = (nome) => nome ? nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase() : "??";
 const age = (dataN) => { if(!dataN) return "—"; const d=new Date(dataN); const now=new Date(); let a=now.getFullYear()-d.getFullYear(); if(now.getMonth()<d.getMonth()||(now.getMonth()===d.getMonth()&&now.getDate()<d.getDate()))a--; return a; };
 const fmtDate = (s) => { if(!s) return "—"; const d=new Date(s+"T00:00:00"); return d.toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"}); };
-const yyyymmdd = (d) => d.toISOString().split("T")[0];
+const yyyymmdd = (d) => { const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), dd=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${dd}`; };
 
 const Badge = ({ label, color="gold", stato, variant }) => {
   const lbl = label || stato;
@@ -2836,9 +2836,9 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
         )
         , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:12,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2835}}
           /* docenti assegnati — piccole icone */
-          , (c.docenti||[]).length > 0 && (
+          , docenti.filter(d=>(d.corsi||[]).includes(c.id)).length > 0 && (
             React.createElement('div', { style: {display:"flex",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2838}}
-              , docenti.filter(d=>(c.docenti||[]).includes(d.id)).slice(0,3).map((d,i)=>(
+              , docenti.filter(d=>(d.corsi||[]).includes(c.id)).slice(0,3).map((d,i)=>(
                 React.createElement('div', { key: d.id, title: d.nome, style: {width:22,height:22,borderRadius:"50%",background:`${d.colore||C.gold}25`,
                   border:`2px solid ${C.bg}`,marginLeft:i===0?0:-6,
                   display:"flex",alignItems:"center",justifyContent:"center",
@@ -2846,10 +2846,10 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
                   , initials(d.nome)
                 )
               ))
-              , (c.docenti||[]).length > 3 && (
+              , docenti.filter(d=>(d.corsi||[]).includes(c.id)).length > 3 && (
                 React.createElement('div', { style: {width:22,height:22,borderRadius:"50%",background:C.surfaceHover,border:`2px solid ${C.bg}`,
                   display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:C.textMuted,marginLeft:-6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2848}}, "+"
-                  , (c.docenti||[]).length-3
+                  , docenti.filter(d=>(d.corsi||[]).includes(c.id)).length-3
                 )
               )
             )
@@ -4289,19 +4289,11 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
                     color:C.textMuted, fontSize:13, padding:"10px 14px", width:"100%",
                     fontFamily:"'DM Sans',sans-serif", appearance:"none", cursor:"pointer"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4264}}
                   , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4275}}, repertorio.length === 0 ? "Nessun brano nel catalogo" : "+ Aggiungi brano al repertorio...")
-                  , ["individuale","collettivo"].map(tipo => {
-                    const group = repertorio.filter(b => (b.tipo||b.type) === tipo && !(f.repertorioIds||[]).includes(b.id));
-                    if(group.length === 0) return null;
-                    return (
-                      React.createElement('optgroup', { key: tipo, label: tipo === "individuale" ? "── Individuali ──" : "── Collettivi ──", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4280}}
-                        , group.map(b => (
-                          React.createElement('option', { key: b.id, value: b.id, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4282}}
-                            , b.title, " — "  , b.composer, b.tonality ? ` (${b.tonality})` : ""
-                          )
-                        ))
-                      )
-                    );
-                  })
+                  , repertorio.filter(b=>!(f.repertorioIds||[]).includes(b.id)).map(b => (
+                    React.createElement('option', { key: b.id, value: b.id }
+                      , b.title, b.composer ? ` — ${b.composer}` : "", b.tonality ? ` (${b.tonality})` : ""
+                    )
+                  ))
                 )
 
                 /* Pills dei brani selezionati */
@@ -6591,7 +6583,7 @@ const INIT_ENTRATE_QUOTE = (()=>{
 })();
 
 // ─── FORM SPESA ───────────────────────────────────────────────────────────────
-const SpesaForm = ({ initial, onSave, onClose }) => {
+const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp }) => {
   const [f, setF] = useState(initial || {
     categoria:"docenti", desc:"", importo:"",
     mese:MESE_ATT, anno:ANNO_ATT,
@@ -6615,8 +6607,8 @@ const SpesaForm = ({ initial, onSave, onClose }) => {
     // Auto-compila desc per docente
     let desc = f.desc;
     if(f.categoria==="docenti"&&f.docenteId&&!f.desc) {
-      const d = DOCENTI.find(x=>x.id===f.docenteId);
-      if(d) desc = `Compenso mensile ${d.name}`;
+      const d = (_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI).find(x=>x.id===f.docenteId);
+      if(d) desc = `Compenso mensile ${(d.nome||d.name)}`;
     }
     onSave({...f, desc, importo:Number(f.importo)});
   };
@@ -6646,7 +6638,7 @@ const SpesaForm = ({ initial, onSave, onClose }) => {
         /* Se categoria = docenti, mostra select docente */
         , f.categoria==="docenti" && (
           React.createElement(Sel, { label: "Docente", value: f.docenteId, onChange: e=>{ set("docenteId",e.target.value); const d=DOCENTI.find(x=>x.id===e.target.value); if(d) set("desc",`Compenso mensile ${d.name}`); },
-            options: [{value:"",label:"— seleziona docente —"},...DOCENTI.map(d=>({value:d.id,label:d.name}))], __self: this, __source: {fileName: _jsxFileName, lineNumber: 6375}})
+            options: [{value:"",label:"— seleziona docente —"},...(_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI).map(d=>({value:d.id,label:d.nome||d.name}))], __self: this, __source: {fileName: _jsxFileName, lineNumber: 6375}})
         )
 
         , React.createElement(Input, { label: "Descrizione *" , value: f.desc, onChange: e=>set("desc",e.target.value), error: err.desc, placeholder: "Es. Bolletta luce gennaio, Spartiti..."    , __self: this, __source: {fileName: _jsxFileName, lineNumber: 6379}})
@@ -7080,7 +7072,6 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota }) => (
     , [
       {id:"spese",   label:"Uscite",   icon:"down"},
       {id:"entrate", label:"Entrate",  icon:"up"},
-      {id:"docenti", label:"Docenti",  icon:"user"},
       {id:"report",  label:"Report",   icon:"chart"},
     ].map(t=>(
       React.createElement('button', { key: t.id, onClick: ()=>{ setTab(t.id); _optionalChain([onSelDoc, 'optionalCall', _59 => _59()]); },
@@ -7104,7 +7095,7 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota }) => (
   )
 );
 
-const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, config:propConfig, setConfig:propSetConfig }) => {
+const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV }) => {
   const isMobile = useIsMobile();
   const [_entrate, _setEntrate] = useState(INIT_ENTRATE_QUOTE);
   const entrate    = _nullishCoalesce(propEntrate, () => ( _entrate));
@@ -7307,48 +7298,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
               )
             )
 
-            /* TAB DOCENTI */
-            , tab==="docenti" && (
-              React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7039}}
-                , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7040}}
-                  , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr auto",minWidth:480,
-                    padding:"9px 18px",borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7041}}
-                    , ["Docente","Strumenti","Pagato anno","Ultimo pagamento",""].map(h=>(
-                      React.createElement('div', { key: h, style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7044}}, h)
-                    ))
-                  )
-                  , docenteStats.map((d,i)=>(
-                    React.createElement('div', { key: d.id, onClick: ()=>setSelDoc(d.id),
-                      style: {display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr auto",minWidth:480,
-                        padding:"14px 18px",borderBottom:i<docenteStats.length-1?`1px solid ${C.border}20`:"none",
-                        cursor:"pointer",transition:"background 0.12s",alignItems:"center"},
-                      onMouseEnter: e=>e.currentTarget.style.background=C.surfaceHover,
-                      onMouseLeave: e=>e.currentTarget.style.background="transparent", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7048}}
-                      , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7054}}
-                        , React.createElement('div', { style: {width:36,height:36,borderRadius:"50%",background:C.goldBg,
-                          border:`1px solid ${C.goldDim}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7055}}
-                          , React.createElement(Ic, { n: "user", size: 16, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7057}})
-                        )
-                        , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7059}}
-                          , React.createElement('div', { style: {fontSize:14,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7060}}, d.name)
-                        )
-                      )
-                      , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7063}}, d.instrument)
-                      , React.createElement('div', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:17,fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7064}}
-                        , d.totAnno>0?fmt(d.totAnno):"—"
-                      )
-                      , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7067}}
-                        , d.ultimoPag?new Date(d.ultimoPag+"T00:00:00").toLocaleDateString("it-IT"):"—"
-                      )
-                      , React.createElement(Ic, { n: "right", size: 16, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7070}})
-                    )
-                  ))
-                )
-              )
-            )
-
-            /* TAB QUOTE */
-            , tab==="entrate" && (() => {
+                        , tab==="entrate" && (() => {
               const MESI_ALL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
               const curY = new Date().getFullYear(), curM = new Date().getMonth()+1;
               const qFiltrate = entrate
@@ -7371,45 +7321,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
               return (
                 React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7099}}
                   /* Riepilogo per allievo */
-                  , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7101}}
-                    , React.createElement('div', { style: {padding:"12px 20px",borderBottom:`1px solid ${C.border}`,
-                      display:"flex",alignItems:"center",justifyContent:"space-between"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7102}}
-                      , React.createElement('span', { style: {fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7104}}, "Riepilogo quote per allievo"   )
-                      , React.createElement('span', { style: {fontSize:12,color:C.green,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7105}}, "Totale incassato a.s.: "   , fmt(totQuoteAnno))
-                    )
-                    , React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7107}}
-                      , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7108}}
-                        , React.createElement('tr', { style: {background:C.bg,borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7109}}
-                          , ["Allievo","Strumento","Quota mensile","Quote pagate","Totale incassato","Ultimo pagamento"].map(h=>(
-                            React.createElement('th', { key: h, style: {padding:"9px 18px",textAlign:"left",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7111}}, h)
-                          ))
-                        )
-                      )
-                      , React.createElement('tbody', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7115}}
-                        , stSummary.map((s,i)=>(
-                          React.createElement('tr', { key: s.id, style: {borderBottom:i<stSummary.length-1?`1px solid ${C.border}20`:"none",
-                            transition:"background 0.1s"},
-                            onMouseEnter: e=>e.currentTarget.style.background=C.surfaceHover,
-                            onMouseLeave: e=>e.currentTarget.style.background="transparent", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7117}}
-                            , React.createElement('td', { style: {padding:"12px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7121}}
-                              , React.createElement('div', { style: {fontSize:14,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7122}}, s.name)
-                              , React.createElement(Badge, { label: s.status, color: s.status==="attivo"?"green":s.status==="sospeso"?"gold":"red", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7123}})
-                            )
-                            , React.createElement('td', { style: {padding:"12px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7125}}, React.createElement(Badge, { label: s.instrument, color: "gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7125}}))
-                            , React.createElement('td', { style: {padding:"12px 18px",fontFamily:"'Cormorant Garamond',serif",fontSize:16,fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7126}}, "€", s.monthlyFee)
-                            , React.createElement('td', { style: {padding:"12px 18px",fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7127}}, s.nPagamenti, " pagam." )
-                            , React.createElement('td', { style: {padding:"12px 18px",fontFamily:"'Cormorant Garamond',serif",fontSize:17,fontWeight:600,color:s.totPag>0?C.green:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7128}}
-                              , s.totPag>0?fmt(s.totPag):"—"
-                            )
-                            , React.createElement('td', { style: {padding:"12px 18px",fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7131}}
-                              , s.ultPag?new Date(s.ultPag+"T00:00:00").toLocaleDateString("it-IT"):"—"
-                            )
-                          )
-                        ))
-                      )
-                    )
-                  )
-
+                  
                   /* Lista pagamenti filtrata */
                   , React.createElement('div', { style: {display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7141}}
                     , React.createElement('div', { style: {position:"relative",flex:"1 1 200px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7142}}
@@ -7496,11 +7408,73 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
             })()
 
             /* TAB REPORT */
-            , tab==="report" && React.createElement(ReportView, { spese: spese, entrate: entrate, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7226}})
+            , tab==="brani" && (() => {
+          const prog  = evento.programma || [];
+          const parts = evento.partecipanti || [];
+          const hasProg2 = ["saggio","concerto","pubblico"].includes(evento.tipo);
+          return React.createElement('div', {style:{maxWidth:700}}
+            , React.createElement('div', {style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}
+              , React.createElement('h3', {style:{fontFamily:"'Cormorant Garamond',serif",fontSize:22,fontWeight:600,margin:0}}, "Scaletta — ", evento.titolo)
+              , hasProg2 && prog.length>0 && React.createElement('button', {
+                  onClick:()=>{
+                    const w=window.open("","_blank");
+                    const rows=prog.map((p,i)=>`<div class="brano"><div class="num">${i+1}</div><div>
+                      <div class="title">${p.branoTitle||""}</div>
+                      <div class="comp">${p.composer||""}</div>
+                      ${(p.allievi||[]).length>0?`<div class="esec">${(p.allievi||[]).map(a=>a.studentName).join(", ")}</div>`:""}
+                    </div></div>`).join("");
+                    w.document.write(`<html><head><title>Scaletta</title><style>
+                      body{font-family:'Georgia',serif;padding:40px;max-width:700px;margin:0 auto}
+                      h1{font-size:28px;margin-bottom:4px}.sub{color:#666;margin-bottom:32px;font-size:14px}
+                      .brano{border-bottom:1px solid #eee;padding:14px 0;display:flex;gap:16px;align-items:flex-start}
+                      .num{font-size:26px;font-weight:700;color:#c9a84c;min-width:36px;font-family:'Georgia',serif}
+                      .title{font-size:16px;font-weight:600;margin-bottom:2px}.comp{font-size:13px;color:#666;margin-bottom:3px}
+                      .esec{font-size:12px;color:#888}@media print{button{display:none}}
+                    </style></head><body>
+                    <h1>${evento.titolo}</h1>
+                    <div class="sub">${evento.data?new Date(evento.data+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long",year:"numeric"}):""} ${evento.luogo?"· "+evento.luogo:""}</div>
+                    ${rows}<script>window.print();<\/script></body></html>`);
+                    w.document.close();
+                  },
+                  style:{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,
+                    border:"1px solid "+C.goldDim,background:C.goldBg,color:C.gold,
+                    cursor:"pointer",fontSize:12,fontFamily:"'DM Sans',sans-serif"}
+                }
+                , React.createElement(Ic,{n:"print",size:13,stroke:C.gold}), " Stampa scaletta"
+              )
+            )
+            , hasProg2 && prog.length===0 && React.createElement('div', {style:{textAlign:"center",padding:"48px 0",color:C.textDim,border:"1px dashed "+C.border,borderRadius:12}}
+              , React.createElement(Ic,{n:"music",size:28,stroke:C.textDim})
+              , React.createElement('p',{style:{marginTop:12}},"Nessun brano nel programma — modifica l'evento per aggiungerli")
+            )
+            , hasProg2 && prog.map((p,i)=>
+              React.createElement('div', {key:p.branoId||i, style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",marginBottom:10,display:"flex",gap:16,alignItems:"flex-start"}}
+                , React.createElement('div', {style:{fontFamily:"'Cormorant Garamond',serif",fontSize:28,fontWeight:700,color:C.gold,minWidth:40,textAlign:"center",lineHeight:1.1,paddingTop:2}}, i+1)
+                , React.createElement('div', {style:{flex:1}}
+                  , React.createElement('div', {style:{fontSize:15,fontWeight:600,marginBottom:2}}, p.branoTitle||"")
+                  , p.composer && React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:6}}, p.composer)
+                  , (p.allievi||[]).length>0 && React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:5}}
+                    , (p.allievi||[]).map(a=>React.createElement('span', {key:a.studentId,style:{padding:"2px 8px",borderRadius:12,background:C.goldBg,border:"1px solid "+C.goldDim,color:C.gold,fontSize:11}}, a.studentName))
+                  )
+                  , (p.allievi||[]).length===0 && React.createElement('div', {style:{fontSize:11,color:C.textDim,fontStyle:"italic"}}, "Nessun esecutore specificato")
+                )
+              )
+            )
+            , !hasProg2 && React.createElement('div', null
+              , parts.length===0 && React.createElement('div', {style:{textAlign:"center",padding:"32px 0",color:C.textDim,border:"1px dashed "+C.border,borderRadius:8}}, "Nessun partecipante registrato")
+              , parts.map(p=>React.createElement('div', {key:p.studentId,style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:6}}
+                  , React.createElement('div', {style:{width:32,height:32,borderRadius:"50%",background:C.teal+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:600,color:C.teal}}, initials(p.studentName))
+                  , React.createElement('span',{style:{fontSize:13}}, p.studentName)
+                ))
+            )
+          );
+        })()
+
+        , tab==="report" && React.createElement(ReportView, { spese: spese, entrate: entrate, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7226}})
           )
         )
 
-        , modal==="add"    && React.createElement(Modal, { title: "Registra spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}, React.createElement(SpesaForm, { onSave: handleAdd, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}))
+        , modal==="add"    && React.createElement(Modal, { title: "Registra spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}, React.createElement(SpesaForm, { onSave: handleAdd, onClose: closeModal, docenti: propDocentiCV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}))
         , modal==="edit"   && selSpesa && React.createElement(Modal, { title: "Modifica spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}, React.createElement(SpesaForm, { initial: selSpesa, docenti: propDocentiCV||[], onSave: handleEdit, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}))
         , modal==="delete" && selSpesa && React.createElement(ConfirmDel, { label: selSpesa.desc, onConfirm: handleDel, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7232}})
         , modal==="addq"   && React.createElement(Modal, { title: "Nuova entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}, React.createElement(EntrataForm, { students: students, onSave: handleAddQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}))
@@ -8451,37 +8425,42 @@ const PrenotazioneForm = ({ evento, initial, onSave, onClose }) => {
 };
 
 // ─── FORM EVENTO ──────────────────────────────────────────────────────────────
-const EventoForm = ({ initial, students, onSave, onClose }) => {
+const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
+  const braniEv = _braniEv || [];
   const def = initial || {id:"",tipo:"saggio",titolo:"",data:"",ora:"",luogo:"",capienza:100,
-    biglietto:false,prezzoBiglietto:0,stato:"programmato",descrizione:"",note:"",partecipanti:[],prenotazioni:[]};
-  const [f,setF]       = useState(def);
-  const [branoInp, setBranoInp] = useState({});
-  const [repOpen, setRepOpen]   = useState({});
+    biglietto:false,prezzoBiglietto:0,stato:"programmato",descrizione:"",note:"",programma:[],partecipanti:[],prenotazioni:[]};
+  const [f,setF] = useState({...def, programma:def.programma||[], partecipanti:def.partecipanti||[]});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const tp  = tipoEv(f.tipo);
-  const isMandatory = f.tipo === "saggio";
-  const hasBrani = f.tipo === "saggio" || f.tipo === "concerto";
+  const hasProgramma  = ["saggio","concerto","pubblico"].includes(f.tipo);
+  const hasPartFacolt = ["workshop","masterclass"].includes(f.tipo);
 
-  const addPart = sid => {
-    if(f.partecipanti.find(p=>p.studentId===sid)) return;
-    const st = students.find(s=>s.id===sid);
-    if(!st) return;
-    set("partecipanti",[...f.partecipanti,{studentId:sid,studentName:st.name,brani:[]}]);
+  const addBranoProg = (bid) => {
+    if(!bid) return;
+    if((f.programma||[]).find(p=>p.branoId===bid)) return;
+    const b = braniEv.find(x=>x.id===bid);
+    if(!b) return;
+    set("programma", [...(f.programma||[]), {id:"pb"+Date.now(),branoId:bid,branoTitle:b.title||"",composer:b.composer||"",allievi:[]}]);
   };
-  const remPart  = sid => set("partecipanti",f.partecipanti.filter(p=>p.studentId!==sid));
-  const addBrano = (sid,b) => { if(!b.trim())return; set("partecipanti",f.partecipanti.map(p=>p.studentId===sid?{...p,brani:[...p.brani,b.trim()]}:p)); };
-  const remBrano = (sid,i) => set("partecipanti",f.partecipanti.map(p=>p.studentId===sid?{...p,brani:p.brani.filter((_,j)=>j!==i)}:p));
-  const toggleRepBrano = (sid, titolo) => {
-    set("partecipanti", f.partecipanti.map(p => {
-      if(p.studentId !== sid) return p;
-      const has = p.brani.includes(titolo);
-      return {...p, brani: has ? p.brani.filter(b=>b!==titolo) : [...p.brani, titolo]};
+  const remBranoProg = (bid) => set("programma",(f.programma||[]).filter(p=>p.branoId!==bid));
+  const toggleAllievoBrano = (bid,sid,sname) => {
+    set("programma",(f.programma||[]).map(p=>{
+      if(p.branoId!==bid) return p;
+      const has=(p.allievi||[]).find(a=>a.studentId===sid);
+      return {...p, allievi:has?p.allievi.filter(a=>a.studentId!==sid):[...(p.allievi||[]),{studentId:sid,studentName:sname}]};
     }));
   };
-  const addTutti = () => {
-    const nuovi = students.filter(s=>!f.partecipanti.find(p=>p.studentId===s.id));
-    set("partecipanti",[...f.partecipanti,...nuovi.map(s=>({studentId:s.id,studentName:s.name,brani:[]}))]);
+  const moveBrano = (idx,dir) => {
+    const prog=[...(f.programma||[])]; const ni=idx+dir;
+    if(ni<0||ni>=prog.length) return;
+    [prog[idx],prog[ni]]=[prog[ni],prog[idx]]; set("programma",prog);
   };
+  const addPart = sid => {
+    if((f.partecipanti||[]).find(p=>p.studentId===sid)) return;
+    const st=students.find(s=>s.id===sid); if(!st) return;
+    set("partecipanti",[...(f.partecipanti||[]),{studentId:sid,studentName:st.name}]);
+  };
+  const remPart = sid => set("partecipanti",(f.partecipanti||[]).filter(p=>p.studentId!==sid));
 
   return (
     React.createElement(React.Fragment, null
@@ -8531,173 +8510,72 @@ const EventoForm = ({ initial, students, onSave, onClose }) => {
           )
         )
 
-        /* Partecipanti */
-        , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 8293}}
-          , React.createElement('div', { style: {display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8294}}
-            , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8295}}
-              , isMandatory ? "Partecipanti — obbligatori" : f.tipo==="concerto" ? "Partecipanti allievi" : "Partecipanti (facoltativi)"
-            )
-            , React.createElement('div', { style: {display:"flex",gap:6,alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8298}}
-              , isMandatory && f.partecipanti.length < students.length && (
-                React.createElement('button', { onClick: addTutti,
-                  style: {padding:"4px 10px",borderRadius:10,border:"1px solid "+C.gold,background:C.goldBg,
-                    color:C.gold,cursor:"pointer",fontSize:10,fontFamily:"'DM Sans',sans-serif",
-                    display:"flex",alignItems:"center",gap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8300}}
-                  , React.createElement(Ic, { n: "plus", size: 9, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8304}}), " Aggiungi tutti"
-                )
+        /* ── PROGRAMMA (saggio/concerto/pubblico) ── */
+        , hasProgramma && React.createElement('div', null
+          , React.createElement('label', { style:{fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",display:"block",marginBottom:10} }, "Programma — brani da eseguire")
+          , React.createElement('select', { value:"", onChange:e=>addBranoProg(e.target.value),
+              style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
+                color:C.textMuted,fontSize:13,padding:"10px 14px",fontFamily:"'DM Sans',sans-serif",appearance:"none",cursor:"pointer",marginBottom:12} }
+            , React.createElement('option', {value:""}, braniEv.length===0?"Nessun brano nel catalogo":"+ Seleziona brano da aggiungere...")
+            , braniEv.filter(b=>!(f.programma||[]).find(p=>p.branoId===b.id)).map(b=>
+                React.createElement('option', {key:b.id,value:b.id}, b.title, b.composer?` — ${b.composer}`:"")
               )
-              , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8307}}, f.partecipanti.length, "/", students.length)
-            )
           )
-
-          , students.filter(s=>!f.partecipanti.find(p=>p.studentId===s.id)).length > 0 && (
-            React.createElement('div', { style: {display:"flex",flexWrap:"wrap",gap:6,marginBottom:10,
-              padding:"10px 12px",background:C.bg,borderRadius:8,border:"1px dashed "+C.border}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8312}}
-              , React.createElement('span', { style: {fontSize:10,color:C.textDim,width:"100%",marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8314}}
-                , isMandatory ? "Aggiungi un allievo:" : "Aggiungi partecipanti (facoltativi):"
+          , (f.programma||[]).length===0 && React.createElement('div', {style:{textAlign:"center",padding:"16px 0",color:C.textDim,fontSize:12,border:"1px dashed "+C.border,borderRadius:8}}, "Nessun brano selezionato")
+          , (f.programma||[]).map((prog,pidx)=>
+            React.createElement('div', {key:prog.branoId, style:{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",marginBottom:8}}
+              , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}}
+                , React.createElement('div', {style:{width:24,height:24,borderRadius:4,background:C.goldBg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:C.gold,flexShrink:0}}, pidx+1)
+                , React.createElement('div', {style:{flex:1,minWidth:0}}
+                  , React.createElement('div', {style:{fontSize:13,fontWeight:600}}, prog.branoTitle)
+                  , prog.composer && React.createElement('div', {style:{fontSize:11,color:C.textMuted}}, prog.composer)
+                )
+                , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:2,marginRight:4}}
+                  , React.createElement('button', {onClick:()=>moveBrano(pidx,-1),disabled:pidx===0,style:{background:"none",border:"none",cursor:pidx===0?"default":"pointer",padding:2,color:pidx===0?C.border:C.textMuted,lineHeight:1}}, "▲")
+                  , React.createElement('button', {onClick:()=>moveBrano(pidx,1),disabled:pidx===(f.programma||[]).length-1,style:{background:"none",border:"none",cursor:pidx===(f.programma||[]).length-1?"default":"pointer",padding:2,color:pidx===(f.programma||[]).length-1?C.border:C.textMuted,lineHeight:1}}, "▼")
+                )
+                , React.createElement('button', {onClick:()=>remBranoProg(prog.branoId),style:{background:"none",border:"none",cursor:"pointer",color:C.textDim,padding:4,display:"flex"},onMouseEnter:e=>e.currentTarget.style.color=C.red,onMouseLeave:e=>e.currentTarget.style.color=C.textDim}
+                  , React.createElement(Ic,{n:"x",size:12,stroke:"currentColor"})
+                )
               )
-              , students.filter(s=>!f.partecipanti.find(p=>p.studentId===s.id)).map(s=>(
-                React.createElement('button', { key: s.id, onClick: ()=>addPart(s.id),
-                  style: {padding:"4px 10px",borderRadius:14,border:"1px solid "+C.border,
-                    background:"transparent",color:C.textMuted,cursor:"pointer",fontSize:11,
-                    fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",gap:5,transition:"all 0.15s"},
-                  onMouseEnter: e=>{e.currentTarget.style.borderColor=tp.hex;e.currentTarget.style.color=tp.hex;},
-                  onMouseLeave: e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8318}}
-                  , React.createElement(Ic, { n: "plus", size: 10, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 8324}}), s.name
-                )
-              ))
-            )
-          )
-
-          , f.partecipanti.map(p=>{
-            const st = students.find(s=>s.id===p.studentId);
-            const rep = (st ? (st.repertorio||[]) : []);
-            const repComp   = rep.filter(r=>r.stato==="completato");
-            const repStudio = rep.filter(r=>r.stato==="in studio");
-            const showRep   = repOpen[p.studentId];
-            return (
-              React.createElement('div', { key: p.studentId, style: {background:C.bg,border:"1px solid "+C.border,borderRadius:8,padding:"12px 14px",marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8337}}
-                , React.createElement('div', { style: {display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:hasBrani?8:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8338}}
-                  , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8339}}
-                    , React.createElement('div', { style: {width:28,height:28,borderRadius:"50%",background:tp.hex+"20",
-                      display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:600,color:tp.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8340}}
-                      , initials(p.studentName)
-                    )
-                    , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 8344}}
-                      , React.createElement('span', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8345}}, p.studentName)
-                      , st && React.createElement('span', { style: {fontSize:10,color:C.textDim,marginLeft:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8346}}, st.instrument)
-                    )
-                  )
-                  , React.createElement('div', { style: {display:"flex",gap:6,alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8349}}
-                    , hasBrani && rep.length > 0 && (
-                      React.createElement('button', { onClick: ()=>setRepOpen(r=>({...r,[p.studentId]:!r[p.studentId]})),
-                        style: {padding:"3px 8px",borderRadius:8,border:"1px solid "+C.border,background:"transparent",
-                          color:C.textMuted,cursor:"pointer",fontSize:10,fontFamily:"'DM Sans',sans-serif",
-                          display:"flex",alignItems:"center",gap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8351}}
-                        , React.createElement(Ic, { n: "music", size: 9, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8355}}), showRep?"Chiudi":"Scegli dal repertorio"
-                      )
-                    )
-                    , React.createElement('button', { onClick: ()=>remPart(p.studentId), style: {background:"none",border:"none",cursor:"pointer",
-                      display:"flex",padding:4,color:C.textDim},
-                      onMouseEnter: e=>e.currentTarget.style.color=C.red, onMouseLeave: e=>e.currentTarget.style.color=C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8358}}
-                      , React.createElement(Ic, { n: "x", size: 12, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 8361}})
-                    )
-                  )
-                )
-
-                , hasBrani && (
-                  React.createElement('div', { style: {paddingLeft:36}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8367}}
-                    , showRep && rep.length > 0 && (
-                      React.createElement('div', { style: {background:C.surface,border:"1px solid "+C.border,borderRadius:8,padding:"10px 12px",marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8369}}
-                        , React.createElement('div', { style: {fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8370}}, "Repertorio — "
-                            , p.studentName
-                        )
-                        , repComp.length > 0 && (
-                          React.createElement('div', { style: {marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8374}}
-                            , React.createElement('div', { style: {fontSize:9,color:C.green,fontWeight:600,letterSpacing:"0.06em",marginBottom:4,textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8375}}, "Completati"
-
-                            )
-                            , repComp.map(r=>{
-                              const sel = p.brani.includes(r.titolo);
-                              return (
-                                React.createElement('label', { key: r.id, style: {display:"flex",alignItems:"center",gap:8,cursor:"pointer",
-                                  padding:"5px 6px",borderRadius:6,marginBottom:2,
-                                  background:sel?(C.green+"15"):"transparent",transition:"background 0.1s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8381}}
-                                  , React.createElement('input', { type: "checkbox", checked: sel,
-                                    onChange: ()=>toggleRepBrano(p.studentId,r.titolo),
-                                    style: {accentColor:C.green,width:14,height:14,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8384}})
-                                  , React.createElement('span', { style: {flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8387}}
-                                    , React.createElement('span', { style: {fontSize:12,fontWeight:sel?600:400}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8388}}, r.titolo)
-                                    , React.createElement('span', { style: {fontSize:10,color:C.textDim,marginLeft:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8389}}, r.compositore)
-                                  )
-                                )
-                              );
-                            })
-                          )
-                        )
-                        , repStudio.length > 0 && (
-                          React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 8397}}
-                            , React.createElement('div', { style: {fontSize:9,color:C.gold,fontWeight:600,letterSpacing:"0.06em",marginBottom:4,textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8398}}, "In studio"
-
-                            )
-                            , repStudio.map(r=>{
-                              const sel = p.brani.includes(r.titolo);
-                              return (
-                                React.createElement('label', { key: r.id, style: {display:"flex",alignItems:"center",gap:8,cursor:"pointer",
-                                  padding:"5px 6px",borderRadius:6,marginBottom:2,
-                                  background:sel?(C.gold+"15"):"transparent",transition:"background 0.1s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8404}}
-                                  , React.createElement('input', { type: "checkbox", checked: sel,
-                                    onChange: ()=>toggleRepBrano(p.studentId,r.titolo),
-                                    style: {accentColor:C.gold,width:14,height:14,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8407}})
-                                  , React.createElement('span', { style: {flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8410}}
-                                    , React.createElement('span', { style: {fontSize:12,fontWeight:sel?600:400}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8411}}, r.titolo)
-                                    , React.createElement('span', { style: {fontSize:10,color:C.textDim,marginLeft:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8412}}, r.compositore)
-                                  )
-                                )
-                              );
-                            })
-                          )
-                        )
-                      )
-                    )
-                    , p.brani.map((b,i)=>(
-                      React.createElement('div', { key: i, style: {display:"flex",alignItems:"center",gap:6,marginBottom:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8422}}
-                        , React.createElement(Ic, { n: "music", size: 10, stroke: tp.hex, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8423}})
-                        , React.createElement('span', { style: {fontSize:11,flex:1,color:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8424}}, b)
-                        , React.createElement('button', { onClick: ()=>remBrano(p.studentId,i), style: {background:"none",border:"none",cursor:"pointer",
-                          display:"flex",padding:2,color:C.textDim},
-                          onMouseEnter: e=>e.currentTarget.style.color=C.red, onMouseLeave: e=>e.currentTarget.style.color=C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8425}}
-                          , React.createElement(Ic, { n: "x", size: 9, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 8428}})
-                        )
-                      )
-                    ))
-                    , React.createElement('div', { style: {display:"flex",gap:6,marginTop:p.brani.length?6:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8432}}
-                      , React.createElement('input', { value: branoInp[p.studentId]||"",
-                        onChange: e=>setBranoInp(prev=>({...prev,[p.studentId]:e.target.value})),
-                        onKeyDown: e=>{if(e.key==="Enter"&&branoInp[p.studentId] && branoInp[p.studentId].trim()){addBrano(p.studentId,branoInp[p.studentId]);setBranoInp(prev=>({...prev,[p.studentId]:""}));}},
-                        placeholder: "Aggiungi brano manuale + Invio..."    ,
-                        style: {flex:1,background:C.surface,border:"1px solid "+C.border,borderRadius:6,
-                          padding:"5px 10px",color:C.text,fontSize:11,fontFamily:"'DM Sans',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8433}})
-                      , React.createElement('button', { onClick: ()=>{if(branoInp[p.studentId] && branoInp[p.studentId].trim()){addBrano(p.studentId,branoInp[p.studentId]);setBranoInp(prev=>({...prev,[p.studentId]:""}));}},
-                        style: {background:C.goldBg,border:"1px solid "+C.goldDim,borderRadius:6,padding:"5px 8px",cursor:"pointer",display:"flex"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8439}}
-                        , React.createElement(Ic, { n: "plus", size: 11, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8441}})
-                      )
+              , React.createElement('div', {style:{paddingLeft:32}}
+                , React.createElement('div', {style:{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}, "Allievi esecutori:")
+                , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
+                  , students.map(s=>
+                    React.createElement('label', {key:s.id, style:{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:"3px 8px",borderRadius:6,
+                      background:(prog.allievi||[]).find(a=>a.studentId===s.id)?(tp.hex+"18"):C.surface,
+                      border:`1px solid ${(prog.allievi||[]).find(a=>a.studentId===s.id)?tp.hex:C.border}`,transition:"all .12s",fontSize:11}}
+                      , React.createElement('input', {type:"checkbox",checked:!!(prog.allievi||[]).find(a=>a.studentId===s.id),
+                          onChange:()=>toggleAllievoBrano(prog.branoId,s.id,s.name||s.nome||""),
+                          style:{accentColor:tp.hex,width:12,height:12,flexShrink:0}})
+                      , s.name||s.nome||""
                     )
                   )
                 )
               )
-            );
-          })
-
-          , f.partecipanti.length === 0 && (
-            React.createElement('div', { style: {textAlign:"center",padding:"20px 0",color:C.textDim,fontSize:12,
-              border:"1px dashed "+C.border,borderRadius:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8451}}
-              , isMandatory ? "Aggiungi gli allievi con il pulsante sopra" : "Nessun partecipante — facoltativo per questo tipo di evento"
             )
           )
         )
 
-        , React.createElement(Textarea, { label: "Note interne" , value: f.note, onChange: e=>set("note",e.target.value), placeholder: "Note riservate alla segreteria..."   , __self: this, __source: {fileName: _jsxFileName, lineNumber: 8458}})
+        /* ── PARTECIPANTI FACOLTATIVI (workshop/masterclass) ── */
+        , hasPartFacolt && React.createElement('div', null
+          , React.createElement('div', {style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}
+            , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}}, "Partecipanti (facoltativi)")
+            , React.createElement('span', {style:{fontSize:11,color:C.textDim}}, (f.partecipanti||[]).length, "/", students.length)
+          )
+          , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6,padding:"10px 12px",background:C.bg,borderRadius:8,border:"1px dashed "+C.border}}
+            , students.map(s=>{
+              const sel=!!(f.partecipanti||[]).find(p=>p.studentId===s.id);
+              return React.createElement('button', {key:s.id,onClick:()=>sel?remPart(s.id):addPart(s.id),
+                style:{padding:"4px 10px",borderRadius:14,border:`1px solid ${sel?tp.hex:C.border}`,
+                  background:sel?(tp.hex+"18"):"transparent",color:sel?tp.hex:C.textMuted,
+                  cursor:"pointer",fontSize:11,fontFamily:"'DM Sans',sans-serif",transition:"all 0.15s"}
+                }, s.name||s.nome||"");
+            })
+          )
+        )
+
+                , React.createElement(Textarea, { label: "Note interne" , value: f.note, onChange: e=>set("note",e.target.value), placeholder: "Note riservate alla segreteria..."   , __self: this, __source: {fileName: _jsxFileName, lineNumber: 8458}})
       )
 
       , React.createElement('div', { style: {padding:"14px 24px",borderTop:"1px solid "+C.border,display:"flex",justifyContent:"flex-end",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8461}}
@@ -8735,6 +8613,7 @@ const EventoDetail = ({ evento, students, onEdit, onDelete, onBack, onUpdate }) 
     {id:"info",    label:"Informazioni", icon:"flag"},
     {id:"partec",  label:"Partecipanti", icon:"users"},
     ...(evento.biglietto?[{id:"biglietti",label:"Biglietteria",icon:"receipt"}]:[]),
+    {id:"brani",   label:"Scaletta",     icon:"music"},
     {id:"report",  label:"Report",       icon:"chart"},
   ];
 
@@ -9113,7 +8992,7 @@ const EventoDetail = ({ evento, students, onEdit, onDelete, onBack, onUpdate }) 
 };
 
 // ─── CONCERTI VIEW ────────────────────────────────────────────────────────────
-const ConcertiView = ({ students:propStudents }) => {
+const ConcertiView = ({ students:propStudents, brani:propBraniCV }) => {
   const isMobile = useIsMobile();
   const students  = propStudents || INIT_STUDENTS;
   const [concerti, setConcerti] = useState(INIT_CONCERTI);
@@ -9160,7 +9039,7 @@ const ConcertiView = ({ students:propStudents }) => {
         onUpdate: handleUpdate, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8897}})
       , modal==="edit" && (
         React.createElement(Modal, { title: "Modifica evento" , onClose: ()=>setModal(null), wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8903}}
-          , React.createElement(EventoForm, { initial: selected, students: students, onSave: handleSave, onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8904}})
+          , React.createElement(EventoForm, { initial: selected, students: students, brani: propBraniCV||[], onSave: handleSave, onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8904}})
         )
       )
       , modal==="del" && selected && (
@@ -9326,7 +9205,7 @@ const ConcertiView = ({ students:propStudents }) => {
       /* Modal nuovo evento */
       , modal==="new" && (
         React.createElement(Modal, { title: "Nuovo evento" , onClose: ()=>setModal(null), wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9069}}
-          , React.createElement(EventoForm, { students: students, onSave: handleSave, onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9070}})
+          , React.createElement(EventoForm, { students: students, brani: propBraniCV||[], onSave: handleSave, onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9070}})
         )
       )
     )
@@ -10142,7 +10021,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const [modal,     setModal]     = useState(null); // null | "new" | "edit" | "del"
   const [draft,     setDraft]     = useState({});
 
-  const initDoc = { nome:"", email:"", phone:"", strumenti:"", bio:"", tariffaOra:35, contratto:"Collaborazione", dataInizio:"", colore:C.gold, corsi:[] };
+  const initDoc = { nome:"", email:"", phone:"", bio:"", tariffaOra:35, contratto:"Collaborazione", dataInizio:"", colore:C.gold, corsi:[] };
 
   const openNew  = () => { setDraft({...initDoc}); setModal("new"); };
   const openEdit = (d) => { setDraft({...d}); setModal("edit"); };
@@ -10197,16 +10076,26 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           , React.createElement(Input, { label: "Nome completo *"  , value: draft.nome||"", onChange: e=>setDraft(p=>({...p,nome:e.target.value})), placeholder: "Prof. Nome Cognome"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 9938}})
           , React.createElement(Input, { label: "Email", type: "email", value: draft.email||"", onChange: e=>setDraft(p=>({...p,email:e.target.value})), placeholder: "nome@accademia.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 9939}})
           , React.createElement(Input, { label: "Telefono", value: draft.phone||"", onChange: e=>setDraft(p=>({...p,phone:e.target.value})), placeholder: "333 0000000" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 9940}})
-          , React.createElement(Input, { label: "Strumenti", value: draft.strumenti||"", onChange: e=>setDraft(p=>({...p,strumenti:e.target.value})), placeholder: "Pianoforte · Chitarra"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 9941}})
           , React.createElement('div', { style:{gridColumn:"1/-1"} }
             , React.createElement('label', { style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8} }, "Corsi insegnati")
-            , React.createElement('div', { style:{display:"flex",flexWrap:"wrap",gap:6} }
-              , (_coursesDocView||[]).map(corso=>{ const sel=(draft.corsi||[]).includes(corso.id); return(
-                React.createElement('button', { key:corso.id, type:"button", onClick:()=>setDraft(p=>({...p,corsi:sel?(p.corsi||[]).filter(x=>x!==corso.id):[...(p.corsi||[]),corso.id]})),
-                  style:{padding:"4px 12px",borderRadius:6,border:`1.5px solid ${sel?C.gold:C.border}`,background:sel?C.goldBg:C.bg,color:sel?C.gold:C.textMuted,cursor:"pointer",fontSize:12,transition:"all .12s"} }
-                , corso.name)
-              );})
-            )
+            , ["individuale","collettivo"].map(tipo => {
+              const gruppo = (_coursesDocView||[]).filter(crs=>crs.type===tipo);
+              if(gruppo.length===0) return null;
+              return React.createElement('div', { key:tipo, style:{marginBottom:10} }
+                , React.createElement('div', { style:{fontSize:10,color:tipo==="individuale"?C.gold:C.purple,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:6} }
+                  , tipo==="individuale" ? "── Individuali ──" : "── Collettivi ──"
+                )
+                , React.createElement('div', { style:{display:"flex",flexWrap:"wrap",gap:6} }
+                  , gruppo.map(corso=>{ const sel=(draft.corsi||[]).includes(corso.id); const hex=tipo==="individuale"?C.gold:C.purple; return(
+                    React.createElement('button', { key:corso.id, type:"button",
+                      onClick:()=>setDraft(p=>({...p,corsi:sel?(p.corsi||[]).filter(x=>x!==corso.id):[...(p.corsi||[]),corso.id]})),
+                      style:{padding:"4px 12px",borderRadius:6,border:`1.5px solid ${sel?hex:C.border}`,
+                        background:sel?(hex+"18"):C.bg,color:sel?hex:C.textMuted,cursor:"pointer",fontSize:12,transition:"all .12s"} }
+                    , corso.name)
+                  );})
+                )
+              );
+            })
           )
           , React.createElement(Input, { label: "Tariffa oraria (€)"  , type: "number", value: draft.tariffaOra||35, onChange: e=>setDraft(p=>({...p,tariffaOra:+e.target.value})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9942}})
           , React.createElement(Sel, { label: "Tipo contratto" , value: draft.contratto||"", onChange: e=>setDraft(p=>({...p,contratto:e.target.value})),
@@ -11063,9 +10952,9 @@ function App() {
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
-    contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, config: sharedConfig, setConfig: setSharedConfig, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
+    contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
     repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
-    concerti:    React.createElement(ConcertiView, { students: sharedStudents, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
+    concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
     sitoWeb:     null,
   };
