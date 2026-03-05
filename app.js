@@ -9355,7 +9355,7 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
         )
 
         /* SCALETTA */
-        , tab==="scaletta" && React.createElement(ScalettaTab, { evento: evento, onUpdate: onUpdate, brani: braniCatalog })
+        , tab==="brani" && React.createElement(ScalettaTab, { evento: evento, onUpdate: onUpdate, brani: braniCatalog })
 
         /* REPORT */
         , tab==="report" && (
