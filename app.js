@@ -230,6 +230,8 @@ const G = `
   /* Safe area per iPhone/Android con barra di navigazione */
   .modal-resp { padding-bottom: env(safe-area-inset-bottom, 0px); }
   .modal-footer-safe { padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important; }
+  /* Nascondi pulsante Sito Web esterno */
+  #sito-web-fab, .sito-web-btn, a[href*="futuro-musica"], a[href*="index.html"].fab { display:none!important; }
   `;
 
 // ── RESPONSIVE HOOK ──────────────────────────────────────────────────────────
@@ -2325,7 +2327,7 @@ const CONFIG_DEFAULT = {
   },
 };
 
-const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, docenti:propDocentiDash, lessons:propLessonsDash, onQuickAction }) => {
+const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, onQuickAction }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
     const [panels,  setPanels]  = useState({});  // pannelli visibili (default = tutti on)
     const [_config,  _setConfig]  = useState(CONFIG_DEFAULT);
@@ -2355,9 +2357,11 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const meseCorrente = oggi.getMonth()+1;
     const annoCorrente = oggi.getFullYear();
     const entrMeseLiveLive = _entrate.filter(e=>e.mese===meseCorrente&&e.anno===annoCorrente).reduce((t,e)=>t+(e.importo||0),0);
-    const uscMeseLiveLive  = _entrate.filter(e=>e.tipo==="uscita"&&e.mese===meseCorrente&&e.anno===annoCorrente).reduce((t,e)=>t+(e.importo||0),0);
-    const saldoAnnoLiveLive = _entrate.filter(e=>e.anno===annoCorrente&&e.tipo!=="uscita").reduce((t,e)=>t+(e.importo||0),0)
-                        - _entrate.filter(e=>e.anno===annoCorrente&&e.tipo==="uscita").reduce((t,e)=>t+(e.importo||0),0);
+    const _spese = propSpeseDash || [];
+    const meseCorrenteSpese = oggi.getMonth(); /* spese usano mese 0-based */
+    const uscMeseLiveLive  = _spese.filter(e=>e.mese===meseCorrenteSpese&&e.anno===annoCorrente).reduce((t,e)=>t+(e.importo||0),0);
+    const saldoAnnoLiveLive = _entrate.filter(e=>e.anno===annoCorrente).reduce((t,e)=>t+(e.importo||0),0)
+                        - _spese.filter(e=>e.anno===annoCorrente).reduce((t,e)=>t+(e.importo||0),0);
   
     // Render logo navbar
     const LogoMark = () => {
@@ -7019,6 +7023,25 @@ const DocenteView = ({ docente, spese, onBack }) => {
 };
 
 // ─── REPORT / SALDO NETTO ─────────────────────────────────────────────────────
+class ReportErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  componentDidCatch(err) { this.setState({ error: err }); }
+  static getDerivedStateFromError(err) { return { error: err }; }
+  render() {
+    if (this.state.error) {
+      return React.createElement('div', {style:{padding:32,textAlign:"center",color:"#f87171",fontFamily:"'DM Sans',sans-serif"}},
+        React.createElement('div', {style:{fontSize:32,marginBottom:12}}, "⚠"),
+        React.createElement('div', {style:{fontWeight:600,marginBottom:6,fontSize:15}}, "Errore nel Report"),
+        React.createElement('div', {style:{fontSize:12,color:"#888",marginBottom:16}}, String(this.state.error.message||this.state.error)),
+        React.createElement('button', {onClick:()=>this.setState({error:null}),
+          style:{padding:"8px 18px",borderRadius:8,border:"1px solid #f87171",
+            background:"transparent",color:"#f87171",cursor:"pointer",fontSize:13}}, "Riprova")
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const ReportView = ({ spese, entrate }) => {
   const [anno, setAnno] = useState(ANNO_ATT);
 
@@ -7030,7 +7053,7 @@ const ReportView = ({ spese, entrate }) => {
   const saldo      = totEntrate - totUscite;
 
   // Per categoria
-  const perCat = CATEGORIE.map(c=>({
+  const perCat = CATEGORIE_DEFAULT.map(c=>({
     ...c,
     tot: speseAnno.filter(s=>s.categoria===c.id).reduce((t,s)=>t+s.importo,0),
     n:   speseAnno.filter(s=>s.categoria===c.id).length,
@@ -7040,7 +7063,7 @@ const ReportView = ({ spese, entrate }) => {
   const datiMesi = MESI.map((m,i)=>({
     mese:m,
     uscite:  speseAnno.filter(s=>s.mese===i).reduce((t,s)=>t+s.importo,0),
-    entrate: entrateAnno.filter(e=>e.mese===i).reduce((t,e)=>t+e.importo,0),
+    entrate: entrateAnno.filter(e=>e.mese===(i+1)).reduce((t,e)=>t+e.importo,0),
   }));
   const maxVal = Math.max(...datiMesi.flatMap(d=>[d.uscite,d.entrate]),1);
 
@@ -7408,13 +7431,13 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota }) => (
   )
 );
 
-const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV, quickAction, clearQuickAction }) => {
+const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, spese:propSpese, setSpese:propSetSpese, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV, quickAction, clearQuickAction }) => {
   const [catSpese,   setCatSpese]   = useState(CATEGORIE_DEFAULT);
   const [catEntrate, setCatEntrate] = useState(CAT_ENTRATE_DEFAULT);
   // Handle quick action from dashboard
   React.useEffect(()=>{
-    if(quickAction==="addEntrata"){ setModal("addEntrata"); if(clearQuickAction)clearQuickAction(); }
-    else if(quickAction==="addSpesa"){ setModal("addSpesa"); if(clearQuickAction)clearQuickAction(); }
+    if(quickAction==="addEntrata"){ setTab("entrate"); setModal("addq"); if(clearQuickAction)clearQuickAction(); }
+    else if(quickAction==="addSpesa"){ setTab("spese"); setModal("add"); if(clearQuickAction)clearQuickAction(); }
   },[quickAction]);
   const isMobile = useIsMobile();
   const [_entrate, _setEntrate] = useState(INIT_ENTRATE_QUOTE);
@@ -7423,7 +7446,9 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
   const students   = _nullishCoalesce(propStudents, () => ( []));
   const config     = _nullishCoalesce(propConfig, () => ( CONFIG_DEFAULT));
   const setConfig  = _nullishCoalesce(propSetConfig, () => ( (()=>{})));
-  const [spese,    setSpese]    = useState(INIT_SPESE);
+  const [_speseLocal, _setSpeseLocal] = useState(INIT_SPESE);
+  const spese    = propSpese    || _speseLocal;
+  const setSpese = propSetSpese || _setSpeseLocal;
     const [tab,      setTab]      = useState("spese");
     const [modal,    setModal]    = useState(null);
     const [selSpesa, setSelSpesa] = useState(null);
@@ -7802,7 +7827,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
           );
         })()
 
-        , tab==="report" && React.createElement(ReportView, { spese: spese, entrate: entrate, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7226}})
+        , tab==="report" && React.createElement(ReportErrorBoundary, null, React.createElement(ReportView, { spese: spese||[], entrate: entrate||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 7226}}))
           )
         )
 
@@ -8214,9 +8239,10 @@ const AllievoBraniView = ({allievo,brani,allStudents,lessons,onBack})=>{
 // APP
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep }) => {
+const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep, quickAction, clearQuickAction }) => {
   const isMobile = useIsMobile();
   const [_braniLocal, _setBraniLocal] = useState(INIT_BRANI);
+  React.useEffect(()=>{ if(quickAction==="addBrano"){ setModal("add"); if(clearQuickAction)clearQuickAction(); } },[quickAction]);
   const brani    = propBrani    || _braniLocal;
   const setBrani = propSetBrani || _setBraniLocal;
   const _studBranoRep = (_propStudentsRep||[]).filter(s=>s.status==="attivo"||!s.status);
@@ -9326,7 +9352,7 @@ const EventoDetail = ({ evento, students, onEdit, onDelete, onBack, onUpdate }) 
 };
 
 // ─── CONCERTI VIEW ────────────────────────────────────────────────────────────
-const ConcertiView = ({ students:propStudents, brani:propBraniCV }) => {
+const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, clearQuickAction }) => {
   const isMobile = useIsMobile();
   const students  = propStudents || INIT_STUDENTS;
   const [concerti, setConcerti] = useState(INIT_CONCERTI);
@@ -9349,6 +9375,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV }) => {
   // ───────────────────────────────────────────────────────────────
   const [selected, setSelected] = useState(null);
   const [modal,    setModal]    = useState(null);
+  React.useEffect(()=>{ if(quickAction==="addEvento"){ setModal("new"); if(clearQuickAction)clearQuickAction(); } },[quickAction]);
   const [fTipo,    setFTipo]    = useState("");
   const [fStato,   setFStato]   = useState("");
   const [search,   setSearch]   = useState("");
@@ -11195,6 +11222,7 @@ function App() {
   const [sharedRepertorio,     setSharedRepertorio]     = useState(INIT_BRANI);
   const [sharedConfig,         setSharedConfig]         = useState(CONFIG_DEFAULT);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
+  const [sharedSpese,          setSharedSpese]          = useState(INIT_SPESE);
   const [sharedAnniScolastici, setSharedAnniScolastici] = useState(INIT_ANNI_SCOLASTICI);
   const [sharedEntrate,         setSharedEntrate]         = useState(INIT_ENTRATE_QUOTE);
 
@@ -11250,6 +11278,7 @@ function App() {
                    config: sharedConfig, setConfig: setSharedConfig,
                    anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici,
                    students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate,
+                   spese: sharedSpese,
                    docenti: sharedDocenti, lessons: sharedLessons,
                    onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
     allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
@@ -11257,9 +11286,9 @@ function App() {
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
-    contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
-    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
-    concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
+    contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
+    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
+    concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
     sitoWeb:       null,
     impostazioni:  React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig }),
@@ -11421,6 +11450,53 @@ const ImpostazioniView = ({ config, setConfig }) => {
         , React.createElement(Toggle,{k:"showCompetenza",  label:"Competenza"})
         , React.createElement(Toggle,{k:"showMetodo",      label:"Metodo pagamento"})
       )
+      /* Anteprima live ricevuta */
+      , React.createElement('div', {style:{background:"#f0ede8",borderRadius:10,padding:"14px",marginBottom:18}}
+        , React.createElement('div', {style:{fontSize:10,color:"#888",letterSpacing:".1em",textTransform:"uppercase",marginBottom:8}}, "Anteprima")
+        , React.createElement('div', {style:{background:"#fff",borderRadius:8,padding:"16px 20px",boxShadow:"0 2px 10px rgba(0,0,0,.12)",fontSize:10,maxWidth:340}}
+          , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:`2px solid ${ac}`,paddingBottom:8,marginBottom:10}}
+            , React.createElement('div', null
+              , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Cormorant Garamond"}',serif`,fontSize:14,fontWeight:700,color:"#1a1a2e"}}, draft.nomeScuola||"Accademia Musicale")
+              , draft.tipoEnte && React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".08em",marginTop:1}}, draft.tipoEnte)
+              , rs.showIndirizzo!==false && draft.indirizzo && React.createElement('div', {style:{fontSize:8,color:"#666",marginTop:1}}, draft.indirizzo)
+            )
+            , React.createElement('div', {style:{textAlign:"right"}}
+              , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase"}}, "Ricevuta n°")
+              , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Cormorant Garamond"}',serif`,fontSize:16,fontWeight:700,color:ac,lineHeight:1}}, "029/2026")
+              , React.createElement('div', {style:{fontSize:8,color:"#888",marginTop:1}}, "05/03/2026")
+            )
+          )
+          , [
+              rs.showNominativo!==false   && ["Ricevuta da","Giulia Romano"],
+              rs.showDataNascita!==false  && ["Data di nascita","30/09/2011"],
+              rs.showDataPagamento!==false&& ["Data pagamento","01/03/2026"],
+              rs.showDescrizione!==false  && ["Descrizione","Quota mensile Marzo 2026"],
+              rs.showCompetenza!==false   && ["Competenza","Marzo 2026"],
+              rs.showMetodo!==false       && ["Metodo","Bonifico bancario"],
+            ].filter(Boolean).map(([k,v],i,arr)=>
+              React.createElement('div', {key:k, style:{display:"flex",justifyContent:"space-between",padding:"3px 0",
+                borderBottom:i<arr.length-1?"1px solid #eee":"none"}}
+                , React.createElement('span', {style:{color:"#888",fontSize:9}}, k)
+                , React.createElement('span', {style:{fontWeight:600,color:"#1a1a2e",fontSize:9}}, v)
+              )
+            )
+          , React.createElement('div', {style:{textAlign:"center",margin:"8px 0",padding:"8px",border:`2px solid ${ac}`,borderRadius:5,background:ac+"15"}}
+            , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Cormorant Garamond"}',serif`,fontSize:18,fontWeight:700,color:ac}}, "€ 120,00")
+            , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".1em",marginTop:1}}, "Importo ricevuto")
+          )
+          , rs.showFirme!==false && React.createElement('div', {style:{display:"flex",justifyContent:"space-between",marginTop:10}}
+            , [rs.labelPagante||"Il pagante",rs.labelCassiere||"Il cassiere"].map(l=>
+                React.createElement('div', {key:l, style:{textAlign:"center",width:"42%"}}
+                  , React.createElement('div', {style:{borderTop:"1px solid #333",marginBottom:3}})
+                  , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".05em"}}, l)
+                )
+              )
+          )
+          , rs.showFooter!==false && React.createElement('div', {style:{marginTop:6,paddingTop:5,borderTop:"1px solid #eee",textAlign:"center",fontSize:8,color:"#888"}}
+            , draft.notaRicevuta||"Ricevuta non fiscale"
+          )
+        )
+      )
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
         , React.createElement('div', {style:{marginBottom:14}}
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Etichetta firma sinistra")
@@ -11539,6 +11615,27 @@ const SchedaScuolaView = ({ config }) => {
     {label:"Anno scolastico", value:cfg.annoScolastico},
   ].filter(r=>r.value);
 
+  const ALL_FIELDS = [
+    {k:"nomeScuola",      label:"Nome scuola"},
+    {k:"tipoEnte",        label:"Tipo ente"},
+    {k:"annoScolastico",  label:"Anno scolastico"},
+    {k:"codiceFiscale",   label:"Codice Fiscale"},
+    {k:"pIva",            label:"Partita IVA"},
+    {k:"sdi",             label:"Codice SDI"},
+    {k:"indirizzo",       label:"Indirizzo"},
+    {k:"telefono",        label:"Telefono"},
+    {k:"email",           label:"Email"},
+    {k:"iban",            label:"IBAN"},
+    {k:"intestatarioConto",label:"Intestatario conto"},
+    {k:"notaRicevuta",    label:"Nota ricevuta"},
+  ];
+  const [hidden, setHidden] = useState({});
+  const toggleField = k => setHidden(p=>({...p,[k]:!p[k]}));
+  const visible_rows = cfg_rows.filter(r=>{
+    const field = ALL_FIELDS.find(f=>f.label===r.label);
+    return field ? !hidden[field.k] : true;
+  });
+
   return React.createElement('div', {style:{maxWidth:700,margin:"0 auto",padding:"24px"}}
     , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}
       , React.createElement('div', null
@@ -11551,20 +11648,39 @@ const SchedaScuolaView = ({ config }) => {
         , React.createElement(Ic,{n:"receipt",size:14,stroke:C.gold}), " Stampa scheda"
       )
     )
+    /* Visibility toggles */
+    , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 18px",marginBottom:18}}
+      , React.createElement('div', {style:{fontSize:11,color:C.textMuted,letterSpacing:".08em",textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:6}}
+        , React.createElement(Ic,{n:"list",size:12,stroke:C.textMuted}), "Campi visibili"
+      )
+      , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
+        , ALL_FIELDS.filter(f=>cfg[f.k]).map(f=>
+            React.createElement('button', {key:f.k, onClick:()=>toggleField(f.k),
+              style:{padding:"4px 10px",borderRadius:20,fontSize:11,cursor:"pointer",transition:"all .15s",
+                border:`1px solid ${hidden[f.k]?C.border:C.goldDim}`,
+                background:hidden[f.k]?"transparent":C.goldBg,
+                color:hidden[f.k]?C.textDim:C.gold,
+                fontFamily:"'DM Sans',sans-serif"}}
+              , React.createElement(Ic,{n:hidden[f.k]?"eye-off":"eye",size:11,stroke:"currentColor"})
+              , " ", f.label
+            )
+          )
+      )
+    )
     , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
       , React.createElement('div', {style:{padding:"18px 22px",background:`linear-gradient(135deg,${C.goldBg},transparent)`,borderBottom:`2px solid ${C.gold}`}}
         , React.createElement('div', {style:{fontFamily:"'Cormorant Garamond',serif",fontSize:24,fontWeight:700}}, cfg.nomeScuola||"—")
         , cfg.tipoEnte && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:2,letterSpacing:".08em",textTransform:"uppercase"}}, cfg.tipoEnte)
         , cfg.annoScolastico && React.createElement('div', {style:{fontSize:12,color:C.textDim,marginTop:2}}, "Anno scolastico: ", React.createElement('strong',{style:{color:C.text}}, cfg.annoScolastico))
       )
-      , cfg_rows.map((r,i)=>React.createElement('div', {key:r.label, style:{display:"flex",justifyContent:"space-between",
-          alignItems:"center",padding:"13px 22px",borderBottom:i<cfg_rows.length-1?`1px solid ${C.border}`:"none"}}
+      , visible_rows.map((r,i)=>React.createElement('div', {key:r.label, style:{display:"flex",justifyContent:"space-between",
+          alignItems:"center",padding:"13px 22px",borderBottom:i<visible_rows.length-1?`1px solid ${C.border}`:"none"}}
           , React.createElement('span', {style:{fontSize:12,color:C.textMuted,minWidth:180}}, r.label)
           , React.createElement('span', {style:{fontSize:13,fontWeight:600,fontFamily:r.mono?"'Courier New',monospace":"inherit",
               color:r.label==="IBAN"?C.gold:C.text}}, r.value)
         ))
     )
-    , cfg_rows.length===0 && React.createElement('div', {style:{textAlign:"center",padding:"48px 0",color:C.textDim,border:`1px dashed ${C.border}`,borderRadius:12,marginTop:16}}
+    , visible_rows.length===0 && React.createElement('div', {style:{textAlign:"center",padding:"48px 0",color:C.textDim,border:`1px dashed ${C.border}`,borderRadius:12,marginTop:16}}
       , React.createElement(Ic,{n:"flag",size:28,stroke:C.textDim})
       , React.createElement('p',{style:{marginTop:12,fontSize:13}}, "Nessun dato configurato")
       , React.createElement('p',{style:{fontSize:11,marginTop:4}}, "Vai in Impostazioni per compilare i dati della scuola")
