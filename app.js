@@ -10452,7 +10452,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               );
             })
           )
-          , React.createElement(Input, { label: "Tariffa oraria (€)"  , type: "number", value: draft.tariffaOra||35, onChange: e=>setDraft(p=>({...p,tariffaOra:+e.target.value})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9942}})
+          , React.createElement(Input, { label: "Tariffa oraria (€)"  , type: "number", value: draft.tariffaOra!=null ? draft.tariffaOra : 35, onChange: e=>setDraft(p=>({...p,tariffaOra:e.target.value===""?0:+e.target.value})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9942}})
           , React.createElement(Sel, { label: "Tipo contratto" , value: draft.contratto||"", onChange: e=>setDraft(p=>({...p,contratto:e.target.value})),
             options: ["Tempo indeterminato","Tempo determinato","Collaborazione","Partita IVA"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 9943}})
           , React.createElement(Input, { label: "Data inizio" , type: "date", value: draft.dataInizio||"", onChange: e=>setDraft(p=>({...p,dataInizio:e.target.value})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9945}})
@@ -11319,13 +11319,6 @@ const ImpostazioniView = ({ config, setConfig }) => {
     setSaved(true);
     setTimeout(()=>setSaved(false), 2000);
   };
-
-  const SField = ({label, k, placeholder, type="text"}) => React.createElement('div', {style:{marginBottom:14}}
-    , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, label)
-    , React.createElement('input', {type, value:draft[k]||"", onChange:e=>setD(k,e.target.value),
-        placeholder, style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
-        color:C.text,fontSize:13,padding:"9px 13px",fontFamily:"'DM Sans',sans-serif"}})
-  );
   const Toggle = ({k, label, sub}) => {
     const val = rs[k]!==false;
     return React.createElement('label', {style:{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:"6px 0"}}
@@ -11365,18 +11358,18 @@ const ImpostazioniView = ({ config, setConfig }) => {
 
     , React.createElement(Section, {title:"Identità scuola", icon:"flag"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
-        , React.createElement(SField,{label:"Nome scuola", k:"nomeScuola", placeholder:"Accademia Musicale"})
-        , React.createElement(SField,{label:"Tipo ente", k:"tipoEnte", placeholder:"Associazione no-profit"})
-        , React.createElement(SField,{label:"Indirizzo", k:"indirizzo", placeholder:"Via..."})
-        , React.createElement(SField,{label:"Codice fiscale", k:"codiceFiscale", placeholder:"CF..."})
-        , React.createElement(SField,{label:"Partita IVA", k:"pIva", placeholder:"P.IVA..."})
-        , React.createElement(SField,{label:"Telefono", k:"telefono", placeholder:"+39..."})
-        , React.createElement(SField,{label:"Email", k:"email", placeholder:"info@..."})
-        , React.createElement(SField,{label:"Codice SDI", k:"sdi", placeholder:"SDI..."})
-        , React.createElement(SField,{label:"IBAN", k:"iban", placeholder:"IT..."})
-        , React.createElement(SField,{label:"Intestatario conto", k:"intestatarioConto", placeholder:"..."})
-        , React.createElement(SField,{label:"Anno scolastico", k:"annoScolastico", placeholder:"2024/2025"})
-        , React.createElement(SField,{label:"Nota ricevuta", k:"notaRicevuta", placeholder:"Ricevuta non fiscale..."})
+        , React.createElement(Input,{label:"Nome scuola", value:draft.nomeScuola||"", onChange:e=>setD("nomeScuola",e.target.value), placeholder:"Accademia Musicale"})
+        , React.createElement(Input,{label:"Tipo ente", value:draft.tipoEnte||"", onChange:e=>setD("tipoEnte",e.target.value), placeholder:"Associazione no-profit"})
+        , React.createElement(Input,{label:"Indirizzo", value:draft.indirizzo||"", onChange:e=>setD("indirizzo",e.target.value), placeholder:"Via..."})
+        , React.createElement(Input,{label:"Codice fiscale", value:draft.codiceFiscale||"", onChange:e=>setD("codiceFiscale",e.target.value), placeholder:"CF..."})
+        , React.createElement(Input,{label:"Partita IVA", value:draft.pIva||"", onChange:e=>setD("pIva",e.target.value), placeholder:"P.IVA..."})
+        , React.createElement(Input,{label:"Telefono", value:draft.telefono||"", onChange:e=>setD("telefono",e.target.value), placeholder:"+39..."})
+        , React.createElement(Input,{label:"Email", value:draft.email||"", onChange:e=>setD("email",e.target.value), placeholder:"info@..."})
+        , React.createElement(Input,{label:"Codice SDI", value:draft.sdi||"", onChange:e=>setD("sdi",e.target.value), placeholder:"SDI..."})
+        , React.createElement(Input,{label:"IBAN", value:draft.iban||"", onChange:e=>setD("iban",e.target.value), placeholder:"IT..."})
+        , React.createElement(Input,{label:"Intestatario conto", value:draft.intestatarioConto||"", onChange:e=>setD("intestatarioConto",e.target.value), placeholder:"..."})
+        , React.createElement(Input,{label:"Anno scolastico", value:draft.annoScolastico||"", onChange:e=>setD("annoScolastico",e.target.value), placeholder:"2024/2025"})
+        , React.createElement(Input,{label:"Nota ricevuta", value:draft.notaRicevuta||"", onChange:e=>setD("notaRicevuta",e.target.value), placeholder:"Ricevuta non fiscale..."})
       )
     )
 
