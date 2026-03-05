@@ -2455,9 +2455,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2188}}
               , React.createElement(KpiCard, { icon: "users",    label: "Allievi attivi" ,  value: allieviAttivi, sub: `${ALLIEVI.length} totali`, hex: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2189}})
               , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni oggi" ,    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2190}})
-              , React.createElement(KpiCard, { icon: "up",       label: "Entrate mese" ,    value: fmt(entrMese), hex: C.green, trend: +8, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2191}})
-              , React.createElement(KpiCard, { icon: "down",     label: "Uscite mese" ,     value: fmt(uscMese),  hex: C.red,   trend: +12, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2192}})
-              , React.createElement(KpiCard, { icon: "chart",    label: `Saldo ${ANNO}`, value: fmt(saldoAnno), hex: saldoAnno>=0?C.green:C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2193}})
+              , React.createElement(KpiCard, { icon: "up",       label: "Entrate mese" ,    value: fmt(entrMeseLiveLive), hex: C.green, trend: +8, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2191}})
+              , React.createElement(KpiCard, { icon: "down",     label: "Uscite mese" ,     value: fmt(uscMeseLiveLive),  hex: C.red,   trend: +12, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2192}})
+              , React.createElement(KpiCard, { icon: "chart",    label: `Saldo ${ANNO}`, value: fmt(saldoAnnoLiveLive), hex: saldoAnnoLiveLive>=0?C.green:C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2193}})
             )
 
             /* ── RIGA 2: AZIONI RAPIDE (full width) ── */
@@ -2552,7 +2552,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                         , [
                           {lbl:"Tot. entrate",val:fmt(FIN_MENSILE.reduce((t,d)=>t+d.entr,0)),hex:C.green},
                           {lbl:"Tot. uscite", val:fmt(FIN_MENSILE.reduce((t,d)=>t+d.usc,0)), hex:C.red},
-                          {lbl:"Saldo",       val:fmt(saldoAnno), hex:saldoAnno>=0?C.green:C.red},
+                          {lbl:"Saldo",       val:fmt(saldoAnnoLiveLive), hex:saldoAnnoLiveLive>=0?C.green:C.red},
                         ].map(x=>(
                           React.createElement('div', { key: x.lbl, style: {display:"flex",justifyContent:"space-between",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2287}}
                             , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2288}}, x.lbl)
@@ -7535,7 +7535,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                     style: {background:C.surface,border:`1px solid ${filterCat?C.goldDim:C.border}`,borderRadius:8,
                       color:filterCat?C.gold:C.textMuted,fontSize:13,padding:"9px 12px",fontFamily:"'DM Sans',sans-serif",appearance:"none",cursor:"pointer"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6950}}
                     , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6953}}, "Tutte le categorie"  )
-                    , CATEGORIE.map(c=>React.createElement('option', { key: c.id, value: c.id, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6954}}, c.label))
+                    , catSpese.map(c=>React.createElement('option', { key: c.id, value: c.id, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6954}}, c.label))
                   )
                   , React.createElement('select', { value: filterMese, onChange: e=>setFMese(e.target.value),
                     style: {background:C.surface,border:`1px solid ${filterMese?C.goldDim:C.border}`,borderRadius:8,
