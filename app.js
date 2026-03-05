@@ -8831,135 +8831,229 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
 };
 
 // ─── DETTAGLIO EVENTO ─────────────────────────────────────────────────────────
-const ScalettaTab = ({ evento, onUpdate }) => {
-  const partItems = React.useMemo(() =>
-    (evento.partecipanti||[]).flatMap(p =>
-      (p.brani||[]).map(b => ({ performer: p.studentName, brano: b }))
-    ), [evento.partecipanti]);
+const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
+  const cat = braniCatalog || [];
 
-  const [items, setItems] = React.useState(() => evento.scaletta || partItems);
+  // Costruisce lista brani dalla struttura programma (eventi creati dal form)
+  const fromProgramma = React.useMemo(() => {
+    const prog = evento.programma || [];
+    return prog.map(p => ({
+      brano: p.branoTitle || p.title || '',
+      performer: (p.allievi||[]).map(a => a.studentName).join(', ')
+    })).filter(x => x.brano);
+  }, [evento.programma]);
 
+  // Oppure dalla struttura partecipanti.brani (formato INIT_CONCERTI)
+  const fromPartecipanti = React.useMemo(() => {
+    return (evento.partecipanti||[]).flatMap(p =>
+      (p.brani||[]).map(b => ({ brano: b, performer: p.studentName }))
+    );
+  }, [evento.partecipanti]);
+
+  // Fallback chain: scaletta salvata → programma → partecipanti
+  const autoItems = fromProgramma.length > 0 ? fromProgramma : fromPartecipanti;
+
+  const [items, setItems] = React.useState(() => {
+    if (evento.scaletta && evento.scaletta.length > 0) return evento.scaletta;
+    return autoItems;
+  });
+
+  const [showAdd, setShowAdd] = React.useState(false);
+  const [addText, setAddText] = React.useState('');
+  const [addPerf, setAddPerf] = React.useState('');
+
+  // Ricarica se cambia evento
   React.useEffect(() => {
-    setItems(evento.scaletta || partItems);
+    if (evento.scaletta && evento.scaletta.length > 0) {
+      setItems(evento.scaletta);
+    } else {
+      setItems(autoItems);
+    }
   }, [evento.id]);
 
+  const save = (newItems) => {
+    setItems(newItems);
+    if (onUpdate) onUpdate({...evento, scaletta: newItems});
+  };
+
   const moveUp = (idx) => {
-    if(idx === 0) return;
+    if (idx === 0) return;
     const s = [...items];
     const tmp = s[idx-1]; s[idx-1] = s[idx]; s[idx] = tmp;
-    setItems(s);
-    if(onUpdate) onUpdate({...evento, scaletta: s});
+    save(s);
   };
 
   const moveDown = (idx) => {
-    if(idx === items.length-1) return;
+    if (idx === items.length-1) return;
     const s = [...items];
     const tmp = s[idx]; s[idx] = s[idx+1]; s[idx+1] = tmp;
-    setItems(s);
-    if(onUpdate) onUpdate({...evento, scaletta: s});
+    save(s);
   };
 
-  const removeItem = (idx) => {
-    const s = items.filter((_,i) => i !== idx);
-    setItems(s);
-    if(onUpdate) onUpdate({...evento, scaletta: s});
+  const removeItem = (idx) => save(items.filter((_,i) => i !== idx));
+
+  const addItem = () => {
+    if (!addText.trim()) return;
+    const newItems = [...items, { brano: addText.trim(), performer: addPerf.trim() }];
+    save(newItems);
+    setAddText(''); setAddPerf(''); setShowAdd(false);
   };
 
-  const resetScaletta = () => {
-    setItems(partItems);
-    if(onUpdate) onUpdate({...evento, scaletta: partItems});
-  };
+  const resetToAuto = () => save(autoItems);
 
   const handlePrint = () => {
     const w = window.open('','_blank','width=794,height=1123');
-    if(!w){ alert('Abilita i popup per stampare'); return; }
+    if (!w) { alert('Abilita i popup per stampare'); return; }
     const rows = items.map((s,i) => {
-      const perf = s.performer ? '<div style="font-size:11px;color:#888;margin-top:2px">'+s.performer+'</div>' : '';
-      return '<tr><td style="width:44px;text-align:center;font-weight:700;color:#c9a84c;font-size:15px;padding:14px 8px">'+(i+1)+'</td>'
-        +'<td style="padding:12px 16px"><div style="font-size:14px;font-weight:600">'+s.brano+'</div>'+perf+'</td></tr>';
+      const perf = s.performer ? '<div style="font-size:11px;color:#888;margin-top:3px">'+s.performer+'</div>' : '';
+      return '<tr><td style="width:44px;text-align:center;font-weight:700;color:#c9a84c;font-size:16px;padding:16px 8px">'+(i+1)+'</td>'
+        +'<td style="padding:14px 16px"><div style="font-size:15px;font-weight:600">'+s.brano+'</div>'+perf+'</td></tr>';
     }).join('');
     const dataStr = evento.data ? new Date(evento.data+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '';
-    w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Scaletta – '+evento.titolo+'</title>'
-      +'<link rel="preconnect" href="https://fonts.googleapis.com">'
+    w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Programma – '+evento.titolo+'</title>'
       +'<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">'
       +'<style>@page{margin:20mm 22mm;size:A4}*{margin:0;padding:0;box-sizing:border-box}'
-      +'body{font-family:\'DM Sans\',sans-serif;color:#1a1a2e;background:#fff;padding:32px}'
-      +'.hdr{border-bottom:2px solid #c9a84c;padding-bottom:14px;margin-bottom:28px}'
-      +'.ttl{font-family:\'Cormorant Garamond\',serif;font-size:28px;font-weight:700}'
-      +'.sub{font-size:12px;color:#888;margin-top:5px}'
+      +'body{font-family:\'DM Sans\',sans-serif;color:#1a1a2e;background:#fff;padding:40px}'
+      +'.hdr{border-bottom:2px solid #c9a84c;padding-bottom:16px;margin-bottom:32px}'
+      +'.ttl{font-family:\'Cormorant Garamond\',serif;font-size:30px;font-weight:700}'
+      +'.sub{font-size:12px;color:#888;margin-top:6px}'
       +'table{width:100%;border-collapse:collapse}'
-      +'tr{border-bottom:1px solid #eee}tr:last-child{border:none}'
-      +'@media print{.no-print{display:none}}</style>'
+      +'tr{border-bottom:1px solid #eee}tr:last-child{border:none}</style>'
       +'</head><body>'
       +'<div class="hdr"><div class="ttl">'+evento.titolo+'</div>'
-      +'<div class="sub">'+dataStr+' '+( evento.ora||'')+' · '+(evento.luogo||'')+'</div></div>'
+      +'<div class="sub">'+dataStr+' '+(evento.ora||'')+' · '+(evento.luogo||'')+'</div></div>'
       +'<table>'+rows+'</table>'
       +'<script>window.onload=function(){window.print()}<\/script>'
       +'</body></html>');
     w.document.close();
   };
 
+  const btnStyle = (extra) => Object.assign({
+    display:'flex',alignItems:'center',justifyContent:'center',
+    borderRadius:6,border:'1px solid '+C.border,
+    background:C.bg,cursor:'pointer',fontSize:13
+  }, extra||{});
+
   return React.createElement('div', {style:{maxWidth:700}},
-    React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18,flexWrap:'wrap',gap:8}},
-      React.createElement('div', {style:{fontSize:13,color:C.textMuted}}, items.length + ' brani in scaletta'),
+
+    /* ── toolbar ── */
+    React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}},
+      React.createElement('div', {style:{fontSize:13,color:C.textMuted}},
+        items.length > 0 ? items.length+' brani in scaletta' : 'Scaletta vuota'
+      ),
       React.createElement('div', {style:{display:'flex',gap:8,flexWrap:'wrap'}},
-        partItems.length > 0 && React.createElement('button', {onClick:resetScaletta,
-          style:{fontSize:12,padding:'6px 14px',borderRadius:7,border:'1px solid '+C.border,
-            background:C.bg,color:C.textMuted,cursor:'pointer'}}, '↺ Reset da partecipanti'),
-        React.createElement('button', {onClick:handlePrint,
-          style:{display:'flex',alignItems:'center',gap:6,fontSize:12,padding:'6px 14px',
-            borderRadius:7,border:'1px solid '+C.goldDim,background:C.goldBg,color:C.gold,cursor:'pointer'}},
-          React.createElement(Ic,{n:'receipt',size:13,stroke:C.gold}), ' Stampa programma'
+        autoItems.length > 0 && React.createElement('button', {onClick:resetToAuto,
+          style:{fontSize:12,padding:'6px 12px',borderRadius:7,border:'1px solid '+C.border,
+            background:C.bg,color:C.textMuted,cursor:'pointer'}},
+          '↺ Importa da programma ('+autoItems.length+')'
+        ),
+        React.createElement('button', {onClick:()=>setShowAdd(v=>!v),
+          style:{fontSize:12,padding:'6px 12px',borderRadius:7,
+            border:'1px solid '+C.goldDim,background:C.goldBg,color:C.gold,cursor:'pointer'}},
+          showAdd ? '✕ Annulla' : '+ Aggiungi brano'
+        ),
+        items.length > 0 && React.createElement('button', {onClick:handlePrint,
+          style:{display:'flex',alignItems:'center',gap:5,fontSize:12,padding:'6px 12px',
+            borderRadius:7,border:'1px solid '+C.border,background:C.bg,color:C.text,cursor:'pointer'}},
+          React.createElement(Ic,{n:'receipt',size:12,stroke:C.text}), ' Stampa'
         )
       )
     ),
+
+    /* ── form aggiungi brano ── */
+    showAdd && React.createElement('div', {style:{background:C.surface,border:'1px solid '+C.goldDim,borderRadius:10,padding:16,marginBottom:14,display:'flex',flexDirection:'column',gap:10}},
+      React.createElement('div', {style:{fontSize:11,color:C.gold,fontWeight:600,letterSpacing:'.06em',textTransform:'uppercase',marginBottom:2}}, 'Aggiungi brano alla scaletta'),
+      React.createElement('div', {style:{display:'flex',gap:8,flexWrap:'wrap'}},
+        React.createElement('div', {style:{flex:'2 1 200px'}},
+          React.createElement('label', {style:{fontSize:10,color:C.textMuted,display:'block',marginBottom:4}}, 'TITOLO BRANO *'),
+          React.createElement('input', {
+            value: addText,
+            onChange: e=>setAddText(e.target.value),
+            onKeyDown: e=>{if(e.key==='Enter')addItem();},
+            placeholder: 'Es. Notturno Op.9 – Chopin',
+            list: 'scaletta-brani-list',
+            style:{width:'100%',background:C.bg,border:'1px solid '+C.border,borderRadius:7,
+              color:C.text,fontSize:13,padding:'8px 12px',fontFamily:"'DM Sans',sans-serif"}
+          }),
+          React.createElement('datalist', {id:'scaletta-brani-list'},
+            cat.map(b => React.createElement('option', {key:b.id, value:(b.title||'')+(b.composer?' – '+b.composer:'')}))
+          )
+        ),
+        React.createElement('div', {style:{flex:'1 1 140px'}},
+          React.createElement('label', {style:{fontSize:10,color:C.textMuted,display:'block',marginBottom:4}}, 'ESECUTORE'),
+          React.createElement('input', {
+            value: addPerf,
+            onChange: e=>setAddPerf(e.target.value),
+            onKeyDown: e=>{if(e.key==='Enter')addItem();},
+            placeholder: 'Nome allievo',
+            style:{width:'100%',background:C.bg,border:'1px solid '+C.border,borderRadius:7,
+              color:C.text,fontSize:13,padding:'8px 12px',fontFamily:"'DM Sans',sans-serif"}
+          })
+        )
+      ),
+      React.createElement('button', {onClick:addItem,
+        style:{alignSelf:'flex-start',padding:'7px 18px',borderRadius:7,border:'none',
+          background:C.gold,color:C.bg,cursor:'pointer',fontSize:13,fontWeight:600,
+          fontFamily:"'DM Sans',sans-serif"}},
+        'Aggiungi'
+      )
+    ),
+
+    /* ── lista vuota ── */
     items.length === 0 && React.createElement('div', {style:{textAlign:'center',padding:'48px 0',
       color:C.textDim,border:'1px dashed '+C.border,borderRadius:12}},
-      React.createElement(Ic,{n:'music',size:28,stroke:C.textDim}),
-      React.createElement('p', {style:{marginTop:12,fontSize:13}}, 'Nessun brano in scaletta'),
-      React.createElement('p', {style:{fontSize:11,marginTop:4,color:C.textDim}},
-        'Aggiungi partecipanti con brani assegnati dalla scheda Partecipanti')
+      React.createElement(Ic,{n:'music',size:32,stroke:C.textDim}),
+      React.createElement('p', {style:{marginTop:12,fontSize:14,fontWeight:500}}, 'Nessun brano in scaletta'),
+      React.createElement('p', {style:{fontSize:12,marginTop:6,color:C.textDim}},
+        autoItems.length > 0
+          ? 'Clicca "Importa da programma" per caricare i brani del programma'
+          : 'Usa "+ Aggiungi brano" per inserire i brani manualmente'
+      )
     ),
+
+    /* ── lista brani ── */
     items.length > 0 && React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}},
       items.map(function(item, idx) {
-        return React.createElement('div', {key:idx,
+        return React.createElement('div', {key:String(idx)+item.brano,
           style:{display:'flex',alignItems:'center',gap:10,background:C.surface,
-            border:'1px solid '+C.border,borderRadius:10,padding:'12px 14px'}},
+            border:'1px solid '+C.border,borderRadius:10,padding:'11px 13px',
+            transition:'background .1s'}},
+
+          /* numero */
           React.createElement('div', {style:{width:28,height:28,borderRadius:7,background:C.goldBg,
             border:'1px solid '+C.goldDim,display:'flex',alignItems:'center',
             justifyContent:'center',fontSize:12,fontWeight:700,color:C.gold,flexShrink:0}}, idx+1),
+
+          /* testo */
           React.createElement('div', {style:{flex:1,minWidth:0}},
             React.createElement('div', {style:{fontSize:13,fontWeight:600,
               overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, item.brano),
-            item.performer && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:2}}, item.performer)
+            item.performer && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:1}}, item.performer)
           ),
-          React.createElement('div', {style:{display:'flex',gap:4,flexShrink:0}},
+
+          /* bottoni */
+          React.createElement('div', {style:{display:'flex',gap:3,flexShrink:0}},
             React.createElement('button', {
-              onClick: function(){ moveUp(idx); },
-              disabled: idx===0,
-              title: 'Sposta su',
-              style:{width:30,height:30,borderRadius:6,border:'1px solid '+C.border,
-                background:C.bg,color:idx===0?C.textDim:C.text,
-                cursor:idx===0?'default':'pointer',
-                display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}},
+              onClick: function(e){ e.preventDefault(); moveUp(idx); },
+              disabled: idx===0, title:'Sposta su',
+              style:btnStyle({width:28,height:28,color:idx===0?C.textDim:C.gold,
+                borderColor:idx===0?C.border:C.goldDim,fontSize:12,
+                cursor:idx===0?'not-allowed':'pointer'})},
               '▲'
             ),
             React.createElement('button', {
-              onClick: function(){ moveDown(idx); },
-              disabled: idx===items.length-1,
-              title: 'Sposta giù',
-              style:{width:30,height:30,borderRadius:6,border:'1px solid '+C.border,
-                background:C.bg,color:idx===items.length-1?C.textDim:C.text,
-                cursor:idx===items.length-1?'default':'pointer',
-                display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}},
+              onClick: function(e){ e.preventDefault(); moveDown(idx); },
+              disabled: idx===items.length-1, title:'Sposta giù',
+              style:btnStyle({width:28,height:28,color:idx===items.length-1?C.textDim:C.gold,
+                borderColor:idx===items.length-1?C.border:C.goldDim,fontSize:12,
+                cursor:idx===items.length-1?'not-allowed':'pointer'})},
               '▼'
             ),
             React.createElement('button', {
-              onClick: function(){ removeItem(idx); },
-              title: 'Rimuovi',
-              style:{width:30,height:30,borderRadius:6,border:'1px solid '+(C.redBorder||C.border),
-                background:C.bg,color:C.red||'#f87171',cursor:'pointer',
-                display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}},
+              onClick: function(e){ e.preventDefault(); removeItem(idx); },
+              title:'Rimuovi',
+              style:btnStyle({width:28,height:28,color:C.red||'#f87171',
+                borderColor:C.redBorder||C.border,cursor:'pointer',fontSize:12})},
               '✕'
             )
           )
@@ -8969,7 +9063,9 @@ const ScalettaTab = ({ evento, onUpdate }) => {
   );
 };
 
-const EventoDetail = ({ evento, students, onEdit, onDelete, onBack, onUpdate }) => {
+
+const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBack, onUpdate }) => {
+  const braniCatalog = _braniED || [];
   const [tab,    setTab]    = useState("info");
   const [modalP, setModalP] = useState(null); // null | "add" | prenotazione-obj
 
@@ -9259,7 +9355,7 @@ const EventoDetail = ({ evento, students, onEdit, onDelete, onBack, onUpdate }) 
         )
 
         /* SCALETTA */
-        , tab==="scaletta" && React.createElement(ScalettaTab, { evento: evento, onUpdate: onUpdate })
+        , tab==="scaletta" && React.createElement(ScalettaTab, { evento: evento, onUpdate: onUpdate, brani: braniCatalog })
 
         /* REPORT */
         , tab==="report" && (
@@ -9413,7 +9509,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
 
   if(selected) return (
     React.createElement(React.Fragment, null
-      , React.createElement(EventoDetail, { evento: selected, students: students,
+      , React.createElement(EventoDetail, { evento: selected, students: students, brani: propBraniCV||[],
         onEdit: ()=>setModal("edit"),
         onDelete: ()=>setModal("del"),
         onBack: ()=>setSelected(null),
