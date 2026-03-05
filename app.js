@@ -8831,6 +8831,144 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
 };
 
 // ─── DETTAGLIO EVENTO ─────────────────────────────────────────────────────────
+const ScalettaTab = ({ evento, onUpdate }) => {
+  const partItems = React.useMemo(() =>
+    (evento.partecipanti||[]).flatMap(p =>
+      (p.brani||[]).map(b => ({ performer: p.studentName, brano: b }))
+    ), [evento.partecipanti]);
+
+  const [items, setItems] = React.useState(() => evento.scaletta || partItems);
+
+  React.useEffect(() => {
+    setItems(evento.scaletta || partItems);
+  }, [evento.id]);
+
+  const moveUp = (idx) => {
+    if(idx === 0) return;
+    const s = [...items];
+    const tmp = s[idx-1]; s[idx-1] = s[idx]; s[idx] = tmp;
+    setItems(s);
+    if(onUpdate) onUpdate({...evento, scaletta: s});
+  };
+
+  const moveDown = (idx) => {
+    if(idx === items.length-1) return;
+    const s = [...items];
+    const tmp = s[idx]; s[idx] = s[idx+1]; s[idx+1] = tmp;
+    setItems(s);
+    if(onUpdate) onUpdate({...evento, scaletta: s});
+  };
+
+  const removeItem = (idx) => {
+    const s = items.filter((_,i) => i !== idx);
+    setItems(s);
+    if(onUpdate) onUpdate({...evento, scaletta: s});
+  };
+
+  const resetScaletta = () => {
+    setItems(partItems);
+    if(onUpdate) onUpdate({...evento, scaletta: partItems});
+  };
+
+  const handlePrint = () => {
+    const w = window.open('','_blank','width=794,height=1123');
+    if(!w){ alert('Abilita i popup per stampare'); return; }
+    const rows = items.map((s,i) => {
+      const perf = s.performer ? '<div style="font-size:11px;color:#888;margin-top:2px">'+s.performer+'</div>' : '';
+      return '<tr><td style="width:44px;text-align:center;font-weight:700;color:#c9a84c;font-size:15px;padding:14px 8px">'+(i+1)+'</td>'
+        +'<td style="padding:12px 16px"><div style="font-size:14px;font-weight:600">'+s.brano+'</div>'+perf+'</td></tr>';
+    }).join('');
+    const dataStr = evento.data ? new Date(evento.data+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '';
+    w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Scaletta – '+evento.titolo+'</title>'
+      +'<link rel="preconnect" href="https://fonts.googleapis.com">'
+      +'<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">'
+      +'<style>@page{margin:20mm 22mm;size:A4}*{margin:0;padding:0;box-sizing:border-box}'
+      +'body{font-family:\'DM Sans\',sans-serif;color:#1a1a2e;background:#fff;padding:32px}'
+      +'.hdr{border-bottom:2px solid #c9a84c;padding-bottom:14px;margin-bottom:28px}'
+      +'.ttl{font-family:\'Cormorant Garamond\',serif;font-size:28px;font-weight:700}'
+      +'.sub{font-size:12px;color:#888;margin-top:5px}'
+      +'table{width:100%;border-collapse:collapse}'
+      +'tr{border-bottom:1px solid #eee}tr:last-child{border:none}'
+      +'@media print{.no-print{display:none}}</style>'
+      +'</head><body>'
+      +'<div class="hdr"><div class="ttl">'+evento.titolo+'</div>'
+      +'<div class="sub">'+dataStr+' '+( evento.ora||'')+' · '+(evento.luogo||'')+'</div></div>'
+      +'<table>'+rows+'</table>'
+      +'<script>window.onload=function(){window.print()}<\/script>'
+      +'</body></html>');
+    w.document.close();
+  };
+
+  return React.createElement('div', {style:{maxWidth:700}},
+    React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:18,flexWrap:'wrap',gap:8}},
+      React.createElement('div', {style:{fontSize:13,color:C.textMuted}}, items.length + ' brani in scaletta'),
+      React.createElement('div', {style:{display:'flex',gap:8,flexWrap:'wrap'}},
+        partItems.length > 0 && React.createElement('button', {onClick:resetScaletta,
+          style:{fontSize:12,padding:'6px 14px',borderRadius:7,border:'1px solid '+C.border,
+            background:C.bg,color:C.textMuted,cursor:'pointer'}}, '↺ Reset da partecipanti'),
+        React.createElement('button', {onClick:handlePrint,
+          style:{display:'flex',alignItems:'center',gap:6,fontSize:12,padding:'6px 14px',
+            borderRadius:7,border:'1px solid '+C.goldDim,background:C.goldBg,color:C.gold,cursor:'pointer'}},
+          React.createElement(Ic,{n:'receipt',size:13,stroke:C.gold}), ' Stampa programma'
+        )
+      )
+    ),
+    items.length === 0 && React.createElement('div', {style:{textAlign:'center',padding:'48px 0',
+      color:C.textDim,border:'1px dashed '+C.border,borderRadius:12}},
+      React.createElement(Ic,{n:'music',size:28,stroke:C.textDim}),
+      React.createElement('p', {style:{marginTop:12,fontSize:13}}, 'Nessun brano in scaletta'),
+      React.createElement('p', {style:{fontSize:11,marginTop:4,color:C.textDim}},
+        'Aggiungi partecipanti con brani assegnati dalla scheda Partecipanti')
+    ),
+    items.length > 0 && React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}},
+      items.map(function(item, idx) {
+        return React.createElement('div', {key:idx,
+          style:{display:'flex',alignItems:'center',gap:10,background:C.surface,
+            border:'1px solid '+C.border,borderRadius:10,padding:'12px 14px'}},
+          React.createElement('div', {style:{width:28,height:28,borderRadius:7,background:C.goldBg,
+            border:'1px solid '+C.goldDim,display:'flex',alignItems:'center',
+            justifyContent:'center',fontSize:12,fontWeight:700,color:C.gold,flexShrink:0}}, idx+1),
+          React.createElement('div', {style:{flex:1,minWidth:0}},
+            React.createElement('div', {style:{fontSize:13,fontWeight:600,
+              overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, item.brano),
+            item.performer && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:2}}, item.performer)
+          ),
+          React.createElement('div', {style:{display:'flex',gap:4,flexShrink:0}},
+            React.createElement('button', {
+              onClick: function(){ moveUp(idx); },
+              disabled: idx===0,
+              title: 'Sposta su',
+              style:{width:30,height:30,borderRadius:6,border:'1px solid '+C.border,
+                background:C.bg,color:idx===0?C.textDim:C.text,
+                cursor:idx===0?'default':'pointer',
+                display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}},
+              '▲'
+            ),
+            React.createElement('button', {
+              onClick: function(){ moveDown(idx); },
+              disabled: idx===items.length-1,
+              title: 'Sposta giù',
+              style:{width:30,height:30,borderRadius:6,border:'1px solid '+C.border,
+                background:C.bg,color:idx===items.length-1?C.textDim:C.text,
+                cursor:idx===items.length-1?'default':'pointer',
+                display:'flex',alignItems:'center',justifyContent:'center',fontSize:16}},
+              '▼'
+            ),
+            React.createElement('button', {
+              onClick: function(){ removeItem(idx); },
+              title: 'Rimuovi',
+              style:{width:30,height:30,borderRadius:6,border:'1px solid '+(C.redBorder||C.border),
+                background:C.bg,color:C.red||'#f87171',cursor:'pointer',
+                display:'flex',alignItems:'center',justifyContent:'center',fontSize:14}},
+              '✕'
+            )
+          )
+        );
+      })
+    )
+  );
+};
+
 const EventoDetail = ({ evento, students, onEdit, onDelete, onBack, onUpdate }) => {
   const [tab,    setTab]    = useState("info");
   const [modalP, setModalP] = useState(null); // null | "add" | prenotazione-obj
@@ -9121,119 +9259,7 @@ const EventoDetail = ({ evento, students, onEdit, onDelete, onBack, onUpdate }) 
         )
 
         /* SCALETTA */
-        , tab==="scaletta" && (() => {
-          // Costruisci scaletta da evento.scaletta o da partecipanti
-          const partItems = (evento.partecipanti||[]).flatMap(p =>
-            (p.brani||[]).map(b => ({ performer: p.studentName, brano: b }))
-          );
-          const scaletta = evento.scaletta || partItems;
-
-          const moveUp = (i) => {
-            if(i===0) return;
-            const s=[...scaletta]; [s[i-1],s[i]]=[s[i],s[i-1]];
-            onUpdate({...evento, scaletta:s});
-          };
-          const moveDown = (i) => {
-            if(i===scaletta.length-1) return;
-            const s=[...scaletta]; [s[i],s[i+1]]=[s[i+1],s[i]];
-            onUpdate({...evento, scaletta:s});
-          };
-          const removeItem = (i) => {
-            const s=scaletta.filter((_,idx)=>idx!==i);
-            onUpdate({...evento, scaletta:s});
-          };
-          const resetScaletta = () => onUpdate({...evento, scaletta:partItems});
-
-          const handlePrintScaletta = () => {
-            const w = window.open("","_blank","width=794,height=1123");
-            if(!w){ alert("Abilita i popup per stampare"); return; }
-            const rows = scaletta.map((s,i) => `
-              <tr>
-                <td style="width:40px;text-align:center;font-weight:700;color:#c9a84c;font-size:15px">${i+1}</td>
-                <td style="padding:12px 16px">
-                  <div style="font-size:14px;font-weight:600">${s.brano}</div>
-                  ${s.performer?`<div style="font-size:11px;color:#888;margin-top:2px">${s.performer}</div>`:''}
-                </td>
-              </tr>`).join('');
-            w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
-              <title>Scaletta – ${evento.titolo}</title>
-              <style>
-                @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500&display=swap');
-                @page{margin:20mm 22mm;size:A4} *{margin:0;padding:0;box-sizing:border-box}
-                body{font-family:'DM Sans',sans-serif;color:#1a1a2e;background:#fff}
-                .header{border-bottom:2px solid #c9a84c;padding-bottom:14px;margin-bottom:24px}
-                .title{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700}
-                .sub{font-size:12px;color:#888;margin-top:4px}
-                table{width:100%;border-collapse:collapse}
-                tr{border-bottom:1px solid #eee}
-                tr:last-child{border-bottom:none}
-                @media print{button{display:none}}
-              </style>
-            </head><body>
-              <div class="header">
-                <div class="title">${evento.titolo}</div>
-                <div class="sub">${evento.data ? new Date(evento.data+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long",year:"numeric"}) : ""} ${evento.ora||""} · ${evento.luogo||""}</div>
-              </div>
-              <table>${rows}</table>
-              <script>window.onload=function(){window.print()}<\/script>
-            </body></html>`);
-            w.document.close();
-          };
-
-          return React.createElement('div', {style:{maxWidth:700}},
-            React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}},
-              React.createElement('div', {style:{fontSize:13,color:C.textMuted}},
-                scaletta.length + " brani in scaletta"
-              ),
-              React.createElement('div', {style:{display:"flex",gap:8}},
-                partItems.length>0 && React.createElement('button', {onClick:resetScaletta,
-                  style:{fontSize:12,padding:"6px 14px",borderRadius:7,border:`1px solid ${C.border}`,
-                    background:C.bg,color:C.textMuted,cursor:"pointer"}}, "↺ Reset da partecipanti"),
-                React.createElement('button', {onClick:handlePrintScaletta,
-                  style:{display:"flex",alignItems:"center",gap:6,fontSize:12,padding:"6px 14px",
-                    borderRadius:7,border:`1px solid ${C.goldDim}`,background:C.goldBg,color:C.gold,cursor:"pointer"}},
-                  React.createElement(Ic,{n:"receipt",size:13,stroke:C.gold}), " Stampa programma"
-                )
-              )
-            ),
-            scaletta.length===0 && React.createElement('div',{style:{textAlign:"center",padding:"48px 0",color:C.textDim,border:`1px dashed ${C.border}`,borderRadius:12}},
-              React.createElement(Ic,{n:"music",size:28,stroke:C.textDim}),
-              React.createElement('p',{style:{marginTop:12,fontSize:13}}, "Nessun brano in scaletta"),
-              React.createElement('p',{style:{fontSize:11,marginTop:4}}, "Aggiungi partecipanti con brani assegnati dalla scheda Partecipanti")
-            ),
-            scaletta.length>0 && React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:6}},
-              scaletta.map((item,i) =>
-                React.createElement('div', {key:i, style:{display:"flex",alignItems:"center",gap:10,
-                  background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",transition:"all .15s"}},
-                  React.createElement('div', {style:{width:28,height:28,borderRadius:7,background:C.goldBg,
-                    border:`1px solid ${C.goldDim}`,display:"flex",alignItems:"center",justifyContent:"center",
-                    fontSize:12,fontWeight:700,color:C.gold,flexShrink:0}}, i+1),
-                  React.createElement('div', {style:{flex:1,minWidth:0}},
-                    React.createElement('div', {style:{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}, item.brano),
-                    item.performer && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:2}}, item.performer)
-                  ),
-                  React.createElement('div', {style:{display:"flex",gap:4,flexShrink:0}},
-                    React.createElement('button', {onClick:()=>moveUp(i), disabled:i===0,
-                      style:{width:28,height:28,borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,
-                        color:i===0?C.textDim:C.text,cursor:i===0?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}},
-                      React.createElement(Ic,{n:"back",size:13,stroke:"currentColor",style:{transform:"rotate(90deg)"}})
-                    ),
-                    React.createElement('button', {onClick:()=>moveDown(i), disabled:i===scaletta.length-1,
-                      style:{width:28,height:28,borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,
-                        color:i===scaletta.length-1?C.textDim:C.text,cursor:i===scaletta.length-1?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}},
-                      React.createElement(Ic,{n:"back",size:13,stroke:"currentColor",style:{transform:"rotate(-90deg)"}})
-                    ),
-                    React.createElement('button', {onClick:()=>removeItem(i),
-                      style:{width:28,height:28,borderRadius:6,border:`1px solid ${C.redBorder||C.border}`,background:C.bg,
-                        color:C.red||"#f87171",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}},
-                      React.createElement(Ic,{n:"trash",size:12,stroke:"currentColor"})
-                    )
-                  )
-                )
-              )
-            )
-          );
-        })()
+        , tab==="scaletta" && React.createElement(ScalettaTab, { evento: evento, onUpdate: onUpdate })
 
         /* REPORT */
         , tab==="report" && (
