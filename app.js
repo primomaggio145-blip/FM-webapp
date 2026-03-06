@@ -2336,7 +2336,13 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const setAnniScolastici = _nullishCoalesce(propSetAnni, () => ( _setAnni));
     // ruolo deriva dal login, non da stato locale
     const ruolo = (appUser && appUser.ruolo) || "admin";
-  
+    // Dati filtrati per allievo loggato
+    const myNome = (appUser && appUser.nome) || "";
+    const myStudentRecord = ruolo==="allievo"
+      ? (_students.find(s=>(s.name||s.nome||"").toLowerCase()===myNome.toLowerCase())||null)
+      : null;
+    const myStudentId = myStudentRecord ? myStudentRecord.id : null;
+
     const isVisible = id => panels[id] !== false;
   
     // Calcoli KPI
@@ -2449,11 +2455,27 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 
             /* ── RIGA 1: KPI ── */
             , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2188}}
-              , React.createElement(KpiCard, { icon: "users",    label: "Allievi attivi" ,  value: allieviAttivi, sub: `${ALLIEVI.length} totali`, hex: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2189}})
-              , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni oggi" ,    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2190}})
-              , React.createElement(KpiCard, { icon: "up",       label: "Entrate mese" ,    value: fmt(entrMeseLiveLive), hex: C.green, trend: +8, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2191}})
-              , React.createElement(KpiCard, { icon: "down",     label: "Uscite mese" ,     value: fmt(uscMeseLiveLive),  hex: C.red,   trend: +12, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2192}})
-              , React.createElement(KpiCard, { icon: "chart",    label: `Saldo ${ANNO}`, value: fmt(saldoAnnoLiveLive), hex: saldoAnnoLiveLive>=0?C.green:C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2193}})
+              , ruolo==="allievo" ? React.createElement(React.Fragment, null
+                  , React.createElement(KpiCard, { icon: "calendar", label: "Le mie lezioni",
+                      value: _lessons.filter(l=>(l.student||l.allievo||"").toLowerCase().includes(myNome.toLowerCase())).length,
+                      sub: "questa settimana", hex: C.teal})
+                  , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
+                      value: (()=>{
+                        const p=_lessons.filter(l=>(l.student||l.allievo||"").toLowerCase().includes(myNome.toLowerCase())&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0];
+                        return p ? new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}) : "—";
+                      })(),
+                      sub: "data più vicina", hex: C.gold})
+                  , React.createElement(KpiCard, { icon: "receipt", label: "Tot. versato",
+                      value: fmt(_entrate.filter(e=>myStudentId?e.studentId===myStudentId:(e.studentName||"").toLowerCase().includes(myNome.toLowerCase())).reduce((t,e)=>t+(e.importo||0),0)),
+                      sub: "pagamenti registrati", hex: C.green})
+                )
+              : React.createElement(React.Fragment, null
+                  , React.createElement(KpiCard, { icon: "users",    label: "Allievi attivi" ,  value: allieviAttivi, sub: `${ALLIEVI.length} totali`, hex: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2189}})
+                  , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni oggi" ,    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2190}})
+                  , React.createElement(KpiCard, { icon: "up",       label: "Entrate mese" ,    value: fmt(entrMeseLiveLive), hex: C.green, trend: +8, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2191}})
+                  , React.createElement(KpiCard, { icon: "down",     label: "Uscite mese" ,     value: fmt(uscMeseLiveLive),  hex: C.red,   trend: +12, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2192}})
+                  , React.createElement(KpiCard, { icon: "chart",    label: `Saldo ${ANNO}`, value: fmt(saldoAnnoLiveLive), hex: saldoAnnoLiveLive>=0?C.green:C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2193}})
+                )
             )
 
             /* ── RIGA 2: AZIONI RAPIDE (full width) ── */
@@ -2519,7 +2541,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       )
                     )
                     , React.createElement('div', { style: {padding:14,maxHeight:380,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2252}}
-                      , React.createElement(LessonTimeline, { lezioni: LEZIONI_OGGI, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2253}})
+                      , React.createElement(LessonTimeline, { lezioni: ruolo==="allievo"
+                        ? LEZIONI_OGGI.filter(l=>(l.allievo||l.student||"").toLowerCase().includes(myNome.toLowerCase()))
+                        : LEZIONI_OGGI, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2253}})
                     )
                     , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2255}}
                       , React.createElement('button', { onClick: ()=>onNavigate("calendario"),
@@ -2581,13 +2605,27 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                         , React.createElement(Ic, { n: "users", size: 14, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2312}})
                         , React.createElement('span', { style: {fontSize:12,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2313}}, "Stato pagamenti" )
                       )
-                      , React.createElement('button', { onClick: ()=>onNavigate("allievi"),
+                      , ruolo!=="allievo" && React.createElement('button', { onClick: ()=>onNavigate("allievi"),
                         style: {background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.gold,fontFamily:"'DM Sans',sans-serif",display:"flex",alignItems:"center",gap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2315}}, "Vedi allievi →"
 
                       )
                     )
                     , React.createElement('div', { style: {padding:"16px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2320}}
-                      , React.createElement(StatoAllievi, { allievi: ALLIEVI, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2321}})
+                      , ruolo==="allievo"
+                        ? React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:8}},
+                            (()=>{
+                              const miei=_entrate.filter(e=>myStudentId?e.studentId===myStudentId:(e.studentName||"").toLowerCase().includes(myNome.toLowerCase())).sort((a,b)=>b.data.localeCompare(a.data)).slice(0,5);
+                              if(!miei.length) return React.createElement('p',{style:{fontSize:13,color:C.textDim,textAlign:"center",padding:"12px 0"}},"Nessun pagamento registrato");
+                              return miei.map((e,i)=>React.createElement('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.border}`}},
+                                React.createElement('div',null,
+                                  React.createElement('div',{style:{fontSize:13,color:C.text}},e.desc||"Quota mensile"),
+                                  React.createElement('div',{style:{fontSize:11,color:C.textDim}},new Date((e.data||"")+"T00:00:00").toLocaleDateString("it-IT"))
+                                ),
+                                React.createElement('span',{style:{fontFamily:"'Cormorant Garamond',serif",fontSize:16,fontWeight:600,color:C.green}},fmt(e.importo||0))
+                              ));
+                            })()
+                          )
+                        : React.createElement(StatoAllievi, { allievi: ALLIEVI, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2321}})
                     )
                   )
                 )
@@ -2605,8 +2643,8 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               )
             )
 
-            /* ── RIGA 5: ALERT + ATTIVITÀ ── */
-            , (isVisible("alert")||isVisible("attivita")) && (
+            /* ── RIGA 5: ALERT + ATTIVITÀ (solo admin/docente) ── */
+            , (isVisible("alert")||isVisible("attivita")) && ruolo!=="allievo" && (
               React.createElement('div', { style: {display:"grid",gap:16,gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2341}}
                 , isVisible("alert") && (
                   React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2343}}
@@ -2641,7 +2679,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       , React.createElement('span', { style: {fontSize:12,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2372}}, "Attività recente" )
                     )
                     , React.createElement('div', { style: {padding:"6px 4px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2374}}
-                      , React.createElement(AttivitaFeed, { items: ATTIVITA_RECENTE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2375}})
+                      , React.createElement(AttivitaFeed, { items: ruolo==="allievo"
+                        ? ATTIVITA_RECENTE.filter(a=>(a.sogg||"").toLowerCase().includes(myNome.toLowerCase()))
+                        : ATTIVITA_RECENTE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2375}})
                     )
                   )
                 )
@@ -7380,7 +7420,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
 };
 
 // Navbar interna alla Contabilità
-const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota }) => (
+const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota, ruoloCV }) => (
   React.createElement('div', { style: {background:C.surface, borderBottom:`1px solid ${C.border}`,
     padding:"0 16px", display:"flex", alignItems:"center", gap:4, flexShrink:0, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6800}}
     , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,paddingRight:20,marginRight:8,
@@ -7392,7 +7432,11 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota }) => (
       {id:"spese",   label:"Uscite",   icon:"down"},
       {id:"entrate", label:"Entrate",  icon:"up"},
       {id:"report",  label:"Report",   icon:"chart"},
-    ].map(t=>(
+    ].filter(t => {
+      if(ruoloCV==="allievo") return t.id==="entrate";
+      if(ruoloCV==="docente") return t.id!=="report";
+      return true;
+    }).map(t=>(
       React.createElement('button', { key: t.id, onClick: ()=>{ setTab(t.id); _optionalChain([onSelDoc, 'optionalCall', _59 => _59()]); },
         style: {display:"flex",alignItems:"center",gap:6,padding:"0 16px",
           alignSelf:"stretch",background:"none",border:"none",
@@ -7433,7 +7477,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
   const [_speseLocal, _setSpeseLocal] = useState(INIT_SPESE);
   const spese    = propSpese    || _speseLocal;
   const setSpese = propSetSpese || _setSpeseLocal;
-    const [tab,      setTab]      = useState("spese");
+    const [tab,      setTab]      = useState(ruoloCV==="allievo"?"entrate":"spese");
     const [modal,    setModal]    = useState(null);
     const [selSpesa, setSelSpesa] = useState(null);
     const [selQuota, setSelQuota] = useState(null);
@@ -7492,7 +7536,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         React.createElement(React.Fragment, null
           , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 6898}}, G)
           , React.createElement('div', { style: {minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6899}}
-            , React.createElement(Navbar, { tab: tab, setTab: setTab, onSelDoc: ()=>setSelDoc(null), onSetModalQuota: ruoloCV==="admin"?()=>setModal('addq'):undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6900}})
+            , React.createElement(Navbar, { tab: tab, setTab: setTab, onSelDoc: ()=>setSelDoc(null), onSetModalQuota: ruoloCV==="admin"?()=>setModal('addq'):undefined, ruoloCV: ruoloCV, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6900}})
             , React.createElement('div', { style: {flex:1,padding:24,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6901}}
               , React.createElement(DocenteView, { docente: d, spese: spese, onBack: ()=>setSelDoc(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6902}})
             )
@@ -7505,7 +7549,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       React.createElement(React.Fragment, null
         , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 6911}}, G)
         , React.createElement('div', { style: {minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6912}}
-          , React.createElement(Navbar, { tab: tab, setTab: t=>{ setTab(t); setSelDoc(null); }, onSetModal: ruoloCV==="admin"?()=>setModal("add"):undefined, onSetModalQuota: ruoloCV==="admin"?()=>setModal('addq'):undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6913}})
+          , React.createElement(Navbar, { tab: tab, setTab: t=>{ setTab(t); setSelDoc(null); }, onSetModal: ruoloCV==="admin"?()=>setModal("add"):undefined, onSetModalQuota: ruoloCV==="admin"?()=>setModal('addq'):undefined, ruoloCV: ruoloCV, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6913}})
 
           /* Stats ribbon */
           , React.createElement('div', { style: {background:C.surface,borderBottom:`1px solid ${C.border}`,
@@ -9504,11 +9548,15 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
   const [fStato,   setFStato]   = useState("");
   const [search,   setSearch]   = useState("");
 
+  const _myNomeConc = typeof window!=="undefined" ? (window.__currentUserName__||"") : "";
   const filtered = concerti.filter(e=>{
     const q = search.toLowerCase();
-    return (!q || e.titolo.toLowerCase().includes(q)||e.luogo.toLowerCase().includes(q))
+    const base = (!q || e.titolo.toLowerCase().includes(q)||e.luogo.toLowerCase().includes(q))
       && (!fTipo  || e.tipo===fTipo)
       && (!fStato || e.stato===fStato);
+    if(ruoloConc==="allievo" && _myNomeConc)
+      return base && (e.partecipanti||[]).some(p=>(p.studentName||"").toLowerCase().includes(_myNomeConc.toLowerCase()));
+    return base;
   }).sort((a,b)=>b.data.localeCompare(a.data));
 
   const handleSave   = ev => { setConcerti(p=>[...p.filter(x=>x.id!==ev.id),ev]); setModal(null); if(_optionalChain([selected, 'optionalAccess', _77 => _77.id])===ev.id) setSelected(ev); };
@@ -9618,11 +9666,12 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
             const pOcc  = pConf.reduce((t,p)=>t+p.posti,0);
             const pct   = ev.capienza>0?Math.min(100,pOcc/ev.capienza*100):0;
             return (
-              React.createElement('div', { key: ev.id, onClick: ()=>setSelected(ev),
+              React.createElement('div', { key: ev.id,
+                onClick: ruoloConc!=="allievo" ? ()=>setSelected(ev) : undefined,
                 style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",
-                  cursor:"pointer",transition:"all 0.18s",display:"flex",flexDirection:"column"},
-                onMouseEnter: e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 28px rgba(0,0,0,0.28)";},
-                onMouseLeave: e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8998}}
+                  cursor:ruoloConc!=="allievo"?"pointer":"default",transition:"all 0.18s",display:"flex",flexDirection:"column"},
+                onMouseEnter: ruoloConc!=="allievo" ? e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 28px rgba(0,0,0,0.28)";} : undefined,
+                onMouseLeave: ruoloConc!=="allievo" ? e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";} : undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8998}}
                 /* Accent bar */
                 , React.createElement('div', { style: {height:4,background:`linear-gradient(90deg,${tp.hex},${tp.hex}50)`,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9004}})
                 , React.createElement('div', { style: {padding:"15px 18px",flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9005}}
