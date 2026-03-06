@@ -2408,7 +2408,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                 borderRadius:8,padding:"6px 8px",cursor:"pointer",display:"flex",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2136}}
                 , React.createElement(Ic, { n: "bell", size: 15, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2138}})
               )
-              /* Settings rimosso: usa Strumenti > Impostazioni nel menu laterale */
+              /* Settings button rimosso dall'header — vedi Strumenti > Impostazioni */
               /* Ruolo badge */
               , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,padding:"4px 10px",
                 borderRadius:8,border:`1px solid ${_optionalChain([DASH_RUOLI, 'access', _14 => _14.find, 'call', _15 => _15(r=>r.id===ruolo), 'optionalAccess', _16 => _16.hex])+"40"}`,
@@ -8826,42 +8826,37 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
 // ─── DETTAGLIO EVENTO ─────────────────────────────────────────────────────────
 const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
   const cat = braniCatalog || [];
-  const parts = evento.partecipanti || [];
-  const allPerformers = parts.map(function(p){ return p.studentName; }).filter(Boolean);
 
-  const fromProgramma = React.useMemo(function() {
+  // Costruisce lista brani dalla struttura programma (eventi creati dal form)
+  const fromProgramma = React.useMemo(() => {
     const prog = evento.programma || [];
-    return prog.map(function(p){ return {
+    return prog.map(p => ({
       brano: p.branoTitle || p.title || '',
-      performer: (p.allievi||[]).map(function(a){ return a.studentName; }).join(', ')
-    }; }).filter(function(x){ return x.brano; });
+      performer: (p.allievi||[]).map(a => a.studentName).join(', ')
+    })).filter(x => x.brano);
   }, [evento.programma]);
 
-  const fromPartecipanti = React.useMemo(function() {
-    return (evento.partecipanti||[]).flatMap(function(p){
-      return (p.brani||[]).map(function(b){ return { brano: b, performer: p.studentName }; });
-    });
+  // Oppure dalla struttura partecipanti.brani (formato INIT_CONCERTI)
+  const fromPartecipanti = React.useMemo(() => {
+    return (evento.partecipanti||[]).flatMap(p =>
+      (p.brani||[]).map(b => ({ brano: b, performer: p.studentName }))
+    );
   }, [evento.partecipanti]);
 
+  // Fallback chain: scaletta salvata → programma → partecipanti
   const autoItems = fromProgramma.length > 0 ? fromProgramma : fromPartecipanti;
 
-  const [items, setItems] = React.useState(function() {
+  const [items, setItems] = React.useState(() => {
     if (evento.scaletta && evento.scaletta.length > 0) return evento.scaletta;
     return autoItems;
   });
-  const [showAdd,       setShowAdd]       = React.useState(false);
-  const [addMode,       setAddMode]       = React.useState('libero'); // 'repertorio' | 'libero'
-  const [addText,       setAddText]       = React.useState('');
-  const [addCatId,      setAddCatId]      = React.useState('');
-  const [addPerformers, setAddPerformers] = React.useState([]);
-  const [addNote,       setAddNote]       = React.useState('');
-  const [editIdx,       setEditIdx]       = React.useState(null);
-  const [editItem,      setEditItem]      = React.useState(null);
-  const [showExport,    setShowExport]    = React.useState(false);
-  const [exportFields,  setExportFields]  = React.useState({numero:true,titolo:true,esecutore:true,note:false});
-  const [layoutMode,    setLayoutMode]    = React.useState(false);
 
-  React.useEffect(function() {
+  const [showAdd, setShowAdd] = React.useState(false);
+  const [addText, setAddText] = React.useState('');
+  const [addPerf, setAddPerf] = React.useState('');
+
+  // Ricarica se cambia evento
+  React.useEffect(() => {
     if (evento.scaletta && evento.scaletta.length > 0) {
       setItems(evento.scaletta);
     } else {
@@ -8869,79 +8864,46 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
     }
   }, [evento.id]);
 
-  const save = function(newItems) {
+  const save = (newItems) => {
     setItems(newItems);
-    if (onUpdate) onUpdate(Object.assign({}, evento, {scaletta: newItems}));
+    if (onUpdate) onUpdate({...evento, scaletta: newItems});
   };
 
-  const moveUp = function(idx) {
+  const moveUp = (idx) => {
     if (idx === 0) return;
-    const s = items.slice();
+    const s = [...items];
     const tmp = s[idx-1]; s[idx-1] = s[idx]; s[idx] = tmp;
     save(s);
   };
 
-  const moveDown = function(idx) {
+  const moveDown = (idx) => {
     if (idx === items.length-1) return;
-    const s = items.slice();
+    const s = [...items];
     const tmp = s[idx]; s[idx] = s[idx+1]; s[idx+1] = tmp;
     save(s);
   };
 
-  const removeItem = function(idx) { save(items.filter(function(_,i){ return i !== idx; })); };
+  const removeItem = (idx) => save(items.filter((_,i) => i !== idx));
 
-  const startEdit = function(idx) {
-    setEditIdx(idx);
-    setEditItem(Object.assign({}, items[idx]));
-  };
-
-  const saveEdit = function() {
-    if (editIdx === null) return;
-    const newItems = items.map(function(it, i){ return i === editIdx ? editItem : it; });
+  const addItem = () => {
+    if (!addText.trim()) return;
+    const newItems = [...items, { brano: addText.trim(), performer: addPerf.trim() }];
     save(newItems);
-    setEditIdx(null); setEditItem(null);
+    setAddText(''); setAddPerf(''); setShowAdd(false);
   };
 
-  const togglePerformer = function(name) {
-    setAddPerformers(function(prev){ return prev.includes(name) ? prev.filter(function(x){ return x !== name; }) : prev.concat([name]); });
-  };
+  const resetToAuto = () => save(autoItems);
 
-  const addItem = function() {
-    var title = '';
-    if (addMode === 'repertorio') {
-      const found = cat.find(function(b){ return String(b.id) === String(addCatId); });
-      if (!found) return;
-      title = (found.title || '') + (found.composer ? ' – ' + found.composer : '');
-    } else {
-      title = addText.trim();
-      if (!title) return;
-    }
-    const performer = addPerformers.join(', ');
-    const newItems = items.concat([{ brano: title, performer: performer, note: addNote.trim(), inRepertorio: addMode === 'repertorio' }]);
-    save(newItems);
-    setAddText(''); setAddCatId(''); setAddPerformers([]); setAddNote(''); setShowAdd(false);
-  };
-
-  const resetToAuto = function() { save(autoItems); };
-
-  /* ── build HTML document for print/export ── */
-  const buildDoc = function(forPrint) {
-    const hdrs = [];
-    if (exportFields.numero)    hdrs.push('<th style="width:44px;text-align:center;padding:8px 6px">N.</th>');
-    if (exportFields.titolo)    hdrs.push('<th style="text-align:left;padding:8px 12px">Brano</th>');
-    if (exportFields.esecutore) hdrs.push('<th style="text-align:left;padding:8px 12px;width:200px">Esecutore</th>');
-    if (exportFields.note)      hdrs.push('<th style="text-align:left;padding:8px 12px;width:160px">Note</th>');
-    const rows = items.map(function(item, i) {
-      const cells = [];
-      if (exportFields.numero)    cells.push('<td style="text-align:center;font-weight:700;color:#c9a84c;font-family:Cormorant Garamond,serif;font-size:18px;padding:14px 6px">'+(i+1)+'</td>');
-      if (exportFields.titolo)    cells.push('<td style="padding:14px 12px"><div style="font-weight:600;font-size:14px">'+item.brano+'</div>'+(item.inRepertorio?'<div style="font-size:10px;color:#c9a84c;margin-top:2px">♪ da repertorio</div>':'')+'</td>');
-      if (exportFields.esecutore) cells.push('<td style="padding:14px 12px;font-size:13px;color:#555">'+(item.performer||'—')+'</td>');
-      if (exportFields.note)      cells.push('<td style="padding:14px 12px;font-size:12px;color:#888;font-style:italic">'+(item.note||'')+'</td>');
-      return '<tr style="border-bottom:1px solid #eee">'+cells.join('')+'</tr>';
+  const handlePrint = () => {
+    const w = window.open('','_blank','width=794,height=1123');
+    if (!w) { alert('Abilita i popup per stampare'); return; }
+    const rows = items.map((s,i) => {
+      const perf = s.performer ? '<div style="font-size:11px;color:#888;margin-top:3px">'+s.performer+'</div>' : '';
+      return '<tr><td style="width:44px;text-align:center;font-weight:700;color:#c9a84c;font-size:16px;padding:16px 8px">'+(i+1)+'</td>'
+        +'<td style="padding:14px 16px"><div style="font-size:15px;font-weight:600">'+s.brano+'</div>'+perf+'</td></tr>';
     }).join('');
     const dataStr = evento.data ? new Date(evento.data+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '';
-    const printScript = forPrint ? '<script>window.onload=function(){window.print()}<\/script>' : '';
-    return '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Scaletta \u2013 '+evento.titolo+'</title>'
+    w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Programma – '+evento.titolo+'</title>'
       +'<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">'
       +'<style>@page{margin:20mm 22mm;size:A4}*{margin:0;padding:0;box-sizing:border-box}'
       +'body{font-family:\'DM Sans\',sans-serif;color:#1a1a2e;background:#fff;padding:40px}'
@@ -8949,145 +8911,25 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
       +'.ttl{font-family:\'Cormorant Garamond\',serif;font-size:30px;font-weight:700}'
       +'.sub{font-size:12px;color:#888;margin-top:6px}'
       +'table{width:100%;border-collapse:collapse}'
-      +'thead th{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.08em;border-bottom:2px solid #e0d0b0}'
-      +'tr:last-child{border-bottom:none}'
-      +'</style></head><body>'
+      +'tr{border-bottom:1px solid #eee}tr:last-child{border:none}</style>'
+      +'</head><body>'
       +'<div class="hdr"><div class="ttl">'+evento.titolo+'</div>'
-      +'<div class="sub">Scaletta &middot; '+dataStr+(evento.ora?' &middot; '+evento.ora:'')+(evento.luogo?' &middot; '+evento.luogo:'')+'</div></div>'
-      +'<table><thead><tr>'+hdrs.join('')+'</tr></thead><tbody>'+rows+'</tbody></table>'
-      +printScript+'</body></html>';
-  };
-
-  const handlePrint = function() {
-    const w = window.open('','_blank','width=794,height=1123');
-    if (!w) { alert('Abilita i popup per stampare'); return; }
-    w.document.write(buildDoc(true));
+      +'<div class="sub">'+dataStr+' '+(evento.ora||'')+' · '+(evento.luogo||'')+'</div></div>'
+      +'<table>'+rows+'</table>'
+      +'<script>window.onload=function(){window.print()}<\/script>'
+      +'</body></html>');
     w.document.close();
   };
 
-  const handleExportDoc = function() {
-    const html = buildDoc(false);
-    const blob = new Blob(['\ufeff'+html], {type:'application/msword;charset=utf-8'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'scaletta-'+(evento.titolo||'evento').replace(/\s+/g,'_')+'.doc';
-    document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
-  };
+  const btnStyle = (extra) => Object.assign({
+    display:'flex',alignItems:'center',justifyContent:'center',
+    borderRadius:6,border:'1px solid '+C.border,
+    background:C.bg,cursor:'pointer',fontSize:13
+  }, extra||{});
 
-  const btnStyle = function(extra) {
-    return Object.assign({
-      display:'flex',alignItems:'center',justifyContent:'center',
-      borderRadius:6,border:'1px solid '+C.border,
-      background:C.bg,cursor:'pointer',fontSize:13
-    }, extra||{});
-  };
-
-  /* ── EXPORT MODAL ── */
-  const ExportModal = showExport && React.createElement('div', {
-      onClick:function(){ setShowExport(false); },
-      style:{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',zIndex:400,display:'flex',alignItems:'center',justifyContent:'center'}},
-    React.createElement('div', {onClick:function(e){ e.stopPropagation(); },
-        style:{background:C.surface,border:'1px solid '+C.border,borderRadius:14,padding:24,width:340,maxWidth:'90vw',boxShadow:'0 20px 60px rgba(0,0,0,.5)'}},
-      React.createElement('div', {style:{fontFamily:"'Cormorant Garamond',serif",fontSize:18,fontWeight:600,marginBottom:4}}, 'Esporta scaletta'),
-      React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:16}}, 'Scegli i campi da includere nel documento Word (.doc):'),
-      React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:10,marginBottom:20}},
-        [{k:'numero',label:'Numero progressivo'},{k:'titolo',label:'Titolo brano'},{k:'esecutore',label:'Esecutore / Allievo'},{k:'note',label:'Note aggiuntive'}]
-        .map(function(f){
-          return React.createElement('label', {key:f.k,style:{display:'flex',alignItems:'center',gap:10,cursor:'pointer',fontSize:13,padding:'8px 12px',borderRadius:8,
-            border:'1px solid '+(exportFields[f.k]?C.goldDim:C.border),background:exportFields[f.k]?C.goldBg:'transparent'}},
-            React.createElement('input', {type:'checkbox',checked:exportFields[f.k],
-              onChange:function(){ setExportFields(function(p){ const n=Object.assign({},p); n[f.k]=!p[f.k]; return n; }); },
-              style:{accentColor:C.gold,width:15,height:15,cursor:'pointer'}}),
-            React.createElement('span', {style:{color:exportFields[f.k]?C.gold:C.text}}, f.label)
-          );
-        })
-      ),
-      React.createElement('div', {style:{display:'flex',gap:8,justifyContent:'flex-end',flexWrap:'wrap'}},
-        React.createElement('button', {onClick:function(){ handlePrint(); setShowExport(false); },
-          style:{display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:8,border:'1px solid '+C.border,background:'none',color:C.textMuted,cursor:'pointer',fontSize:12}},
-          React.createElement(Ic,{n:'print',size:12,stroke:C.textMuted}), ' Stampa'
-        ),
-        React.createElement('button', {onClick:function(){ setShowExport(false); },
-          style:{padding:'8px 14px',borderRadius:8,border:'1px solid '+C.border,background:'none',color:C.textMuted,cursor:'pointer',fontSize:13}},
-          'Annulla'
-        ),
-        React.createElement('button', {onClick:function(){ handleExportDoc(); setShowExport(false); },
-          style:{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:8,border:'none',background:C.gold,color:C.bg,cursor:'pointer',fontSize:13,fontWeight:600}},
-          React.createElement(Ic,{n:'download',size:13,stroke:C.bg}), ' Scarica .doc'
-        )
-      )
-    )
-  );
-
-  /* ── LAYOUT PREVIEW ── */
-  if (layoutMode) {
-    return React.createElement('div', {style:{maxWidth:700}},
-      ExportModal,
-      React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}},
-        React.createElement('div', {style:{fontSize:13,color:C.teal,fontWeight:500,display:'flex',alignItems:'center',gap:6}},
-          React.createElement(Ic,{n:'flag',size:13,stroke:C.teal}), ' Anteprima layout scaletta'
-        ),
-        React.createElement('div', {style:{display:'flex',gap:8,flexWrap:'wrap'}},
-          React.createElement('button', {onClick:function(){ setShowExport(true); },
-            style:{display:'flex',alignItems:'center',gap:5,fontSize:12,padding:'6px 12px',
-              borderRadius:7,border:'1px solid '+C.goldDim,background:C.goldBg,color:C.gold,cursor:'pointer'}},
-            React.createElement(Ic,{n:'download',size:12,stroke:C.gold}), ' Esporta DOCX'
-          ),
-          React.createElement('button', {onClick:handlePrint,
-            style:{display:'flex',alignItems:'center',gap:5,fontSize:12,padding:'6px 12px',
-              borderRadius:7,border:'1px solid '+C.border,background:C.bg,color:C.text,cursor:'pointer'}},
-            React.createElement(Ic,{n:'print',size:12,stroke:C.text}), ' Stampa'
-          ),
-          React.createElement('button', {onClick:function(){ setLayoutMode(false); },
-            style:{fontSize:12,padding:'6px 12px',borderRadius:7,border:'1px solid '+C.border,background:C.bg,color:C.textMuted,cursor:'pointer'}},
-            '\u2715 Chiudi anteprima'
-          )
-        )
-      ),
-      React.createElement('div', {style:{background:'#fff',borderRadius:12,padding:'28px 32px',border:'1px solid '+C.border}},
-        React.createElement('div', {style:{borderBottom:'2px solid #c9a84c',paddingBottom:14,marginBottom:24}},
-          React.createElement('div', {style:{fontFamily:"'Cormorant Garamond',serif",fontSize:26,fontWeight:700,color:'#1a1a2e'}}, evento.titolo),
-          React.createElement('div', {style:{fontSize:12,color:'#888',marginTop:5}},
-            (evento.data ? new Date(evento.data+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : ''),
-            evento.ora ? ' \u00b7 '+evento.ora : '',
-            evento.luogo ? ' \u00b7 '+evento.luogo : ''
-          )
-        ),
-        items.length === 0
-          ? React.createElement('p', {style:{color:'#aaa',textAlign:'center',padding:'32px 0'}}, 'Scaletta vuota')
-          : React.createElement('table', {style:{width:'100%',borderCollapse:'collapse'}},
-              React.createElement('thead', null,
-                React.createElement('tr', null,
-                  React.createElement('th',{style:{width:40,textAlign:'center',fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:'.08em',padding:'8px 6px',borderBottom:'2px solid #e0d0b0'}},'N.'),
-                  React.createElement('th',{style:{textAlign:'left',fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:'.08em',padding:'8px 12px',borderBottom:'2px solid #e0d0b0'}},'Brano'),
-                  React.createElement('th',{style:{width:200,textAlign:'left',fontSize:10,color:'#888',textTransform:'uppercase',letterSpacing:'.08em',padding:'8px 12px',borderBottom:'2px solid #e0d0b0'}},'Esecutore')
-                )
-              ),
-              React.createElement('tbody', null,
-                items.map(function(item, i){
-                  return React.createElement('tr', {key:i,style:{borderBottom:'1px solid #eee'}},
-                    React.createElement('td',{style:{textAlign:'center',fontFamily:"'Cormorant Garamond',serif",fontSize:20,fontWeight:700,color:'#c9a84c',padding:'14px 6px'}}, i+1),
-                    React.createElement('td',{style:{padding:'14px 12px'}},
-                      React.createElement('div',{style:{fontWeight:600,fontSize:14,color:'#1a1a2e'}}, item.brano),
-                      item.inRepertorio && React.createElement('div',{style:{fontSize:9,color:'#c9a84c',marginTop:2}}, '\u266a da repertorio'),
-                      item.note && React.createElement('div',{style:{fontSize:11,color:'#888',fontStyle:'italic',marginTop:3}}, item.note)
-                    ),
-                    React.createElement('td',{style:{padding:'14px 12px',fontSize:13,color:'#555'}}, item.performer||'\u2014')
-                  );
-                })
-              )
-            )
-      )
-    );
-  }
-
-  /* ── NORMAL EDIT MODE ── */
   return React.createElement('div', {style:{maxWidth:700}},
-    ExportModal,
 
-    /* toolbar */
+    /* ── toolbar ── */
     React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}},
       React.createElement('div', {style:{fontSize:13,color:C.textMuted}},
         items.length > 0 ? items.length+' brani in scaletta' : 'Scaletta vuota'
@@ -9096,112 +8938,52 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
         autoItems.length > 0 && React.createElement('button', {onClick:resetToAuto,
           style:{fontSize:12,padding:'6px 12px',borderRadius:7,border:'1px solid '+C.border,
             background:C.bg,color:C.textMuted,cursor:'pointer'}},
-          '\u21ba Importa da programma ('+autoItems.length+')'
+          '↺ Importa da programma ('+autoItems.length+')'
         ),
-        React.createElement('button', {onClick:function(){ setShowAdd(function(v){ return !v; }); },
+        React.createElement('button', {onClick:()=>setShowAdd(v=>!v),
           style:{fontSize:12,padding:'6px 12px',borderRadius:7,
             border:'1px solid '+C.goldDim,background:C.goldBg,color:C.gold,cursor:'pointer'}},
-          showAdd ? '\u2715 Annulla' : '+ Aggiungi brano'
-        ),
-        items.length > 0 && React.createElement('button', {onClick:function(){ setLayoutMode(true); },
-          style:{display:'flex',alignItems:'center',gap:5,fontSize:12,padding:'6px 12px',
-            borderRadius:7,border:'1px solid '+C.tealBorder,background:C.tealBg,color:C.teal,cursor:'pointer'}},
-          React.createElement(Ic,{n:'flag',size:12,stroke:C.teal}), ' Layout / Esporta'
+          showAdd ? '✕ Annulla' : '+ Aggiungi brano'
         ),
         items.length > 0 && React.createElement('button', {onClick:handlePrint,
           style:{display:'flex',alignItems:'center',gap:5,fontSize:12,padding:'6px 12px',
             borderRadius:7,border:'1px solid '+C.border,background:C.bg,color:C.text,cursor:'pointer'}},
-          React.createElement(Ic,{n:'print',size:12,stroke:C.text}), ' Stampa'
+          React.createElement(Ic,{n:'receipt',size:12,stroke:C.text}), ' Stampa'
         )
       )
     ),
 
-    /* add form */
-    showAdd && React.createElement('div', {style:{background:C.surface,border:'1px solid '+C.goldDim,borderRadius:10,padding:16,marginBottom:14,display:'flex',flexDirection:'column',gap:12}},
+    /* ── form aggiungi brano ── */
+    showAdd && React.createElement('div', {style:{background:C.surface,border:'1px solid '+C.goldDim,borderRadius:10,padding:16,marginBottom:14,display:'flex',flexDirection:'column',gap:10}},
       React.createElement('div', {style:{fontSize:11,color:C.gold,fontWeight:600,letterSpacing:'.06em',textTransform:'uppercase',marginBottom:2}}, 'Aggiungi brano alla scaletta'),
-
-      /* mode toggle */
-      React.createElement('div', {style:{display:'flex',gap:0,borderRadius:8,overflow:'hidden',border:'1px solid '+C.border,alignSelf:'flex-start'}},
-        React.createElement('button', {onClick:function(){ setAddMode('repertorio'); },
-          style:{padding:'6px 14px',border:'none',background:addMode==='repertorio'?C.gold:C.bg,
-            color:addMode==='repertorio'?C.bg:C.textMuted,cursor:'pointer',fontSize:12,fontFamily:"'DM Sans',sans-serif",
-            display:'flex',alignItems:'center',gap:5}},
-          React.createElement(Ic,{n:'book',size:11,stroke:addMode==='repertorio'?C.bg:C.textMuted}), ' Da repertorio'
-        ),
-        React.createElement('button', {onClick:function(){ setAddMode('libero'); },
-          style:{padding:'6px 14px',border:'none',background:addMode==='libero'?C.gold:C.bg,
-            color:addMode==='libero'?C.bg:C.textMuted,cursor:'pointer',fontSize:12,fontFamily:"'DM Sans',sans-serif",
-            display:'flex',alignItems:'center',gap:5}},
-          React.createElement(Ic,{n:'music',size:11,stroke:addMode==='libero'?C.bg:C.textMuted}), ' Brano libero'
-        )
-      ),
-      addMode === 'libero' && React.createElement('div', {style:{fontSize:11,color:C.textDim,background:C.bg,padding:'6px 10px',borderRadius:6,border:'1px solid '+C.border}},
-        '\u2139\uFE0F I brani liberi vengono aggiunti solo alla scaletta, non al catalogo Repertorio.'
-      ),
-      addMode === 'repertorio' && React.createElement('div', {style:{fontSize:11,color:C.gold,background:C.goldBg,padding:'6px 10px',borderRadius:6,border:'1px solid '+C.goldDim}},
-        '\u266a Stai scegliendo un brano gi\u00e0 presente nel catalogo Repertorio.'
-      ),
-
-      /* title input */
       React.createElement('div', {style:{display:'flex',gap:8,flexWrap:'wrap'}},
         React.createElement('div', {style:{flex:'2 1 200px'}},
           React.createElement('label', {style:{fontSize:10,color:C.textMuted,display:'block',marginBottom:4}}, 'TITOLO BRANO *'),
-          addMode === 'repertorio'
-            ? React.createElement('select', {value:addCatId,onChange:function(e){ setAddCatId(e.target.value); },
-                style:{width:'100%',background:C.bg,border:'1px solid '+C.border,borderRadius:7,
-                  color:C.text,fontSize:13,padding:'8px 12px',fontFamily:"'DM Sans',sans-serif"}},
-                React.createElement('option',{value:''}, cat.length===0?'Nessun brano nel catalogo':'— Seleziona da catalogo...'),
-                cat.map(function(b){ return React.createElement('option',{key:b.id,value:String(b.id)},
-                  (b.title||'')+(b.composer?' \u2013 '+b.composer:'')); })
-              )
-            : React.createElement('input', {value:addText,onChange:function(e){ setAddText(e.target.value); },
-                onKeyDown:function(e){ if(e.key==='Enter') addItem(); },
-                placeholder:'Es. Notturno Op.9 \u2013 Chopin (non nel catalogo)',
-                style:{width:'100%',background:C.bg,border:'1px solid '+C.border,borderRadius:7,
-                  color:C.text,fontSize:13,padding:'8px 12px',fontFamily:"'DM Sans',sans-serif"}
-              })
+          React.createElement('input', {
+            value: addText,
+            onChange: e=>setAddText(e.target.value),
+            onKeyDown: e=>{if(e.key==='Enter')addItem();},
+            placeholder: 'Es. Notturno Op.9 – Chopin',
+            list: 'scaletta-brani-list',
+            style:{width:'100%',background:C.bg,border:'1px solid '+C.border,borderRadius:7,
+              color:C.text,fontSize:13,padding:'8px 12px',fontFamily:"'DM Sans',sans-serif"}
+          }),
+          React.createElement('datalist', {id:'scaletta-brani-list'},
+            cat.map(b => React.createElement('option', {key:b.id, value:(b.title||'')+(b.composer?' – '+b.composer:'')}))
+          )
         ),
-        React.createElement('div', {style:{flex:'1 1 150px'}},
-          React.createElement('label', {style:{fontSize:10,color:C.textMuted,display:'block',marginBottom:4}}, 'NOTE'),
-          React.createElement('input', {value:addNote,onChange:function(e){ setAddNote(e.target.value); },
-            placeholder:'Es. bis, prima esecuzione...',
+        React.createElement('div', {style:{flex:'1 1 140px'}},
+          React.createElement('label', {style:{fontSize:10,color:C.textMuted,display:'block',marginBottom:4}}, 'ESECUTORE'),
+          React.createElement('input', {
+            value: addPerf,
+            onChange: e=>setAddPerf(e.target.value),
+            onKeyDown: e=>{if(e.key==='Enter')addItem();},
+            placeholder: 'Nome allievo',
             style:{width:'100%',background:C.bg,border:'1px solid '+C.border,borderRadius:7,
               color:C.text,fontSize:13,padding:'8px 12px',fontFamily:"'DM Sans',sans-serif"}
           })
         )
       ),
-
-      /* performers */
-      React.createElement('div', null,
-        React.createElement('label', {style:{fontSize:10,color:C.textMuted,display:'block',marginBottom:8}}, 'ESECUTORI'),
-        allPerformers.length > 0
-          ? React.createElement('div', {style:{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center'}},
-              allPerformers.map(function(name){
-                const sel = addPerformers.includes(name);
-                return React.createElement('label', {key:name,
-                  style:{display:'flex',alignItems:'center',gap:6,padding:'5px 11px',borderRadius:20,
-                    border:'1px solid '+(sel?C.gold:C.border),background:sel?C.goldBg:C.bg,
-                    cursor:'pointer',fontSize:12,color:sel?C.gold:C.textMuted,transition:'all .12s',userSelect:'none'}},
-                  React.createElement('input',{type:'checkbox',checked:sel,onChange:function(){ togglePerformer(name); },style:{display:'none'}}),
-                  sel ? React.createElement(Ic,{n:'check',size:10,stroke:C.gold}) : null,
-                  name
-                );
-              }),
-              React.createElement('input', {
-                placeholder:'+ altro nome...',
-                onKeyDown:function(e){ if(e.key==='Enter'&&e.target.value.trim()){ togglePerformer(e.target.value.trim()); e.target.value=''; } },
-                style:{padding:'5px 11px',borderRadius:20,border:'1px solid '+C.border,
-                  background:C.bg,color:C.text,fontSize:12,fontFamily:"'DM Sans',sans-serif",width:130}
-              })
-            )
-          : React.createElement('input', {value:addPerformers.join(', '),
-              onChange:function(e){ setAddPerformers(e.target.value ? [e.target.value] : []); },
-              placeholder:'Nome esecutore',
-              style:{width:'100%',background:C.bg,border:'1px solid '+C.border,borderRadius:7,
-                color:C.text,fontSize:13,padding:'8px 12px',fontFamily:"'DM Sans',sans-serif"}
-            })
-      ),
-
       React.createElement('button', {onClick:addItem,
         style:{alignSelf:'flex-start',padding:'7px 18px',borderRadius:7,border:'none',
           background:C.gold,color:C.bg,cursor:'pointer',fontSize:13,fontWeight:600,
@@ -9210,7 +8992,7 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
       )
     ),
 
-    /* empty state */
+    /* ── lista vuota ── */
     items.length === 0 && React.createElement('div', {style:{textAlign:'center',padding:'48px 0',
       color:C.textDim,border:'1px dashed '+C.border,borderRadius:12}},
       React.createElement(Ic,{n:'music',size:32,stroke:C.textDim}),
@@ -9222,77 +9004,50 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
       )
     ),
 
-    /* list */
+    /* ── lista brani ── */
     items.length > 0 && React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}},
       items.map(function(item, idx) {
-        /* EDIT ROW */
-        if (editIdx === idx) {
-          return React.createElement('div', {key:'edit-'+idx,
-            style:{background:C.surface,border:'1px solid '+C.goldDim,borderRadius:10,padding:14}},
-            React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8}},
-              React.createElement('div', {style:{display:'flex',gap:8,flexWrap:'wrap'}},
-                React.createElement('div', {style:{flex:'2 1 180px'}},
-                  React.createElement('label',{style:{fontSize:10,color:C.textMuted,display:'block',marginBottom:3}}, 'TITOLO'),
-                  React.createElement('input',{value:editItem.brano||'',onChange:function(e){ setEditItem(function(p){ return Object.assign({},p,{brano:e.target.value}); }); },
-                    style:{width:'100%',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:13,padding:'7px 10px',fontFamily:"'DM Sans',sans-serif"}})
-                ),
-                React.createElement('div', {style:{flex:'1 1 140px'}},
-                  React.createElement('label',{style:{fontSize:10,color:C.textMuted,display:'block',marginBottom:3}}, 'ESECUTORE'),
-                  React.createElement('input',{value:editItem.performer||'',onChange:function(e){ setEditItem(function(p){ return Object.assign({},p,{performer:e.target.value}); }); },
-                    style:{width:'100%',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:13,padding:'7px 10px',fontFamily:"'DM Sans',sans-serif"}})
-                ),
-                React.createElement('div', {style:{flex:'1 1 120px'}},
-                  React.createElement('label',{style:{fontSize:10,color:C.textMuted,display:'block',marginBottom:3}}, 'NOTE'),
-                  React.createElement('input',{value:editItem.note||'',onChange:function(e){ setEditItem(function(p){ return Object.assign({},p,{note:e.target.value}); }); },
-                    style:{width:'100%',background:C.bg,border:'1px solid '+C.border,borderRadius:6,color:C.text,fontSize:13,padding:'7px 10px',fontFamily:"'DM Sans',sans-serif"}})
-                )
-              ),
-              React.createElement('div', {style:{display:'flex',gap:6}},
-                React.createElement('button',{onClick:saveEdit,
-                  style:{padding:'6px 14px',borderRadius:6,border:'none',background:C.gold,color:C.bg,cursor:'pointer',fontSize:12,fontWeight:600}}, 'Salva'),
-                React.createElement('button',{onClick:function(){ setEditIdx(null); setEditItem(null); },
-                  style:{padding:'6px 14px',borderRadius:6,border:'1px solid '+C.border,background:'none',color:C.textMuted,cursor:'pointer',fontSize:12}}, 'Annulla')
-              )
-            )
-          );
-        }
-
-        /* NORMAL ROW */
         return React.createElement('div', {key:String(idx)+item.brano,
           style:{display:'flex',alignItems:'center',gap:10,background:C.surface,
-            border:'1px solid '+C.border,borderRadius:10,padding:'11px 13px',transition:'background .1s'}},
+            border:'1px solid '+C.border,borderRadius:10,padding:'11px 13px',
+            transition:'background .1s'}},
 
+          /* numero */
           React.createElement('div', {style:{width:28,height:28,borderRadius:7,background:C.goldBg,
             border:'1px solid '+C.goldDim,display:'flex',alignItems:'center',
             justifyContent:'center',fontSize:12,fontWeight:700,color:C.gold,flexShrink:0}}, idx+1),
 
+          /* testo */
           React.createElement('div', {style:{flex:1,minWidth:0}},
-            React.createElement('div', {style:{display:'flex',alignItems:'center',gap:5}},
-              React.createElement('div', {style:{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, item.brano),
-              item.inRepertorio && React.createElement('span',{style:{fontSize:9,background:C.goldBg,color:C.gold,border:'1px solid '+C.goldDim,borderRadius:4,padding:'1px 5px',flexShrink:0}},'\u266a REP')
-            ),
-            React.createElement('div', {style:{display:'flex',gap:8,marginTop:2,flexWrap:'wrap'}},
-              item.performer && React.createElement('div',{style:{fontSize:11,color:C.textMuted}}, item.performer),
-              item.note && React.createElement('div',{style:{fontSize:11,color:C.textDim,fontStyle:'italic'}}, item.note)
-            )
+            React.createElement('div', {style:{fontSize:13,fontWeight:600,
+              overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, item.brano),
+            item.performer && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:1}}, item.performer)
           ),
 
+          /* bottoni */
           React.createElement('div', {style:{display:'flex',gap:3,flexShrink:0}},
-            React.createElement('button',{onClick:function(e){ e.preventDefault(); startEdit(idx); },title:'Modifica',
-              style:btnStyle({width:28,height:28,color:C.textMuted,cursor:'pointer'})},
-              React.createElement(Ic,{n:'edit',size:11,stroke:'currentColor'})
+            React.createElement('button', {
+              onClick: function(e){ e.preventDefault(); moveUp(idx); },
+              disabled: idx===0, title:'Sposta su',
+              style:btnStyle({width:28,height:28,color:idx===0?C.textDim:C.gold,
+                borderColor:idx===0?C.border:C.goldDim,fontSize:12,
+                cursor:idx===0?'not-allowed':'pointer'})},
+              '▲'
             ),
-            React.createElement('button',{onClick:function(e){ e.preventDefault(); moveUp(idx); },disabled:idx===0,title:'Sposta su',
-              style:btnStyle({width:28,height:28,color:idx===0?C.textDim:C.gold,borderColor:idx===0?C.border:C.goldDim,fontSize:12,cursor:idx===0?'not-allowed':'pointer'})},
-              '\u25b2'
+            React.createElement('button', {
+              onClick: function(e){ e.preventDefault(); moveDown(idx); },
+              disabled: idx===items.length-1, title:'Sposta giù',
+              style:btnStyle({width:28,height:28,color:idx===items.length-1?C.textDim:C.gold,
+                borderColor:idx===items.length-1?C.border:C.goldDim,fontSize:12,
+                cursor:idx===items.length-1?'not-allowed':'pointer'})},
+              '▼'
             ),
-            React.createElement('button',{onClick:function(e){ e.preventDefault(); moveDown(idx); },disabled:idx===items.length-1,title:'Sposta gi\u00f9',
-              style:btnStyle({width:28,height:28,color:idx===items.length-1?C.textDim:C.gold,borderColor:idx===items.length-1?C.border:C.goldDim,fontSize:12,cursor:idx===items.length-1?'not-allowed':'pointer'})},
-              '\u25bc'
-            ),
-            React.createElement('button',{onClick:function(e){ e.preventDefault(); removeItem(idx); },title:'Rimuovi',
-              style:btnStyle({width:28,height:28,color:C.red,borderColor:C.redBorder||C.border,cursor:'pointer',fontSize:12})},
-              '\u2715'
+            React.createElement('button', {
+              onClick: function(e){ e.preventDefault(); removeItem(idx); },
+              title:'Rimuovi',
+              style:btnStyle({width:28,height:28,color:C.red||'#f87171',
+                borderColor:C.redBorder||C.border,cursor:'pointer',fontSize:12})},
+              '✕'
             )
           )
         );
@@ -9529,60 +9284,7 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
                      , evento.prenotazioni.length, ")"
                   )
                 )
-                , React.createElement('div', {style:{display:'flex',gap:6}},
-                    React.createElement('button', {
-                      onClick: function() {
-                        const w = window.open('','_blank','width=794,height=1123');
-                        if (!w) { alert('Abilita i popup per stampare'); return; }
-                        const dataStr = evento.data ? new Date(evento.data+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '';
-                        const rows = evento.prenotazioni.map(function(p,i){
-                          const imp = p.posti*(evento.prezzoBiglietto||0);
-                          const statoColor = p.stato==='confermata'?'#4ade80':p.stato==='annullata'?'#f87171':'#c9a84c';
-                          const bgRow = i%2===0?'#fff':'#f9f7f4';
-                          return '<tr style="background:'+bgRow+'"><td style="padding:12px 14px;border-bottom:1px solid #eee;font-weight:600">'+p.nome+'</td>'
-                            +'<td style="padding:12px 14px;border-bottom:1px solid #eee;color:#666;font-size:12px">'+p.email+(p.telefono?'<br>'+p.telefono:'')+'</td>'
-                            +'<td style="padding:12px 14px;border-bottom:1px solid #eee;text-align:center;font-weight:700">'+p.posti+'</td>'
-                            +'<td style="padding:12px 14px;border-bottom:1px solid #eee;font-weight:600;color:'+(p.pagato?'#1a8a4a':'#c0392b')+'">'+'\u20ac'+(imp.toLocaleString('it-IT'))+(p.pagato?' \u2714':' \u29bb')+'</td>'
-                            +'<td style="padding:12px 14px;border-bottom:1px solid #eee;text-align:center"><span style="padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700;background:'+statoColor+'22;color:'+statoColor+'">'+p.stato+'</span></td>'
-                            +'<td style="padding:12px 14px;border-bottom:1px solid #eee;text-align:center;font-size:18px">'+( p.stato==='confermata' ? '\u25a1' : '' )+'</td>'
-                            +'</tr>';
-                        }).join('');
-                        const totPosti = evento.prenotazioni.filter(function(p){ return p.stato==='confermata'; }).reduce(function(t,p){ return t+p.posti; },0);
-                        const totPagato = evento.prenotazioni.filter(function(p){ return p.stato==='confermata'&&p.pagato; }).reduce(function(t,p){ return t+p.posti*(evento.prezzoBiglietto||0); },0);
-                        w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Biglietteria \u2013 '+evento.titolo+'</title>'
-                          +'<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">'
-                          +'<style>@page{margin:15mm 18mm;size:A4}*{margin:0;padding:0;box-sizing:border-box}'
-                          +'body{font-family:\'DM Sans\',sans-serif;color:#1a1a2e;background:#fff;padding:32px}'
-                          +'.hdr{border-bottom:2px solid #c9a84c;padding-bottom:12px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:flex-end}'
-                          +'.ttl{font-family:\'Cormorant Garamond\',serif;font-size:26px;font-weight:700}'
-                          +'.sub{font-size:11px;color:#888;margin-top:4px}'
-                          +'.badge{font-size:12px;background:#f5f0e8;border:1px solid #c9a84c;border-radius:8px;padding:6px 14px;color:#7a6430;font-weight:600}'
-                          +'table{width:100%;border-collapse:collapse;font-size:13px}'
-                          +'thead th{background:#f5f0e8;color:#7a6430;font-size:10px;text-transform:uppercase;letter-spacing:.08em;padding:10px 14px;text-align:left;border-bottom:2px solid #c9a84c}'
-                          +'.footer{margin-top:20px;padding:12px 16px;background:#f9f7f4;border-radius:8px;display:flex;gap:32px;font-size:13px}'
-                          +'.foot-label{color:#888;font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px}'
-                          +'.foot-val{font-weight:700;font-size:16px;font-family:\'Cormorant Garamond\',serif}'
-                          +'</style></head><body>'
-                          +'<div class="hdr"><div><div class="ttl">'+evento.titolo+'</div><div class="sub">Biglietteria &middot; '+dataStr+(evento.ora?' &middot; '+evento.ora:'')+(evento.luogo?' &middot; '+evento.luogo:'')+'</div></div>'
-                          +'<div class="badge">Prezzo: &euro; '+evento.prezzoBiglietto+' &nbsp;|&nbsp; Capienza: '+evento.capienza+'</div></div>'
-                          +'<table><thead><tr><th>Nome</th><th>Contatto</th><th style="text-align:center;width:60px">Posti</th><th style="width:110px">Importo</th><th style="text-align:center;width:90px">Stato</th><th style="text-align:center;width:60px">Ingresso</th></tr></thead>'
-                          +'<tbody>'+rows+'</tbody></table>'
-                          +'<div class="footer">'
-                          +'<div><div class="foot-label">Posti occupati</div><div class="foot-val">'+totPosti+' / '+evento.capienza+'</div></div>'
-                          +'<div><div class="foot-label">Incasso riscosso</div><div class="foot-val">&euro; '+totPagato.toLocaleString('it-IT')+'</div></div>'
-                          +'<div><div class="foot-label">Prenotazioni conf.</div><div class="foot-val">'+evento.prenotazioni.filter(function(p){ return p.stato==='confermata'; }).length+'</div></div>'
-                          +'</div>'
-                          +'<script>window.onload=function(){window.print()}<\/script>'
-                          +'</body></html>');
-                        w.document.close();
-                      },
-                      style:{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:7,border:'1px solid '+C.border,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11,fontFamily:"'DM Sans',sans-serif"},
-                      title:'Stampa lista portineria'
-                    },
-                    React.createElement(Ic,{n:'print',size:12,stroke:C.textMuted}), ' Stampa'
-                  ),
-                  React.createElement(Btn, { small: true, onClick: ()=>setModalP("add"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8700}}, React.createElement(Ic, { n: "plus", size: 12, stroke: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8700}}), "Nuova")
-                )
+                , React.createElement(Btn, { small: true, onClick: ()=>setModalP("add"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8700}}, React.createElement(Ic, { n: "plus", size: 12, stroke: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8700}}), "Nuova")
               )
               , evento.prenotazioni.length===0 ? (
                 React.createElement('div', { style: {padding:"40px 0",textAlign:"center",color:C.textDim,fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8703}}, "Nessuna prenotazione ancora"
@@ -11430,6 +11132,14 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 // ═══════════════════════════════════════════════════════════════════════════════
 // SIDEBAR NAVIGATION
 // ═══════════════════════════════════════════════════════════════════════════════
+// Permessi per ruolo: false = voce nascosta
+const ROLE_PERMS = {
+  admin:      {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, utenti:true},
+  direttore:  {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, utenti:false},
+  segreteria: {dashboard:true, allievi:true, docenti:false,corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:false,utenti:false},
+  docente:    {dashboard:true, allievi:false,docenti:false,corsi:true, calendario:true, concerti:true, contabilita:false,repertorio:true, utenti:false},
+};
+
 const NAV_ITEMS = [
   { id:"dashboard",   label:"Dashboard",    icon:"grid"     },
   { id:"allievi",     label:"Allievi",      icon:"users"    },
@@ -11442,7 +11152,7 @@ const NAV_ITEMS = [
   { id:"utenti",      label:"Utenti",       icon:"shield"   },
 ];
 
-const Sidebar = ({ current, setView, user, onLogout }) => {
+const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo }) => {
   const ruoloHex = {admin:C.gold, direttore:C.purple, segreteria:C.blue, docente:C.teal}[_optionalChain([user, 'optionalAccess', _89 => _89.ruolo])] || C.gold;
   const ini = _optionalChain([user, 'optionalAccess', _90 => _90.nome]) ? user.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase() : "??";
   // Primary nav items shown in bottom bar (most used)
@@ -11471,7 +11181,11 @@ const Sidebar = ({ current, setView, user, onLogout }) => {
         )
         /* Navigation */
         , React.createElement('nav', { style: {flex:1,padding:"10px 8px",overflowY:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10602}}
-          , NAV_ITEMS.map(item => {
+          , NAV_ITEMS.filter(item => {
+              const r = settingsDrawerOpen ? "admin" : (currentRuolo || _optionalChain([user, 'optionalAccess', _x => _x.ruolo]) || "admin");
+              const perms = ROLE_PERMS[r] || ROLE_PERMS["admin"];
+              return perms[item.id] !== false;
+            }).map(item => {
             const active = current === item.id;
             return (
               React.createElement('button', { key: item.id, onClick: ()=>{ setView(item.id);},
@@ -11491,8 +11205,20 @@ const Sidebar = ({ current, setView, user, onLogout }) => {
         /* ── Sezione strumenti con divider ── */
         , React.createElement('div', { style: {padding:"6px 8px",borderTop:`1px solid ${C.border}`,flexShrink:0} }
           , React.createElement('div', {style:{fontSize:9,color:C.textDim,letterSpacing:".1em",textTransform:"uppercase",padding:"6px 4px 4px"}}, "Strumenti")
+          /* Pulsante che apre il pannello Impostazioni (DrawerImpostazioni) */
+          , React.createElement('button', {
+              onClick: function(){ if(onSettingsOpen) onSettingsOpen(true); },
+              style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
+                borderRadius:7,border:"none",cursor:"pointer",
+                background:settingsDrawerOpen?C.goldBg:"transparent",
+                color:settingsDrawerOpen?C.gold:C.textMuted,
+                fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:settingsDrawerOpen?500:400,
+                textAlign:"left",transition:"all .15s",marginBottom:1,
+                borderLeft:settingsDrawerOpen?`2px solid ${C.gold}`:"2px solid transparent"}},
+              React.createElement(Ic,{n:"settings",size:14,stroke:settingsDrawerOpen?C.gold:C.textMuted}),
+              "Impostazioni"
+            )
           , [
-              {id:"impostazioni", label:"Impostazioni",   icon:"settings"},
               {id:"schedaScuola", label:"Scheda scuola",  icon:"flag"},
               {id:"modulistica",  label:"Modulistica",    icon:"file"},
             ].map(item=>{
@@ -11632,6 +11358,10 @@ function App() {
   const [sharedSpese,          setSharedSpese]          = useState(INIT_SPESE);
   const [sharedAnniScolastici, setSharedAnniScolastici] = useState(INIT_ANNI_SCOLASTICI);
   const [sharedEntrate,         setSharedEntrate]         = useState(INIT_ENTRATE_QUOTE);
+  // ── Stato globale per pannelli dashboard e ruolo simulazione ──
+  const [sharedPanels,  setSharedPanels]  = useState({});
+  const [sharedRuolo,   setSharedRuolo]   = useState("admin");
+  const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
 
   // ── Sync corsi e statistiche → sito pubblico ───────────────────
   useEffect(() => {
@@ -11698,7 +11428,7 @@ function App() {
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
     sitoWeb:       null,
-    impostazioni:  React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig }),
+    impostazioni:  React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo }),
     schedaScuola:  React.createElement(SchedaScuolaView, { config: sharedConfig }),
     modulistica:   React.createElement(ModulisticaView, { }),
   };
@@ -11707,7 +11437,19 @@ function App() {
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
       , React.createElement('div', { style: {display:"flex",height:"100vh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: ()=>setUser(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: ()=>setUser(null), settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , settingsDrawerOpen && React.createElement(SettingsDrawer, {
+            open: settingsDrawerOpen,
+            onClose: ()=>setSettingsDrawerOpen(false),
+            anniScolastici: sharedAnniScolastici,
+            setAnniScolastici: setSharedAnniScolastici,
+            panels: sharedPanels,
+            onPanels: setSharedPanels,
+            config: sharedConfig,
+            onConfig: setSharedConfig,
+            ruolo: sharedRuolo,
+            onRuolo: setSharedRuolo,
+          })
         , React.createElement('div', { key: view, className: "main-scroll", style: {flex:1,overflow:"auto",background:C.bg,animation:"fadeIn 0.25s ease",
           paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 4px)",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10788}}
           , views[view] || null
@@ -11719,40 +11461,55 @@ function App() {
 
 
 // ─── IMPOSTAZIONI VIEW (standalone page) ──────────────────────────────────────
-const ImpostazioniView = ({ config, setConfig }) => {
-  const [draft, setDraft] = useState(config||CONFIG_DEFAULT);
-  const setD = (k,v) => setDraft(p=>({...p,[k]:v}));
-  const setRS = (k,v) => setDraft(p=>({...p, ricevutaStyle:{...(p.ricevutaStyle||{}), [k]:v}}));
-  const rs = draft.ricevutaStyle || {};
-  const ac = rs.accentColor || "#c9a84c";
-  const [saved, setSaved] = useState(false);
-
-  const handleSave = () => {
-    setConfig(draft);
-    setSaved(true);
-    setTimeout(()=>setSaved(false), 2000);
-  };
-  const Toggle = ({k, label, sub}) => {
-    const val = rs[k]!==false;
-    return React.createElement('label', {style:{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:"6px 0"}}
-      , React.createElement('div', {onClick:()=>setRS(k,!val),
-          style:{width:34,height:20,borderRadius:10,background:val?ac:"#444",position:"relative",cursor:"pointer",transition:"background .15s",flexShrink:0,marginTop:2}}
-        , React.createElement('div', {style:{position:"absolute",top:3,left:val?15:3,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .15s"}})
-      )
-      , React.createElement('div', null
-        , React.createElement('div', {style:{fontSize:13,color:val?C.text:C.textMuted}}, label)
-        , sub && React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:1}}, sub)
-      )
-    );
-  };
-
-  const Section = ({title, icon, children}) => React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",marginBottom:20}}
+// ⚠ ImpToggle e ImpSection DEVONO essere FUORI da ImpostazioniView.
+//   Se fossero dentro, React li tratta come tipi nuovi a ogni render
+//   → i campi input perdono il focus dopo 1 carattere.
+const ImpSection = ({title, icon, children}) =>
+  React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",marginBottom:20}}
     , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
       , React.createElement(Ic,{n:icon,size:14,stroke:C.gold})
       , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:".08em",textTransform:"uppercase",color:C.gold}}, title)
     )
     , React.createElement('div', {style:{padding:"18px 20px"}}, children)
   );
+
+// Riceve rs, ac, setRS esplicitamente per evitare closure stantia
+const ImpRSToggle = ({k, label, rs, ac, setRS}) => {
+  const val = rs[k]!==false;
+  return React.createElement('label', {style:{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",padding:"6px 0"}}
+    , React.createElement('div', {onClick:()=>setRS(k,!val),
+        style:{width:34,height:20,borderRadius:10,background:val?ac:"#444",position:"relative",cursor:"pointer",transition:"background .15s",flexShrink:0,marginTop:2}}
+      , React.createElement('div', {style:{position:"absolute",top:3,left:val?15:3,width:14,height:14,borderRadius:"50%",background:"#fff",transition:"left .15s"}})
+    )
+    , React.createElement('div', null
+      , React.createElement('div', {style:{fontSize:13,color:val?C.text:C.textMuted}}, label)
+    )
+  );
+};
+
+const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: propSetPanels, ruolo: propRuolo, setRuolo: propSetRuolo }) => {
+  const [draft, setDraft] = useState(config||CONFIG_DEFAULT);
+  // Sync when config changes from outside
+  useEffect(()=>{ setDraft(config||CONFIG_DEFAULT); }, [config]);
+  const setD  = (k,v) => setDraft(p=>({...p,[k]:v}));
+  const setRS = (k,v) => setDraft(p=>({...p, ricevutaStyle:{...(p.ricevutaStyle||{}), [k]:v}}));
+  const rs = draft.ricevutaStyle || {};
+  const ac = rs.accentColor || "#c9a84c";
+  const [saved, setSaved] = useState(false);
+
+  // Panels e Ruolo locali se non passati dall'esterno
+  const [_lPanels, _setLPanels] = useState({});
+  const [_lRuolo,  _setLRuolo]  = useState("admin");
+  const panels    = propPanels    !== undefined ? propPanels    : _lPanels;
+  const setPanels = propSetPanels !== undefined ? propSetPanels : _setLPanels;
+  const ruolo     = propRuolo     !== undefined ? propRuolo     : _lRuolo;
+  const setRuolo  = propSetRuolo  !== undefined ? propSetRuolo  : _setLRuolo;
+
+  const handleSave = () => {
+    setConfig(draft);
+    setSaved(true);
+    setTimeout(()=>setSaved(false), 2000);
+  };
 
   return React.createElement('div', {style:{maxWidth:800,margin:"0 auto",padding:"24px 24px"}}
     , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}
@@ -11769,7 +11526,7 @@ const ImpostazioniView = ({ config, setConfig }) => {
       )
     )
 
-    , React.createElement(Section, {title:"Identità scuola", icon:"flag"}
+    , React.createElement(ImpSection, {title:"Identità scuola", icon:"flag"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
         , React.createElement(Input,{label:"Nome scuola", value:draft.nomeScuola||"", onChange:e=>setD("nomeScuola",e.target.value), placeholder:"Accademia Musicale"})
         , React.createElement(Input,{label:"Tipo ente", value:draft.tipoEnte||"", onChange:e=>setD("tipoEnte",e.target.value), placeholder:"Associazione no-profit"})
@@ -11786,7 +11543,7 @@ const ImpostazioniView = ({ config, setConfig }) => {
       )
     )
 
-    , React.createElement(Section, {title:"Stile grafico app", icon:"palette"}
+    , React.createElement(ImpSection, {title:"Stile grafico app", icon:"palette"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
         , React.createElement('div', {style:{marginBottom:14}}
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Colore accento principale")
@@ -11817,7 +11574,7 @@ const ImpostazioniView = ({ config, setConfig }) => {
       )
     )
 
-    , React.createElement(Section, {title:"Impostazioni ricevuta", icon:"receipt"}
+    , React.createElement(ImpSection, {title:"Impostazioni ricevuta", icon:"receipt"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px",marginBottom:16}}
         , React.createElement('div', {style:{marginBottom:14}}
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Colore accento ricevuta")
@@ -11843,12 +11600,12 @@ const ImpostazioniView = ({ config, setConfig }) => {
         )
       )
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:16}}
-        , React.createElement(Toggle,{k:"showIndirizzo",    label:"Indirizzo scuola"})
-        , React.createElement(Toggle,{k:"showDataNascita", label:"Data di nascita"})
-        , React.createElement(Toggle,{k:"showFirme",       label:"Spazio firme"})
-        , React.createElement(Toggle,{k:"showFooter",      label:"Footer"})
-        , React.createElement(Toggle,{k:"showCompetenza",  label:"Competenza"})
-        , React.createElement(Toggle,{k:"showMetodo",      label:"Metodo pagamento"})
+        , React.createElement(ImpRSToggle,{k:"showIndirizzo",    label:"Indirizzo scuola",  rs:rs,ac:ac,setRS:setRS})
+        , React.createElement(ImpRSToggle,{k:"showDataNascita", label:"Data di nascita",    rs:rs,ac:ac,setRS:setRS})
+        , React.createElement(ImpRSToggle,{k:"showFirme",       label:"Spazio firme",       rs:rs,ac:ac,setRS:setRS})
+        , React.createElement(ImpRSToggle,{k:"showFooter",      label:"Footer",             rs:rs,ac:ac,setRS:setRS})
+        , React.createElement(ImpRSToggle,{k:"showCompetenza",  label:"Competenza",         rs:rs,ac:ac,setRS:setRS})
+        , React.createElement(ImpRSToggle,{k:"showMetodo",      label:"Metodo pagamento",   rs:rs,ac:ac,setRS:setRS})
       )
       /* Anteprima live ricevuta */
       , React.createElement('div', {style:{background:"#f0ede8",borderRadius:10,padding:"14px",marginBottom:18}}
@@ -11931,6 +11688,54 @@ const ImpostazioniView = ({ config, setConfig }) => {
               placeholder:"Es. IBAN IT00..., note legali...", rows:2,
               style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,padding:"9px 13px",fontFamily:"'DM Sans',sans-serif",resize:"vertical"}})
         )
+      )
+    )
+
+    /* ── Pannelli Dashboard ── */
+    , React.createElement(ImpSection, {title:"Pannelli Dashboard", icon:"grid"}
+      , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Scegli quali sezioni mostrare nella dashboard. Le KPI card sono sempre visibili.")
+      , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:6}}
+        , PANNELLI_DEF.map(function(p){
+          const on = panels[p.id]!==false;
+          return React.createElement('div', {key:p.id,
+            style:{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",
+              borderRadius:10,border:`1px solid ${on&&!p.sempre?C.goldDim:C.border}`,
+              background:on&&!p.sempre?C.goldBg:C.bg,transition:"all .15s",opacity:p.sempre?0.6:1}},
+            React.createElement('div', {style:{width:32,height:32,borderRadius:8,
+              background:on?`${C.gold}18`:C.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},
+              React.createElement(Ic,{n:p.icon,size:15,stroke:on?C.gold:C.textDim})
+            ),
+            React.createElement('div', {style:{flex:1}},
+              React.createElement('div',{style:{fontSize:13,fontWeight:500,color:on?C.text:C.textMuted}}, p.label),
+              React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, p.desc)
+            ),
+            p.sempre
+              ? React.createElement('span',{style:{fontSize:10,color:C.textDim,letterSpacing:".06em"}}, "FISSO")
+              : React.createElement(Toggle, {value:on, onChange:function(v){ setPanels(function(prev){ return Object.assign({},prev,{[p.id]:v}); }); }})
+          );
+        })
+      )
+    )
+
+    /* ── Simulazione Ruolo ── */
+    , React.createElement(ImpSection, {title:"Simulazione Ruolo", icon:"shield"}
+      , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Simula la vista per un ruolo diverso. Le voci del menu laterale vengono filtrate di conseguenza.")
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8},className:"form-2col"}
+        , DASH_RUOLI.map(function(r){
+          return React.createElement('button', {key:r.id, onClick:function(){ setRuolo(r.id); },
+            style:{padding:"12px 14px",borderRadius:10,textAlign:"left",cursor:"pointer",
+              fontFamily:"'DM Sans',sans-serif",transition:"all .15s",
+              background:ruolo===r.id?`${r.hex}18`:C.bg,
+              border:`1.5px solid ${ruolo===r.id?r.hex:C.border}`}},
+            React.createElement('div',{style:{fontSize:13,fontWeight:500,color:ruolo===r.id?r.hex:C.text}}, r.label),
+            React.createElement('div',{style:{fontSize:10,color:C.textDim,marginTop:3}}, r.desc)
+          );
+        })
+      )
+      , React.createElement('div',{style:{marginTop:12,padding:"8px 12px",borderRadius:8,background:C.goldBg,border:`1px solid ${C.goldDim}`,fontSize:12,color:C.gold}},
+        "► Ruolo attivo: ",
+        React.createElement('strong',null, (DASH_RUOLI.find(function(r){ return r.id===ruolo; })||{label:"—"}).label),
+        " — le voci del menu cambieranno di conseguenza."
       )
     )
   );
