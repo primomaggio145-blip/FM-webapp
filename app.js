@@ -2334,7 +2334,8 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const setConfig      = _nullishCoalesce(propSetConfig, () => ( _setConfig));
     const anniScolastici = _nullishCoalesce(propAnni, () => ( _anni));
     const setAnniScolastici = _nullishCoalesce(propSetAnni, () => ( _setAnni));
-    const [ruolo,   setRuolo]   = useState("admin");
+    // ruolo deriva dal login, non da stato locale
+    const ruolo = (appUser && appUser.ruolo) || "admin";
   
     const isVisible = id => panels[id] !== false;
   
@@ -7410,7 +7411,8 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota }) => (
   )
 );
 
-const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, spese:propSpese, setSpese:propSetSpese, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV, quickAction, clearQuickAction }) => {
+const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, spese:propSpese, setSpese:propSetSpese, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV, quickAction, clearQuickAction, userRuolo:_ruoloCV }) => {
+  const ruoloCV = _ruoloCV || "admin"; // admin = scrittura completa; docente/allievo = sola lettura
   const [catSpese,   setCatSpese]   = useState(CATEGORIE_DEFAULT);
   const [catEntrate, setCatEntrate] = useState(CAT_ENTRATE_DEFAULT);
   // Handle quick action from dashboard
@@ -7485,7 +7487,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         React.createElement(React.Fragment, null
           , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 6898}}, G)
           , React.createElement('div', { style: {minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6899}}
-            , React.createElement(Navbar, { tab: tab, setTab: setTab, onSelDoc: ()=>setSelDoc(null), onSetModalQuota: ()=>setModal('addq'), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6900}})
+            , React.createElement(Navbar, { tab: tab, setTab: setTab, onSelDoc: ()=>setSelDoc(null), onSetModalQuota: ruoloCV==="admin"?()=>setModal('addq'):undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6900}})
             , React.createElement('div', { style: {flex:1,padding:24,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6901}}
               , React.createElement(DocenteView, { docente: d, spese: spese, onBack: ()=>setSelDoc(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6902}})
             )
@@ -7498,7 +7500,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       React.createElement(React.Fragment, null
         , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 6911}}, G)
         , React.createElement('div', { style: {minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6912}}
-          , React.createElement(Navbar, { tab: tab, setTab: t=>{ setTab(t); setSelDoc(null); }, onSetModal: ()=>setModal("add"), onSetModalQuota: ()=>setModal('addq'), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6913}})
+          , React.createElement(Navbar, { tab: tab, setTab: t=>{ setTab(t); setSelDoc(null); }, onSetModal: ruoloCV==="admin"?()=>setModal("add"):undefined, onSetModalQuota: ruoloCV==="admin"?()=>setModal('addq'):undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6913}})
 
           /* Stats ribbon */
           , React.createElement('div', { style: {background:C.surface,borderBottom:`1px solid ${C.border}`,
@@ -7810,10 +7812,10 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
           )
         )
 
-        , modal==="add"    && React.createElement(Modal, { title: "Registra spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}, React.createElement(SpesaForm, { onSave: handleAdd, onClose: closeModal, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}))
+        , ruoloCV==="admin" && modal==="add"    && React.createElement(Modal, { title: "Registra spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}, React.createElement(SpesaForm, { onSave: handleAdd, onClose: closeModal, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}))
         , modal==="edit"   && selSpesa && React.createElement(Modal, { title: "Modifica spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}, React.createElement(SpesaForm, { initial: selSpesa, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), onSave: handleEdit, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}))
         , modal==="delete" && selSpesa && React.createElement(ConfirmDel, { label: selSpesa.desc, onConfirm: handleDel, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7232}})
-        , modal==="addq"   && React.createElement(Modal, { title: "Nuova entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}, React.createElement(EntrataForm, { students: students, onSave: handleAddQ, onClose: closeModal, categorie: catEntrate, onAddCategoriaEntr: (cat)=>setCatEntrate(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}))
+        , ruoloCV==="admin" && modal==="addq"   && React.createElement(Modal, { title: "Nuova entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}, React.createElement(EntrataForm, { students: students, onSave: handleAddQ, onClose: closeModal, categorie: catEntrate, onAddCategoriaEntr: (cat)=>setCatEntrate(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}))
         , modal==="editq"  && selQuota && React.createElement(Modal, { title: "Modifica entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}, React.createElement(EntrataForm, { students: students, initial: selQuota, onSave: handleEditQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}))
         , modal==="deleteq"&& selQuota && React.createElement(ConfirmDel, { label: selQuota.desc, onConfirm: handleDelQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7235}})
         , modal==="ricevuta" && selQuota && (
@@ -8170,7 +8172,8 @@ const AllievoBraniView = ({allievo,brani,allStudents,lessons,onBack})=>{
 // APP
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep, quickAction, clearQuickAction }) => {
+const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep, quickAction, clearQuickAction, userRuolo:_ruoloRep }) => {
+  const ruoloRep = _ruoloRep || "admin"; // admin+docente = scrittura; allievo = sola lettura
   const isMobile = useIsMobile();
   const [_braniLocal, _setBraniLocal] = useState(INIT_BRANI);
   React.useEffect(()=>{ if(quickAction==="addBrano"){ setModal("add"); if(clearQuickAction)clearQuickAction(); } },[quickAction]);
@@ -9462,7 +9465,8 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
 };
 
 // ─── CONCERTI VIEW ────────────────────────────────────────────────────────────
-const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, clearQuickAction }) => {
+const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, clearQuickAction, userRuolo:_ruoloConc }) => {
+  const ruoloConc = _ruoloConc || "admin";
   const isMobile = useIsMobile();
   const students  = propStudents || INIT_STUDENTS;
   const [concerti, setConcerti] = useState(INIT_CONCERTI);
@@ -9534,7 +9538,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
             , prossimi, " programmati · "   , completati, " completati · "   , concerti.length, " totali"
           )
         )
-        , React.createElement(Btn, { onClick: ()=>setModal("new"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8928}}, React.createElement(Ic, { n: "plus", size: 14, stroke: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8928}}), "Nuovo evento" )
+        , ruoloConc==="admin" && React.createElement(Btn, { onClick: ()=>setModal("new"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8928}}, React.createElement(Ic, { n: "plus", size: 14, stroke: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8928}}), "Nuovo evento" )
       )
 
       /* KPI strip */
@@ -11205,40 +11209,43 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
             );
           })
         )
-        /* ── Sezione strumenti con divider ── */
-        , React.createElement('div', { style: {padding:"6px 8px",borderTop:`1px solid ${C.border}`,flexShrink:0} }
-          , React.createElement('div', {style:{fontSize:9,color:C.textDim,letterSpacing:".1em",textTransform:"uppercase",padding:"6px 4px 4px"}}, "Strumenti")
-          /* Pulsante che apre il pannello Impostazioni (DrawerImpostazioni) */
-          , React.createElement('button', {
-              onClick: function(){ if(onSettingsOpen) onSettingsOpen(true); },
-              style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
-                borderRadius:7,border:"none",cursor:"pointer",
-                background:settingsDrawerOpen?C.goldBg:"transparent",
-                color:settingsDrawerOpen?C.gold:C.textMuted,
-                fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:settingsDrawerOpen?500:400,
-                textAlign:"left",transition:"all .15s",marginBottom:1,
-                borderLeft:settingsDrawerOpen?`2px solid ${C.gold}`:"2px solid transparent"}},
-              React.createElement(Ic,{n:"settings",size:14,stroke:settingsDrawerOpen?C.gold:C.textMuted}),
-              "Impostazioni"
-            )
-          , [
-              {id:"schedaScuola", label:"Scheda scuola",  icon:"flag"},
-              {id:"modulistica",  label:"Modulistica",    icon:"file"},
-            ].map(item=>{
-              const active=current===item.id;
-              return React.createElement('button', {key:item.id, onClick:()=>setView(item.id),
-                style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
-                  borderRadius:7,border:"none",cursor:"pointer",
-                  background:active?C.goldBg:"transparent",
-                  color:active?C.gold:C.textMuted,
-                  fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:active?500:400,
-                  textAlign:"left",transition:"all .15s",marginBottom:1,
-                  borderLeft:active?`2px solid ${C.gold}`:"2px solid transparent"}}
-                , React.createElement(Ic,{n:item.icon,size:14,stroke:active?C.gold:C.textMuted})
-                , item.label
-              );
-            })
-        )
+        /* ── Sezione strumenti — solo admin ── */
+        , (function(){
+            const sideRuolo = _optionalChain([user, 'optionalAccess', _sx => _sx.ruolo]) || "admin";
+            if(sideRuolo !== "admin") return null;
+            return React.createElement('div', { style: {padding:"6px 8px",borderTop:`1px solid ${C.border}`,flexShrink:0} }
+              , React.createElement('div', {style:{fontSize:9,color:C.textDim,letterSpacing:".1em",textTransform:"uppercase",padding:"6px 4px 4px"}}, "Strumenti")
+              , React.createElement('button', {
+                  onClick: function(){ if(onSettingsOpen) onSettingsOpen(true); },
+                  style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
+                    borderRadius:7,border:"none",cursor:"pointer",
+                    background:settingsDrawerOpen?C.goldBg:"transparent",
+                    color:settingsDrawerOpen?C.gold:C.textMuted,
+                    fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:settingsDrawerOpen?500:400,
+                    textAlign:"left",transition:"all .15s",marginBottom:1,
+                    borderLeft:settingsDrawerOpen?`2px solid ${C.gold}`:"2px solid transparent"}},
+                React.createElement(Ic,{n:"settings",size:14,stroke:settingsDrawerOpen?C.gold:C.textMuted}),
+                "Impostazioni"
+              )
+              , [
+                  {id:"schedaScuola", label:"Scheda scuola",  icon:"flag"},
+                  {id:"modulistica",  label:"Modulistica",    icon:"file"},
+                ].map(item=>{
+                  const active=current===item.id;
+                  return React.createElement('button', {key:item.id, onClick:()=>setView(item.id),
+                    style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
+                      borderRadius:7,border:"none",cursor:"pointer",
+                      background:active?C.goldBg:"transparent",
+                      color:active?C.gold:C.textMuted,
+                      fontFamily:"'DM Sans',sans-serif",fontSize:12,fontWeight:active?500:400,
+                      textAlign:"left",transition:"all .15s",marginBottom:1,
+                      borderLeft:active?`2px solid ${C.gold}`:"2px solid transparent"}}
+                    , React.createElement(Ic,{n:item.icon,size:14,stroke:active?C.gold:C.textMuted})
+                    , item.label
+                  );
+                })
+            );
+          })()
 
         /* User profile */
         , React.createElement('div', { style: {padding:"12px 14px",borderTop:`1px solid ${C.border}`,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10621}}
@@ -11249,7 +11256,7 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
                 , _optionalChain([user, 'optionalAccess', _91 => _91.nome]) || "Utente"
               )
               , React.createElement('div', { style: {fontSize:10,color:ruoloHex,textTransform:"capitalize",marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10628}}
-                , _optionalChain([user, 'optionalAccess', _92 => _92.ruolo]) || "—"
+                , {admin:"Amministratore",docente:"Docente",allievo:"Allievo"}[_optionalChain([user,'optionalAccess',_92=>_92.ruolo])] || "—"
               )
             )
           )
@@ -11426,9 +11433,9 @@ function App() {
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
-    contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
-    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
-    concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
+    contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
+    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
+    concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
     sitoWeb:       null,
     impostazioni:  React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo }),
