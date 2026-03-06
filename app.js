@@ -2664,7 +2664,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
           config: config,
           onConfig: setConfig,
           ruolo: ruolo,
-          onRuolo: setRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2391}}
+          onRuolo: function(){}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2391}}
         )
       )
     );
