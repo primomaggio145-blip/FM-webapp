@@ -2336,12 +2336,6 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const setAnniScolastici = _nullishCoalesce(propSetAnni, () => ( _setAnni));
     // ruolo deriva dal login, non da stato locale
     const ruolo = (appUser && appUser.ruolo) || "admin";
-    // Dati filtrati per allievo loggato
-    const myNome = (appUser && appUser.nome) || "";
-    const myStudentRecord = ruolo==="allievo"
-      ? (_students.find(s=>(s.name||s.nome||"").toLowerCase()===myNome.toLowerCase())||null)
-      : null;
-    const myStudentId = myStudentRecord ? myStudentRecord.id : null;
 
     const isVisible = id => panels[id] !== false;
   
@@ -2352,6 +2346,12 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const _docenti  = propDocentiDash  || [];
     const _entrate  = propEntrateDash  || [];
     const _lessons  = propLessonsDash  || [];
+    // Dati filtrati per allievo loggato (definiti dopo _students/_entrate)
+    const myNome = (appUser && appUser.nome) || "";
+    const myStudentRecord = ruolo==="allievo"
+      ? (_students.find(s=>(s.name||s.nome||"").toLowerCase()===myNome.toLowerCase())||null)
+      : null;
+    const myStudentId = myStudentRecord ? myStudentRecord.id : null;
     const allieviAttivi    = _students.filter(a=>a.status==="attivo"||a.stato==="attivo").length;
     const morosi           = _students.filter(a=>a.status==="scaduto"||a.stato==="scaduto").length;
     const oraNum  = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
