@@ -11152,7 +11152,7 @@ const NAV_ITEMS = [
 ];
 
 const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo }) => {
-  const ruoloHex = {admin:C.gold, direttore:C.purple, segreteria:C.blue, docente:C.teal}[_optionalChain([user, 'optionalAccess', _89 => _89.ruolo])] || C.gold;
+  const ruoloHex = {admin:C.gold, docente:C.teal, allievo:C.blue}[_optionalChain([user, 'optionalAccess', _89 => _89.ruolo])] || C.gold;
   const ini = _optionalChain([user, 'optionalAccess', _90 => _90.nome]) ? user.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase() : "??";
   // Primary nav items shown in bottom bar (most used)
   const BOTTOM_ITEMS = NAV_ITEMS.slice(0, 5);
@@ -11181,7 +11181,11 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
         /* Navigation */
         , React.createElement('nav', { style: {flex:1,padding:"10px 8px",overflowY:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10602}}
           , NAV_ITEMS.filter(item => {
-              const r = settingsDrawerOpen ? "admin" : (currentRuolo || _optionalChain([user, 'optionalAccess', _x => _x.ruolo]) || "admin");
+              // user.ruolo = ruolo reale del login; currentRuolo = simulazione (solo admin)
+              const userRole = _optionalChain([user, 'optionalAccess', _x => _x.ruolo]) || "admin";
+              const r = settingsDrawerOpen
+                ? "admin"
+                : (userRole === "admin" && currentRuolo ? currentRuolo : userRole);
               const perms = ROLE_PERMS[r] || ROLE_PERMS["admin"];
               return perms[item.id] !== false;
             }).map(item => {
@@ -11394,7 +11398,7 @@ function App() {
             , React.createElement('div', { key: panKey, style: {width:"100%",maxWidth:400,padding:"0 4px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10750}}
               , schermata==="login" && (
                 React.createElement(FormLogin, {
-                  onSuccess: u=>{setUser(u);setView("dashboard");},
+                  onSuccess: u=>{setUser(u);setSharedRuolo(u.ruolo||"admin");setView("dashboard");},
                   onRegistrazione: ()=>cambiaSchermata("register"),
                   onRecupero: ()=>cambiaSchermata("recover"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10752}}
                 )
@@ -11436,7 +11440,7 @@ function App() {
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
       , React.createElement('div', { style: {display:"flex",height:"100vh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: ()=>setUser(null), settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: ()=>{setUser(null);setSharedRuolo("admin");}, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , settingsDrawerOpen && React.createElement(SettingsDrawer, {
             open: settingsDrawerOpen,
             onClose: ()=>setSettingsDrawerOpen(false),
