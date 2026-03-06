@@ -876,11 +876,11 @@ const FormLogin = ({onSuccess,onRegistrazione,onRecupero})=>{
   const [loading,  setLoading]  = useState(false);
   const [err,      setErr]      = useState({});
 
-  // Credenziali demo
+  // Credenziali demo — 3 ruoli: admin, docente, allievo
   const DEMO = {
-    "admin@accademia.it":       {password:"admin123",   nome:"Marco Bianchi",   ruolo:"admin"},
-    "segreteria@accademia.it":  {password:"segr2024",   nome:"Laura Esposito",  ruolo:"segreteria"},
-    "rossi@accademia.it":       {password:"musica2024", nome:"Prof. Rossi",     ruolo:"docente"},
+    "admin@accademia.it":    {password:"admin123",   nome:"Marco Bianchi",  ruolo:"admin"},
+    "rossi@accademia.it":    {password:"musica2024", nome:"Prof. Rossi",    ruolo:"docente"},
+    "sofia@accademia.it":    {password:"sofia2024",  nome:"Sofia Marchetti",ruolo:"allievo"},
   };
 
   const validate=()=>{
@@ -993,9 +993,8 @@ const FormRegistrazione = ({onBack})=>{
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
 
   const RUOLI=[
-    {id:"docente",    label:"Docente",       desc:"Accesso al calendario e repertorio"},
-    {id:"segreteria", label:"Segreteria",    desc:"Allievi, pagamenti, calendario"},
-    {id:"direttore",  label:"Direttore",     desc:"Accesso completo, senza impostazioni admin"},
+    {id:"docente", label:"Docente", desc:"Lezioni assegnate, allievi propri, repertorio"},
+    {id:"allievo", label:"Allievo", desc:"Dashboard personale, calendario e concerti propri"},
   ];
 
   const validate=()=>{
@@ -1668,10 +1667,9 @@ const PANNELLI_DEF = [
 ];
 
 const DASH_RUOLI = [
-  {id:"admin",     label:"Amministratore", hex:C.gold,   desc:"Accesso completo + impostazioni"},
-  {id:"direttore", label:"Direttore",      hex:C.purple, desc:"Dashboard completa, no impostazioni admin"},
-  {id:"docente",   label:"Docente",        hex:C.teal,   desc:"Solo lezioni e repertorio"},
-  {id:"segreteria",label:"Segreteria",     hex:C.blue,   desc:"Allievi e pagamenti"},
+  {id:"admin",   label:"Amministratore", hex:C.gold, desc:"Accesso completo + impostazioni"},
+  {id:"docente", label:"Docente",        hex:C.teal, desc:"Proprie lezioni, allievi assegnati, repertorio"},
+  {id:"allievo", label:"Allievo",        hex:C.blue, desc:"Dashboard, calendario e concerti propri"},
 ];
 
 const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruolo, onRuolo, anniScolastici:_anniScolasticiRaw, setAnniScolastici }) => {
@@ -2258,7 +2256,7 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
           position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2012}}
           , React.createElement('div', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2014}}, "Ruolo: "
              , React.createElement('span', { style: {color:_optionalChain([DASH_RUOLI, 'access', _8 => _8.find, 'call', _9 => _9(r=>r.id===ruolo), 'optionalAccess', _10 => _10.hex])||C.textMuted,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2015}}
-              , _optionalChain([DASH_RUOLI, 'access', _11 => _11.find, 'call', _12 => _12(r=>r.id===ruolo), 'optionalAccess', _13 => _13.label])
+              , (DASH_RUOLI.find(r=>r.id===ruolo)||DASH_RUOLI[0]).label
             )
           )
           , React.createElement('div', { style: {display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2019}}
@@ -2429,7 +2427,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             , React.createElement('div', { style: {animation:"fadeUp 0.4s ease both"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2165}}
               , React.createElement('h1', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:30,fontWeight:300,letterSpacing:"0.02em",lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2166}}, "Buongiorno, "
                  , React.createElement('span', { style: {fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2167}}
-                  , ruolo==="admin"?"Amministratore":ruolo==="direttore"?"Direttore":ruolo==="docente"?"Docente":"Segreteria"
+                  , ruolo==="admin"?"Amministratore":ruolo==="docente"?"Docente":ruolo==="allievo"?"Allievo":"Utente"
                 )
               )
               , React.createElement('p', { style: {fontSize:13,color:C.textMuted,marginTop:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2171}}
@@ -3191,7 +3189,8 @@ const validate = f => {
   return e;
 };
 
-const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt }) => {
+const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, role:_roleSF }) => {
+  const roleSF = _roleSF || "admin"; // docente = dati anagrafici readOnly
   const _teacherOpts = (_docentiFSt||[]).map(d=>({value:d.nome||d.name||"",label:d.nome||d.name||""}));
   const [f, setF] = useState(initial || emptyStudent);
   const [errors, setErrors] = useState({});
@@ -3210,11 +3209,11 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt })
       , React.createElement('div', { style: {padding:24,display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2942}}
 
         , React.createElement(SectionDivider, { label: "Dati anagrafici" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 2944}})
-        , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}, React.createElement(Input, { label: "Nome completo *"  , value: f.name, onChange: e=>set("name",e.target.value), error: errors.name, placeholder: "Es. Sofia Marchetti"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}))
-        , React.createElement(Input, { label: "Email", type: "email", value: f.email, onChange: e=>set("email",e.target.value), error: errors.email, placeholder: "email@esempio.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2946}})
-        , React.createElement(Input, { label: "Telefono", value: f.phone, onChange: e=>set("phone",e.target.value), placeholder: "333 1234567" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 2947}})
-        , React.createElement(Input, { label: "Data di nascita"  , type: "date", value: f.birthdate, onChange: e=>set("birthdate",e.target.value), __self: this, __source: {fileName: _jsxFileName, lineNumber: 2948}})
-        , React.createElement(Input, { label: "Data iscrizione" , type: "date", value: f.enrollDate, onChange: e=>set("enrollDate",e.target.value), __self: this, __source: {fileName: _jsxFileName, lineNumber: 2949}})
+        , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}, React.createElement(Input, { label: roleSF==="docente"?"Nome (sola lettura)":"Nome completo *", value: f.name, onChange: roleSF==="docente"?undefined:e=>set("name",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.name, placeholder: "Es. Sofia Marchetti", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}))
+        , React.createElement(Input, { label: "Email", type: "email", value: f.email, onChange: roleSF==="docente"?undefined:e=>set("email",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.email, placeholder: "email@esempio.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2946}})
+        , React.createElement(Input, { label: "Telefono", value: f.phone, onChange: roleSF==="docente"?undefined:e=>set("phone",e.target.value), readOnly: roleSF==="docente", placeholder: "333 1234567", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2947}})
+        , React.createElement(Input, { label: "Data di nascita", type: "date", value: f.birthdate, onChange: roleSF==="docente"?undefined:e=>set("birthdate",e.target.value), readOnly: roleSF==="docente", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2948}})
+        , React.createElement(Input, { label: "Data iscrizione", type: "date", value: f.enrollDate, onChange: roleSF==="docente"?undefined:e=>set("enrollDate",e.target.value), readOnly: roleSF==="docente", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2949}})
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2950}}
           , React.createElement(Input, { label: "Nome per ricevuta"  , value: f.nomeRicevuta||"", onChange: e=>set("nomeRicevuta",e.target.value),
             placeholder: f.name||"Lascia vuoto per usare il nome dell'allievo", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2951}})
@@ -4120,7 +4119,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete }) =
 // APP ROOT
 // ════════════════════════════════════════════════════════════════════════════════
 
-const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV }) => {
+const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV }) => {
   const isMobile = useIsMobile();
   const [_students, _setStudents] = useState(INIT_STUDENTS);
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
@@ -4176,7 +4175,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         )
       )
       , modal==="add"    && React.createElement(Modal, { title: "Nuovo allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}, React.createElement(StudentForm, { onSave: handleAddStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}))
-      , modal==="edit"   && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
+      , modal==="edit"   && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], role: propUserRuoloAV||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
       , modal==="delete" && selected && React.createElement(ConfirmDelete, { label: selected.name, description: "Questa azione è irreversibile."   , onConfirm: handleDeleteStudent, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3911}})
     )
   );
@@ -4445,7 +4444,8 @@ const INIT_LESSONS = (() => {
 // ─── FORM LEZIONE ─────────────────────────────────────────────────────────────
 const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"Nessuna", notes:"", exercises:"", repertorioIds:[] };
 
-const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes }) => {
+const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, role:_roleLF }) => {
+  const roleLF = _roleLF || "admin"; // admin = può modificare data; docente = data readOnly
   const _teacherOptsLes = (_docentiFLes||[]).map(d=>({value:d.nome||d.name||"",label:d.nome||d.name||""}));
   const repertorio = _repertorioRaw || [];
   // Lista allievi dinamica: usa quella passata come prop, con fallback alla lista statica
@@ -4753,6 +4753,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
 const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students }) => {
   const canEdit = role === 'admin' || role === 'docente';
+  const canEditDate = role === 'admin'; // solo admin può cambiare la data
   const studentsList = students || [];
   const hex = insHex(lesson.instrument);
   const ATT_STYLES = {
@@ -6186,7 +6187,7 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
-const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, quickAction:qaCV, clearQuickAction:clearQaCV }) => {
+const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
   const propStudents = _propStudentsRaw || [];
@@ -6203,7 +6204,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const [modal,     setModal]     = useState(null);
     const [selLesson, setSelLesson] = useState(null);
     const [addDate,   setAddDate]   = useState(null);
-    const [role,      setRole]      = useState("admin"); // admin | docente | allievo
+    const role = propUserRuolo || "admin"; // ricevuto dall'App; admin | docente | allievo
     const currentStudent = "Sofia Marchetti"; // in produzione verrà dal sistema di login
     const [appView,     setAppView]    = useState("calendario"); // calendario | repertorio
   
@@ -6649,12 +6650,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
         , modal === "add" && (
           React.createElement(Modal, { title: "Nuova lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6136}}
-            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
+            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
           )
         )
         , modal === "edit" && selLesson && (
           React.createElement(Modal, { title: "Modifica lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6141}}
-            , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
+            , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
           )
         )
         , modal === "detail" && selLesson && (
@@ -6919,7 +6920,7 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
 
         , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6381}}
           , React.createElement(Input, { label: "Importo (€) *"  , type: "number", value: f.importo, onChange: e=>set("importo",e.target.value), error: err.importo, placeholder: "0.00", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6382}})
-          , React.createElement(Input, { label: "Data *" , type: "date", value: f.data, onChange: e=>set("data",e.target.value), error: err.data, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6383}})
+          , React.createElement(Input, { label: roleLF==="docente"?"Data (sola lettura)":"Data *", type: "date", value: f.data, onChange: roleLF==="docente"?undefined:e=>set("data",e.target.value), readOnly: roleLF==="docente", error: roleLF==="docente"?undefined:err.data, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6383}})
           , React.createElement(Sel, { label: "Mese di riferimento"  , value: f.mese, onChange: e=>set("mese",Number(e.target.value)),
             options: MESI.map((m,i)=>({value:i,label:m})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6384}})
           , React.createElement(Input, { label: "Anno", type: "number", value: f.anno, onChange: e=>set("anno",Number(e.target.value)), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6386}})
@@ -9695,30 +9696,29 @@ const fmt_data = d => new Date(d+"T00:00:00").toLocaleDateString("it-IT",{day:"2
 const fmt_ts   = d => new Date(d).toLocaleDateString("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
 
 const RUOLI = [
-  {id:"admin",      label:"Amministratore", hex:C.gold,   bg:C.goldBg,    bd:C.goldDim,      desc:"Accesso completo al sistema e alle impostazioni"},
-  {id:"direttore",  label:"Direttore",      hex:C.purple, bg:C.purpleBg,  bd:C.purpleBorder, desc:"Dashboard completa, report, nessuna impostazione admin"},
-  {id:"segreteria", label:"Segreteria",     hex:C.blue,   bg:C.blueBg,    bd:C.blueBorder,   desc:"Allievi, pagamenti, calendario"},
-  {id:"docente",    label:"Docente",        hex:C.teal,   bg:C.tealBg,    bd:C.tealBorder,   desc:"Solo le proprie lezioni e il repertorio"},
+  {id:"admin",   label:"Amministratore", hex:C.gold, bg:C.goldBg, bd:C.goldDim,    desc:"Accesso completo al sistema e alle impostazioni"},
+  {id:"docente", label:"Docente",        hex:C.teal, bg:C.tealBg, bd:C.tealBorder, desc:"Proprie lezioni, allievi assegnati, repertorio"},
+  {id:"allievo", label:"Allievo",        hex:C.blue, bg:C.blueBg, bd:C.blueBorder, desc:"Dashboard personale, calendario e concerti propri"},
 ];
-const ruoloById = id => RUOLI.find(r=>r.id===id)||RUOLI[3];
+const ruoloById = id => RUOLI.find(r=>r.id===id)||RUOLI[1];
 
 const MODULI = [
   {id:"dashboard",   label:"Dashboard",      icon:"grid"},
   {id:"allievi",     label:"Allievi",         icon:"users"},
+  {id:"docenti",     label:"Docenti",         icon:"user"},
+  {id:"corsi",       label:"Corsi",           icon:"music"},
   {id:"calendario",  label:"Calendario",      icon:"calendar"},
+  {id:"concerti",    label:"Concerti",        icon:"star"},
   {id:"contabilita", label:"Contabilità",     icon:"euro"},
   {id:"repertorio",  label:"Repertorio",      icon:"music"},
-  {id:"report",      label:"Report",          icon:"chart"},
-  {id:"impostazioni",label:"Impostazioni",    icon:"settings"},
   {id:"utenti",      label:"Gestione utenti", icon:"shield"},
 ];
 
-// Permessi default per ruolo
+// Permessi default per ruolo (usati da UtentiView per granularità moduli)
 const PERM_DEFAULT = {
-  admin:      {dashboard:true, allievi:true, calendario:true, contabilita:true, repertorio:true, report:true, impostazioni:true, utenti:true},
-  direttore:  {dashboard:true, allievi:true, calendario:true, contabilita:true, repertorio:true, report:true, impostazioni:false, utenti:false},
-  segreteria: {dashboard:true, allievi:true, calendario:true, contabilita:true, repertorio:false,report:false,impostazioni:false, utenti:false},
-  docente:    {dashboard:true, allievi:false,calendario:true, contabilita:false,repertorio:true, report:false,impostazioni:false, utenti:false},
+  admin:   {dashboard:true, allievi:true,  calendario:true, contabilita:true,  repertorio:true,  report:true,  impostazioni:true,  utenti:true},
+  docente: {dashboard:true, allievi:true,  calendario:true, contabilita:true,  repertorio:true,  report:false, impostazioni:false, utenti:false},
+  allievo: {dashboard:true, allievi:false, calendario:true, contabilita:true,  repertorio:false, report:false, impostazioni:false, utenti:false},
 };
 
 const STATI = [
@@ -9731,19 +9731,19 @@ const statoById = id => STATI.find(s=>s.id===id)||STATI[0];
 
 // ─── DATI DEMO ────────────────────────────────────────────────────────────────
 const INIT_UTENTI = [
-  {id:"u1", nome:"Marco Bianchi",    email:"m.bianchi@accademia.it",  ruolo:"admin",      stato:"attivo",   avatar:"MB", iscritto:"2023-09-01", ultimoAccesso:"2025-05-23T09:14:00", permessi:{...PERM_DEFAULT.admin},     note:"Fondatore e direttore artistico"},
-  {id:"u2", nome:"Laura Esposito",   email:"l.esposito@accademia.it", ruolo:"segreteria", stato:"attivo",   avatar:"LE", iscritto:"2023-09-15", ultimoAccesso:"2025-05-23T08:40:00", permessi:{...PERM_DEFAULT.segreteria},note:""},
-  {id:"u3", nome:"Prof. Rossi",      email:"rossi@accademia.it",      ruolo:"docente",    stato:"attivo",   avatar:"PR", iscritto:"2023-10-01", ultimoAccesso:"2025-05-22T18:05:00", permessi:{...PERM_DEFAULT.docente,allievi:true},note:"Accesso allievi esteso per coordinamento"},
-  {id:"u4", nome:"Prof. Bianchi",    email:"fbianchi@accademia.it",   ruolo:"docente",    stato:"attivo",   avatar:"PB", iscritto:"2023-10-01", ultimoAccesso:"2025-05-20T16:30:00", permessi:{...PERM_DEFAULT.docente},   note:""},
-  {id:"u5", nome:"Prof. Verde",      email:"verde@accademia.it",      ruolo:"docente",    stato:"attivo",   avatar:"PV", iscritto:"2024-01-10", ultimoAccesso:"2025-05-21T14:00:00", permessi:{...PERM_DEFAULT.docente},   note:""},
-  {id:"u6", nome:"Giulia Moretti",   email:"g.moretti@gmail.com",     ruolo:"direttore",  stato:"attivo",   avatar:"GM", iscritto:"2024-03-01", ultimoAccesso:"2025-05-19T10:22:00", permessi:{...PERM_DEFAULT.direttore}, note:"Direttore amministrativo"},
-  {id:"u7", nome:"Antonio Ferrara",  email:"a.ferrara@gmail.com",     ruolo:"docente",    stato:"sospeso",  avatar:"AF", iscritto:"2024-06-01", ultimoAccesso:"2025-03-10T09:00:00", permessi:{...PERM_DEFAULT.docente},   note:"Sospeso — contratto scaduto"},
+  {id:"u1", nome:"Marco Bianchi",    email:"admin@accademia.it",      ruolo:"admin",   stato:"attivo",  avatar:"MB", iscritto:"2023-09-01", ultimoAccesso:"2025-05-23T09:14:00", permessi:{...PERM_DEFAULT.admin},   note:"Amministratore di sistema"},
+  {id:"u3", nome:"Prof. Rossi",      email:"rossi@accademia.it",      ruolo:"docente",  stato:"attivo",  avatar:"PR", iscritto:"2023-10-01", ultimoAccesso:"2025-05-22T18:05:00", permessi:{...PERM_DEFAULT.docente}, note:"Docente di pianoforte"},
+  {id:"u4", nome:"Prof. Bianchi",    email:"fbianchi@accademia.it",   ruolo:"docente",  stato:"attivo",  avatar:"PB", iscritto:"2023-10-01", ultimoAccesso:"2025-05-20T16:30:00", permessi:{...PERM_DEFAULT.docente}, note:""},
+  {id:"u5", nome:"Prof. Verde",      email:"verde@accademia.it",      ruolo:"docente",  stato:"attivo",  avatar:"PV", iscritto:"2024-01-10", ultimoAccesso:"2025-05-21T14:00:00", permessi:{...PERM_DEFAULT.docente}, note:""},
+  {id:"u8", nome:"Sofia Marchetti",  email:"sofia@accademia.it",      ruolo:"allievo",  stato:"attivo",  avatar:"SM", iscritto:"2024-09-01", ultimoAccesso:"2025-05-22T10:00:00", permessi:{...PERM_DEFAULT.allievo}, note:"Allievo di pianoforte"},
+  {id:"u9", nome:"Luca Ferrari",     email:"luca.f@gmail.com",        ruolo:"allievo",  stato:"attivo",  avatar:"LF", iscritto:"2024-09-10", ultimoAccesso:"2025-05-20T15:30:00", permessi:{...PERM_DEFAULT.allievo}, note:"Allievo di chitarra"},
+  {id:"u7", nome:"Antonio Ferrara",  email:"a.ferrara@gmail.com",     ruolo:"docente",  stato:"sospeso", avatar:"AF", iscritto:"2024-06-01", ultimoAccesso:"2025-03-10T09:00:00", permessi:{...PERM_DEFAULT.docente}, note:"Sospeso — contratto scaduto"},
 ];
 
 const INIT_RICHIESTE = [
-  {id:"r1", nome:"Chiara Lombardi",  email:"c.lombardi@gmail.com",    ruolo:"docente",    data:"2025-05-22", messaggio:"Docente di violoncello, vorrei accedere al calendario e al repertorio."},
-  {id:"r2", nome:"Roberto Neri",     email:"r.neri@outlook.com",      ruolo:"segreteria", data:"2025-05-20", messaggio:"Collaboro in segreteria, ho bisogno di accedere alla gestione allievi e pagamenti."},
-  {id:"r3", nome:"Sofia Belli",      email:"s.belli@accademia.it",    ruolo:"docente",    data:"2025-05-18", messaggio:"Nuova insegnante di canto assunta dal 1° giugno."},
+  {id:"r1", nome:"Chiara Lombardi",  email:"c.lombardi@gmail.com",  ruolo:"docente", data:"2025-05-22", messaggio:"Docente di violoncello, vorrei accedere al calendario e al repertorio."},
+  {id:"r2", nome:"Matteo Conti",     email:"m.conti@gmail.com",       ruolo:"allievo", data:"2025-05-20", messaggio:"Sono un nuovo allievo di chitarra, vorrei accedere al portale."},
+  {id:"r3", nome:"Sofia Belli",      email:"s.belli@accademia.it",    ruolo:"docente", data:"2025-05-18", messaggio:"Nuova insegnante di canto assunta dal 1° giugno."},
 ];
 
 // ─── DRAWER DETTAGLIO UTENTE ──────────────────────────────────────────────────
@@ -11132,12 +11132,11 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 // ═══════════════════════════════════════════════════════════════════════════════
 // SIDEBAR NAVIGATION
 // ═══════════════════════════════════════════════════════════════════════════════
-// Permessi per ruolo: false = voce nascosta
+// Permessi navigazione per ruolo (sidebar): false = voce nascosta
 const ROLE_PERMS = {
-  admin:      {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, utenti:true},
-  direttore:  {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, utenti:false},
-  segreteria: {dashboard:true, allievi:true, docenti:false,corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:false,utenti:false},
-  docente:    {dashboard:true, allievi:false,docenti:false,corsi:true, calendario:true, concerti:true, contabilita:false,repertorio:true, utenti:false},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, utenti:true, impostazioni:true, schedaScuola:true, modulistica:true},
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
+  allievo: {dashboard:true, allievi:false,docenti:false,corsi:false, calendario:true, concerti:true, contabilita:true, repertorio:false,utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
 };
 
 const NAV_ITEMS = [
@@ -11418,11 +11417,11 @@ function App() {
                    spese: sharedSpese,
                    docenti: sharedDocenti, lessons: sharedLessons,
                    onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
-    allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
+    allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
     docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses,
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
-    calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
+    calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
     repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
