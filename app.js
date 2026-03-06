@@ -2464,14 +2464,17 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   , React.createElement('span', { style: {fontSize:12,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2201}}, "Azioni rapide" )
                 )
                 , React.createElement('div', { style: {padding:"14px 16px",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2203}}
-                  , [
-                    {icon:"receipt",  label:"Registra pagamento",    hex:C.green,  bg:C.greenBg,  bd:C.greenBorder,  action:"addEntrata"},
-                    {icon:"calendar", label:"Aggiungi lezione",       hex:C.teal,   bg:C.tealBg,   bd:C.tealBorder,   action:"addLezione"},
-                    {icon:"user",     label:"Nuovo allievo",          hex:C.gold,   bg:C.goldBg,   bd:C.goldDim,      action:"addAllievo"},
-                    {icon:"down",     label:"Registra spesa",         hex:C.red,    bg:C.redBg,    bd:C.redBorder,    action:"addSpesa"},
-                    {icon:"music",    label:"Nuovo brano",            hex:C.blue,   bg:C.blueBg,   bd:C.blueBorder,   action:"addBrano"},
-                    {icon:"flag",     label:"Crea evento/concerto",   hex:C.purple, bg:C.purpleBg, bd:C.purpleBorder, action:"addEvento"},
-                  ].map(a=>(
+                  , (function(){
+                      const allAzioni = [
+                        {icon:"receipt",  label:"Registra pagamento",  hex:C.green,  bg:C.greenBg,  bd:C.greenBorder,  action:"addEntrata", ruoli:["admin"]},
+                        {icon:"calendar", label:"Aggiungi lezione",     hex:C.teal,   bg:C.tealBg,   bd:C.tealBorder,   action:"addLezione", ruoli:["admin","docente"]},
+                        {icon:"user",     label:"Nuovo allievo",        hex:C.gold,   bg:C.goldBg,   bd:C.goldDim,      action:"addAllievo", ruoli:["admin"]},
+                        {icon:"down",     label:"Registra spesa",       hex:C.red,    bg:C.redBg,    bd:C.redBorder,    action:"addSpesa",   ruoli:["admin"]},
+                        {icon:"music",    label:"Nuovo brano",          hex:C.blue,   bg:C.blueBg,   bd:C.blueBorder,   action:"addBrano",   ruoli:["admin","docente"]},
+                        {icon:"flag",     label:"Crea evento/concerto", hex:C.purple, bg:C.purpleBg, bd:C.purpleBorder, action:"addEvento",  ruoli:["admin"]},
+                      ];
+                      return allAzioni.filter(a=>a.ruoli.includes(ruolo));
+                    })().map(a=>(
                     React.createElement('button', { key: a.label, onClick: ()=>{ if(onQuickAction&&a.action){
                           onQuickAction(a.action);
                           const navMap={addAllievo:"allievi",addLezione:"calendario",addBrano:"repertorio",addEvento:"concerti",addEntrata:"contabilita",addSpesa:"contabilita"};
@@ -2528,7 +2531,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                 )
 
                 /* Grafico andamento */
-                , isVisible("grafico") && (
+                , isVisible("grafico") && ruolo==="admin" && (
                   React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2266}}
                     , React.createElement('div', { style: {padding:"14px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2267}}
                       , React.createElement(Ic, { n: "chart", size: 14, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2268}})
@@ -7464,9 +7467,11 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
     const totQuoteAnno = entrate.filter(e=>e.anno===ANNO_ATT||(e.anno===ANNO_ATT-1&&e.mese>=9)).reduce((t,e)=>t+e.importo,0);
     const totQuoteMese = entrate.filter(e=>e.mese===MESE_C&&e.anno===new Date().getFullYear()).reduce((t,e)=>t+e.importo,0);
   
-    // Spese filtrate
+    // Spese filtrate — docente vede solo le proprie, allievo non vede uscite
     const filtered = spese.filter(s=>{
       const q=search.toLowerCase();
+      if(ruoloCV==="allievo") return false;
+      if(ruoloCV==="docente") return s.anno===ANNO_ATT && !!s.docenteId;
       return s.anno===ANNO_ATT
         &&(!q||s.desc.toLowerCase().includes(q)||(s.note||"").toLowerCase().includes(q))
         &&(!filterCat||s.categoria===filterCat)
@@ -7601,8 +7606,8 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                         , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7011}}, s.metodo)
                         /* Importo */
                         , React.createElement('div', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:17,fontWeight:600,color:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7013}}, fmt(s.importo))
-                        /* Azioni */
-                        , React.createElement('div', { style: {display:"flex",gap:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7015}}
+                        /* Azioni — solo admin */
+                        , ruoloCV==="admin" && React.createElement('div', { style: {display:"flex",gap:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7015}}
                           , React.createElement('button', { onClick: ()=>{setSelSpesa(s);setModal("edit");},
                             style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,padding:4,display:"flex",borderRadius:6},
                             onMouseEnter: e=>e.currentTarget.style.color=C.gold,
@@ -7630,7 +7635,12 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
               const qFiltrate = entrate
                 .filter(e=>{
                   const q = searchQ.toLowerCase();
-                  return (!q||e.studentName.toLowerCase().includes(q)||e.desc.toLowerCase().includes(q))
+                  // allievo vede solo i propri pagamenti
+                  if(ruoloCV==="allievo"){
+                    const myName = (typeof window!=="undefined" && window.__currentUserName__) || "";
+                    return (e.studentName||"").toLowerCase().includes(myName.toLowerCase()) || !myName;
+                  }
+                  return (!q||((e.studentName||"").toLowerCase().includes(q)||(e.desc||"").toLowerCase().includes(q)))
                     && (!filterQMese||Number(filterQMese)===e.mese);
                 })
                 .sort((a,b)=>b.data.localeCompare(a.data));
@@ -7713,13 +7723,13 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                             onMouseLeave: el=>el.currentTarget.style.color=C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7198}}
                             , React.createElement(Ic, { n: "receipt", size: 13, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7203}})
                           )
-                          , React.createElement('button', { onClick: ()=>{setSelQuota(e);setModal("editq");},
+                          , ruoloCV==="admin" && React.createElement('button', { onClick: ()=>{setSelQuota(e);setModal("editq");},
                             style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,padding:4,display:"flex",borderRadius:6},
                             onMouseEnter: el=>el.currentTarget.style.color=C.gold,
                             onMouseLeave: el=>el.currentTarget.style.color=C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7205}}
                             , React.createElement(Ic, { n: "edit", size: 13, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7209}})
                           )
-                          , React.createElement('button', { onClick: ()=>{setSelQuota(e);setModal("deleteq");},
+                          , ruoloCV==="admin" && React.createElement('button', { onClick: ()=>{setSelQuota(e);setModal("deleteq");},
                             style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,padding:4,display:"flex",borderRadius:6},
                             onMouseEnter: el=>el.currentTarget.style.color=C.red,
                             onMouseLeave: el=>el.currentTarget.style.color=C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7211}}
@@ -10486,7 +10496,8 @@ const INIT_DOCENTI_EXT = [
   { id:"d4", corsi:["c9","c10"], nome:"Prof.ssa Lia Marino", teacherKey:"Prof. Marino",  email:"l.marino@accademia.it",   phone:"366 3344556", strumenti:"Canto · Solfeggio",      bio:"Soprano lirico, docente di tecnica vocale e teoria musicale.",  tariffaOra:35, contratto:"Tempo indeterminato", dataInizio:"2017-09-01", colore:C.purple  },
 ];
 
-const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView }) => {
+const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView }) => {
+  const ruoloDocView = _ruoloDocView || "admin";
   const isMobile = useIsMobile();
   const students = _studentsRaw || [];
   const lessons = _lessonsRaw || [];
@@ -10595,11 +10606,13 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             , docenti.length, " docenti"
           )
         )
-        , React.createElement(Btn, { onClick: openNew, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9966}}, React.createElement(Ic, { n: "plus", size: 15, stroke: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9966}}), "Nuovo docente" )
+        , ruoloDocView==="admin" && React.createElement(Btn, { onClick: openNew, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9966}}, React.createElement(Ic, { n: "plus", size: 15, stroke: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9966}}), "Nuovo docente" )
       )
 
       , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9969}}
-        , docenti.map(d=>{
+        , (ruoloDocView==="docente"
+          ? (docenti||[]).filter(d=>(d.nome||d.name||"").toLowerCase().includes((_appUserDocView&&_appUserDocView.nome||"").toLowerCase()))
+          : (docenti||[])).map(d=>{
           const all = allievi(d);
           return (
             React.createElement('div', { key: d.id, onClick: ()=>{setSelected(d);setTab("profilo");},
@@ -11405,7 +11418,7 @@ function App() {
             , React.createElement('div', { key: panKey, style: {width:"100%",maxWidth:400,padding:"0 4px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10750}}
               , schermata==="login" && (
                 React.createElement(FormLogin, {
-                  onSuccess: u=>{setUser(u);setSharedRuolo(u.ruolo||"admin");setView("dashboard");},
+                  onSuccess: u=>{setUser(u);setSharedRuolo(u.ruolo||"admin");setView("dashboard"); try{window.__currentUserName__=u.nome||"";}catch(e){}},
                   onRegistrazione: ()=>cambiaSchermata("register"),
                   onRecupero: ()=>cambiaSchermata("recover"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10752}}
                 )
@@ -11429,7 +11442,7 @@ function App() {
                    docenti: sharedDocenti, lessons: sharedLessons,
                    onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
     allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
-    docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses,
+    docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user,
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
@@ -11447,7 +11460,7 @@ function App() {
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
       , React.createElement('div', { style: {display:"flex",height:"100vh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: ()=>{setUser(null);setSharedRuolo("admin");}, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: ()=>{setUser(null);setSharedRuolo("admin"); try{window.__currentUserName__="";}catch(e){}}, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , settingsDrawerOpen && React.createElement(SettingsDrawer, {
             open: settingsDrawerOpen,
             onClose: ()=>setSettingsDrawerOpen(false),
