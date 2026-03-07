@@ -3535,7 +3535,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
 
   return (
     React.createElement('div', { style: {animation:"slideIn 0.25s ease"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3200}}
-      , React.createElement('button', { onClick: onBack, style: {display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:C.textMuted,fontSize:13,marginBottom:20,padding:0,fontFamily:"'DM Sans',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3201}}
+      , onBack && React.createElement('button', { onClick: onBack, style: {display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:C.textMuted,fontSize:13,marginBottom:20,padding:0,fontFamily:"'DM Sans',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3201}}
         , React.createElement(Ic, { n: "back", size: 16, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3202}}), " Tutti gli allievi"
       )
 
@@ -4197,14 +4197,18 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
   const _allStudents = _nullishCoalesce(propStudents, () => ( _students));
   const setStudents  = _nullishCoalesce(propSetStudents, () => ( _setStudents));
-  const students = _ruoloAV==="docente" && _nomeAV ? _allStudents.filter(s=>{ const t=(s.teacher||""); return t===_nomeAV||t.toLowerCase().includes(_nomeAV.toLowerCase())||_nomeAV.toLowerCase().includes(t.toLowerCase()); }) : _allStudents;
+  const students = _ruoloAV==="docente" && _nomeAV
+    ? _allStudents.filter(s=>{ const t=(s.teacher||""); return t===_nomeAV||t.toLowerCase().includes(_nomeAV.toLowerCase())||_nomeAV.toLowerCase().includes(t.toLowerCase()); })
+    : _ruoloAV==="allievo" && _nomeAV
+    ? _allStudents.filter(s=>(s.name||s.nome||"").toLowerCase()===_nomeAV.toLowerCase())
+    : _allStudents;
   const courses     = _nullishCoalesce(propCourses, () => ( _courses));
   const setCourses  = _nullishCoalesce(propSetCourses, () => ( _setCourses));
   const lessons     = _nullishCoalesce(propLessons, () => ( []));
   const entrate     = _nullishCoalesce(propEntrate, () => ( []));
   const setEntrate  = _nullishCoalesce(propSetEntrate, () => ( (()=>{})));
-  const [view,     setView]     = useState("list");
-  const [selected, setSelected] = useState(null);
+  const [view,     setView]     = useState(_ruoloAV==="allievo" ? "detail" : "list");
+  const [selected, setSelected] = useState(_ruoloAV==="allievo" ? (students[0]||null) : null);
   const [modal,    setModal]    = useState(null);
 
   const closeModal = () => setModal(null);
@@ -4239,9 +4243,9 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             setEntrate: setEntrate,
             annoInizioAttivo: annoInizioAttivo,
             config: propConfig,
-            onEdit: ()=>setModal("edit"),
-            onDelete: ()=>setModal("delete"),
-            onBack: ()=>setView("list"),
+            onEdit: _ruoloAV==="admin" ? ()=>setModal("edit") : undefined,
+            onDelete: _ruoloAV==="admin" ? ()=>setModal("delete") : undefined,
+            onBack: _ruoloAV!=="allievo" ? ()=>setView("list") : undefined,
             onAddLesson: handleAddLesson,
             onUpdateStudent: d=>setStudents(p=>p.map(s=>s.id===d.id?d:s)), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3893}}
           )
@@ -4277,6 +4281,8 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
       , React.createElement(CourseManager, {
         courses: _ruoloCorsi==="docente" && _nomeCorsi
           ? (()=>{ const myD=(propDocenti||[]).find(d=>d.teacherKey===_nomeCorsi||(d.nome||"").toLowerCase().includes(_nomeCorsi.toLowerCase())); return myD?courses.filter(c=>(c.docenti||[]).includes(myD.id)):courses; })()
+          : _ruoloCorsi==="allievo" && _nomeCorsi
+          ? (()=>{ const me=students.find(s=>(s.name||s.nome||"").toLowerCase()===_nomeCorsi.toLowerCase()); if(!me) return []; const ids=new Set([...(me.instrument?courses.filter(c=>c.name===me.instrument).map(c=>c.id):[]),...(me.complementaryCourse?[me.complementaryCourse]:[])]); return courses.filter(c=>ids.has(c.id)); })()
           : courses,
         students: students,
         docenti: docenti,
@@ -8197,7 +8203,7 @@ const AllievoBraniView = ({allievo,brani,allStudents,lessons,onBack})=>{
   
   return(
     React.createElement('div', { style: {flex:1,padding:isMobile?"12px":"20px 24px",overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7588}}
-      , React.createElement('button', { onClick: onBack, style: {display:"flex",alignItems:"center",gap:6,background:"none",
+      , onBack && React.createElement('button', { onClick: onBack, style: {display:"flex",alignItems:"center",gap:6,background:"none",
         border:"none",cursor:"pointer",color:C.textMuted,fontSize:13,fontFamily:"'DM Sans',sans-serif",
         marginBottom:20,padding:"4px 0"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7589}}
         , React.createElement('svg', { width: 16, height: 16, viewBox: "0 0 24 24"   , fill: "none", stroke: C.textMuted, strokeWidth: "1.8", strokeLinecap: "round", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7592}}, React.createElement('path', { d: "m15 18-6-6 6-6"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 7592}})), "Tutti gli allievi"
@@ -8263,8 +8269,9 @@ const AllievoBraniView = ({allievo,brani,allStudents,lessons,onBack})=>{
 // APP
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep, quickAction, clearQuickAction, userRuolo:_ruoloRep }) => {
-  const ruoloRep = _ruoloRep || "admin"; // admin+docente = scrittura; allievo = sola lettura
+const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep, quickAction, clearQuickAction, userRuolo:_ruoloRep, appUser:_appUserRep }) => {
+  const ruoloRep = _ruoloRep || "admin";
+  const _nomeAllievoRep = ruoloRep==="allievo" ? ((_appUserRep&&_appUserRep.nome)||"") : "";
   const isMobile = useIsMobile();
   const [_braniLocal, _setBraniLocal] = useState(INIT_BRANI);
   React.useEffect(()=>{ if(quickAction==="addBrano"){ setModal("add"); if(clearQuickAction)clearQuickAction(); } },[quickAction]);
@@ -8322,15 +8329,24 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
             height:52,flexShrink:0,gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7730}}
             , React.createElement(Ic, { n: "book", size: 16, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7733}})
             , React.createElement('span', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:15,fontWeight:600,color:C.gold,letterSpacing:"0.04em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7734}}, "Repertorio")
-            , React.createElement('div', { style: {marginLeft:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7735}}
+            , ruoloRep!=="allievo" && React.createElement('div', { style: {marginLeft:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7735}}
               , React.createElement(Btn, { onClick: ()=>setModal("add"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7736}}
                 , React.createElement(Ic, { n: "plus", size: 14, stroke: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7737}}), "Nuovo brano"
               )
             )
           )
 
-          /* ── Se allievoPOV attivo, mostra vista allievo ── */
-          , allievoPOV ? (
+          /* ── Per allievo loggato: vista diretta propri brani ── */
+          , ruoloRep==="allievo" && _nomeAllievoRep ? (
+            React.createElement(AllievoBraniView, {
+              allievo: _nomeAllievoRep,
+              brani: brani,
+              allStudents: _studBranoRep,
+              lessons: _lessonsRep,
+              onBack: undefined,
+            }
+            )
+          ) : allievoPOV ? (
             React.createElement(AllievoBraniView, {
               allievo: allievoPOV,
               brani: brani,
@@ -11240,7 +11256,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 const ROLE_PERMS = {
   admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, utenti:true, impostazioni:true, schedaScuola:true, modulistica:true},
   docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
-  allievo: {dashboard:true, allievi:false,docenti:false,corsi:false, calendario:true, concerti:true, contabilita:true, repertorio:false,utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false,contabilita:true, repertorio:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
 };
 
 const NAV_ITEMS = [
@@ -11534,9 +11550,9 @@ function App() {
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
-    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
+    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
-    utenti:      (user?.ruolo||"admin")!=="docente" && React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
+    utenti:      (user?.ruolo||"admin")==="admin" && React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
     sitoWeb:       null,
     impostazioni:  React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo }),
     schedaScuola:  React.createElement(SchedaScuolaView, { config: sharedConfig }),
