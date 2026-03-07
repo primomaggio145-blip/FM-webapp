@@ -2348,6 +2348,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const _lessons  = propLessonsDash  || [];
     // Dati filtrati per allievo loggato (definiti dopo _students/_entrate)
     const myNome = (appUser && appUser.nome) || "";
+    const myDocNome = ruolo==="docente" ? myNome : "";
     const myStudentRecord = ruolo==="allievo"
       ? (_students.find(s=>(s.name||s.nome||"").toLowerCase()===myNome.toLowerCase())||null)
       : null;
@@ -2438,7 +2439,10 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                 )
               )
               , React.createElement('p', { style: {fontSize:13,color:C.textMuted,marginTop:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2171}}
-                , config.annoScolastico, " · "  , lezioniOggi, " lezioni oggi · "    , lezComplete, " completate · "   , lezioniOggi-lezComplete, " rimanenti"
+                , config.annoScolastico
+                , ruolo==="docente" ? " · " + _lessons.filter(l=>(l.teacher||l.docente||"").toLowerCase().includes(myDocNome.toLowerCase())).length + " mie lezioni"
+                : ruolo==="allievo" ? " · " + _lessons.filter(l=>(l.student||l.allievo||"").toLowerCase().includes(myNome.toLowerCase())).length + " lezioni assegnate"
+                : " · " + lezioniOggi + " lezioni oggi · " + lezComplete + " completate · " + (lezioniOggi-lezComplete) + " rimanenti"
               )
               , React.createElement('div', { style: {marginTop:10,width:220}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2174}}
                 , React.createElement('div', { style: {height:4,background:C.border,borderRadius:2,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2175}}
@@ -2455,7 +2459,18 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 
             /* ── RIGA 1: KPI ── */
             , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2188}}
-              , ruolo==="allievo" ? React.createElement(React.Fragment, null
+              , ruolo==="docente" ? React.createElement(React.Fragment, null
+                  , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni settimana",
+                      value: _lessons.filter(l=>(l.teacher||l.docente||"").toLowerCase().includes(myDocNome.toLowerCase())).length,
+                      sub: "mie lezioni", hex: C.teal})
+                  , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
+                      value: (()=>{ const p=_lessons.filter(l=>(l.teacher||l.docente||"").toLowerCase().includes(myDocNome.toLowerCase())&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0]; return p?new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}):"—"; })(),
+                      sub: "data più vicina", hex: C.gold})
+                  , React.createElement(KpiCard, { icon: "euro", label: "Compensi anno",
+                      value: fmt((_spese||[]).filter(s=>{const doc=(_docenti||[]).find(d=>d.id===s.docenteId);return doc&&(doc.nome||"").toLowerCase().includes(myDocNome.toLowerCase())&&s.anno===annoCorrente;}).reduce((t,s)=>t+(s.importo||0),0)),
+                      sub: "totale a.s.", hex: C.green})
+                )
+              : ruolo==="allievo" ? React.createElement(React.Fragment, null
                   , React.createElement(KpiCard, { icon: "calendar", label: "Le mie lezioni",
                       value: _lessons.filter(l=>(l.student||l.allievo||"").toLowerCase().includes(myNome.toLowerCase())).length,
                       sub: "questa settimana", hex: C.teal})
@@ -2543,6 +2558,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     , React.createElement('div', { style: {padding:14,maxHeight:380,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2252}}
                       , React.createElement(LessonTimeline, { lezioni: ruolo==="allievo"
                         ? LEZIONI_OGGI.filter(l=>(l.allievo||l.student||"").toLowerCase().includes(myNome.toLowerCase()))
+                        : ruolo==="docente" ? LEZIONI_OGGI.filter(l=>(l.docente||l.teacher||"").toLowerCase().includes(myDocNome.toLowerCase()))
                         : LEZIONI_OGGI, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2253}})
                     )
                     , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2255}}
@@ -2611,7 +2627,15 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       )
                     )
                     , React.createElement('div', { style: {padding:"16px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2320}}
-                      , ruolo==="allievo"
+                      , ruolo==="docente"
+                        ? React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:8}},
+                            (()=>{
+                              const ms=(_spese||[]).filter(s=>{const d=(_docenti||[]).find(x=>x.id===s.docenteId);return d&&(d.nome||"").toLowerCase().includes(myDocNome.toLowerCase());}).sort((a,b)=>(b.data||"").localeCompare(a.data||"")).slice(0,5);
+                              if(!ms.length) return React.createElement('p',{style:{fontSize:13,color:C.textDim,textAlign:"center",padding:"12px 0"}},"Nessun compenso");
+                              return ms.map((s,i)=>React.createElement('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.border}`}},React.createElement('div',null,React.createElement('div',{style:{fontSize:13,color:C.text}},s.desc||"Compenso"),React.createElement('div',{style:{fontSize:11,color:C.textDim}},new Date((s.data||"")+"T00:00:00").toLocaleDateString("it-IT"))),React.createElement('span',{style:{fontFamily:"'Cormorant Garamond',serif",fontSize:16,fontWeight:600,color:C.gold}},fmt(s.importo||0))));
+                            })()
+                          )
+                        : ruolo==="allievo"
                         ? React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:8}},
                             (()=>{
                               const miei=_entrate.filter(e=>myStudentId?e.studentId===myStudentId:(e.studentName||"").toLowerCase().includes(myNome.toLowerCase())).sort((a,b)=>b.data.localeCompare(a.data)).slice(0,5);
@@ -2681,6 +2705,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     , React.createElement('div', { style: {padding:"6px 4px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2374}}
                       , React.createElement(AttivitaFeed, { items: ruolo==="allievo"
                         ? ATTIVITA_RECENTE.filter(a=>(a.sogg||"").toLowerCase().includes(myNome.toLowerCase()))
+                        : ruolo==="docente" ? ATTIVITA_RECENTE.filter(a=>(a.sogg||"").toLowerCase().includes(myDocNome.toLowerCase()))
                         : ATTIVITA_RECENTE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2375}})
                     )
                   )
@@ -3190,7 +3215,7 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
           , React.createElement('h1', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:32,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2881}}, "Gestione Corsi" )
           , React.createElement('p', { style: {color:C.textMuted,fontSize:14,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2882}}, individuali.length, " corsi individuali · "    , collettivi.length, " corsi collettivi"  )
         )
-        , React.createElement(Btn, { onClick: ()=>setModal("add"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 2884}}, React.createElement(Ic, { n: "plus", size: 14, color: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2884}}), "Nuovo corso" )
+        , onAdd && React.createElement(Btn, { onClick: ()=>setModal("add"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 2884}}, React.createElement(Ic, { n: "plus", size: 14, color: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2884}}), "Nuovo corso" )
       )
 
       , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:24,display:"flex",flexDirection:"column",gap:24}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2887}}
@@ -4064,7 +4089,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete }) =
           , React.createElement('h1', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:"clamp(22px,4vw,32px)",fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3753}}, "Anagrafica Allievi" )
           , React.createElement('p', { style: {color:C.textMuted,fontSize:14,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3754}}, students.filter(s=>s.status==="attivo").length, " attivi · "   , students.length, " totali" )
         )
-        , React.createElement(Btn, { onClick: onAdd, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}, React.createElement(Ic, { n: "plus", size: 14, color: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}), "Nuovo allievo" )
+        , _ruoloAV==="admin" && React.createElement(Btn, { onClick: onAdd, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}, React.createElement(Ic, { n: "plus", size: 14, color: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}), "Nuovo allievo" )
       )
 
       , React.createElement('div', { style: {display:"flex",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3759}}
@@ -4163,12 +4188,15 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete }) =
 // APP ROOT
 // ════════════════════════════════════════════════════════════════════════════════
 
-const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV }) => {
+const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV }) => {
+  const _ruoloAV = propUserRuoloAV || "admin";
+  const _nomeAV  = (_appUserAV && _appUserAV.nome) || "";
   const isMobile = useIsMobile();
   const [_students, _setStudents] = useState(INIT_STUDENTS);
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
-  const students    = _nullishCoalesce(propStudents, () => ( _students));
-  const setStudents = _nullishCoalesce(propSetStudents, () => ( _setStudents));
+  const _allStudents = _nullishCoalesce(propStudents, () => ( _students));
+  const setStudents  = _nullishCoalesce(propSetStudents, () => ( _setStudents));
+  const students = _ruoloAV==="docente" && _nomeAV ? _allStudents.filter(s=>(s.teacher||"").toLowerCase().includes(_nomeAV.toLowerCase())) : _allStudents;
   const courses     = _nullishCoalesce(propCourses, () => ( _courses));
   const setCourses  = _nullishCoalesce(propSetCourses, () => ( _setCourses));
   const lessons     = _nullishCoalesce(propLessons, () => ( []));
@@ -4218,14 +4246,16 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
           )
         )
       )
-      , modal==="add"    && React.createElement(Modal, { title: "Nuovo allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}, React.createElement(StudentForm, { onSave: handleAddStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}))
-      , modal==="edit"   && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], role: propUserRuoloAV||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
+      , _ruoloAV==="admin" && modal==="add" && React.createElement(Modal, { title: "Nuovo allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}, React.createElement(StudentForm, { onSave: handleAddStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}))
+      , _ruoloAV==="admin" && modal==="edit" && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], role: propUserRuoloAV||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
       , modal==="delete" && selected && React.createElement(ConfirmDelete, { label: selected.name, description: "Questa azione è irreversibile."   , onConfirm: handleDeleteStudent, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3911}})
     )
   );
 };
 
-const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:propStudents, setStudents:propSetStudents, docenti:propDocenti }) => {
+const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:propStudents, setStudents:propSetStudents, docenti:propDocenti, userRuolo:_rC2, appUser:_aC }) => {
+  const _ruoloCorsi = _rC2 || "admin";
+  const _nomeCorsi  = (_aC && _aC.nome) || "";
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
   const [_students, _setStudents] = useState(INIT_STUDENTS);
   const courses     = _nullishCoalesce(propCourses, () => ( _courses));
@@ -4244,12 +4274,14 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
   return (
     React.createElement('div', { style: {maxWidth:1200,margin:"0 auto",padding:"clamp(12px, 3vw, 32px)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3933}}
       , React.createElement(CourseManager, {
-        courses: courses,
+        courses: _ruoloCorsi==="docente" && _nomeCorsi
+          ? courses.filter(c=>(c.docenti||[]).some(id=>{const d=(propDocenti||[]).find(x=>x.id===id);return d&&(d.nome||"").toLowerCase().includes(_nomeCorsi.toLowerCase());})||(c.teacherName||c.teacher||"").toLowerCase().includes(_nomeCorsi.toLowerCase()))
+          : courses,
         students: students,
         docenti: docenti,
-        onAdd: handleAddCourse,
-        onEdit: handleEditCourse,
-        onDelete: handleDelCourse, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3934}}
+        onAdd: _ruoloCorsi==="admin" ? handleAddCourse : undefined,
+        onEdit: _ruoloCorsi==="admin" ? handleEditCourse : undefined,
+        onDelete: _ruoloCorsi==="admin" ? handleDelCourse : undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3934}}
       )
     )
   );
@@ -6476,6 +6508,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const visibleLessons = useMemo(() => {
       let ls = role === "allievo"
         ? lessons.filter(l => studentInLesson(l, currentStudent))
+        : role === "docente" && window.__currentUserName__
+        ? lessons.filter(l => (l.teacher||"").toLowerCase().includes((window.__currentUserName__||"").toLowerCase()))
         : lessons;
       if (filterCorso) {
         ls = ls.filter(l =>
@@ -6579,7 +6613,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   )
                 ))
               )
-              , (role === "admin" || role === "docente") && (
+              , role === "admin" && (
                 React.createElement('div', { style: {display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6023}}
                   , React.createElement(Btn, { variant: "secondary", onClick: () => { setAddDate(viewMode==="day"?yyyymmdd(curDate):yyyymmdd(today)); setModal("addprova"); },
                     style: {border:`1px solid ${C.teal}`,color:C.teal,background:C.tealBg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6024}}
@@ -7434,7 +7468,7 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota, ruoloCV })
       {id:"report",  label:"Report",   icon:"chart"},
     ].filter(t => {
       if(ruoloCV==="allievo") return t.id==="entrate";
-      if(ruoloCV==="docente") return t.id!=="report";
+      if(ruoloCV==="docente") return t.id==="spese";
       return true;
     }).map(t=>(
       React.createElement('button', { key: t.id, onClick: ()=>{ setTab(t.id); _optionalChain([onSelDoc, 'optionalCall', _59 => _59()]); },
@@ -7551,8 +7585,8 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         , React.createElement('div', { style: {minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6912}}
           , React.createElement(Navbar, { tab: tab, setTab: t=>{ setTab(t); setSelDoc(null); }, onSetModal: ruoloCV==="admin"?()=>setModal("add"):undefined, onSetModalQuota: ruoloCV==="admin"?()=>setModal('addq'):undefined, ruoloCV: ruoloCV, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6913}})
 
-          /* Stats ribbon */
-          , React.createElement('div', { style: {background:C.surface,borderBottom:`1px solid ${C.border}`,
+          /* Stats ribbon — solo admin */
+          , ruoloCV==="admin" && React.createElement('div', { style: {background:C.surface,borderBottom:`1px solid ${C.border}`,
             padding:"10px 24px",display:"flex",gap:0,flexShrink:0,alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6916}}
             , [
               {label:"Entrate (a.s.)",  val:fmt(totQuoteAnno), hex:C.green},
@@ -9556,6 +9590,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
       && (!fStato || e.stato===fStato);
     if(ruoloConc==="allievo" && _myNomeConc)
       return base && (e.partecipanti||[]).some(p=>(p.studentName||"").toLowerCase().includes(_myNomeConc.toLowerCase()));
+    if(ruoloConc==="docente") return base;
     return base;
   }).sort((a,b)=>b.data.localeCompare(a.data));
 
@@ -9667,11 +9702,11 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
             const pct   = ev.capienza>0?Math.min(100,pOcc/ev.capienza*100):0;
             return (
               React.createElement('div', { key: ev.id,
-                onClick: ruoloConc!=="allievo" ? ()=>setSelected(ev) : undefined,
+                onClick: ruoloConc==="admin" ? ()=>setSelected(ev) : undefined,
                 style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",
-                  cursor:ruoloConc!=="allievo"?"pointer":"default",transition:"all 0.18s",display:"flex",flexDirection:"column"},
-                onMouseEnter: ruoloConc!=="allievo" ? e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 28px rgba(0,0,0,0.28)";} : undefined,
-                onMouseLeave: ruoloConc!=="allievo" ? e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";} : undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8998}}
+                  cursor:ruoloConc==="admin"?"pointer":"default",transition:"all 0.18s",display:"flex",flexDirection:"column"},
+                onMouseEnter: ruoloConc==="admin" ? e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 28px rgba(0,0,0,0.28)";} : undefined,
+                onMouseLeave: ruoloConc==="admin" ? e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";} : undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8998}}
                 /* Accent bar */
                 , React.createElement('div', { style: {height:4,background:`linear-gradient(90deg,${tp.hex},${tp.hex}50)`,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9004}})
                 , React.createElement('div', { style: {padding:"15px 18px",flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9005}}
@@ -11490,10 +11525,10 @@ function App() {
                    spese: sharedSpese,
                    docenti: sharedDocenti, lessons: sharedLessons,
                    onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
-    allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
+    allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
     docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user,
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
-    corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
+    corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
     repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
