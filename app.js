@@ -4090,7 +4090,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete }) =
           , React.createElement('h1', { style: {fontFamily:"'Cormorant Garamond',serif",fontSize:"clamp(22px,4vw,32px)",fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3753}}, "Anagrafica Allievi" )
           , React.createElement('p', { style: {color:C.textMuted,fontSize:14,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3754}}, students.filter(s=>s.status==="attivo").length, " attivi · "   , students.length, " totali" )
         )
-        , _ruoloAV==="admin" && React.createElement(Btn, { onClick: onAdd, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}, React.createElement(Ic, { n: "plus", size: 14, color: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}), "Nuovo allievo" )
+        , onAdd && React.createElement(Btn, { onClick: onAdd, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}, React.createElement(Ic, { n: "plus", size: 14, color: C.bg, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}), "Nuovo allievo" )
       )
 
       , React.createElement('div', { style: {display:"flex",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3759}}
@@ -4167,9 +4167,9 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete }) =
                       )
                       , React.createElement('td', { style: {padding:"13px 16px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3831}}
                         , React.createElement('div', { style: {display:"flex",gap:4,justifyContent:"flex-end"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3832}}
-                          , React.createElement('button', { onClick: e=>{e.stopPropagation();onEdit(s);}, style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,padding:6,borderRadius:6,display:"flex"},
+                          , onEdit && React.createElement('button', { onClick: e=>{e.stopPropagation();onEdit(s);}, style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,padding:6,borderRadius:6,display:"flex"},
                             onMouseEnter: e=>e.currentTarget.style.color=C.gold, onMouseLeave: e=>e.currentTarget.style.color=C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3833}}, React.createElement(Ic, { n: "edit", size: 14, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3834}}))
-                          , React.createElement('button', { onClick: e=>{e.stopPropagation();onDelete(s);}, style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,padding:6,borderRadius:6,display:"flex"},
+                          , onDelete && React.createElement('button', { onClick: e=>{e.stopPropagation();onDelete(s);}, style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,padding:6,borderRadius:6,display:"flex"},
                             onMouseEnter: e=>e.currentTarget.style.color=C.red, onMouseLeave: e=>e.currentTarget.style.color=C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3835}}, React.createElement(Ic, { n: "trash", size: 14, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3836}}))
                         )
                       )
@@ -4225,9 +4225,9 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
           React.createElement(StudentList, {
             students: students, courses: courses,
             onSelect: s=>{setSelected(s);setView("detail");},
-            onAdd: ()=>setModal("add"),
-            onEdit: s=>{setSelected(s);setModal("edit");},
-            onDelete: s=>{setSelected(s);setModal("delete");}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3884}}
+            onAdd: _ruoloAV==="admin" ? ()=>setModal("add") : undefined,
+            onEdit: _ruoloAV==="admin" ? s=>{setSelected(s);setModal("edit");} : undefined,
+            onDelete: _ruoloAV==="admin" ? s=>{setSelected(s);setModal("delete");} : undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3884}}
           )
         )
         , view==="detail" && selected && (
@@ -4830,7 +4830,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
 const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students }) => {
   const canEdit = role === 'admin' || role === 'docente';
-  const canEditDate = role === 'admin'; // solo admin può cambiare la data
+  const canEditDate = role === 'admin' || role === 'docente'; // docente può cambiare data
   const studentsList = students || [];
   const hex = insHex(lesson.instrument);
   const ATT_STYLES = {
