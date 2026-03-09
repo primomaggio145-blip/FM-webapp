@@ -183,9 +183,12 @@
     return { added, updated, deleted };
   }
 
-  // Genera un ID univoco per nuovi record — formato timestamp+random, leggibile e ordinabile
+  // Genera un UUID v4 valido per Supabase (colonne di tipo uuid)
   function newId() {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
   }
 
   // Pulisce un oggetto row rimuovendo solo i valori `undefined` (non null)
