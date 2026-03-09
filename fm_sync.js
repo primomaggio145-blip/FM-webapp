@@ -83,6 +83,24 @@
       dataUltima: r.data_ultima || '',
     };
   }
+  function adaptConcerto(r) {
+    return {
+      id: r.id,
+      tipo: r.tipo || 'saggio',
+      titolo: r.titolo || '',
+      data: r.data || null,
+      ora: r.ora || null,
+      luogo: r.luogo || null,
+      capienza: r.capienza ? parseInt(r.capienza) : null,
+      biglietto: r.biglietto || false,
+      prezzoBiglietto: parseFloat(r.prezzo_biglietto) || 0,
+      stato: r.stato || 'programmato',
+      descrizione: r.descrizione || '',
+      note: r.note || '',
+      partecipanti: r.partecipanti || [],
+      scaletta: r.scaletta || [],
+    };
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  ADAPTERS  React → DB
@@ -163,6 +181,25 @@
         periodo: b.periodo || null, tonality: b.tonality || null,
         difficulty: b.difficulty || null, tipo: b.tipo || 'individuale',
         note: b.note || null, updated_at: new Date().toISOString(),
+      };
+    },
+    concerti(c) {
+      return {
+        id: c.id || null,
+        tipo: c.tipo || 'saggio',
+        titolo: c.titolo || '',
+        data: c.data || null,
+        ora: c.ora || null,
+        luogo: c.luogo || null,
+        capienza: c.capienza ? parseInt(c.capienza) : null,
+        biglietto: c.biglietto || false,
+        prezzo_biglietto: parseFloat(c.prezzoBiglietto) || 0,
+        stato: c.stato || 'programmato',
+        descrizione: c.descrizione || null,
+        note: c.note || null,
+        partecipanti: JSON.stringify(c.partecipanti || []),
+        scaletta: JSON.stringify(c.scaletta || []),
+        updated_at: new Date().toISOString(),
       };
     },
   };
@@ -274,6 +311,7 @@
       ['quote',    'entrate',  toDB.quote   ],
       ['spese',    'spese',    toDB.spese   ],
       ['brani',    'brani',    toDB.brani   ],
+      ['concerti', 'concerti', toDB.concerti],
     ];
 
     let totalChanges = 0;
@@ -299,6 +337,7 @@
         entrate:  state.entrate  ? [...state.entrate]  : _prev.entrate,
         spese:    state.spese    ? [...state.spese]    : _prev.spese,
         brani:    state.brani    ? [...state.brani]    : _prev.brani,
+        concerti: state.concerti ? [...state.concerti] : _prev.concerti,
       };
       log(`Sync completato (${totalChanges} modifiche)`);
     }
@@ -316,6 +355,7 @@
         { data: sS, error: e1 }, { data: sD, error: e2 }, { data: sC, error: e3 },
         { data: sL, error: e4 }, { data: sB, error: e5 },
         { data: sP, error: e6 }, { data: sQ, error: e7 },
+        { data: sEV, error: e8 },
       ] = await Promise.all([
         sb.from('studenti').select('*').order('nome'),
         sb.from('docenti').select('*').order('nome'),
@@ -324,11 +364,12 @@
         sb.from('brani').select('*').order('titolo'),
         sb.from('spese').select('*').order('data', { ascending: false }),
         sb.from('quote').select('*').order('anno').order('mese'),
+        sb.from('concerti').select('*').order('data', { ascending: false }),
       ]);
 
       // Log errori
       [['studenti',e1],['docenti',e2],['corsi',e3],['lezioni',e4],
-       ['brani',e5],['spese',e6],['quote',e7]].forEach(([t,e]) => {
+       ['brani',e5],['spese',e6],['quote',e7],['concerti',e8]].forEach(([t,e]) => {
         if (e) fail(`Errore lettura ${t}:`, e.message);
       });
 
@@ -340,6 +381,7 @@
         brani:    (sB || []).map(adaptBrano),
         spese:    (sP || []).map(adaptSpesa),
         entrate:  (sQ || []).map(adaptQuota),
+        concerti: (sEV || []).map(adaptConcerto),
       };
 
       log('Caricati →',
@@ -367,6 +409,7 @@
       { t: 'quote',    k: 'entrate',  o: 'mese',  a: adaptQuota    },
       { t: 'spese',    k: 'spese',    o: 'data',  a: adaptSpesa    },
       { t: 'brani',    k: 'brani',    o: 'titolo', a: adaptBrano    },
+      { t: 'concerti', k: 'concerti', o: 'data',   a: adaptConcerto },
     ];
 
     cfg.forEach(({ t, k, o, a }) => {
@@ -445,7 +488,7 @@
         students: [...data.students], docenti: [...data.docenti],
         courses:  [...data.courses],  lessons: [...data.lessons],
         entrate:  [...data.entrate],  spese:   [...data.spese],
-        brani:    [...data.brani],
+        brani:    [...data.brani],    concerti: [...(data.concerti||[])],
       };
     } else {
       warn('Supabase non disponibile — uso dati demo (modalità offline)');
@@ -491,7 +534,8 @@
       const d = await loadAll();
       if (d && window.__FM_RELOAD__) {
         _prev = { students:[...d.students], docenti:[...d.docenti], courses:[...d.courses],
-                  lessons:[...d.lessons], entrate:[...d.entrate], spese:[...d.spese], brani:[...d.brani] };
+                  lessons:[...d.lessons], entrate:[...d.entrate], spese:[...d.spese],
+                  brani:[...d.brani], concerti:[...(d.concerti||[])] };
         window.__FM_RELOAD__(d);
         log('Reload manuale OK');
       }

@@ -9594,11 +9594,13 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
 };
 
 // ─── CONCERTI VIEW ────────────────────────────────────────────────────────────
-const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, clearQuickAction, userRuolo:_ruoloConc }) => {
+const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, clearQuickAction, userRuolo:_ruoloConc, concerti:propConcerti, setConcerti:propSetConcerti }) => {
   const ruoloConc = _ruoloConc || "admin";
   const isMobile = useIsMobile();
   const students  = propStudents || INIT_STUDENTS;
-  const [concerti, setConcerti] = useState(INIT_CONCERTI);
+  const [_localConcerti, _setLocalConcerti] = useState(INIT_CONCERTI);
+  const concerti    = propConcerti    || _localConcerti;
+  const setConcerti = propSetConcerti || _setLocalConcerti;
 
   // ── Sync concerti → sito pubblico ──────────────────────────────
   useEffect(() => {
@@ -11519,6 +11521,7 @@ function App() {
   const [sharedDocenti,        setSharedDocenti]        = useState(_d.docenti    || INIT_DOCENTI_EXT);
   const [sharedLessons,        setSharedLessons]        = useState(_d.lessons    || INIT_LESSONS);
   const [sharedRepertorio,     setSharedRepertorio]     = useState(_d.brani      || INIT_BRANI);
+  const [sharedConcerti,       setSharedConcerti]       = useState(_d.concerti   || INIT_CONCERTI);
   const [sharedConfig,         setSharedConfig]         = useState(CONFIG_DEFAULT);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
   const [sharedSpese,          setSharedSpese]          = useState(_d.spese      || INIT_SPESE);
@@ -11554,6 +11557,7 @@ function App() {
       window.__FM_ON_STATE__({
         students: sharedStudents, courses: sharedCourses, docenti: sharedDocenti,
         lessons: sharedLessons, brani: sharedRepertorio, spese: sharedSpese, entrate: sharedEntrate,
+        concerti: sharedConcerti,
       });
     }
   }, [sharedStudents, sharedCourses, sharedDocenti, sharedLessons, sharedRepertorio, sharedSpese, sharedEntrate]);
@@ -11568,6 +11572,7 @@ function App() {
       if (data.brani)     setSharedRepertorio(data.brani);
       if (data.spese)     setSharedSpese(data.spese);
       if (data.entrate)   setSharedEntrate(data.entrate);
+      if (data.concerti)  setSharedConcerti(data.concerti);
     };
     return () => { window.__FM_RELOAD__ = null; };
   }, []);
@@ -11617,7 +11622,7 @@ function App() {
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
     repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
-    concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
+    concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      (user?.ruolo||"admin")==="admin" && React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
     sitoWeb:       null,
     impostazioni:  React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo }),
