@@ -4557,6 +4557,23 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     return `${h.toString().padStart(2,"0")}:${m.toString().padStart(2,"0")}`;
   }).filter(h => h <= "22:00");
 
+  // Auto-compila strumento e insegnante quando si seleziona un allievo
+  useEffect(() => {
+    if (!f.student || !_studentsRaw) return;
+    const st = (_studentsRaw || []).find(s => (s.name || s.nome || '') === f.student);
+    if (!st) return;
+    // Strumento principale dell'allievo → pre-seleziona strumento lezione
+    const instr = st.instrument || st.strumento || '';
+    // Docente principale dell'allievo → pre-seleziona insegnante
+    const teacher = st.teacher || st.docente || st.teacherName || '';
+    setF(prev => ({
+      ...prev,
+      instrument: prev.instrument || instr,
+      teacher:    prev.teacher    || teacher,
+    }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.student]);
+
   const validate = () => {
     const e = {};
     if(!f.date)       e.date       = "Data obbligatoria";

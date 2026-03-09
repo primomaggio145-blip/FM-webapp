@@ -46,7 +46,7 @@
   function adaptLezione(r) {
     return {
       id: r.id, date: r.data, hour: r.ora || '', student: r.student || '',
-      instrument: r.instrument || '', teacher: r.teacher || '', room: r.room || '',
+      instrument: r.strumento || r.instrument || '', teacher: r.teacher || '', room: r.room || '',
       topic: r.topic || '', attendance: r.attendance || '',
       recurrence: r.recurrence || 'Nessuna', notes: r.notes || '',
       exercises: r.exercises || '', repertorio: r.repertorio || '',
@@ -125,7 +125,8 @@
       return {
         id: l.id || null,
         data: l.date, ora: l.hour || null,
-        student: l.student || null, instrument: l.instrument || null,
+        student: l.student || null,
+        strumento: l.instrument || l.strumento || null,
         teacher: l.teacher || null, room: l.room || null,
         topic: l.topic || null, attendance: l.attendance || null,
         recurrence: l.recurrence || 'Nessuna', notes: l.notes || null,
