@@ -91,14 +91,15 @@
       data: r.data || null,
       ora: r.ora || null,
       luogo: r.luogo || null,
-      capienza: r.capienza ? parseInt(r.capienza) : null,
+      capienza: r.capienza ? parseInt(r.capienza) : 0,
       biglietto: r.biglietto || false,
       prezzoBiglietto: parseFloat(r.prezzo_biglietto) || 0,
       stato: r.stato || 'programmato',
       descrizione: r.descrizione || '',
       note: r.note || '',
-      partecipanti: r.partecipanti || [],
-      scaletta: r.scaletta || [],
+      partecipanti: Array.isArray(r.partecipanti) ? r.partecipanti : (r.partecipanti ? JSON.parse(r.partecipanti) : []),
+      scaletta: Array.isArray(r.scaletta) ? r.scaletta : (r.scaletta ? JSON.parse(r.scaletta) : []),
+      prenotazioni: [],  // tabella separata concerti_prenotazioni — non ancora sincronizzata
     };
   }
 
