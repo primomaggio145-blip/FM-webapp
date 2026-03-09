@@ -87,9 +87,7 @@
         importo:         parseFloat(q.importo) || 0,
         mese:            q.mese,
         anno:            q.anno,
-        anno_scolastico: q.anno && q.mese
-          ? (q.mese >= 9 ? q.anno : q.anno - 1)
-          : null,
+        anno_scolastico: (q.anno && q.mese) ? (q.mese >= 9 ? q.anno : q.anno - 1) : null,
         stato:           stato,
         data_pagamento:  q.dataPagamento || null,
         num_ricevuta:    q.numRicevuta   || '',
@@ -421,10 +419,20 @@
     // 2. Aggancia intercettore stato React
     window.__FM_ON_STATE__ = function (state) {
       if (!_booted) {
-        // Primo aggancio post-boot React
+        _booted = true;
+        log('React montato — sync attivo');
+
+        // ── FIX TIMING: se i dati Supabase sono pronti, iniettali subito
+        // in modo da sovrascrivere i dati demo che React ha caricato come fallback
         if (data) {
-          // Snapshot già pronto da loadAll — non sovrascrivere con dati demo
+          setTimeout(() => {
+            if (window.__FM_RELOAD__) {
+              log('Iniezione dati Supabase → sovrascrittura dati demo');
+              window.__FM_RELOAD__(data);
+            }
+          }, 50); // micro-ritardo per assicurarsi che __FM_RELOAD__ sia registrato
         } else {
+          // Supabase non disponibile — usa snapshot dai dati demo già in React
           _prevState = {
             students: state.students ? [...state.students] : [],
             lessons:  state.lessons  ? [...state.lessons]  : [],
@@ -433,8 +441,7 @@
             brani:    state.brani    ? [...state.brani]    : [],
           };
         }
-        _booted = true;
-        log('React montato — sync attivo');
+
         subscribeRealtime();
         return;
       }
