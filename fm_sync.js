@@ -27,6 +27,7 @@
   let _syncTimer   = null;
   let _channels    = [];
   let _booted      = false;
+  let _initialized = false;  // true solo dopo che i dati Supabase sono stati iniettati in React
   const DEBOUNCE_MS = 800;
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -397,16 +398,65 @@
   // ══════════════════════════════════════════════════════════════════════════
   //  BOOT
   // ══════════════════════════════════════════════════════════════════════════
+
+  // __FM_RELOAD__ interno (React lo sovrascrive ad ogni montaggio)
+  let _reloadFn = null;
+
+  // Intercetta la registrazione di __FM_RELOAD__:
+  // ogni volta che React rimonta (login dopo logout), questa prop viene riassegnata.
+  // La usiamo per resettare lo stato sync e ricaricare i dati da Supabase.
+  Object.defineProperty(window, '__FM_RELOAD__', {
+    get() { return _reloadFn; },
+    set(fn) {
+      const wasRegistered = !!_reloadFn;
+      _reloadFn = fn;
+
+      if (!fn) return; // logout: React si smonta, fn = null
+
+      if (wasRegistered || _booted) {
+        // React si è rimontato (re-login) — reset completo e ricarica
+        log('Re-login rilevato — reset sync e ricaricamento da Supabase');
+        clearTimeout(_syncTimer);
+        _booted      = false;
+        _initialized = false;
+        _prevState   = {};
+        // Scollega canali realtime precedenti
+        _channels.forEach(ch => {
+          try { window.supabaseClient?.removeChannel(ch); } catch(e) {}
+        });
+        _channels = [];
+        // Ricarica dati freschi da Supabase e inietta in React
+        loadAll().then(fresh => {
+          if (fresh && _reloadFn) {
+            _prevState = {
+              students: [...fresh.students],
+              lessons:  [...fresh.lessons],
+              entrate:  [...fresh.entrate],
+              spese:    [...fresh.spese],
+              brani:    [...fresh.brani],
+            };
+            _initialized = true;
+            _reloadFn(fresh);
+            log('Dati ricaricati dopo re-login →',
+              Object.entries(fresh).map(([k,v]) => `${k}:${v.length}`).join(', '));
+            subscribeRealtime();
+          }
+        });
+      }
+    },
+    configurable: true,
+  });
+
   async function boot() {
     if (!window.supabaseClient) {
       warn('supabaseClient non trovato — includi supabase_integration.js PRIMA di fm_sync.js');
       return;
     }
 
-    // 1. Carica dati iniziali e inietta in window.__FM_DATA__
+    // 1. Carica dati iniziali da Supabase
     const data = await loadAll();
     if (data) {
-      window.__FM_DATA__ = data;
+      window.__FM_DATA__ = data;  // letto da React prima del primo useState
       _prevState = {
         students: [...data.students],
         lessons:  [...data.lessons],
@@ -414,25 +464,26 @@
         spese:    [...data.spese],
         brani:    [...data.brani],
       };
+      _initialized = true;
     }
 
     // 2. Aggancia intercettore stato React
+    // __FM_ON_STATE__ è chiamato da App() ad ogni setState
     window.__FM_ON_STATE__ = function (state) {
       if (!_booted) {
         _booted = true;
         log('React montato — sync attivo');
 
-        // ── FIX TIMING: se i dati Supabase sono pronti, iniettali subito
-        // in modo da sovrascrivere i dati demo che React ha caricato come fallback
+        // Inietta i dati Supabase in React sovrascrivendo i dati demo
         if (data) {
           setTimeout(() => {
-            if (window.__FM_RELOAD__) {
+            if (_reloadFn) {
               log('Iniezione dati Supabase → sovrascrittura dati demo');
-              window.__FM_RELOAD__(data);
+              _reloadFn(data);
             }
-          }, 50); // micro-ritardo per assicurarsi che __FM_RELOAD__ sia registrato
+          }, 50);
         } else {
-          // Supabase non disponibile — usa snapshot dai dati demo già in React
+          // Supabase non disponibile: accetta i dati demo ma non scriverli
           _prevState = {
             students: state.students ? [...state.students] : [],
             lessons:  state.lessons  ? [...state.lessons]  : [],
@@ -440,12 +491,21 @@
             spese:    state.spese    ? [...state.spese]    : [],
             brani:    state.brani    ? [...state.brani]    : [],
           };
+          _initialized = true;
         }
 
         subscribeRealtime();
         return;
       }
-      // Debounce write
+
+      // Blocca il sync finché i dati Supabase non sono stati iniettati
+      // (evita di scrivere dati demo durante il caricamento iniziale o il re-login)
+      if (!_initialized) {
+        log('Sync bloccato — attendo iniezione dati Supabase');
+        return;
+      }
+
+      // Debounce write verso Supabase
       clearTimeout(_syncTimer);
       _syncTimer = setTimeout(() => syncState(state), DEBOUNCE_MS);
     };
@@ -465,17 +525,16 @@
 
   // ── API pubblica per debug da console ──────────────────────────────────────
   window.__FM_SYNC__ = {
-    /** Ricarica tutti i dati da Supabase e aggiorna React */
     reload: async () => {
       const data = await loadAll();
-      if (data && window.__FM_RELOAD__) {
-        window.__FM_RELOAD__(data);
+      if (data && _reloadFn) {
+        _reloadFn(data);
         log('Ricaricamento manuale OK');
       }
     },
-    /** Stato interno del sync */
     status: () => ({
       booted: _booted,
+      initialized: _initialized,
       snapshot: Object.fromEntries(
         Object.entries(_prevState).map(([k,v]) => [k, Array.isArray(v) ? v.length : '?'])
       ),
