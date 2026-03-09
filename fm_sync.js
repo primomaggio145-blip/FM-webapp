@@ -74,7 +74,7 @@
   }
   function adaptBrano(r) {
     return {
-      id: r.id, title: r.title || '', composer: r.composer || '',
+      id: r.id, title: r.titolo || r.title || '', composer: r.compositore || r.composer || '',
       periodo: r.periodo || '', tonality: r.tonality || '',
       difficulty: r.difficulty || '', tipo: r.tipo || 'individuale',
       note: r.note || '', dataPrima: r.data_prima || '', dataUltima: r.data_ultima || '',
@@ -151,8 +151,8 @@
     },
     brani(b) {
       return {
-        id: b.id, title: b.title || b.titolo || '',
-        composer: b.composer || b.compositore || null,
+        id: b.id, titolo: b.title || b.titolo || '',
+        compositore: b.composer || b.compositore || null,
         periodo: b.periodo || null, tonality: b.tonality || null,
         difficulty: b.difficulty || null, tipo: b.tipo || 'individuale',
         note: b.note || null, data_prima: b.dataPrima || null,
@@ -284,7 +284,7 @@
         sb.from('docenti').select('*').order('nome'),
         sb.from('corsi').select('*, corsi_docenti(docente_id)').order('nome'),
         sb.from('lezioni').select('*').order('data', { ascending: false }),
-        sb.from('brani').select('*').order('title'),
+        sb.from('brani').select('*').order('titolo'),
         sb.from('spese').select('*').order('data', { ascending: false }),
         sb.from('quote').select('*').order('anno').order('mese'),
       ]);
@@ -329,7 +329,7 @@
       { t: 'lezioni',  k: 'lessons',  o: 'data',  a: adaptLezione  },
       { t: 'quote',    k: 'entrate',  o: 'mese',  a: adaptQuota    },
       { t: 'spese',    k: 'spese',    o: 'data',  a: adaptSpesa    },
-      { t: 'brani',    k: 'brani',    o: 'title', a: adaptBrano    },
+      { t: 'brani',    k: 'brani',    o: 'titolo', a: adaptBrano    },
     ];
 
     cfg.forEach(({ t, k, o, a }) => {
