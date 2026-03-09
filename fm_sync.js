@@ -122,6 +122,32 @@
         updated_at: new Date().toISOString(),
       };
     },
+    docente(d) {
+      return {
+        id:          d.id,
+        nome:        d.nome        || d.name  || '',
+        teacher_key: d.teacherKey  || d.nome  || '',
+        email:       d.email       || null,
+        phone:       d.phone       || null,
+        strumenti:   d.strumenti   || null,
+        bio:         d.bio         || null,
+        tariffa_ora: parseFloat(d.tariffaOra) || 0,
+        contratto:   d.contratto   || null,
+        data_inizio: d.dataInizio  || null,
+        attivo:      d.attivo !== false,
+      };
+    },
+    corso(c) {
+      return {
+        id:          c.id,
+        nome:        c.name        || c.nome || '',
+        tipo:        c.type        || c.tipo || 'individuale',
+        descrizione: c.description || null,
+        livelli:     c.livelli     || null,
+        foto:        c.foto        || null,
+        visible:     c.visible     !== false,
+      };
+    },
   };
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -178,6 +204,10 @@
     const tasks = [];
     if (state.students && _prevState.students !== undefined)
       tasks.push(persistDiff('studenti', diff(_prevState.students, state.students), toDB.studente));
+    if (state.docenti && _prevState.docenti !== undefined)
+      tasks.push(persistDiff('docenti', diff(_prevState.docenti, state.docenti), toDB.docente));
+    if (state.courses && _prevState.courses !== undefined)
+      tasks.push(persistDiff('corsi', diff(_prevState.courses, state.courses), toDB.corso));
     if (state.lessons && _prevState.lessons !== undefined)
       tasks.push(persistDiff('lezioni', diff(_prevState.lessons, state.lessons), toDB.lezione));
     if (state.entrate && _prevState.entrate !== undefined)
@@ -189,6 +219,8 @@
     await Promise.all(tasks);
     _prevState = {
       students: state.students ? [...state.students] : _prevState.students,
+      docenti:  state.docenti  ? [...state.docenti]  : _prevState.docenti,
+      courses:  state.courses  ? [...state.courses]  : _prevState.courses,
       lessons:  state.lessons  ? [...state.lessons]  : _prevState.lessons,
       entrate:  state.entrate  ? [...state.entrate]  : _prevState.entrate,
       spese:    state.spese    ? [...state.spese]    : _prevState.spese,
@@ -248,6 +280,8 @@
     if (!sb || typeof sb.channel !== 'function') return;
     const cfg = [
       { table: 'studenti', key: 'students', order: 'nome',  adapt: r => window.FMAdapter?.studente(r) || r },
+      { table: 'docenti',  key: 'docenti',  order: 'nome',  adapt: r => window.FMAdapter?.docente(r)  || r },
+      { table: 'corsi',    key: 'courses',  order: 'nome',  adapt: r => window.FMAdapter?.corso(r)    || r },
       { table: 'lezioni',  key: 'lessons',  order: 'data',  adapt: adaptLezione },
       { table: 'quote',    key: 'entrate',  order: 'mese',  adapt: adaptQuota  },
       { table: 'spese',    key: 'spese',    order: 'data',  adapt: adaptSpesa  },
@@ -297,7 +331,8 @@
         _prevState  = {};
         loadAll().then(fresh => {
           if (!fresh) return;
-          _prevState  = { students:[...fresh.students], lessons:[...fresh.lessons],
+          _prevState  = { students:[...fresh.students], docenti:[...fresh.docenti],
+                          courses:[...fresh.courses], lessons:[...fresh.lessons],
                           entrate:[...fresh.entrate], spese:[...fresh.spese], brani:[...fresh.brani] };
           _syncActive = true;
           if (_reloadFn) _reloadFn(fresh);
@@ -364,7 +399,8 @@
     if (data) {
       // 2. Inietta in __FM_DATA__ — React lo leggerà nel primo useState
       window.__FM_DATA__ = data;
-      _prevState  = { students:[...data.students], lessons:[...data.lessons],
+      _prevState  = { students:[...data.students], docenti:[...data.docenti],
+                      courses:[...data.courses], lessons:[...data.lessons],
                       entrate:[...data.entrate], spese:[...data.spese], brani:[...data.brani] };
       log('__FM_DATA__ pronto — carico app.js');
     } else {
