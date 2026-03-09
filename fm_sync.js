@@ -1,110 +1,146 @@
 // ═══════════════════════════════════════════════════════════════════════════════
-//  FUTURO MUSICA — fm_sync.js  v3
-//  
-//  ARCHITETTURA CORRETTA:
-//  1. fm_sync.js carica i dati da Supabase (await)
-//  2. Solo DOPO aver popolato window.__FM_DATA__, carica app.js dinamicamente
-//  3. React inizializza il suo stato leggendo __FM_DATA__ — sempre dati reali
-//  4. Al logout/re-login, intercetta __FM_RELOAD__ e ricarica dati freschi
+//  FUTURO MUSICA — fm_sync.js  v4
 //
-//  webapp.html NON deve più avere <script src="app.js"> — ci pensa fm_sync
+//  DESIGN SEMPLIFICATO:
+//  1. loadAll() carica i dati da Supabase → window.__FM_DATA__
+//  2. Carica app.js dinamicamente (React legge __FM_DATA__ nel primo useState)
+//  3. Dopo 1.5s dal mount React, attiva il sync
+//  4. __FM_ON_STATE__ riceve ogni cambio di stato e scrive su Supabase (debounced)
+//  5. Nessuna magia con re-login: App non si smonta mai, il sync resta attivo
 // ═══════════════════════════════════════════════════════════════════════════════
 
 (function () {
   'use strict';
 
-  const log  = (...a) => console.log('%c[fm_sync]', 'color:#1a4fa0;font-weight:700', ...a);
-  const warn = (...a) => console.warn('%c[fm_sync]', 'color:#c9a84c;font-weight:700', ...a);
-  const err  = (...a) => console.error('%c[fm_sync]', 'color:#8c1818;font-weight:700', ...a);
+  const log  = (...a) => console.log('%c[FM]', 'color:#1a4fa0;font-weight:700;font-size:12px', ...a);
+  const warn = (...a) => console.warn('%c[FM]', 'color:#c9a84c;font-weight:700;font-size:12px', ...a);
+  const fail = (...a) => console.error('%c[FM] ⚠️', 'color:#8c1818;font-weight:700;font-size:12px', ...a);
 
-  // ── Stato interno ─────────────────────────────────────────────────────────
-  let _prevState  = {};
-  let _syncTimer  = null;
-  let _channels   = [];
-  let _reloadFn   = null;   // window.__FM_RELOAD__ (registrato da React)
-  let _syncActive = false;  // true solo dopo iniezione dati confermata
-  const DEBOUNCE_MS = 800;
+  // ─── Stato ──────────────────────────────────────────────────────────────────
+  let _prev       = {};         // snapshot dati al momento dell'ultimo sync
+  let _ready      = false;      // true dopo che React ha ricevuto i dati Supabase
+  let _timer      = null;
+  const DEBOUNCE  = 1200;       // ms — aspetta che l'utente finisca di modificare
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  ADAPTERS DB → React
-  // ══════════════════════════════════════════════════════════════════════════
-  function adaptLezione(row) {
+  // ─── Utility ────────────────────────────────────────────────────────────────
+  function setStatus(msg) {
+    const el = document.getElementById('status');
+    if (el) el.textContent = msg;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  ADAPTERS  DB → React
+  // ═══════════════════════════════════════════════════════════════════════════
+  function adaptStudente(r) {
+    const FA = window.FMAdapter;
+    return FA ? FA.studente(r) : r;
+  }
+  function adaptDocente(r) {
+    const FA = window.FMAdapter;
+    return FA ? FA.docente(r) : r;
+  }
+  function adaptCorso(r) {
+    const FA = window.FMAdapter;
+    return FA ? FA.corso(r) : r;
+  }
+  function adaptLezione(r) {
     return {
-      id: row.id, date: row.data, hour: row.ora || '', student: row.student || '',
-      instrument: row.instrument || '', teacher: row.teacher || '', room: row.room || '',
-      topic: row.topic || '', attendance: row.attendance || '', recurrence: row.recurrence || 'Nessuna',
-      notes: row.notes || '', exercises: row.exercises || '', repertorio: row.repertorio || '',
-      type: row.tipo || 'individuale',
+      id: r.id, date: r.data, hour: r.ora || '', student: r.student || '',
+      instrument: r.instrument || '', teacher: r.teacher || '', room: r.room || '',
+      topic: r.topic || '', attendance: r.attendance || '',
+      recurrence: r.recurrence || 'Nessuna', notes: r.notes || '',
+      exercises: r.exercises || '', repertorio: r.repertorio || '',
+      type: r.tipo || 'individuale',
+    };
+  }
+  function adaptQuota(r) {
+    const sm = { 'da pagare': 'attesa', 'in ritardo': 'ritardo' };
+    return {
+      id: String(r.id), studentId: r.studente_id || null,
+      studentName: r.studente_nome || '', importo: parseFloat(r.importo) || 0,
+      mese: r.mese, anno: r.anno, data: r.data_pagamento || '',
+      metodo: r.metodo || 'Contanti', categoria: 'quota', desc: r.note || '',
+      stato: sm[r.stato] || r.stato || 'attesa',
+      dataPagamento: r.data_pagamento || '', numRicevuta: r.num_ricevuta || '',
+    };
+  }
+  function adaptSpesa(r) {
+    return {
+      id: r.id, categoria: r.categoria || 'altro', desc: r.desc || '',
+      importo: parseFloat(r.importo) || 0, mese: r.mese ?? 0,
+      anno: r.anno || new Date().getFullYear(), metodo: r.metodo || '',
+      data: r.data || '', docenteId: r.docente_id || null, note: r.note || '',
+    };
+  }
+  function adaptBrano(r) {
+    return {
+      id: r.id, title: r.title || '', composer: r.composer || '',
+      periodo: r.periodo || '', tonality: r.tonality || '',
+      difficulty: r.difficulty || '', tipo: r.tipo || 'individuale',
+      note: r.note || '', dataPrima: r.data_prima || '', dataUltima: r.data_ultima || '',
     };
   }
 
-  function adaptQuota(row) {
-    const statoMap = { 'da pagare': 'attesa', 'in ritardo': 'ritardo' };
-    return {
-      id: String(row.id), studentId: row.studente_id || null, studentName: row.studente_nome || '',
-      importo: parseFloat(row.importo) || 0, mese: row.mese, anno: row.anno,
-      data: row.data_pagamento || '', metodo: row.metodo || 'Contanti',
-      categoria: 'quota', desc: row.note || '',
-      stato: statoMap[row.stato] || row.stato || 'attesa',
-      dataPagamento: row.data_pagamento || '', numRicevuta: row.num_ricevuta || '',
-    };
-  }
-
-  function adaptSpesa(row) {
-    return {
-      id: row.id, categoria: row.categoria || 'altro', desc: row.desc || '',
-      importo: parseFloat(row.importo) || 0, mese: row.mese ?? 0,
-      anno: row.anno || new Date().getFullYear(), metodo: row.metodo || '',
-      data: row.data || '', docenteId: row.docente_id || null, note: row.note || '',
-    };
-  }
-
-  function adaptBrano(row) {
-    return {
-      id: row.id, title: row.title || '', composer: row.composer || '',
-      periodo: row.periodo || '', tonality: row.tonality || '', difficulty: row.difficulty || '',
-      tipo: row.tipo || 'individuale', note: row.note || '',
-      dataPrima: row.data_prima || '', dataUltima: row.data_ultima || '',
-    };
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  ADAPTERS React → DB
-  // ══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  ADAPTERS  React → DB
+  // ═══════════════════════════════════════════════════════════════════════════
   const toDB = {
-    studente(s) {
+    studenti(s) {
       return {
-        id: s.id, nome: s.name || '', email: s.email || null, phone: s.phone || null,
-        strumento: s.instrument || null, docente: s.teacher || null,
-        livello: s.level || 'Principiante', status: s.status || 'attivo',
-        monthly_fee: parseFloat(s.monthlyFee) || 0, fee_type: s.feeType || 'fisso',
-        birthdate: s.birthdate || null, enroll_date: s.enrollDate || null,
-        complementary_course: s.complementaryCourse || null, notes: s.notes || null,
-        updated_at: new Date().toISOString(),
+        id: s.id, nome: s.name || '', email: s.email || null,
+        phone: s.phone || null, strumento: s.instrument || null,
+        docente: s.teacher || null, livello: s.level || 'Principiante',
+        status: s.status || 'attivo', monthly_fee: parseFloat(s.monthlyFee) || 0,
+        fee_type: s.feeType || 'fisso', birthdate: s.birthdate || null,
+        enroll_date: s.enrollDate || null,
+        complementary_course: s.complementaryCourse || null,
+        notes: s.notes || null, updated_at: new Date().toISOString(),
       };
     },
-    lezione(l) {
+    docenti(d) {
       return {
-        id: l.id, data: l.date, ora: l.hour || null, student: l.student || null,
-        instrument: l.instrument || null, teacher: l.teacher || null, room: l.room || null,
-        topic: l.topic || null, attendance: l.attendance || null, recurrence: l.recurrence || 'Nessuna',
-        notes: l.notes || null, exercises: l.exercises || null, repertorio: l.repertorio || null,
+        id: d.id, nome: d.nome || d.name || '',
+        teacher_key: d.teacherKey || d.nome || '',
+        email: d.email || null, phone: d.phone || null,
+        strumenti: d.strumenti || null, bio: d.bio || null,
+        tariffa_ora: parseFloat(d.tariffaOra) || 0,
+        contratto: d.contratto || null, data_inizio: d.dataInizio || null,
+        attivo: d.attivo !== false,
+      };
+    },
+    corsi(c) {
+      return {
+        id: c.id, nome: c.name || c.nome || '',
+        tipo: c.type || c.tipo || 'individuale',
+        descrizione: c.description || null, livelli: c.livelli || null,
+        foto: c.foto || null, visible: c.visible !== false,
+      };
+    },
+    lezioni(l) {
+      return {
+        id: l.id, data: l.date, ora: l.hour || null,
+        student: l.student || null, instrument: l.instrument || null,
+        teacher: l.teacher || null, room: l.room || null,
+        topic: l.topic || null, attendance: l.attendance || null,
+        recurrence: l.recurrence || 'Nessuna', notes: l.notes || null,
+        exercises: l.exercises || null, repertorio: l.repertorio || null,
         tipo: l.type || 'individuale', updated_at: new Date().toISOString(),
       };
     },
-    quota(q) {
-      const statoMap = { 'attesa': 'da pagare', 'ritardo': 'in ritardo' };
+    quote(q) {
+      const sm = { 'attesa': 'da pagare', 'ritardo': 'in ritardo' };
       return {
         id: String(q.id), studente_id: q.studentId ? parseInt(q.studentId, 10) : null,
         studente_nome: q.studentName || '', importo: parseFloat(q.importo) || 0,
         mese: q.mese, anno: q.anno,
         anno_scolastico: (q.anno && q.mese) ? (q.mese >= 9 ? q.anno : q.anno - 1) : null,
-        stato: statoMap[q.stato] || q.stato || 'da pagare',
-        data_pagamento: q.dataPagamento || null, num_ricevuta: q.numRicevuta || '',
-        metodo: q.metodo || 'Contanti', note: q.note || '',
+        stato: sm[q.stato] || q.stato || 'da pagare',
+        data_pagamento: q.dataPagamento || null,
+        num_ricevuta: q.numRicevuta || '', metodo: q.metodo || 'Contanti',
+        note: q.note || '',
       };
     },
-    spesa(s) {
+    spese(s) {
       return {
         id: s.id, categoria: s.categoria || 'altro', desc: s.desc || null,
         importo: parseFloat(s.importo) || 0, mese: s.mese ?? null,
@@ -113,137 +149,136 @@
         updated_at: new Date().toISOString(),
       };
     },
-    brano(b) {
+    brani(b) {
       return {
-        id: b.id, title: b.title || b.titolo || '', composer: b.composer || b.compositore || null,
-        periodo: b.periodo || null, tonality: b.tonality || null, difficulty: b.difficulty || null,
-        tipo: b.tipo || 'individuale', note: b.note || null,
-        data_prima: b.dataPrima || null, data_ultima: b.dataUltima || null,
-        updated_at: new Date().toISOString(),
-      };
-    },
-    docente(d) {
-      return {
-        id:          d.id,
-        nome:        d.nome        || d.name  || '',
-        teacher_key: d.teacherKey  || d.nome  || '',
-        email:       d.email       || null,
-        phone:       d.phone       || null,
-        strumenti:   d.strumenti   || null,
-        bio:         d.bio         || null,
-        tariffa_ora: parseFloat(d.tariffaOra) || 0,
-        contratto:   d.contratto   || null,
-        data_inizio: d.dataInizio  || null,
-        attivo:      d.attivo !== false,
-      };
-    },
-    corso(c) {
-      return {
-        id:          c.id,
-        nome:        c.name        || c.nome || '',
-        tipo:        c.type        || c.tipo || 'individuale',
-        descrizione: c.description || null,
-        livelli:     c.livelli     || null,
-        foto:        c.foto        || null,
-        visible:     c.visible     !== false,
+        id: b.id, title: b.title || b.titolo || '',
+        composer: b.composer || b.compositore || null,
+        periodo: b.periodo || null, tonality: b.tonality || null,
+        difficulty: b.difficulty || null, tipo: b.tipo || 'individuale',
+        note: b.note || null, data_prima: b.dataPrima || null,
+        data_ultima: b.dataUltima || null, updated_at: new Date().toISOString(),
       };
     },
   };
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  DIFF + PERSIST
-  // ══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  DIFF
+  // ═══════════════════════════════════════════════════════════════════════════
   function diff(prev, next) {
-    const prevMap = new Map((prev || []).map(r => [String(r.id), JSON.stringify(r)]));
-    const nextMap = new Map((next || []).map(r => [String(r.id), r]));
+    if (!Array.isArray(prev) || !Array.isArray(next)) return { added:[], updated:[], deleted:[] };
+    const pm = new Map(prev.map(r => [String(r.id), JSON.stringify(r)]));
+    const nm = new Map(next.map(r => [String(r.id), r]));
     const added = [], updated = [], deleted = [];
-    nextMap.forEach((item, id) => {
-      if (!prevMap.has(id)) added.push(item);
-      else if (prevMap.get(id) !== JSON.stringify(item)) updated.push(item);
+    nm.forEach((item, id) => {
+      if (!pm.has(id)) added.push(item);
+      else if (pm.get(id) !== JSON.stringify(item)) updated.push(item);
     });
-    prevMap.forEach((_, id) => { if (!nextMap.has(id)) deleted.push(id); });
+    pm.forEach((_, id) => { if (!nm.has(id)) deleted.push(id); });
     return { added, updated, deleted };
   }
 
-  // IDs client-side (demo): numeri o stringhe corte tipo "d1", "q001", "b3"
+  // IDs generati lato client (non UUID) — Supabase deve generare l'ID reale
   function isClientId(id) {
-    return typeof id === 'number' || /^[a-zA-Z]{0,3}\d{1,6}$/.test(String(id));
+    if (typeof id === 'number') return true;
+    const s = String(id);
+    // UUID format: 8-4-4-4-12 hex → è un vero UUID, non client-side
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) return false;
+    // Tutto il resto (d1, q001, b3, ecc.) è client-side
+    return true;
   }
 
-  async function persistDiff(table, changes, adapter) {
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  WRITE — scrive una tabella su Supabase
+  // ═══════════════════════════════════════════════════════════════════════════
+  async function writeTable(table, changes, adapter) {
     const sb = window.supabaseClient;
     if (!sb) return;
+
     for (const item of changes.added) {
       try {
         const row = adapter(item);
-        if (isClientId(row.id)) delete row.id;
+        const hasClientId = isClientId(row.id);
+        if (hasClientId) delete row.id;
         const { error } = await sb.from(table).insert(row);
-        if (error) warn(`INSERT ${table}:`, error.message);
-        else log(`+ ${table}`, row.nome || row.title || row.desc || '');
-      } catch(e) { err('insert', e); }
+        if (error) fail(`INSERT ${table}:`, error.message, '| row:', row);
+        else log(`✚ ${table}`, hasClientId ? '(nuovo)' : row.id);
+      } catch(e) { fail('insert error', table, e); }
     }
+
     for (const item of changes.updated) {
       try {
         const row = adapter(item);
         const { error } = await sb.from(table).update(row).eq('id', item.id);
-        if (error) warn(`UPDATE ${table} ${item.id}:`, error.message);
+        if (error) fail(`UPDATE ${table} [${item.id}]:`, error.message, '| row:', row);
         else log(`✎ ${table}`, item.id);
-      } catch(e) { err('update', e); }
+      } catch(e) { fail('update error', table, e); }
     }
+
     for (const id of changes.deleted) {
       try {
         const { error } = await sb.from(table).delete().eq('id', id);
-        if (error) warn(`DELETE ${table} ${id}:`, error.message);
+        if (error) fail(`DELETE ${table} [${id}]:`, error.message);
         else log(`✕ ${table}`, id);
-      } catch(e) { err('delete', e); }
+      } catch(e) { fail('delete error', table, e); }
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  SYNC — confronta _prev con lo stato corrente e scrive le differenze
+  // ═══════════════════════════════════════════════════════════════════════════
   async function syncState(state) {
-    if (!_syncActive) return;
-    const tasks = [];
-    if (state.students && _prevState.students !== undefined)
-      tasks.push(persistDiff('studenti', diff(_prevState.students, state.students), toDB.studente));
-    if (state.docenti && _prevState.docenti !== undefined)
-      tasks.push(persistDiff('docenti', diff(_prevState.docenti, state.docenti), toDB.docente));
-    if (state.courses && _prevState.courses !== undefined)
-      tasks.push(persistDiff('corsi', diff(_prevState.courses, state.courses), toDB.corso));
-    if (state.lessons && _prevState.lessons !== undefined)
-      tasks.push(persistDiff('lezioni', diff(_prevState.lessons, state.lessons), toDB.lezione));
-    if (state.entrate && _prevState.entrate !== undefined)
-      tasks.push(persistDiff('quote', diff(_prevState.entrate, state.entrate), toDB.quota));
-    if (state.spese && _prevState.spese !== undefined)
-      tasks.push(persistDiff('spese', diff(_prevState.spese, state.spese), toDB.spesa));
-    if (state.brani && _prevState.brani !== undefined)
-      tasks.push(persistDiff('brani', diff(_prevState.brani, state.brani), toDB.brano));
+    if (!_ready) { warn('Sync non ancora attivo — salto'); return; }
+
+    const MAP = [
+      ['studenti', 'students', toDB.studenti],
+      ['docenti',  'docenti',  toDB.docenti ],
+      ['corsi',    'courses',  toDB.corsi   ],
+      ['lezioni',  'lessons',  toDB.lezioni ],
+      ['quote',    'entrate',  toDB.quote   ],
+      ['spese',    'spese',    toDB.spese   ],
+      ['brani',    'brani',    toDB.brani   ],
+    ];
+
+    let totalChanges = 0;
+    const tasks = MAP.map(([table, key, adapter]) => {
+      if (!state[key] || _prev[key] === undefined) return Promise.resolve();
+      const d = diff(_prev[key], state[key]);
+      const n = d.added.length + d.updated.length + d.deleted.length;
+      if (n === 0) return Promise.resolve();
+      totalChanges += n;
+      log(`Sync ${table}: +${d.added.length} ~${d.updated.length} -${d.deleted.length}`);
+      return writeTable(table, d, adapter);
+    });
+
     await Promise.all(tasks);
-    _prevState = {
-      students: state.students ? [...state.students] : _prevState.students,
-      docenti:  state.docenti  ? [...state.docenti]  : _prevState.docenti,
-      courses:  state.courses  ? [...state.courses]  : _prevState.courses,
-      lessons:  state.lessons  ? [...state.lessons]  : _prevState.lessons,
-      entrate:  state.entrate  ? [...state.entrate]  : _prevState.entrate,
-      spese:    state.spese    ? [...state.spese]    : _prevState.spese,
-      brani:    state.brani    ? [...state.brani]    : _prevState.brani,
-    };
+
+    if (totalChanges > 0) {
+      // Aggiorna snapshot
+      _prev = {
+        students: state.students ? [...state.students] : _prev.students,
+        docenti:  state.docenti  ? [...state.docenti]  : _prev.docenti,
+        courses:  state.courses  ? [...state.courses]  : _prev.courses,
+        lessons:  state.lessons  ? [...state.lessons]  : _prev.lessons,
+        entrate:  state.entrate  ? [...state.entrate]  : _prev.entrate,
+        spese:    state.spese    ? [...state.spese]    : _prev.spese,
+        brani:    state.brani    ? [...state.brani]    : _prev.brani,
+      };
+      log(`Sync completato (${totalChanges} modifiche)`);
+    }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   //  LOAD ALL — carica tutti i dati da Supabase
-  // ══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   async function loadAll() {
     const sb = window.supabaseClient;
-    if (!sb) { warn('supabaseClient non disponibile'); return null; }
+    if (!sb) return null;
     log('Caricamento da Supabase...');
     try {
       const [
-        { data: studentiRaw, error: e1 },
-        { data: docentiRaw,  error: e2 },
-        { data: corsiRaw,    error: e3 },
-        { data: lezioniRaw,  error: e4 },
-        { data: braniRaw,    error: e5 },
-        { data: speseRaw,    error: e6 },
-        { data: quoteRaw,    error: e7 },
+        { data: sS, error: e1 }, { data: sD, error: e2 }, { data: sC, error: e3 },
+        { data: sL, error: e4 }, { data: sB, error: e5 },
+        { data: sP, error: e6 }, { data: sQ, error: e7 },
       ] = await Promise.all([
         sb.from('studenti').select('*').order('nome'),
         sb.from('docenti').select('*').order('nome'),
@@ -253,122 +288,88 @@
         sb.from('spese').select('*').order('data', { ascending: false }),
         sb.from('quote').select('*').order('anno').order('mese'),
       ]);
+
+      // Log errori
       [['studenti',e1],['docenti',e2],['corsi',e3],['lezioni',e4],
        ['brani',e5],['spese',e6],['quote',e7]].forEach(([t,e]) => {
-        if (e) warn(`Errore ${t}:`, e.message);
+        if (e) fail(`Errore lettura ${t}:`, e.message);
       });
-      const FA = window.FMAdapter;
+
       const data = {
-        students: (studentiRaw || []).map(r => FA?.studente(r) || r),
-        docenti:  (docentiRaw  || []).map(r => FA?.docente(r)  || r),
-        courses:  (corsiRaw    || []).map(r => FA?.corso(r)    || r),
-        lessons:  (lezioniRaw  || []).map(adaptLezione),
-        brani:    (braniRaw    || []).map(adaptBrano),
-        spese:    (speseRaw    || []).map(adaptSpesa),
-        entrate:  (quoteRaw    || []).map(adaptQuota),
+        students: (sS || []).map(adaptStudente),
+        docenti:  (sD || []).map(adaptDocente),
+        courses:  (sC || []).map(adaptCorso),
+        lessons:  (sL || []).map(adaptLezione),
+        brani:    (sB || []).map(adaptBrano),
+        spese:    (sP || []).map(adaptSpesa),
+        entrate:  (sQ || []).map(adaptQuota),
       };
-      log('Caricati →', Object.entries(data).map(([k,v]) => `${k}:${v.length}`).join(', '));
+
+      log('Caricati →',
+        `studenti:${data.students.length}`,
+        `docenti:${data.docenti.length}`,
+        `corsi:${data.courses.length}`,
+        `lezioni:${data.lessons.length}`
+      );
       return data;
-    } catch(e) { err('loadAll fallito:', e); return null; }
+    } catch(e) { fail('loadAll fallito:', e); return null; }
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   //  REALTIME
-  // ══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
   function subscribeRealtime() {
     const sb = window.supabaseClient;
     if (!sb || typeof sb.channel !== 'function') return;
+
     const cfg = [
-      { table: 'studenti', key: 'students', order: 'nome',  adapt: r => window.FMAdapter?.studente(r) || r },
-      { table: 'docenti',  key: 'docenti',  order: 'nome',  adapt: r => window.FMAdapter?.docente(r)  || r },
-      { table: 'corsi',    key: 'courses',  order: 'nome',  adapt: r => window.FMAdapter?.corso(r)    || r },
-      { table: 'lezioni',  key: 'lessons',  order: 'data',  adapt: adaptLezione },
-      { table: 'quote',    key: 'entrate',  order: 'mese',  adapt: adaptQuota  },
-      { table: 'spese',    key: 'spese',    order: 'data',  adapt: adaptSpesa  },
-      { table: 'brani',    key: 'brani',    order: 'title', adapt: adaptBrano  },
+      { t: 'studenti', k: 'students', o: 'nome',  a: adaptStudente },
+      { t: 'docenti',  k: 'docenti',  o: 'nome',  a: adaptDocente  },
+      { t: 'corsi',    k: 'courses',  o: 'nome',  a: adaptCorso    },
+      { t: 'lezioni',  k: 'lessons',  o: 'data',  a: adaptLezione  },
+      { t: 'quote',    k: 'entrate',  o: 'mese',  a: adaptQuota    },
+      { t: 'spese',    k: 'spese',    o: 'data',  a: adaptSpesa    },
+      { t: 'brani',    k: 'brani',    o: 'title', a: adaptBrano    },
     ];
-    cfg.forEach(({ table, key, order, adapt }) => {
+
+    cfg.forEach(({ t, k, o, a }) => {
       try {
-        const ch = sb.channel(`fm:${table}`)
-          .on('postgres_changes', { event: '*', schema: 'public', table }, async () => {
-            const asc = table !== 'lezioni';
-            const { data, error } = await sb.from(table).select('*').order(order, { ascending: asc });
-            if (error) { warn('realtime reload', table, error.message); return; }
-            const adapted = (data || []).map(adapt);
-            _prevState[key] = adapted;
-            if (_reloadFn) _reloadFn({ [key]: adapted });
+        sb.channel(`fm4:${t}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: t }, async () => {
+            const asc = (t !== 'lezioni' && t !== 'spese');
+            const { data, error } = await sb.from(t).select('*').order(o, { ascending: asc });
+            if (error) { warn('realtime', t, error.message); return; }
+            const adapted = (data || []).map(a);
+            _prev[k] = adapted;  // aggiorna snapshot senza triggerare write
+            if (window.__FM_RELOAD__) window.__FM_RELOAD__({ [k]: adapted });
           })
           .subscribe();
-        _channels.push(ch);
-      } catch(e) { warn('subscribe error', table, e); }
+      } catch(e) { warn('subscribe error', t, e); }
     });
+
     log('Realtime attivo');
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  INTERCETTA __FM_RELOAD__ per rilevare logout/re-login
-  // ══════════════════════════════════════════════════════════════════════════
-  Object.defineProperty(window, '__FM_RELOAD__', {
-    get() { return _reloadFn; },
-    set(fn) {
-      const wasSet = !!_reloadFn;
-      _reloadFn = fn;
-      if (!fn) {
-        // Logout: React si smonta
-        log('Logout — sync in pausa');
-        _syncActive = false;
-        clearTimeout(_syncTimer);
-        _channels.forEach(ch => {
-          try { window.supabaseClient?.removeChannel(ch); } catch(e) {}
-        });
-        _channels = [];
-        return;
-      }
-      if (wasSet) {
-        // Re-login: React si è rimontato — ricarica dati freschi
-        log('Re-login rilevato — ricarico da Supabase');
-        _syncActive = false;
-        _prevState  = {};
-        loadAll().then(fresh => {
-          if (!fresh) return;
-          _prevState  = { students:[...fresh.students], docenti:[...fresh.docenti],
-                          courses:[...fresh.courses], lessons:[...fresh.lessons],
-                          entrate:[...fresh.entrate], spese:[...fresh.spese], brani:[...fresh.brani] };
-          _syncActive = true;
-          if (_reloadFn) _reloadFn(fresh);
-          log('Re-login dati iniettati →', Object.entries(fresh).map(([k,v])=>`${k}:${v.length}`).join(', '));
-          subscribeRealtime();
-        });
-      }
-    },
-    configurable: true,
-  });
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  __FM_ON_STATE__ — intercettore write verso Supabase
-  // ══════════════════════════════════════════════════════════════════════════
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  HOOK __FM_ON_STATE__ — chiamato da React ad ogni cambio di stato
+  // ═══════════════════════════════════════════════════════════════════════════
   window.__FM_ON_STATE__ = function(state) {
-    if (!_syncActive) return; // blocca scritture finché i dati reali non sono caricati
-    clearTimeout(_syncTimer);
-    _syncTimer = setTimeout(() => syncState(state), DEBOUNCE_MS);
+    if (!_ready) return;
+    clearTimeout(_timer);
+    _timer = setTimeout(() => syncState(state), DEBOUNCE);
   };
 
-  // ══════════════════════════════════════════════════════════════════════════
-  //  CARICA app.js DINAMICAMENTE — solo dopo che i dati sono pronti
-  // ══════════════════════════════════════════════════════════════════════════
-  function setStatus(msg) {
-    const el = document.getElementById('status');
-    if (el) el.textContent = msg;
-  }
-
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  MOUNT REACT
+  // ═══════════════════════════════════════════════════════════════════════════
   function mountReact() {
-    setStatus('Avvio React…');
     const rootEl    = document.getElementById('root');
     const loadingEl = document.getElementById('loading');
+    setStatus('Avvio React…');
     try {
       if (window.__BOOT_ERROR) throw window.__BOOT_ERROR;
       const App = window.__AppComponent;
-      if (!App) throw new Error('__AppComponent non definito');
+      if (!App) throw new Error('__AppComponent non definito — controlla app.js');
       window.ReactDOM.createRoot(rootEl).render(window.React.createElement(App));
       loadingEl.style.opacity = '0';
       loadingEl.style.transition = 'opacity 0.5s';
@@ -384,10 +385,12 @@
     }
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  BOOT — punto di ingresso
+  // ═══════════════════════════════════════════════════════════════════════════
   async function boot() {
     if (!window.supabaseClient) {
       warn('supabaseClient non trovato');
-      // Carica app.js comunque — funzionerà offline con dati demo
       loadAppThen(mountReact);
       return;
     }
@@ -397,35 +400,41 @@
     const data = await loadAll();
 
     if (data) {
-      // 2. Inietta in __FM_DATA__ — React lo leggerà nel primo useState
+      // 2. Inietta in __FM_DATA__ — React lo legge nel primo useState
       window.__FM_DATA__ = data;
-      _prevState  = { students:[...data.students], docenti:[...data.docenti],
-                      courses:[...data.courses], lessons:[...data.lessons],
-                      entrate:[...data.entrate], spese:[...data.spese], brani:[...data.brani] };
-      log('__FM_DATA__ pronto — carico app.js');
+
+      // 3. Snapshot per il diff
+      _prev = {
+        students: [...data.students], docenti: [...data.docenti],
+        courses:  [...data.courses],  lessons: [...data.lessons],
+        entrate:  [...data.entrate],  spese:   [...data.spese],
+        brani:    [...data.brani],
+      };
     } else {
-      warn('Supabase non disponibile — uso dati demo (sola lettura)');
+      warn('Supabase non disponibile — uso dati demo (modalità offline)');
     }
 
-    // 3. Carica app.js dinamicamente (DOPO che __FM_DATA__ è popolato)
+    // 4. Carica app.js e monta React
     setStatus('Caricamento app…');
     loadAppThen(() => {
       mountReact();
-      // 4. Abilita il sync solo dopo che React è montato e i dati reali sono stati usati
+
       if (data) {
+        // 5. Attiva sync dopo 2s — tempo sufficiente per React di montarsi
+        //    e per ricevere i dati da __FM_DATA__ senza scrivere demo su Supabase
         setTimeout(() => {
-          _syncActive = true;
+          _ready = true;
+          log('✅ Sync attivo — pronto a scrivere su Supabase');
           subscribeRealtime();
-          log('Sync attivo ✓');
-        }, 500); // breve attesa per assicurarsi che React abbia finito di montare
+        }, 2000);
       }
     });
   }
 
   function loadAppThen(callback) {
     const script = document.createElement('script');
-    script.src = './app.js';
-    script.onload = callback;
+    script.src   = './app.js';
+    script.onload  = callback;
     script.onerror = () => {
       document.getElementById('spinner').style.display = 'none';
       setStatus('ERRORE: app.js non trovato (404)');
@@ -436,21 +445,35 @@
   boot();
 
   // ── Cleanup ──────────────────────────────────────────────────────────────
-  window.addEventListener('beforeunload', () => {
-    clearTimeout(_syncTimer);
-    _channels.forEach(ch => {
-      try { window.supabaseClient?.removeChannel(ch); } catch(e) {}
-    });
-  });
+  window.addEventListener('beforeunload', () => { clearTimeout(_timer); });
 
-  // ── Debug API ─────────────────────────────────────────────────────────────
+  // ── API debug da console ──────────────────────────────────────────────────
   window.__FM_SYNC__ = {
+    // Forza ricaricamento dati da Supabase
     reload: async () => {
       const d = await loadAll();
-      if (d && _reloadFn) { _reloadFn(d); log('Reload manuale OK'); }
+      if (d && window.__FM_RELOAD__) {
+        _prev = { students:[...d.students], docenti:[...d.docenti], courses:[...d.courses],
+                  lessons:[...d.lessons], entrate:[...d.entrate], spese:[...d.spese], brani:[...d.brani] };
+        window.__FM_RELOAD__(d);
+        log('Reload manuale OK');
+      }
     },
-    status: () => ({ syncActive: _syncActive, channels: _channels.length,
-      snapshot: Object.fromEntries(Object.entries(_prevState).map(([k,v])=>[k,Array.isArray(v)?v.length:'?'])) }),
+    // Test scrittura: prova a fare un UPDATE su un record esistente
+    testWrite: async (table = 'studenti') => {
+      const sb = window.supabaseClient;
+      const { data, error } = await sb.from(table).select('id').limit(1);
+      if (error) { fail('testWrite SELECT:', error.message); return; }
+      if (!data?.length) { warn('testWrite: tabella vuota'); return; }
+      const id = data[0].id;
+      const { error: e2 } = await sb.from(table).update({ updated_at: new Date().toISOString() }).eq('id', id);
+      if (e2) fail(`testWrite UPDATE ${table} [${id}]:`, e2.message);
+      else log(`testWrite OK — ${table} [${id}] aggiornato`);
+    },
+    status: () => ({
+      ready: _ready,
+      snap: Object.fromEntries(Object.entries(_prev).map(([k,v]) => [k, Array.isArray(v) ? v.length : '?'])),
+    }),
   };
 
 })();
