@@ -7,9 +7,9 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <!-- 1. Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <!-- 2. Client + API (crea window.FM, window.FMAdapter, window.supabaseClient) -->
+  <!-- 2. Client Supabase + FMAdapter -->
   <script src="supabase_integration.js"></script>
-  <!-- 3. Sync bridge (carica dati in window.__FM_DATA__ prima di React) -->
+  <!-- 3. fm_sync: carica i dati da Supabase, poi carica app.js, poi monta React -->
   <script src="fm_sync.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
@@ -18,28 +18,23 @@
     #loading{
       position:fixed;inset:0;
       background:linear-gradient(160deg,#123a7a 0%,#1a4fa0 60%,#0d2d6b 100%);
-      display:flex;flex-direction:column;
-      align-items:center;justify-content:center;
-      gap:16px;z-index:9999;font-family:sans-serif;padding:24px
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:16px;z-index:9999;padding:24px
     }
-    .logo{font-size:26px;font-weight:700;color:#ffffff;
-      font-family:'Oswald',sans-serif;letter-spacing:0.12em;text-transform:uppercase}
+    .logo{font-size:26px;font-weight:700;color:#fff;
+      font-family:'Oswald',sans-serif;letter-spacing:.12em;text-transform:uppercase}
     .logo span{color:#e88080}
-    .spinner{width:32px;height:32px;border:2px solid rgba(255,255,255,0.2);
-      border-top-color:#ffffff;border-radius:50%;animation:spin 0.8s linear infinite}
-    .sub{font-size:11px;color:rgba(255,255,255,0.6);
-      letter-spacing:0.12em;text-transform:uppercase;font-family:sans-serif}
-    .err{color:#fca5a5;font-size:13px;background:rgba(0,0,0,0.35);
-      padding:16px;max-width:90vw;width:100%;
-      word-break:break-all;white-space:pre-wrap;max-height:60vh;overflow:auto}
+    .spinner{width:32px;height:32px;border:2px solid rgba(255,255,255,.2);
+      border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+    .sub{font-size:11px;color:rgba(255,255,255,.6);letter-spacing:.12em;text-transform:uppercase}
+    .err{color:#fca5a5;font-size:13px;background:rgba(0,0,0,.35);padding:16px;
+      max-width:90vw;width:100%;word-break:break-all;white-space:pre-wrap;max-height:60vh;overflow:auto}
     @keyframes spin{to{transform:rotate(360deg)}}
-
     #sync-toast{
-      position:fixed;bottom:130px;right:16px;z-index:9001;
+      position:fixed;bottom:20px;right:16px;z-index:9001;
       background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;
-      padding:8px 14px;
-      font-family:'Open Sans',sans-serif;font-size:12px;font-weight:600;
-      opacity:0;transition:opacity 0.4s;pointer-events:none;
+      padding:8px 14px;font-family:'Open Sans',sans-serif;font-size:12px;font-weight:600;
+      opacity:0;transition:opacity .4s;pointer-events:none;
     }
   </style>
 </head>
@@ -53,7 +48,7 @@
   <div id="sync-toast">✓ Dati salvati</div>
 
   <script>
-    // ── Error handlers ────────────────────────────────────────────────────
+    // Error handler globale — cattura errori JS e Promise non gestite
     window.onerror = function(msg, src, line) {
       document.getElementById('spinner').style.display = 'none';
       var d = document.createElement('div');
@@ -62,66 +57,17 @@
       document.getElementById('loading').appendChild(d);
     };
     window.onunhandledrejection = function(e) {
-      document.getElementById('spinner').style.display = 'none';
       var d = document.createElement('div');
       d.className = 'err';
       d.textContent = 'Promise error: ' + (e.reason?.message || e.reason);
       document.getElementById('loading').appendChild(d);
     };
-
-    // ── Toast "Dati salvati" (intercetta __FM_ON_STATE__ dopo boot) ───────
-    (function() {
-      var toast = document.getElementById('sync-toast');
-      var booted = false;
-      var origFn = null;
-      Object.defineProperty(window, '__FM_ON_STATE__', {
-        get: function() { return origFn; },
-        set: function(fn) {
-          origFn = fn ? function(state) {
-            fn(state);
-            if (booted) {
-              clearTimeout(toast._t);
-              toast.style.opacity = '1';
-              toast._t = setTimeout(function(){ toast.style.opacity = '0'; }, 2000);
-            } else {
-              booted = true; // primo aggancio = boot, non mostrare toast
-            }
-          } : null;
-        },
-        configurable: true,
-      });
-    })();
-
   </script>
 
-  <!-- 4. App React (legge window.__FM_DATA__ iniettato da fm_sync.js) -->
-  <script src="./app.js"
-    onerror="document.getElementById('status').textContent='ERRORE: app.js non trovato (404)'">
-  </script>
-
-  <!-- 5. Mount React -->
-  <script>
-    (function() {
-      document.getElementById('status').textContent = 'Avvio React…';
-      var rootEl = document.getElementById('root');
-      var loadEl = document.getElementById('loading');
-      try {
-        if (window.__BOOT_ERROR) throw window.__BOOT_ERROR;
-        var App = window.__AppComponent;
-        if (!App) throw new Error('__AppComponent non definito — controlla app.js');
-        ReactDOM.createRoot(rootEl).render(React.createElement(App));
-        loadEl.style.opacity = '0';
-        loadEl.style.transition = 'opacity 0.5s';
-        setTimeout(function(){ loadEl.style.display = 'none'; }, 550);
-      } catch(e) {
-        document.getElementById('spinner').style.display = 'none';
-        document.getElementById('status').textContent = '⚠️ Errore avvio';
-        var d = document.createElement('div');
-        d.className = 'err';
-        d.textContent = 'ERRORE:\n' + (e.stack || e.message || String(e));
-        loadEl.appendChild(d);
-      }
-    })();
-  </script>
+  <!--
+    NON serve <script src="app.js"> qui.
+    fm_sync.js carica app.js dinamicamente DOPO aver caricato i dati da Supabase,
+    garantendo che React usi sempre i dati reali e mai i dati demo.
+  -->
 </body>
 </html>
