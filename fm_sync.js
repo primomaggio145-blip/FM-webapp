@@ -231,10 +231,9 @@
           delete row.id;
         } else {
           // Tutte le altre tabelle: ID text assegnato dall'app
-          // Se l'ID è un placeholder corto (es 'c3', 'b5'), sostituiamo con uno vero
-          const id = String(row.id || '');
-          const isPlaceholder = !id || id.length < 5;
-          if (isPlaceholder) row.id = newId();
+          // Se l'ID non è un UUID valido, generiamo uno nuovo
+          const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(row.id || ''));
+          if (!row.id || !isValidUUID) row.id = newId();
         }
         const { error } = await sb.from(table).insert(row);
         if (error) {
