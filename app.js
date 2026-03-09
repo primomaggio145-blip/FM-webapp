@@ -313,6 +313,7 @@ const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
     map:      React.createElement(React.Fragment, null, React.createElement('polygon', { points: "3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"               , __self: this, __source: {fileName: _jsxFileName, lineNumber: 307}}), React.createElement('line', { x1: "9", y1: "3", x2: "9", y2: "18", __self: this, __source: {fileName: _jsxFileName, lineNumber: 307}}), React.createElement('line', { x1: "15", y1: "6", x2: "15", y2: "21", __self: this, __source: {fileName: _jsxFileName, lineNumber: 307}})),
     qr:       React.createElement(React.Fragment, null, React.createElement('rect', { x: "3", y: "3", width: "7", height: "7", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "14", y: "3", width: "7", height: "7", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "14", y: "14", width: "7", height: "7", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "3", y: "14", width: "7", height: "7", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "5", y: "5", width: "3", height: "3", fill: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "16", y: "5", width: "3", height: "3", fill: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "16", y: "16", width: "3", height: "3", fill: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "5", y: "16", width: "3", height: "3", fill: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}})),
     report:   React.createElement(React.Fragment, null, React.createElement('path', { d: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"                 , __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('polyline', { points: "14 2 14 8 20 8"     , __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('line', { x1: "16", y1: "13", x2: "8", y2: "13", __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('line', { x1: "16", y1: "17", x2: "8", y2: "17", __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('polyline', { points: "10 9 9 9 8 9"     , __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}})),
+    globe:    React.createElement(React.Fragment, null, React.createElement('circle', { cx: "12", cy: "12", r: "10"}), React.createElement('line', { x1: "2", y1: "12", x2: "22", y2: "12"}), React.createElement('path', { d: "M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"})),
   };
   return (
     React.createElement('svg', { width: size, height: size, viewBox: "0 0 24 24"   , fill: fill,
@@ -11362,6 +11363,23 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
                     , item.label
                   );
                 })
+              , React.createElement('a', {
+                  href:"index.html", target:"_blank",
+                  style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
+                    borderRadius:0,border:"none",cursor:"pointer",
+                    background:"transparent",
+                    color:C.sidebarText,
+                    fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:400,
+                    textAlign:"left",textDecoration:"none",
+                    transition:"all .15s",marginBottom:1,
+                    borderLeft:"3px solid transparent"},
+                  onMouseEnter:e=>{e.currentTarget.style.background="rgba(255,255,255,0.1)";},
+                  onMouseLeave:e=>{e.currentTarget.style.background="transparent";},
+                }
+                , React.createElement(Ic,{n:"globe",size:14,stroke:C.sidebarText})
+                , "Sito Web"
+                , React.createElement('span', {style:{marginLeft:"auto",fontSize:9,opacity:0.5}}, "↗")
+              )
             );
           })()
 
@@ -11476,16 +11494,17 @@ function App() {
   const [view,           setView]           = useState("dashboard");
   const [panKey,         setPanKey]         = useState(0);
   const [schermata,      setSchermata]      = useState("login");
-  const [sharedStudents,       setSharedStudents]       = useState(INIT_STUDENTS);
-  const [sharedCourses,        setSharedCourses]        = useState(INIT_COURSES);
-  const [sharedDocenti,        setSharedDocenti]        = useState(INIT_DOCENTI_EXT);
-  const [sharedLessons,        setSharedLessons]        = useState(INIT_LESSONS);
-  const [sharedRepertorio,     setSharedRepertorio]     = useState(INIT_BRANI);
+  const _d = window.__FM_DATA__ || {};
+  const [sharedStudents,       setSharedStudents]       = useState(_d.students   || INIT_STUDENTS);
+  const [sharedCourses,        setSharedCourses]        = useState(_d.courses    || INIT_COURSES);
+  const [sharedDocenti,        setSharedDocenti]        = useState(_d.docenti    || INIT_DOCENTI_EXT);
+  const [sharedLessons,        setSharedLessons]        = useState(_d.lessons    || INIT_LESSONS);
+  const [sharedRepertorio,     setSharedRepertorio]     = useState(_d.brani      || INIT_BRANI);
   const [sharedConfig,         setSharedConfig]         = useState(CONFIG_DEFAULT);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
-  const [sharedSpese,          setSharedSpese]          = useState(INIT_SPESE);
+  const [sharedSpese,          setSharedSpese]          = useState(_d.spese      || INIT_SPESE);
   const [sharedAnniScolastici, setSharedAnniScolastici] = useState(INIT_ANNI_SCOLASTICI);
-  const [sharedEntrate,         setSharedEntrate]         = useState(INIT_ENTRATE_QUOTE);
+  const [sharedEntrate,         setSharedEntrate]         = useState(_d.entrate  || INIT_ENTRATE_QUOTE);
   // ── Stato globale per pannelli dashboard e ruolo simulazione ──
   const [sharedPanels,  setSharedPanels]  = useState({});
   const [sharedRuolo,   setSharedRuolo]   = useState("admin");
@@ -11508,6 +11527,32 @@ function App() {
     } catch(e) {}
   }, [sharedCourses, sharedStudents, sharedDocenti]);
   // ───────────────────────────────────────────────────────────────
+
+  // ── Supabase: esponi stato + reload hook ──────────────────────
+  useEffect(() => {
+    // Aggiorna snapshot stato corrente (usato da fm_sync.js per il write-back)
+    if (window.__FM_ON_STATE__) {
+      window.__FM_ON_STATE__({
+        students: sharedStudents, courses: sharedCourses, docenti: sharedDocenti,
+        lessons: sharedLessons, brani: sharedRepertorio, spese: sharedSpese, entrate: sharedEntrate,
+      });
+    }
+  }, [sharedStudents, sharedCourses, sharedDocenti, sharedLessons, sharedRepertorio, sharedSpese, sharedEntrate]);
+
+  useEffect(() => {
+    // Hook che fm_sync.js chiama per iniettare aggiornamenti real-time nel React state
+    window.__FM_RELOAD__ = function(data) {
+      if (data.students)  setSharedStudents(data.students);
+      if (data.courses)   setSharedCourses(data.courses);
+      if (data.docenti)   setSharedDocenti(data.docenti);
+      if (data.lessons)   setSharedLessons(data.lessons);
+      if (data.brani)     setSharedRepertorio(data.brani);
+      if (data.spese)     setSharedSpese(data.spese);
+      if (data.entrate)   setSharedEntrate(data.entrate);
+    };
+    return () => { window.__FM_RELOAD__ = null; };
+  }, []);
+  // ─────────────────────────────────────────────────────────────
 
   const cambiaSchermata = (s) => { setSchermata(s); setPanKey(p=>p+1); };
 
