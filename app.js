@@ -505,6 +505,8 @@ const ConfirmDel = ({ title="Conferma eliminazione", testo, label, description, 
   )
 );
 
+const ConfirmDelete = ConfirmDel; // alias — alcuni componenti usano ConfirmDelete
+
 // ─── RICEVUTA MODAL + PRINT ───────────────────────────────────────────────────
 const PRINT_CSS = `
 @media print {
@@ -7008,7 +7010,7 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
 
         , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6381}}
           , React.createElement(Input, { label: "Importo (€) *"  , type: "number", value: f.importo, onChange: e=>set("importo",e.target.value), error: err.importo, placeholder: "0.00", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6382}})
-          , React.createElement(Input, { label: roleLF==="docente"?"Data (sola lettura)":"Data *", type: "date", value: f.data, onChange: roleLF==="docente"?undefined:e=>set("data",e.target.value), readOnly: roleLF==="docente", error: roleLF==="docente"?undefined:err.data, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6383}})
+          , React.createElement(Input, { label: "Data *", type: "date", value: f.data, onChange: e=>set("data",e.target.value), error: err.data, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6383}})
           , React.createElement(Sel, { label: "Mese di riferimento"  , value: f.mese, onChange: e=>set("mese",Number(e.target.value)),
             options: MESI.map((m,i)=>({value:i,label:m})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6384}})
           , React.createElement(Input, { label: "Anno", type: "number", value: f.anno, onChange: e=>set("anno",Number(e.target.value)), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6386}})

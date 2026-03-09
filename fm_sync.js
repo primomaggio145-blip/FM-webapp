@@ -74,10 +74,13 @@
   }
   function adaptBrano(r) {
     return {
-      id: r.id, title: r.titolo || r.title || '', composer: r.compositore || r.composer || '',
+      id: r.id,
+      title: r.titolo || r.title || '',
+      composer: r.compositore || r.composer || '',
       periodo: r.periodo || '', tonality: r.tonality || '',
       difficulty: r.difficulty || '', tipo: r.tipo || 'individuale',
-      note: r.note || '', dataPrima: r.data_prima || '', dataUltima: r.data_ultima || '',
+      note: r.note || '', dataPrima: r.data_prima || '',
+      dataUltima: r.data_ultima || '',
     };
   }
 
@@ -99,7 +102,8 @@
     },
     docenti(d) {
       return {
-        id: d.id, nome: d.nome || d.name || '',
+        id: d.id || null,
+        nome: d.nome || d.name || '',
         teacher_key: d.teacherKey || d.nome || '',
         email: d.email || null, phone: d.phone || null,
         strumenti: d.strumenti || null, bio: d.bio || null,
@@ -110,7 +114,8 @@
     },
     corsi(c) {
       return {
-        id: c.id, nome: c.name || c.nome || '',
+        id: c.id || null,
+        nome: c.name || c.nome || '',
         tipo: c.type || c.tipo || 'individuale',
         descrizione: c.description || null, livelli: c.livelli || null,
         foto: c.foto || null, visible: c.visible !== false,
@@ -118,12 +123,12 @@
     },
     lezioni(l) {
       return {
-        id: l.id, data: l.date, ora: l.hour || null,
+        id: l.id || null,
+        data: l.date, ora: l.hour || null,
         student: l.student || null, instrument: l.instrument || null,
         teacher: l.teacher || null, room: l.room || null,
         topic: l.topic || null, attendance: l.attendance || null,
         recurrence: l.recurrence || 'Nessuna', notes: l.notes || null,
-        exercises: l.exercises || null, repertorio: l.repertorio || null,
         tipo: l.type || 'individuale', updated_at: new Date().toISOString(),
       };
     },
@@ -151,12 +156,12 @@
     },
     brani(b) {
       return {
-        id: b.id, titolo: b.title || b.titolo || '',
+        id: b.id || null,
+        titolo: b.title || b.titolo || '',
         compositore: b.composer || b.compositore || null,
         periodo: b.periodo || null, tonality: b.tonality || null,
         difficulty: b.difficulty || null, tipo: b.tipo || 'individuale',
-        note: b.note || null, data_prima: b.dataPrima || null,
-        data_ultima: b.dataUltima || null, updated_at: new Date().toISOString(),
+        note: b.note || null, updated_at: new Date().toISOString(),
       };
     },
   };
@@ -177,41 +182,70 @@
     return { added, updated, deleted };
   }
 
-  // IDs generati lato client (non UUID) — Supabase deve generare l'ID reale
-  function isClientId(id) {
-    if (typeof id === 'number') return true;
-    const s = String(id);
-    // UUID format: 8-4-4-4-12 hex → è un vero UUID, non client-side
-    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) return false;
-    // Tutto il resto (d1, q001, b3, ecc.) è client-side
-    return true;
+  // Genera un ID univoco per nuovi record — formato timestamp+random, leggibile e ordinabile
+  function newId() {
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  // Pulisce un oggetto row rimuovendo solo i valori `undefined` (non null)
+  function cleanRow(row) {
+    const r = {};
+    Object.entries(row).forEach(([k, v]) => { if (v !== undefined) r[k] = v; });
+    return r;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  WRITE — scrive una tabella su Supabase
+  //
+  //  Strategia ID per tabella:
+  //  - studenti: ID intero auto-increment → per NUOVI record, rimuoviamo l'ID client
+  //              e lasciamo generare a Supabase
+  //  - tutte le altre (docenti, corsi, lezioni, quote, spese, brani): ID text
+  //              assegnato dall'app → MANTENIAMO sempre l'ID; per nuovi record
+  //              con ID placeholder (corto, tipo 'c3'), generiamo un vero ID univoco
   // ═══════════════════════════════════════════════════════════════════════════
   async function writeTable(table, changes, adapter) {
     const sb = window.supabaseClient;
     if (!sb) return;
 
-    for (const item of changes.added) {
-      try {
-        const row = adapter(item);
-        const hasClientId = isClientId(row.id);
-        if (hasClientId) delete row.id;
-        const { error } = await sb.from(table).insert(row);
-        if (error) fail(`INSERT ${table}:`, error.message, '| row:', row);
-        else log(`✚ ${table}`, hasClientId ? '(nuovo)' : row.id);
-      } catch(e) { fail('insert error', table, e); }
-    }
-
+    // Per record già esistenti in Supabase: UPDATE diretto
     for (const item of changes.updated) {
       try {
-        const row = adapter(item);
+        const row = cleanRow(adapter(item));
         const { error } = await sb.from(table).update(row).eq('id', item.id);
         if (error) fail(`UPDATE ${table} [${item.id}]:`, error.message, '| row:', row);
         else log(`✎ ${table}`, item.id);
       } catch(e) { fail('update error', table, e); }
+    }
+
+    // Per nuovi record: INSERT con ID corretto
+    for (const item of changes.added) {
+      try {
+        const row = cleanRow(adapter(item));
+        if (table === 'studenti') {
+          // studenti: ID intero auto-increment → Supabase lo genera
+          delete row.id;
+        } else {
+          // Tutte le altre tabelle: ID text assegnato dall'app
+          // Se l'ID è un placeholder corto (es 'c3', 'b5'), sostituiamo con uno vero
+          const id = String(row.id || '');
+          const isPlaceholder = !id || id.length < 5;
+          if (isPlaceholder) row.id = newId();
+        }
+        const { error } = await sb.from(table).insert(row);
+        if (error) {
+          // Se duplicate key (record già esiste): proviamo upsert
+          if (error.code === '23505') {
+            const { error: e2 } = await sb.from(table).upsert(row);
+            if (e2) fail(`UPSERT fallback ${table}:`, e2.message);
+            else log(`✚ (upsert) ${table}`, row.id || '(auto)');
+          } else {
+            fail(`INSERT ${table}:`, error.message, '| row:', row);
+          }
+        } else {
+          log(`✚ ${table}`, row.id || '(auto)');
+        }
+      } catch(e) { fail('upsert error', table, e); }
     }
 
     for (const id of changes.deleted) {
