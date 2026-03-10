@@ -326,7 +326,10 @@ const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // PRIMITIVI CONDIVISI
 // ═══════════════════════════════════════════════════════════════════════════════
-const uid = () => "id_" + Date.now() + "_" + Math.floor(Math.random()*10000);
+const uid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+  const r = Math.random() * 16 | 0;
+  return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+});
 
 const initials = (nome) => nome ? nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase() : "??";
 const age = (dataN) => { if(!dataN) return "—"; const d=new Date(dataN); const now=new Date(); let a=now.getFullYear()-d.getFullYear(); if(now.getMonth()<d.getMonth()||(now.getMonth()===d.getMonth()&&now.getDate()<d.getDate()))a--; return a; };
