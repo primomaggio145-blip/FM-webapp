@@ -884,13 +884,6 @@ const FormLogin = ({onSuccess,onRegistrazione,onRecupero})=>{
   const [loading,  setLoading]  = useState(false);
   const [err,      setErr]      = useState({});
 
-  // Credenziali demo — 3 ruoli: admin, docente, allievo
-  const DEMO = {
-    "admin@accademia.it":    {password:"admin123",   nome:"Marco Bianchi",  ruolo:"admin"},
-    "rossi@accademia.it":    {password:"musica2024", nome:"Prof. Rossi",    ruolo:"docente"},
-    "sofia@accademia.it":    {password:"sofia2024",  nome:"Sofia Marchetti",ruolo:"allievo"},
-  };
-
   const validate=()=>{
     const e={};
     if(!email.trim())    e.email="Email obbligatoria";
@@ -902,15 +895,26 @@ const FormLogin = ({onSuccess,onRegistrazione,onRecupero})=>{
   const handleLogin=()=>{
     const e=validate(); if(Object.keys(e).length){setErr(e);return;}
     setLoading(true);
-    setTimeout(()=>{
-      const u=DEMO[email.toLowerCase()];
-      if(u&&u.password===password){
-        onSuccess({email,nome:u.nome,ruolo:u.ruolo});
-      } else {
-        setErr({form:"Credenziali non valide. Prova con le credenziali demo sotto."});
+    (async()=>{
+      try {
+        if(window.FM_AUTH){
+          const {user, profilo} = await window.FM_AUTH.signIn(email.trim().toLowerCase(), password);
+          if(!profilo){ setErr({form:"Profilo non trovato. Contatta l'amministratore."}); setLoading(false); return; }
+          if(profilo.stato==='sospeso'){ setErr({form:"Il tuo account è stato sospeso. Contatta l'amministratore."}); setLoading(false); return; }
+          if(profilo.stato==='invitato'){ setErr({form:"Account non ancora attivato. Imposta la password dal link nell'email di invito."}); setLoading(false); return; }
+          onSuccess({email:user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:user.id});
+        } else {
+          // Fallback DEMO (sviluppo locale senza Supabase)
+          const DEMO={"admin@accademia.it":{password:"admin123",nome:"Marco Bianchi",ruolo:"admin"},"rossi@accademia.it":{password:"musica2024",nome:"Prof. Rossi",ruolo:"docente"},"sofia@accademia.it":{password:"sofia2024",nome:"Sofia Marchetti",ruolo:"allievo"}};
+          const u=DEMO[email.toLowerCase()];
+          if(u&&u.password===password){ onSuccess({email,nome:u.nome,ruolo:u.ruolo}); }
+          else { setErr({form:"Credenziali non valide."}); setLoading(false); }
+        }
+      } catch(ex){
+        setErr({form: ex.message==="Invalid login credentials" ? "Email o password errati." : (ex.message||"Errore di accesso.")});
         setLoading(false);
       }
-    },900);
+    })();
   };
 
   const handleKeyDown=(e)=>{if(e.key==="Enter")handleLogin();};
@@ -964,22 +968,7 @@ const FormLogin = ({onSuccess,onRegistrazione,onRecupero})=>{
         )
       )
 
-      /* Credenziali demo */
-      , React.createElement('div', { className: "st5", style: {background:C.goldBg,border:`1px solid ${C.border}`,
-        borderRadius:0,padding:"14px 16px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 899}}
-        , React.createElement('div', { style: {fontSize:10,color:C.gold,letterSpacing:"0.12em",textTransform:"uppercase",fontWeight:700,marginBottom:10,fontFamily:"'Oswald',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 901}}, "Credenziali demo"
 
-        )
-        , Object.entries(DEMO).map(([em,u])=>(
-          React.createElement('button', { key: em, onClick: ()=>{setEmail(em);setPassword(u.password);setErr({});},
-            style: {display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",
-              background:"transparent",border:"none",cursor:"pointer",padding:"5px 0",
-              borderBottom:`1px solid ${C.border}`,fontFamily:"'Open Sans',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 905}}
-            , React.createElement('span', { style: {fontSize:11,color:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 909}}, u.nome)
-            , React.createElement('span', { style: {fontSize:10,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 910}}, u.ruolo, " · "  , em)
-          )
-        ))
-      )
 
       , React.createElement('div', { style: {textAlign:"center",paddingTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 915}}
         , React.createElement('span', { style: {fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 916}}, "Non hai un account? "    )
@@ -1015,7 +1004,17 @@ const FormRegistrazione = ({onBack})=>{
   const handleInvia=()=>{
     const e=validate(); if(Object.keys(e).length){setErr(e);return;}
     setLoading(true);
-    setTimeout(()=>{setLoading(false);setStep(2);},1200);
+    (async()=>{
+      try {
+        if(window.FM_AUTH){
+          await window.FM_AUTH.inviaRichiesta({nome:f.nome.trim(),email:f.email.trim().toLowerCase(),ruolo:f.ruolo,messaggio:f.messaggio||''});
+        }
+        setLoading(false); setStep(2);
+      } catch(ex){
+        setErr({form: ex.message||"Errore nell'invio della richiesta. Riprova."});
+        setLoading(false);
+      }
+    })();
   };
 
   if(step===2) return(
@@ -10590,7 +10589,47 @@ const UtentiView = () => {
     const [selReq,    setSelReq]    = useState(null);
     const [selUtente, setSelUtente] = useState(null);
     const [toast,     setToast]     = useState(null);
-  
+    const [saving,    setSaving]    = useState(false);
+
+    // Carica dati reali da Supabase al mount
+    useEffect(()=>{
+      if(!window.FM_AUTH) return;
+      (async()=>{
+        try {
+          const [profili, richiesteLive] = await Promise.all([
+            window.FM_AUTH.getProfili(),
+            window.FM_AUTH.getRichieste(),
+          ]);
+          if(profili.length>0){
+            setUtenti(profili.map(p=>({
+              id:           p.id,
+              nome:         p.nome,
+              email:        p.email,
+              ruolo:        p.ruolo,
+              stato:        p.stato||'attivo',
+              avatar:       p.nome.split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase(),
+              iscritto:     p.created_at?.split("T")[0]||'',
+              ultimoAccesso:p.updated_at?.split("T")[0]||null,
+              permessi:     {...(PERM_DEFAULT[p.ruolo]||{})},
+              note:         p.note||'',
+            })));
+          }
+          if(richiesteLive.length>0){
+            setRichieste(richiesteLive.map(r=>({
+              id:       r.id,
+              nome:     r.nome,
+              email:    r.email,
+              ruolo:    r.ruolo_richiesto||'allievo',
+              messaggio:r.messaggio||'',
+              data:     r.created_at?.split("T")[0]||'',
+            })));
+          } else {
+            setRichieste([]);
+          }
+        } catch(ex){ console.warn('[UtentiView] caricamento fallito:', ex.message); }
+      })();
+    },[]);
+
     const closeModal=()=>{setModal(null);setSelReq(null);setSelUtente(null);};
   
     const showToast=(msg,hex=C.green)=>{
@@ -10619,39 +10658,80 @@ const UtentiView = () => {
       showToast(`${draft.nome} aggiornato`);
     };
     const sospendiUtente=(u)=>{
-      const nuovo=u.stato==="sospeso"?"attivo":"sospeso";
-      setUtenti(p=>p.map(x=>x.id===u.id?{...x,stato:nuovo}:x));
-      setDrawer(null); closeModal();
-      showToast(`${u.nome} ${nuovo==="sospeso"?"sospeso":"riattivato"}`,nuovo==="sospeso"?C.orange:C.green);
+      const nuovoStato=u.stato==="sospeso"?"attivo":"sospeso";
+      setSaving(true);
+      (async()=>{
+        try {
+          if(window.FM_AUTH) await window.FM_AUTH.sospendiUtente({userId:u.id,sospendi:nuovoStato==="sospeso"});
+          setUtenti(p=>p.map(x=>x.id===u.id?{...x,stato:nuovoStato}:x));
+          setDrawer(null); closeModal();
+          showToast(`${u.nome} ${nuovoStato==="sospeso"?"sospeso":"riattivato"}`,nuovoStato==="sospeso"?C.orange:C.green);
+        } catch(ex){ showToast(`Errore: ${ex.message}`,C.red); }
+        finally { setSaving(false); }
+      })();
     };
     const eliminaUtente=(u)=>{
-      setUtenti(p=>p.filter(x=>x.id!==u.id));
-      setDrawer(null); closeModal();
-      showToast(`${u.nome} eliminato`,C.red);
+      setSaving(true);
+      (async()=>{
+        try {
+          if(window.FM_AUTH) await window.FM_AUTH.eliminaUtente({userId:u.id});
+          setUtenti(p=>p.filter(x=>x.id!==u.id));
+          setDrawer(null); closeModal();
+          showToast(`${u.nome} eliminato`,C.red);
+        } catch(ex){ showToast(`Errore: ${ex.message}`,C.red); }
+        finally { setSaving(false); }
+      })();
     };
     const approvaRichiesta=(req,ruolo)=>{
-      const nuovo={id:uid(),nome:req.nome,email:req.email,ruolo,stato:"attivo",
-        avatar:req.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(),
-        iscritto:new Date().toISOString().split("T")[0],
-        ultimoAccesso:null,permessi:{...PERM_DEFAULT[ruolo]},note:""};
-      setUtenti(p=>[...p,nuovo]);
-      setRichieste(p=>p.filter(r=>r.id!==req.id));
-      closeModal();
-      showToast(`${req.nome} approvato come ${ruoloById(ruolo).label}`);
+      setSaving(true);
+      (async()=>{
+        try {
+          if(window.FM_AUTH){
+            await window.FM_AUTH.approvaRichiesta({richiestaId:req.id,nome:req.nome,email:req.email,ruolo});
+          }
+          const nuovo={id:uid(),nome:req.nome,email:req.email,ruolo,stato:"invitato",
+            avatar:req.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(),
+            iscritto:new Date().toISOString().split("T")[0],
+            ultimoAccesso:null,permessi:{...PERM_DEFAULT[ruolo]},note:""};
+          setUtenti(p=>[...p,nuovo]);
+          setRichieste(p=>p.filter(r=>r.id!==req.id));
+          closeModal();
+          showToast(`${req.nome} approvato — invito inviato a ${req.email}`);
+        } catch(ex){
+          showToast(`Errore: ${ex.message}`,C.red);
+        } finally { setSaving(false); }
+      })();
     };
     const rifiutaRichiesta=(req)=>{
-      setRichieste(p=>p.filter(r=>r.id!==req.id));
-      closeModal();
-      showToast(`Richiesta di ${req.nome} rifiutata`,C.orange);
+      setSaving(true);
+      (async()=>{
+        try {
+          if(window.FM_AUTH) await window.FM_AUTH.rifiutaRichiesta({richiestaId:req.id});
+          setRichieste(p=>p.filter(r=>r.id!==req.id));
+          closeModal();
+          showToast(`Richiesta di ${req.nome} rifiutata`,C.orange);
+        } catch(ex){ showToast(`Errore: ${ex.message}`,C.red); }
+        finally { setSaving(false); }
+      })();
     };
     const invitaUtente=(f)=>{
-      const nuovo={id:uid(),nome:f.nome,email:f.email,ruolo:f.ruolo,stato:"invitato",
-        avatar:f.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(),
-        iscritto:new Date().toISOString().split("T")[0],ultimoAccesso:null,
-        permessi:{...PERM_DEFAULT[f.ruolo]},note:""};
-      setUtenti(p=>[...p,nuovo]);
-      closeModal();
-      showToast(`Invito inviato a ${f.email}`,C.blue);
+      setSaving(true);
+      (async()=>{
+        try {
+          if(window.FM_AUTH){
+            // Crea una richiesta fittizia e approvala subito (flusso admin diretto)
+            await window.FM_AUTH.approvaRichiesta({richiestaId:null,nome:f.nome,email:f.email,ruolo:f.ruolo});
+          }
+          const nuovo={id:uid(),nome:f.nome,email:f.email,ruolo:f.ruolo,stato:"invitato",
+            avatar:f.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(),
+            iscritto:new Date().toISOString().split("T")[0],ultimoAccesso:null,
+            permessi:{...PERM_DEFAULT[f.ruolo]},note:""};
+          setUtenti(p=>[...p,nuovo]);
+          closeModal();
+          showToast(`Invito inviato a ${f.email}`,C.blue);
+        } catch(ex){ showToast(`Errore: ${ex.message}`,C.red); }
+        finally { setSaving(false); }
+      })();
     };
   
     return(
@@ -11860,6 +11940,25 @@ function App() {
   const [sharedRuolo,   setSharedRuolo]   = useState("admin");
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
 
+  // ── Ripristina sessione Auth al refresh pagina ──────────────────
+  useEffect(()=>{
+    if(!window.FM_AUTH) return;
+    (async()=>{
+      try {
+        const session = await window.FM_AUTH.getSession();
+        if(session?.user){
+          const profilo = await window.FM_AUTH.getProfilo(session.user.id);
+          if(profilo && profilo.stato!=='sospeso'){
+            setUser({email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id});
+            setSharedRuolo(profilo.ruolo||"admin");
+            try{ window.__currentUserName__=profilo.nome||""; }catch(e){}
+          }
+        }
+      } catch(e){}
+    })();
+  },[]);
+  // ───────────────────────────────────────────────────────────────
+
   // ── Sync corsi e statistiche → sito pubblico ───────────────────
   useEffect(() => {
     try {
@@ -11964,7 +12063,7 @@ function App() {
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
       , React.createElement('div', { style: {display:"flex",height:"100vh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: ()=>{setUser(null);setSharedRuolo("admin"); try{window.__currentUserName__="";}catch(e){}}, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: ()=>{ if(window.FM_AUTH) window.FM_AUTH.signOut().catch(()=>{}); setUser(null); setSharedRuolo("admin"); try{window.__currentUserName__="";}catch(e){}}, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , settingsDrawerOpen && React.createElement(SettingsDrawer, {
             open: settingsDrawerOpen,
             onClose: ()=>setSettingsDrawerOpen(false),
