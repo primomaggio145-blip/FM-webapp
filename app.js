@@ -1011,6 +1011,7 @@ const FormRegistrazione = ({onBack})=>{
         }
         setLoading(false); setStep(2);
       } catch(ex){
+        console.error('[FM] inviaRichiesta error:', ex);
         setErr({form: ex.message||"Errore nell'invio della richiesta. Riprova."});
         setLoading(false);
       }
