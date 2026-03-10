@@ -1,349 +1,210 @@
-// ═══════════════════════════════════════════════════════════════════
-//  FUTURO MUSICA — Integrazione Supabase
-//  
-//  ISTRUZIONI:
-//  1. Crea il progetto su supabase.com
-//  2. Vai su Settings → API e copia URL e anon key
-//  3. Sostituisci i valori sotto
-//  4. Questo file va incluso PRIMA di app.js e di admin.html
-//
-//  <script src="supabase_integration.js"></script>
-//  <script src="app.js"></script>
-// ═══════════════════════════════════════════════════════════════════
+﻿// ════════════════════════════════════════════════════════════════
+//  FUTURO MUSICA — supabase_integration.js
+//  Inizializza il client Supabase + FMAdapter + gestione Auth reale
+// ════════════════════════════════════════════════════════════════
 
-// ─── CONFIGURAZIONE ────────────────────────────────────────────────
-const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';   // ← sostituisci
-const SUPABASE_KEY  = 'sb_publishable_hoDexm3CUGWCnH6OrjbQ7Q_zMutnDcO';     // ← anon public key
+(function () {
+  // ── CONFIGURA QUESTE DUE RIGHE CON I TUOI VALORI SUPABASE ────
+  const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
+  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjE0NDAsImV4cCI6MjA4NzkzNzQ0MH0.ScXeqKD73hu1zMwVWppybmNRqCtKWnR9C_pfNMjwQio';
+  // URL della Edge Function (dopo averla deployata)
+  const EDGE_APPROVE  = `${SUPABASE_URL}/functions/v1/approve-user`;
+  // ─────────────────────────────────────────────────────────────
 
-// ─── CLIENT ────────────────────────────────────────────────────────
-// Carica la libreria Supabase (già inclusa via CDN in webapp.html/admin.html)
-const { createClient } = supabase;
-const db = createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// ═══════════════════════════════════════════════════════════════════
-//  API — funzioni usate dalla webapp (app.js) e dall'admin
-// ═══════════════════════════════════════════════════════════════════
-
-const FM = {
-
-  // ─── STUDENTI ────────────────────────────────────────────────────
-  studenti: {
-    async list() {
-      const { data, error } = await db.from('studenti').select('*').order('nome');
-      if (error) throw error;
-      return data;
-    },
-    async get(id) {
-      const { data, error } = await db.from('studenti').select(`
-        *, 
-        lezioni(*), 
-        repertorio_studenti(*), 
-        quote(*)
-      `).eq('id', id).single();
-      if (error) throw error;
-      return data;
-    },
-    async add(studente) {
-      const { data, error } = await db.from('studenti').insert(studente).select().single();
-      if (error) throw error;
-      return data;
-    },
-    async update(id, fields) {
-      const { data, error } = await db.from('studenti')
-        .update({ ...fields, updated_at: new Date().toISOString() })
-        .eq('id', id).select().single();
-      if (error) throw error;
-      return data;
-    },
-    async delete(id) {
-      const { error } = await db.from('studenti').delete().eq('id', id);
-      if (error) throw error;
+  const { createClient } = window.supabase;
+  const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
+    auth: {
+      autoRefreshToken:  true,
+      persistSession:    true,
+      detectSessionInUrl: true,   // necessario per il link di invito email
     }
-  },
+  });
 
-  // ─── DOCENTI ─────────────────────────────────────────────────────
-  docenti: {
-    async list() {
-      const { data, error } = await db.from('docenti').select('*').order('nome');
-      if (error) throw error;
-      return data;
-    },
-    async add(docente) {
-      const { data, error } = await db.from('docenti').insert(docente).select().single();
-      if (error) throw error;
-      return data;
-    },
-    async update(id, fields) {
-      const { data, error } = await db.from('docenti').update(fields).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
-    }
-  },
+  window.supabaseClient = sb;
+  window.SUPABASE_EDGE_APPROVE = EDGE_APPROVE;
 
-  // ─── CORSI ───────────────────────────────────────────────────────
-  corsi: {
-    async list() {
-      const { data, error } = await db.from('corsi').select('*, corsi_docenti(docente_id)').order('nome');
-      if (error) throw error;
-      return data;
+  // ── FMAdapter: DB → formato React ───────────────────────────
+  window.FMAdapter = {
+    studente(r) {
+      return {
+        id:                   r.id,
+        name:                 r.nome                    || '',
+        email:                r.email                   || '',
+        phone:                r.phone                   || '',
+        instrument:           r.strumento               || '',
+        teacher:              r.docente                 || '',
+        level:                r.livello                 || 'Principiante',
+        status:               r.status                  || 'attivo',
+        monthlyFee:           parseFloat(r.monthly_fee) || 0,
+        feeType:              r.fee_type                || 'fisso',
+        birthdate:            r.birthdate               || '',
+        enrollDate:           r.enroll_date             || '',
+        complementaryCourse:  r.complementary_course    || '',
+        notes:                r.notes                   || '',
+        lessons:              [],
+      };
     },
-    async update(id, fields) {
-      const { data, error } = await db.from('corsi').update(fields).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
+    docente(r) {
+      return {
+        id:         r.id,
+        nome:       r.nome        || '',
+        email:      r.email       || '',
+        phone:      r.phone       || '',
+        strumenti:  r.strumenti   || [],
+        colore:     r.colore      || '#1a4fa0',
+        teacherKey: r.teacher_key || r.nome || '',
+        bio:        r.bio         || '',
+        stato:      r.stato       || 'attivo',
+      };
     },
-    async toggleVisible(id, visible) {
-      return FM.corsi.update(id, { visible });
-    }
-  },
+    corso(r) {
+      const docentiIds = (r.corsi_docenti || []).map(cd => cd.docente_id);
+      return {
+        id:          r.id,
+        name:        r.nome       || '',
+        instrument:  r.strumento  || '',
+        tipo:        r.tipo       || 'individuale',
+        description: r.descrizione|| '',
+        docentiIds,
+      };
+    },
+  };
 
-  // ─── LEZIONI ─────────────────────────────────────────────────────
-  lezioni: {
-    async listByStudente(studenteId) {
-      const { data, error } = await db.from('lezioni')
-        .select('*').eq('studente_id', studenteId).order('data', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    async add(lezione) {
-      const { data, error } = await db.from('lezioni').insert(lezione).select().single();
-      if (error) throw error;
-      return data;
-    },
-    async delete(id) {
-      const { error } = await db.from('lezioni').delete().eq('id', id);
-      if (error) throw error;
-    }
-  },
+  // ── Auth helpers esposti a fm_sync e app.js ──────────────────
 
-  // ─── QUOTE (pagamenti) ────────────────────────────────────────────
-  quote: {
-    async list(filters = {}) {
-      let q = db.from('quote').select('*');
-      if (filters.studente_id) q = q.eq('studente_id', filters.studente_id);
-      if (filters.anno)        q = q.eq('anno', filters.anno);
-      if (filters.stato)       q = q.eq('stato', filters.stato);
-      const { data, error } = await q.order('anno').order('mese');
+  // Login con email + password
+  window.FM_AUTH = {
+
+    async signIn(email, password) {
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
       if (error) throw error;
+      // Leggi il ruolo dal profilo
+      const profilo = await window.FM_AUTH.getProfilo(data.user.id);
+      return { user: data.user, profilo };
+    },
+
+    async signOut() {
+      await sb.auth.signOut();
+    },
+
+    async getSession() {
+      const { data: { session } } = await sb.auth.getSession();
+      return session;
+    },
+
+    async getCurrentUser() {
+      const { data: { user } } = await sb.auth.getUser();
+      return user;
+    },
+
+    async getProfilo(userId) {
+      const { data, error } = await sb.from('profili').select('*').eq('id', userId).single();
+      if (error) return null;
       return data;
     },
-    async update(id, fields) {
-      const { data, error } = await db.from('quote').update(fields).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
-    },
-    async add(quota) {
-      const { data, error } = await db.from('quote').insert(quota).select().single();
-      if (error) throw error;
-      return data;
-    },
-    async setStato(id, stato, dataPagamento = null) {
-      return FM.quote.update(id, {
-        stato,
-        data_pagamento: dataPagamento || (stato === 'pagato' ? new Date().toISOString().split('T')[0] : null)
+
+    // Invia richiesta di accesso (senza essere autenticati)
+    async inviaRichiesta({ nome, email, ruolo, messaggio }) {
+      const { error } = await sb.from('richieste_accesso').insert({
+        id:              crypto.randomUUID(),
+        nome,
+        email,
+        ruolo_richiesto: ruolo,
+        messaggio:       messaggio || '',
+        stato:           'in_attesa',
       });
-    }
-  },
+      if (error) throw error;
+    },
 
-  // ─── CONCERTI ────────────────────────────────────────────────────
-  concerti: {
-    async list() {
-      const { data, error } = await db.from('concerti').select('*, concerti_partecipanti(*), concerti_prenotazioni(*)').order('data');
-      if (error) throw error;
-      return data;
+    // Admin: approva richiesta → manda email invito
+    async approvaRichiesta({ richiestaId, nome, email, ruolo }) {
+      const session = await window.FM_AUTH.getSession();
+      const res = await fetch(window.SUPABASE_EDGE_APPROVE, {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey':        SUPABASE_ANON,
+        },
+        body: JSON.stringify({ action: 'approva', richiestaId, nome, email, ruolo }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || 'Errore approvazione');
+      return json;
     },
-    async add(concerto) {
-      const { data, error } = await db.from('concerti').insert(concerto).select().single();
-      if (error) throw error;
-      return data;
-    },
-    async update(id, fields) {
-      const { data, error } = await db.from('concerti').update(fields).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
-    },
-    async delete(id) {
-      const { error } = await db.from('concerti').delete().eq('id', id);
-      if (error) throw error;
-    },
-    async toggleVisible(id, visible) {
-      return FM.concerti.update(id, { visible });
-    }
-  },
 
-  // ─── SPESE ───────────────────────────────────────────────────────
-  spese: {
-    async list(anno) {
-      let q = db.from('spese').select('*');
-      if (anno) q = q.eq('anno', anno);
-      const { data, error } = await q.order('data', { ascending: false });
-      if (error) throw error;
-      return data;
+    // Admin: rifiuta richiesta
+    async rifiutaRichiesta({ richiestaId }) {
+      const session = await window.FM_AUTH.getSession();
+      const res = await fetch(window.SUPABASE_EDGE_APPROVE, {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey':        SUPABASE_ANON,
+        },
+        body: JSON.stringify({ action: 'rifiuta', richiestaId }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || 'Errore rifiuto');
+      return json;
     },
-    async add(spesa) {
-      const { data, error } = await db.from('spese').insert(spesa).select().single();
-      if (error) throw error;
-      return data;
-    },
-    async delete(id) {
-      const { error } = await db.from('spese').delete().eq('id', id);
-      if (error) throw error;
-    }
-  },
 
-  // ─── BRANI (repertorio) ───────────────────────────────────────────
-  brani: {
-    async list() {
-      const { data, error } = await db.from('brani').select('*').order('titolo');
-      if (error) throw error;
-      return data;
+    // Admin: sospendi / riattiva utente
+    async sospendiUtente({ userId, sospendi }) {
+      const session = await window.FM_AUTH.getSession();
+      const res = await fetch(window.SUPABASE_EDGE_APPROVE, {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey':        SUPABASE_ANON,
+        },
+        body: JSON.stringify({ action: sospendi ? 'sospendi' : 'riattiva', userId }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || 'Errore sospensione');
+      return json;
     },
-    async add(brano) {
-      const { data, error } = await db.from('brani').insert(brano).select().single();
-      if (error) throw error;
-      return data;
-    }
-  },
 
-  // ─── UTENTI ──────────────────────────────────────────────────────
-  utenti: {
-    async list() {
-      const { data, error } = await db.from('utenti').select('*').order('nome');
-      if (error) throw error;
-      return data;
+    // Admin: elimina utente
+    async eliminaUtente({ userId }) {
+      const session = await window.FM_AUTH.getSession();
+      const res = await fetch(window.SUPABASE_EDGE_APPROVE, {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+          'apikey':        SUPABASE_ANON,
+        },
+        body: JSON.stringify({ action: 'elimina', userId }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || 'Errore eliminazione');
+      return json;
     },
-    async update(id, fields) {
-      const { data, error } = await db.from('utenti').update(fields).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
-    }
-  },
 
-  // ─── SITO CONFIG (admin + sito pubblico) ─────────────────────────
-  sito: {
-    async getAll() {
-      const { data, error } = await db.from('sito_config').select('*');
-      if (error) throw error;
-      // Trasforma in oggetto chiave:valore
-      const result = {};
-      (data || []).forEach(row => { result[row.chiave] = row.valore; });
-      return result;
+    // Carica tutte le richieste in attesa (solo admin)
+    async getRichieste() {
+      const { data, error } = await sb
+        .from('richieste_accesso')
+        .select('*')
+        .eq('stato', 'in_attesa')
+        .order('created_at', { ascending: false });
+      if (error) return [];
+      return data || [];
     },
-    async set(chiave, valore) {
-      const { error } = await db.from('sito_config')
-        .upsert({ chiave, valore: typeof valore === 'object' ? JSON.stringify(valore) : String(valore), updated_at: new Date().toISOString() })
-        .eq('chiave', chiave);
-      if (error) throw error;
-    },
-    async getAttivita() {
-      const { data, error } = await db.from('sito_attivita').select('*').eq('visible', true).order('ordine');
-      if (error) throw error;
-      return data;
-    },
-    async getAttivitaAll() {
-      const { data, error } = await db.from('sito_attivita').select('*').order('ordine');
-      if (error) throw error;
-      return data;
-    },
-    async updateAttivita(id, fields) {
-      const { data, error } = await db.from('sito_attivita').update(fields).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
-    },
-    async getCorsiComplementari() {
-      const { data, error } = await db.from('corsi_complementari').select('*').eq('visible', true).order('ordine');
-      if (error) throw error;
-      return data;
-    },
-    async getCorsiComplementariAll() {
-      const { data, error } = await db.from('corsi_complementari').select('*').order('ordine');
-      if (error) throw error;
-      return data;
-    },
-    async updateCorsoComplementare(id, fields) {
-      const { data, error } = await db.from('corsi_complementari').update(fields).eq('id', id).select().single();
-      if (error) throw error;
-      return data;
-    }
-  },
 
-  // ─── REALTIME ────────────────────────────────────────────────────
-  // Usa subscribeToTable() per ricevere aggiornamenti in tempo reale
-  realtime: {
-    subscribe(table, callback) {
-      return db.channel(`public:${table}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table }, callback)
-        .subscribe();
+    // Carica tutti i profili utente (solo admin)
+    async getProfili() {
+      const { data, error } = await sb
+        .from('profili')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) return [];
+      return data || [];
     },
-    unsubscribe(channel) {
-      db.removeChannel(channel);
-    }
-  },
+  };
 
-  // ─── ANNO SCOLASTICO ──────────────────────────────────────────────
-  anni: {
-    async list() {
-      const { data, error } = await db.from('anni_scolastici').select('*').order('anno_inizio', { ascending: false });
-      if (error) throw error;
-      return data;
-    },
-    async attivo() {
-      const { data, error } = await db.from('anni_scolastici').select('*').eq('stato', 'attivo').single();
-      if (error) throw error;
-      return data;
-    }
-  }
-};
-
-// ═══════════════════════════════════════════════════════════════════
-//  HELPER — converte formato DB → formato webapp React
-// ═══════════════════════════════════════════════════════════════════
-const FMAdapter = {
-  studente(row) {
-    if (!row) return null;
-    return {
-      id: row.id,
-      name: row.nome,
-      email: row.email || '',
-      phone: row.phone || '',
-      instrument: row.strumento || '',
-      teacher: row.docente || '',
-      level: row.livello || 'Principiante',
-      status: row.status || 'attivo',
-      monthlyFee: parseFloat(row.monthly_fee) || 0,
-      feeType: row.fee_type || 'fisso',
-      birthdate: row.birthdate || '',
-      enrollDate: row.enroll_date || '',
-      complementaryCourse: row.complementary_course || '',
-      notes: row.notes || '',
-      lessons: (row.lezioni || []).map(FMAdapter.lezione),
-      repertorio: (row.repertorio_studenti || []).map(FMAdapter.repertorioItem),
-      quote: (row.quote || []).map(FMAdapter.quota),
-    };
-  },
-  lezione(row) {
-    return { id: row.id, date: row.data, topic: row.topic, attendance: row.attendance, notes: row.notes || '' };
-  },
-  repertorioItem(row) {
-    return { id: row.id, titolo: row.titolo, compositore: row.compositore || '', periodo: row.periodo || '', stato: row.stato, dataInizio: row.data_inizio || '', note: row.note || '' };
-  },
-  quota(row) {
-    return { id: row.id, mese: row.mese, anno: row.anno, importo: parseFloat(row.importo), stato: row.stato, dataPagamento: row.data_pagamento || '', numRicevuta: row.num_ricevuta || '' };
-  },
-  docente(row) {
-    return { id: row.id, nome: row.nome, teacherKey: row.teacher_key, email: row.email || '', phone: row.phone || '', strumenti: row.strumenti || '', bio: row.bio || '', tariffaOra: parseFloat(row.tariffa_ora) || 0, contratto: row.contratto || '', dataInizio: row.data_inizio || '', attivo: row.attivo };
-  },
-  corso(row) {
-    return { id: row.id, name: row.nome, type: row.tipo, description: row.descrizione || '', livelli: row.livelli || '', foto: row.foto || '', visible: row.visible, docenti: (row.corsi_docenti || []).map(cd => cd.docente_id) };
-  },
-  concerto(row) {
-    return { id: row.id, tipo: row.tipo, titolo: row.titolo, data: row.data, ora: row.ora, luogo: row.luogo || '', capienza: row.capienza || 0, biglietto: row.biglietto, prezzoBiglietto: parseFloat(row.prezzo_biglietto) || 0, stato: row.stato, descrizione: row.descrizione || '', note: row.note || '', badge: row.badge || 'Concerto', visible: row.visible, ingresso: row.ingresso || 'Ingresso libero', partecipanti: (row.concerti_partecipanti || []), prenotazioni: (row.concerti_prenotazioni || []) };
-  }
-};
-
-// Esporta globalmente
-window.FM = FM;
-window.FMAdapter = FMAdapter;
-window.supabaseClient = db;
-
-console.log('✅ Futuro Musica — Supabase connesso');
+  console.log('%c[FM] supabase_integration.js caricato ✓', 'color:#1a4fa0;font-weight:600');
+})();
