@@ -167,7 +167,7 @@
     },
     spese(s) {
       return {
-        id: s.id, categoria: s.categoria || 'altro', desc: s.desc || null,
+        id: s.id, categoria: s.categoria || 'altro', descrizione: s.desc || s.descrizione || null,
         importo: parseFloat(s.importo) || 0, mese: s.mese ?? null,
         anno: s.anno || new Date().getFullYear(), metodo: s.metodo || null,
         data: s.data || null, docente_id: s.docenteId || null, note: s.note || null,
@@ -198,7 +198,6 @@
         stato: c.stato || 'programmato',
         descrizione: c.descrizione || null,
         note: c.note || null,
-        partecipanti: JSON.stringify(c.partecipanti || []),
         scaletta: JSON.stringify(c.scaletta || []),
         updated_at: new Date().toISOString(),
       };

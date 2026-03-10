@@ -7000,7 +7000,7 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
 
         /* Se categoria = docenti, mostra select docente */
         , f.categoria==="docenti" && (
-          React.createElement(Sel, { label: "Docente", value: f.docenteId, onChange: e=>{ set("docenteId",e.target.value); const d=DOCENTI.find(x=>x.id===e.target.value); if(d) set("desc",`Compenso mensile ${d.name}`); },
+          React.createElement(Sel, { label: "Docente", value: f.docenteId, onChange: e=>{ set("docenteId",e.target.value); const _dList=(_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI); const d=_dList.find(x=>x.id===e.target.value); if(d) set("desc",`Compenso mensile ${d.nome||d.name}`); },
             options: [{value:"",label:"— seleziona docente —"},...(_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI).map(d=>({value:d.id,label:d.nome||d.name}))], __self: this, __source: {fileName: _jsxFileName, lineNumber: 6375}})
         )
 
