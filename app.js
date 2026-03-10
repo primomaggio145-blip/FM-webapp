@@ -4920,9 +4920,8 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students }) => {
+const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson }) => {
   const canEdit = role === 'admin' || role === 'docente';
-  const canEditDate = role === 'admin' || role === 'docente'; // docente può cambiare data
   const studentsList = students || [];
   const hex = insHex(lesson.instrument);
   const ATT_STYLES = {
@@ -4934,6 +4933,31 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
 
   const [showIscrizionePanel, setShowIscrizionePanel] = useState(false);
   const [iscrizioneStudent, setIscrizioneStudent] = useState("");
+
+  // Stato locale per editing inline
+  const [localTopic,     setLocalTopic]     = useState(lesson.topic     || "");
+  const [localExercises, setLocalExercises] = useState(lesson.exercises || "");
+  const [localLinkUrl,   setLocalLinkUrl]   = useState(lesson.linkUrl   || "");
+  const [localAllegati,  setLocalAllegati]  = useState(lesson.allegati  || []);
+  const [saving, setSaving] = useState(false);
+
+  const saveField = (patch) => {
+    if (!onUpdateLesson) return;
+    setSaving(true);
+    onUpdateLesson({ ...lesson, ...patch });
+    setTimeout(() => setSaving(false), 600);
+  };
+
+  const InlineLabel = ({ label, icon, color }) => (
+    React.createElement('div', { style: {fontSize:10, color:color||C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:6, display:"flex", alignItems:"center", gap:5}}
+      , icon && React.createElement(Ic, {n:icon, size:11, stroke:color||C.textMuted})
+      , label
+    )
+  );
+
+  const SaveDot = () => saving
+    ? React.createElement('span', {style:{fontSize:10,color:C.green,marginLeft:6}}, "✓ salvato")
+    : null;
 
   return (
     React.createElement(Modal, { title: "Dettaglio lezione" , onClose: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4493}}
@@ -4965,9 +4989,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                       )
                     : React.createElement('span', { style: {fontSize:11,background:C.tealBg,color:C.teal,
                         border:`1px solid ${C.tealBorder}`,borderRadius:4,padding:"2px 8px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4520}}, "Non ancora iscritto"
-
                       )
-                  
                 )
                 , React.createElement('div', { style: {fontSize:13, color:C.teal, opacity:0.85, marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4526}}
                   , lesson.instrument, lesson.teacher ? ` · ${lesson.teacher}` : ""
@@ -5031,25 +5053,49 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
             )
           )
         )
-        , lesson.topic && (
-          React.createElement('div', { style: {padding:"12px 14px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4589}}
-            , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4590}}, "Argomento")
-            , React.createElement('div', { style: {fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4591}}, lesson.topic)
+
+        /* ── Argomento — inline editable ── */
+        , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:4}}
+          , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between"}}
+            , React.createElement(InlineLabel, {label:"Argomento", icon:"note"})
+            , React.createElement(SaveDot, null)
           )
+          , canEdit
+            ? React.createElement('input', { value: localTopic, onChange: e=>setLocalTopic(e.target.value),
+                onBlur: () => saveField({topic: localTopic}),
+                placeholder: "Es. Scale maggiori, Chopin Notturno...",
+                style: {padding:"10px 12px", borderRadius:8, border:`1px solid ${C.border}`,
+                  background:C.bg, color:C.text, fontSize:13,
+                  fontFamily:"'Open Sans',sans-serif", outline:"none", width:"100%", boxSizing:"border-box"}})
+            : React.createElement('div', { style: {padding:"10px 12px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, color:localTopic?C.text:C.textDim, fontStyle:localTopic?"normal":"italic"}},
+                localTopic || "Nessun argomento")
         )
+
+        /* ── Note lezione (solo lettura) ── */
         , lesson.notes && (
-          React.createElement('div', { style: {padding:"12px 14px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4595}}
-            , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4596}}, "Note")
-            , React.createElement('div', { style: {fontSize:13, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4597}}, lesson.notes)
+          React.createElement('div', { style: {padding:"12px 14px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}`}}
+            , React.createElement(InlineLabel, {label:"Note"})
+            , React.createElement('div', { style: {fontSize:13, color:C.textMuted}}, lesson.notes)
           )
         )
+
+        /* ── Esercizi da svolgere — inline editable ── */
         , lesson.tipo !== "prova" && (
-          React.createElement('div', { style: {padding:"12px 14px", background:C.blueBg, borderRadius:8, border:`1px solid ${C.blueBorder}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4601}}
-            , React.createElement('div', { style: {fontSize:10, color:C.blue, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:6, opacity:0.8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4602}}, "Esercizi da svolgere"  )
-            , lesson.exercises
-              ? React.createElement('div', { style: {fontSize:13, color:C.text, lineHeight:1.6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4604}}, lesson.exercises)
-              : React.createElement('div', { style: {fontSize:13, color:C.textDim, fontStyle:"italic"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4605}}, "Nessun esercizio assegnato"  )
-            
+          React.createElement('div', { style: {padding:"12px 14px", background:C.blueBg, borderRadius:8, border:`1px solid ${C.blueBorder}`}}
+            , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6}}
+              , React.createElement(InlineLabel, {label:"Esercizi da svolgere", icon:"check", color:C.blue})
+              , React.createElement(SaveDot, null)
+            )
+            , canEdit
+              ? React.createElement('textarea', { value: localExercises, onChange: e=>setLocalExercises(e.target.value),
+                  onBlur: () => saveField({exercises: localExercises}),
+                  rows: 3, placeholder: "Es. Studiare scale in Do maggiore, ripetere battute 12-24...",
+                  style: {width:"100%", boxSizing:"border-box", padding:"8px 10px", borderRadius:7,
+                    border:`1px solid ${C.blueBorder}`, background:"rgba(255,255,255,0.08)",
+                    color:C.text, fontSize:13, fontFamily:"'Open Sans',sans-serif",
+                    outline:"none", resize:"vertical", lineHeight:1.5}})
+              : React.createElement('div', { style: {fontSize:13, color:localExercises?C.text:C.textDim, lineHeight:1.6, fontStyle:localExercises?"normal":"italic"}},
+                  localExercises || "Nessun esercizio assegnato")
           )
         )
 
@@ -5079,6 +5125,99 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
           )
         )
 
+        /* ── Link URL — inline editable ── */
+        , canEdit && (
+          React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:4}}
+            , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between"}}
+              , React.createElement(InlineLabel, {label:"Link (YouTube, Drive, altro)", icon:"link"})
+              , React.createElement(SaveDot, null)
+            )
+            , React.createElement('input', { value: localLinkUrl, onChange: e=>setLocalLinkUrl(e.target.value),
+                onBlur: () => saveField({linkUrl: localLinkUrl}),
+                type:"url", placeholder:"https://...",
+                style: {padding:"10px 12px", borderRadius:8, border:`1px solid ${C.border}`,
+                  background:C.bg, color:C.text, fontSize:13,
+                  fontFamily:"'Open Sans',sans-serif", outline:"none", width:"100%", boxSizing:"border-box"}})
+          )
+        )
+        , !canEdit && lesson.linkUrl && (
+          React.createElement('div', { style: {padding:"10px 12px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}`, display:"flex", alignItems:"center", gap:8}}
+            , React.createElement(Ic, {n:"link", size:13, stroke:C.blue})
+            , React.createElement('a', { href:lesson.linkUrl, target:"_blank", rel:"noopener noreferrer",
+                style:{fontSize:13, color:C.blue, textDecoration:"none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}},
+                lesson.linkUrl)
+          )
+        )
+
+        /* ── Allegati — inline upload ── */
+        , (canEdit || (localAllegati||[]).length > 0) && (
+          React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:6}}
+            , React.createElement(InlineLabel, {label:"Allegati", icon:"paperclip"})
+            , (localAllegati||[]).map((a,i) => (
+              React.createElement('div', { key: a.id||i, style: {display:"flex", alignItems:"center", gap:10,
+                padding:"8px 12px", borderRadius:8, border:`1px solid ${C.border}`, background:C.bg}}
+                , React.createElement(Ic, {n:"paperclip", size:13, stroke:C.blue})
+                , React.createElement('div', {style:{flex:1, minWidth:0}}
+                  , a.fileUrl
+                    ? React.createElement('a', {href:a.fileUrl, target:"_blank", rel:"noopener noreferrer",
+                        style:{fontSize:13, fontWeight:500, color:C.blue, textDecoration:"none",
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"block"}},
+                        a.fileName||"Allegato")
+                    : React.createElement('span', {style:{fontSize:13, color:C.text}}, a.fileName||"Allegato")
+                  , a.descrizione && React.createElement('div', {style:{fontSize:11, color:C.textMuted}}, a.descrizione)
+                )
+                , canEdit && React.createElement('button', {
+                    onClick: () => { const updated = (localAllegati||[]).filter((_,j)=>j!==i); setLocalAllegati(updated); saveField({allegati:updated}); },
+                    style:{background:"none",border:"none",cursor:"pointer",padding:4,color:C.textMuted,display:"flex",borderRadius:4},
+                    onMouseEnter:e=>e.currentTarget.style.color=C.red,
+                    onMouseLeave:e=>e.currentTarget.style.color=C.textMuted}
+                    , React.createElement(Ic, {n:"x", size:13, stroke:"currentColor"})
+                  )
+              )
+            ))
+            , canEdit && React.createElement('label', { style: {display:"flex", alignItems:"center", gap:8, padding:"8px 12px",
+              background:"none", border:`1px dashed ${C.border}`, borderRadius:8,
+              cursor:"pointer", color:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif",
+              transition:"all 0.15s"},
+              onMouseEnter:e=>{e.currentTarget.style.borderColor=C.blue;e.currentTarget.style.color=C.blue;},
+              onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}}
+              , React.createElement(Ic, {n:"upload", size:13, stroke:"currentColor"})
+              , "Allega file"
+              , React.createElement('input', {type:"file", style:{display:"none"}, multiple:true,
+                  onChange: async e => {
+                    const files = Array.from(e.target.files||[]);
+                    if (!files.length) return;
+                    const sb = window.supabaseClient;
+                    const newAllegati = [];
+                    for (const file of files) {
+                      const path = `${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,'_')}`;
+                      let fileUrl = null;
+                      if (sb) {
+                        try {
+                          const { error: upErr } = await sb.storage.from('allegati').upload(path, file, {upsert:true});
+                          if (!upErr) {
+                            const { data: urlData } = sb.storage.from('allegati').getPublicUrl(path);
+                            fileUrl = urlData?.publicUrl || null;
+                          }
+                        } catch(err) { console.warn('[FM] upload error', err); }
+                      }
+                      newAllegati.push({
+                        id: 'att_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+                        fileName: file.name, fileUrl, fileType: file.type, descrizione:'',
+                        corso: lesson.instrument||'', lezioneId: lesson.id,
+                        allievoNome: lesson.student||'', createdAt: new Date().toISOString(),
+                      });
+                    }
+                    const updated = [...(localAllegati||[]), ...newAllegati];
+                    setLocalAllegati(updated);
+                    saveField({allegati: updated});
+                    e.target.value='';
+                  }})
+            )
+          )
+        )
+
+        /* ── Segna presenza ── */
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4636}}
           , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4637}}, "Segna presenza" )
           , React.createElement('div', { className: "att-row", style: {display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4638}}
@@ -5111,7 +5250,6 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                 , nextLessonDate ? (
                   React.createElement(React.Fragment, null
                     , React.createElement('div', { style: {fontSize:12, color:C.green, fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4667}}, "Prossima lezione creata"
-
                     )
                     , React.createElement('div', { style: {fontSize:11, color:C.textMuted, marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4670}}
                       , fmtFull(new Date(nextLessonDate+"T00:00:00")), " · "  , lesson.hour, " · "  , lesson.teacher
@@ -5143,7 +5281,6 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                   )
                   , !lesson.iscritto && (
                     React.createElement('div', { style: {fontSize:11, color:C.teal, opacity:0.8, marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4699}}, "Collega a un allievo esistente quando si iscrive"
-
                     )
                   )
                 )
@@ -5159,7 +5296,6 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                 React.createElement('button', { onClick: ()=>onIscrizione(lesson.id, "", false),
                   style: {background:"none",color:C.textDim,border:`1px solid ${C.border}`,borderRadius:7,
                     padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"'Open Sans',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4713}}, "Rimuovi iscrizione"
-
                 )
               )
             )
@@ -5184,7 +5320,6 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                   style: {background:iscrizioneStudent?C.green:"#1a2a1a",color:iscrizioneStudent?C.bg:C.textDim,
                     border:"none",borderRadius:7,padding:"9px 16px",cursor:iscrizioneStudent?"pointer":"not-allowed",
                     fontSize:12,fontFamily:"'Open Sans',sans-serif",fontWeight:600,flexShrink:0,transition:"all 0.12s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4732}}, "Conferma"
-
                 )
               )
             )
@@ -5202,7 +5337,6 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
         ) : (
           React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,color:C.textDim,fontSize:12,width:"100%",justifyContent:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4757}}
             , React.createElement(Ic, { n: "lock", size: 14, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4758}}), "Solo docenti e amministratori possono modificare le lezioni"
-
           )
         )
       )
@@ -6850,6 +6984,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             onDelete: () => setModal("delete"),
             onAttendance: handleAttendance,
             onIscrizione: handleIscrizioneProva,
+            onUpdateLesson: (updated) => { setLessons(p => p.map(l => l.id === updated.id ? {...l,...updated} : l)); },
             students: propStudents,
             nextLessonDate: _optionalChain([selLesson, 'optionalAccess', _55 => _55.recurrence]) && selLesson.recurrence !== 'Nessuna' ? nextLessonCreated : null,
             onClose: closeModal,
