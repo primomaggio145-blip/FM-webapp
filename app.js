@@ -10620,7 +10620,7 @@ const UtentiView = () => {
               id:       r.id,
               nome:     r.nome,
               email:    r.email,
-              ruolo:    r.ruolo_richiesto||'allievo',
+              ruolo:    r.ruolo||'allievo',
               messaggio:r.messaggio||'',
               data:     r.created_at?.split("T")[0]||'',
             })));
