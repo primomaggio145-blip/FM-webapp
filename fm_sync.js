@@ -150,6 +150,7 @@
         topic: l.topic || null, attendance: l.attendance || null,
         recurrence: l.recurrence || 'Nessuna', notes: l.notes || null,
         tipo: l.type || 'individuale', updated_at: new Date().toISOString(),
+        link_url: l.linkUrl || null,
       };
     },
     quote(q) {
@@ -184,6 +185,20 @@
         note: b.note || null,
       };
     },
+    allegati(a) {
+      return {
+        id: a.id || null,
+        lezione_id: a.lezioneId || null,
+        allievo_id: a.allievoId || null,
+        allievo_nome: a.allievoNome || null,
+        corso: a.corso || null,
+        descrizione: a.descrizione || null,
+        file_url: a.fileUrl || null,
+        file_name: a.fileName || null,
+        file_type: a.fileType || null,
+        created_at: a.createdAt || new Date().toISOString(),
+      };
+    },
     concerti(c) {
       return {
         id: c.id || null,
@@ -198,8 +213,8 @@
         stato: c.stato || 'programmato',
         descrizione: c.descrizione || null,
         note: c.note || null,
+        partecipanti: JSON.stringify(c.partecipanti || []),
         scaletta: JSON.stringify(c.scaletta || []),
-        updated_at: new Date().toISOString(),
       };
     },
   };
@@ -312,6 +327,7 @@
       ['spese',    'spese',    toDB.spese   ],
       ['brani',    'brani',    toDB.brani   ],
       ['concerti', 'concerti', toDB.concerti],
+      ['allegati', 'allegati', toDB.allegati],
     ];
 
     let totalChanges = 0;
@@ -338,6 +354,7 @@
         spese:    state.spese    ? [...state.spese]    : _prev.spese,
         brani:    state.brani    ? [...state.brani]    : _prev.brani,
         concerti: state.concerti ? [...state.concerti] : _prev.concerti,
+        allegati: state.allegati ? [...state.allegati] : _prev.allegati,
       };
       log(`Sync completato (${totalChanges} modifiche)`);
     }
@@ -355,7 +372,7 @@
         { data: sS, error: e1 }, { data: sD, error: e2 }, { data: sC, error: e3 },
         { data: sL, error: e4 }, { data: sB, error: e5 },
         { data: sP, error: e6 }, { data: sQ, error: e7 },
-        { data: sEV, error: e8 },
+        { data: sEV, error: e8 }, { data: sAL, error: e9 },
       ] = await Promise.all([
         sb.from('studenti').select('*').order('nome'),
         sb.from('docenti').select('*').order('nome'),
@@ -365,11 +382,12 @@
         sb.from('spese').select('*').order('data', { ascending: false }),
         sb.from('quote').select('*').order('anno').order('mese'),
         sb.from('concerti').select('*').order('data', { ascending: false }),
+        sb.from('allegati').select('*').order('created_at', { ascending: false }),
       ]);
 
       // Log errori
       [['studenti',e1],['docenti',e2],['corsi',e3],['lezioni',e4],
-       ['brani',e5],['spese',e6],['quote',e7],['concerti',e8]].forEach(([t,e]) => {
+       ['brani',e5],['spese',e6],['quote',e7],['concerti',e8],['allegati',e9]].forEach(([t,e]) => {
         if (e) fail(`Errore lettura ${t}:`, e.message);
       });
 
@@ -382,6 +400,18 @@
         spese:    (sP || []).map(adaptSpesa),
         entrate:  (sQ || []).map(adaptQuota),
         concerti: (sEV || []).map(adaptConcerto),
+        allegati: (sAL || []).map(r => ({
+          id: r.id,
+          lezioneId: r.lezione_id || null,
+          allievoId: r.allievo_id || null,
+          allievoNome: r.allievo_nome || null,
+          corso: r.corso || null,
+          descrizione: r.descrizione || null,
+          fileUrl: r.file_url || null,
+          fileName: r.file_name || null,
+          fileType: r.file_type || null,
+          createdAt: r.created_at || null,
+        })),
       };
 
       log('Caricati →',
@@ -489,6 +519,7 @@
         courses:  [...data.courses],  lessons: [...data.lessons],
         entrate:  [...data.entrate],  spese:   [...data.spese],
         brani:    [...data.brani],    concerti: [...(data.concerti||[])],
+        allegati: [...(data.allegati||[])],
       };
     } else {
       warn('Supabase non disponibile — uso dati demo (modalità offline)');
@@ -535,7 +566,7 @@
       if (d && window.__FM_RELOAD__) {
         _prev = { students:[...d.students], docenti:[...d.docenti], courses:[...d.courses],
                   lessons:[...d.lessons], entrate:[...d.entrate], spese:[...d.spese],
-                  brani:[...d.brani], concerti:[...(d.concerti||[])] };
+                  brani:[...d.brani], concerti:[...(d.concerti||[])], allegati:[...(d.allegati||[])] };
         window.__FM_RELOAD__(d);
         log('Reload manuale OK');
       }
