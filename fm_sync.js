@@ -181,7 +181,7 @@
         compositore: b.composer || b.compositore || null,
         periodo: b.periodo || null, tonality: b.tonality || null,
         difficulty: b.difficulty || null, tipo: b.tipo || 'individuale',
-        note: b.note || null, updated_at: new Date().toISOString(),
+        note: b.note || null,
       };
     },
     concerti(c) {
