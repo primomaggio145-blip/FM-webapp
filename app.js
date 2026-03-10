@@ -11560,7 +11560,7 @@ function App() {
         concerti: sharedConcerti,
       });
     }
-  }, [sharedStudents, sharedCourses, sharedDocenti, sharedLessons, sharedRepertorio, sharedSpese, sharedEntrate]);
+  }, [sharedStudents, sharedCourses, sharedDocenti, sharedLessons, sharedRepertorio, sharedSpese, sharedEntrate, sharedConcerti]);
 
   useEffect(() => {
     // Hook che fm_sync.js chiama per iniettare aggiornamenti real-time nel React state
