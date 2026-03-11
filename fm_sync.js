@@ -60,12 +60,15 @@
       : [];
     return {
       id: r.id, date: r.data, hour: r.ora || '', student: r.student || '',
+      studentId: r.studente_id || null,
       instrument: r.strumento || r.instrument || '', teacher: r.teacher || '', room: r.room || '',
       topic: r.topic || '', attendance: r.attendance || '',
       recurrence: r.recurrence || 'Nessuna', notes: r.notes || '',
       exercises: r.exercises || '', repertorio: r.repertorio || '',
       type: r.tipo || 'individuale',
       linkUrl: r.link_url || '',
+      inRecupero: r.in_recupero || false,
+      recuperoScadenza: r.recupero_scadenza || null,
       allegati,
     };
   }
@@ -180,6 +183,8 @@
         recurrence: l.recurrence || 'Nessuna', notes: l.notes || null,
         tipo: l.type || 'individuale', updated_at: new Date().toISOString(),
         link_url: l.linkUrl || null,
+        in_recupero: l.inRecupero || false,
+        recupero_scadenza: l.recuperoScadenza || null,
       };
     },
     quote(q) {
