@@ -89,6 +89,7 @@
     };
   }
   function adaptBrano(r) {
+    const parseJson = (v, fallback=[]) => { if (!v) return fallback; if (Array.isArray(v)) return v; try { return JSON.parse(v); } catch(e) { return fallback; } };
     return {
       id: r.id,
       title: r.titolo || r.title || '',
@@ -97,6 +98,9 @@
       difficulty: r.difficulty || '', tipo: r.tipo || 'individuale',
       note: r.note || '', dataPrima: r.data_prima || '',
       dataUltima: r.data_ultima || '',
+      linkBacking: r.link_backing || '',
+      files: parseJson(r.files, []),
+      spartiti: parseJson(r.spartiti, []),
     };
   }
   function adaptConcerto(r) {
@@ -208,6 +212,9 @@
         periodo: b.periodo || null, tonality: b.tonality || null,
         difficulty: b.difficulty || null, tipo: b.tipo || 'individuale',
         note: b.note || null,
+        link_backing: b.linkBacking || null,
+        files: b.files ? JSON.stringify(b.files) : null,
+        spartiti: b.spartiti ? JSON.stringify(b.spartiti) : null,
       };
     },
     allegati(a) {

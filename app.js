@@ -2393,7 +2393,188 @@ const CONFIG_DEFAULT = {
   },
 };
 
-const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, onQuickAction }) => {
+
+// ─── NOTIFICATION BELL ────────────────────────────────────────────────────────
+const NotificationBell = ({ students, lessons, richieste, onNavigate }) => {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef(null);
+
+  // Chiudi cliccando fuori
+  useEffect(() => {
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // ── Calcola notifiche live ──────────────────────────────────────────────────
+  const oggi = new Date();
+  const todayStr = yyyymmdd(oggi);
+  const ieri = new Date(oggi); ieri.setDate(oggi.getDate()-1);
+  const ieriStr = yyyymmdd(ieri);
+
+  const notifs = [];
+
+  // 1. Nuove richieste accesso in attesa
+  const richiesteAttesa = (richieste||[]).filter(r=>r.stato==='in_attesa'||!r.stato);
+  if (richiesteAttesa.length > 0) {
+    notifs.push({
+      id:'richieste', tipo:'info',
+      icon:'users', color: C.blue,
+      titolo: `${richiesteAttesa.length} ${richiesteAttesa.length===1?'richiesta':'richieste'} di accesso in attesa`,
+      desc: richiesteAttesa.map(r=>r.nome).join(', '),
+      action: () => { onNavigate('utenti'); setOpen(false); },
+      actionLabel: 'Gestisci utenti',
+    });
+  }
+
+  // 2. Allievi con rate scadute
+  const morosi = (students||[]).filter(s=>s.status==='scaduto'||s.stato==='scaduto');
+  if (morosi.length > 0) {
+    notifs.push({
+      id:'morosi', tipo:'warning',
+      icon:'euro', color: C.orange,
+      titolo: `${morosi.length} ${morosi.length===1?'allievo ha':'allievi hanno'} rate scadute`,
+      desc: morosi.slice(0,3).map(s=>s.name||s.nome||'').join(', ') + (morosi.length>3?' e altri...':''),
+      action: () => { onNavigate('allievi'); setOpen(false); },
+      actionLabel: 'Vedi contabilità',
+    });
+  }
+
+  // 3. Lezioni di oggi senza presenza segnata
+  const lezioniOggiSenzaPresenza = (lessons||[]).filter(l => {
+    const d = l.date||l.data||'';
+    return d===todayStr && (!l.attendance||l.attendance==='');
+  });
+  if (lezioniOggiSenzaPresenza.length > 0) {
+    notifs.push({
+      id:'presenze', tipo:'warning',
+      icon:'check', color: C.gold,
+      titolo: `${lezioniOggiSenzaPresenza.length} ${lezioniOggiSenzaPresenza.length===1?'lezione oggi senza':'lezioni oggi senza'} presenza`,
+      desc: lezioniOggiSenzaPresenza.slice(0,3).map(l=>l.student||l.allievo||'Lezione collettiva').join(', '),
+      action: () => { onNavigate('calendario'); setOpen(false); },
+      actionLabel: 'Apri calendario',
+    });
+  }
+
+  // 4. Variazioni presenza ieri (lezioni con presenza registrata ieri)
+  const presenzeIeri = (lessons||[]).filter(l => {
+    const d = l.date||l.data||'';
+    return d===ieriStr && l.attendance && l.attendance!=='';
+  });
+  if (presenzeIeri.length > 0) {
+    const assenze = presenzeIeri.filter(l=>l.attendance==='assente'||l.attendance==='giustificato');
+    if (assenze.length > 0) {
+      notifs.push({
+        id:'assenze_ieri', tipo:'info',
+        icon:'alert', color: C.red,
+        titolo: `${assenze.length} ${assenze.length===1?'assenza':'assenze'} registrate ieri`,
+        desc: assenze.slice(0,3).map(l=>l.student||l.allievo||'—').join(', '),
+        action: () => { onNavigate('calendario'); setOpen(false); },
+        actionLabel: 'Vedi calendario',
+      });
+    }
+  }
+
+  // 5. Allievi sospesi
+  const sospesi = (students||[]).filter(s=>s.status==='sospeso'||s.stato==='sospeso');
+  if (sospesi.length > 0) {
+    notifs.push({
+      id:'sospesi', tipo:'info',
+      icon:'user', color: C.textMuted,
+      titolo: `${sospesi.length} ${sospesi.length===1?'abbonamento sospeso':'abbonamenti sospesi'}`,
+      desc: sospesi.slice(0,3).map(s=>s.name||s.nome||'').join(', '),
+      action: () => { onNavigate('allievi'); setOpen(false); },
+      actionLabel: 'Vedi allievi',
+    });
+  }
+
+  const count = notifs.length;
+
+  const TIPO_COLORS = {
+    warning: { bg: '#fff7ed', border: '#fed7aa', dot: C.orange },
+    info:    { bg: C.blueBg,  border: C.blueBorder, dot: C.blue },
+    error:   { bg: C.redBg,   border: C.redBorder,  dot: C.red  },
+  };
+
+  return (
+    React.createElement('div', {ref, style:{position:'relative'}}
+      , React.createElement('button', {
+          onClick: ()=>setOpen(p=>!p),
+          style:{position:'relative',background:'none',border:`1px solid ${C.border}`,
+            borderRadius:8,padding:'6px 8px',cursor:'pointer',display:'flex',
+            color:open?C.gold:C.textMuted,
+            transition:'all .15s',
+            borderColor: open ? C.gold : C.border},
+          onMouseEnter:e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;},
+          onMouseLeave:e=>{if(!open){e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}}}
+        , React.createElement(Ic, {n:'bell', size:15, stroke:'currentColor'})
+        , count > 0 && React.createElement('span', {style:{
+            position:'absolute',top:-5,right:-5,
+            minWidth:16,height:16,borderRadius:8,
+            background:C.red,color:'#fff',
+            fontSize:9,fontWeight:700,
+            display:'flex',alignItems:'center',justifyContent:'center',
+            padding:'0 3px',lineHeight:1,
+            border:`2px solid ${C.bg}`,
+          }}, count > 9 ? '9+' : count)
+      )
+
+      /* ── Dropdown ── */
+      , open && React.createElement('div', {style:{
+            position:'absolute',top:'calc(100% + 8px)',right:0,
+            width:340,maxHeight:480,overflowY:'auto',
+            background:C.surface,border:`1px solid ${C.border}`,
+            borderRadius:14,boxShadow:'0 12px 40px rgba(0,0,0,0.25)',
+            zIndex:1000,animation:'fadeUp .18s ease both',
+          }}
+          , React.createElement('div', {style:{padding:'14px 16px',borderBottom:`1px solid ${C.border}`,
+              display:'flex',alignItems:'center',justifyContent:'space-between'}}
+            , React.createElement('span', {style:{fontFamily:"'Oswald',sans-serif",fontSize:14,fontWeight:600,letterSpacing:'.04em'}}, 'NOTIFICHE')
+            , count > 0 && React.createElement('span', {style:{fontSize:10,color:C.textMuted}}, `${count} attive`)
+          )
+          , count === 0
+            ? React.createElement('div', {style:{padding:'32px 16px',textAlign:'center'}}
+                , React.createElement(Ic, {n:'check',size:28,stroke:C.green})
+                , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:10}}, 'Nessuna notifica attiva')
+              )
+            : notifs.map(n => {
+                const tc = TIPO_COLORS[n.tipo] || TIPO_COLORS.info;
+                return React.createElement('div', {key:n.id, style:{
+                    padding:'12px 16px',
+                    borderBottom:`1px solid ${C.border}`,
+                    background:'transparent',
+                    transition:'background .12s',
+                  },
+                  onMouseEnter:e=>e.currentTarget.style.background=C.surfaceHover,
+                  onMouseLeave:e=>e.currentTarget.style.background='transparent'}
+                  , React.createElement('div', {style:{display:'flex',gap:10,alignItems:'flex-start'}}
+                    , React.createElement('div', {style:{
+                          width:30,height:30,borderRadius:8,flexShrink:0,
+                          background:`${n.color}18`,
+                          display:'flex',alignItems:'center',justifyContent:'center',marginTop:1}}
+                        , React.createElement(Ic, {n:n.icon, size:13, stroke:n.color})
+                      )
+                    , React.createElement('div', {style:{flex:1,minWidth:0}}
+                      , React.createElement('div', {style:{fontSize:12,fontWeight:600,color:C.text,lineHeight:1.4}}, n.titolo)
+                      , n.desc && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:2,lineHeight:1.4,
+                          overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, n.desc)
+                      , React.createElement('button', {
+                            onClick: n.action,
+                            style:{marginTop:6,fontSize:11,color:n.color,background:'none',border:'none',
+                              cursor:'pointer',padding:0,fontFamily:"'Open Sans',sans-serif",fontWeight:600}}
+                          , n.actionLabel, ' →'
+                        )
+                    )
+                  )
+                );
+              })
+        )
+    )
+  );
+};
+
+
+const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, onQuickAction }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
     const [panels,  setPanels]  = useState({});  // pannelli visibili (default = tutti on)
     const [_config,  _setConfig]  = useState(CONFIG_DEFAULT);
@@ -2497,6 +2678,25 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
       .sort((a,b)=>a.quando.localeCompare(b.quando))
       .slice(0, 8);
 
+    // ── Grafico andamento: dati mensili reali ───────────────────────────────────
+    const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    const FIN_MENSILE_LIVE = MESI_SHORT.map((m, idx) => {
+      const mesNum = idx + 1; // 1-based, come nei dati entrate
+      const entr = (_entrate || [])
+        .filter(e => e.anno === annoCorrente && e.mese === mesNum)
+        .reduce((t, e) => t + (e.importo || 0), 0);
+      const usc = (_spese || [])
+        .filter(s => s.anno === annoCorrente && s.mese === idx) // spese 0-based
+        .reduce((t, s) => t + (s.importo || 0), 0);
+      return { m, entr, usc };
+    }).filter((d, idx) => {
+      // Mostra solo i mesi fino al mese corrente (incluso)
+      return idx <= oggi.getMonth();
+    });
+
+    const totEntrateAnno = FIN_MENSILE_LIVE.reduce((t, d) => t + d.entr, 0);
+    const totUsciteAnno  = FIN_MENSILE_LIVE.reduce((t, d) => t + d.usc,  0);
+
     // Render logo navbar
     const LogoMark = () => {
       if(config.logoUrl) return (
@@ -2538,10 +2738,12 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               )
             )
             , React.createElement('div', { style: {marginLeft:"auto",display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2135}}
-              , React.createElement('button', { className: "nav-btn", style: {background:"none",border:`1px solid ${C.border}`,
-                borderRadius:8,padding:"6px 8px",cursor:"pointer",display:"flex",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2136}}
-                , React.createElement(Ic, { n: "bell", size: 15, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2138}})
-              )
+              , React.createElement(NotificationBell, {
+                  students: _students,
+                  lessons: _lessons,
+                  richieste: propRichieste||[],
+                  onNavigate: onNavigate,
+                })
               /* Settings button rimosso dall'header — vedi Strumenti > Impostazioni */
               /* Ruolo badge */
               , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,padding:"4px 10px",
@@ -2706,7 +2908,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       , React.createElement('span', { style: {fontSize:12,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2269}}, "Andamento " , ANNO)
                     )
                     , React.createElement('div', { style: {padding:"18px 18px 12px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2271}}
-                      , React.createElement(MiniChart, { dati: FIN_MENSILE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2272}})
+                      , React.createElement(MiniChart, { dati: FIN_MENSILE_LIVE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2272}})
                       , React.createElement('div', { style: {marginTop:16,display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:12,borderTop:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2273}}
                         , [{lbl:"Entrate",hex:C.green},{lbl:"Uscite",hex:C.red}].map(x=>(
                           React.createElement('div', { key: x.lbl, style: {display:"flex",alignItems:"center",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2275}}
@@ -2717,8 +2919,8 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       )
                       , React.createElement('div', { style: {marginTop:14,display:"flex",flexDirection:"column",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2281}}
                         , [
-                          {lbl:"Tot. entrate",val:fmt(FIN_MENSILE.reduce((t,d)=>t+d.entr,0)),hex:C.green},
-                          {lbl:"Tot. uscite", val:fmt(FIN_MENSILE.reduce((t,d)=>t+d.usc,0)), hex:C.red},
+                          {lbl:"Tot. entrate",val:fmt(totEntrateAnno),hex:C.green},
+                          {lbl:"Tot. uscite", val:fmt(totUsciteAnno), hex:C.red},
                           {lbl:"Saldo",       val:fmt(saldoAnnoLiveLive), hex:saldoAnnoLiveLive>=0?C.green:C.red},
                         ].map(x=>(
                           React.createElement('div', { key: x.lbl, style: {display:"flex",justifyContent:"space-between",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2287}}
@@ -5724,7 +5926,7 @@ const MonthView = ({ year, month, lessons, onSelect, onDayClick }) => {
 // ════════════════════════════════════════════════════════════════════════════════
 // REPERTORIO
 // ════════════════════════════════════════════════════════════════════════════════
-const emptyBrano = { title:"", composer:"", tonality:"", difficulty:"Intermedio", tipo:"individuale", note:"" };
+const emptyBrano = { title:"", composer:"", tonality:"", difficulty:"Intermedio", tipo:"individuale", note:"", linkBacking:"", files:[], spartiti:[] };
 
 const BranoFormInline = ({ initial, onSave, onClose, compact=false }) => {
   const [f, setF] = useState(initial || emptyBrano);
@@ -5747,11 +5949,112 @@ const BranoFormInline = ({ initial, onSave, onClose, compact=false }) => {
         , React.createElement(Sel, { label: "Tonalità / Scala"  , value: f.tonality, onChange: e=>set("tonality",e.target.value), options: TONALITY_OPTS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5016}})
         , React.createElement(Sel, { label: "Livello di difficoltà"  , value: f.difficulty, onChange: e=>set("difficulty",e.target.value), options: DIFFICULTY_OPTS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5017}})
         
-        , React.createElement(Textarea, { label: "Note / annotazioni"  , value: f.notes, onChange: e=>set("notes",e.target.value), placeholder: "Note aggiuntive, indicazioni tecniche..."   , __self: this, __source: {fileName: _jsxFileName, lineNumber: 5034}})
+        , React.createElement(Textarea, { label: "Note / annotazioni"  , value: f.notes, onChange: e=>set("notes",e.target.value), placeholder: "Note aggiuntive, indicazioni tecniche..."   })
+
+        /* ── Link Backing/Base Track ── */
+        , React.createElement('div', null
+          , React.createElement('label', {style:{fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.5)',letterSpacing:'.08em',textTransform:'uppercase',display:'block',marginBottom:6}}, 'Link Backing Track / YouTube / Drive')
+          , React.createElement('input', {
+              type:'url', value:f.linkBacking||'', placeholder:'https://youtube.com/...',
+              onChange:e=>set('linkBacking',e.target.value),
+              style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,
+                background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",
+                outline:'none',boxSizing:'border-box'}})
+        )
+
+        /* ── Spartiti (PDF upload) ── */
+        , React.createElement('div', null
+          , React.createElement('div', {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}
+            , React.createElement('label', {style:{fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.5)',letterSpacing:'.08em',textTransform:'uppercase'}}, 'Spartiti')
+            , React.createElement('label', {style:{fontSize:11,color:C.blue,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}
+                , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.blue}), 'Carica PDF'
+                , React.createElement('input', {type:'file', accept:'.pdf,image/*', multiple:true, style:{display:'none'},
+                    onChange: async e => {
+                      const sb = window.supabaseClient;
+                      const newItems = [];
+                      for (const file of Array.from(e.target.files||[])) {
+                        const path = `spartiti/${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
+                        let fileUrl = null;
+                        if (sb) {
+                          try {
+                            await sb.storage.from('allegati').upload(path, file, {upsert:true});
+                            const {data:u} = sb.storage.from('allegati').getPublicUrl(path);
+                            fileUrl = u?.publicUrl||null;
+                          } catch(er){}
+                        }
+                        newItems.push({id:'sp_'+Date.now()+'_'+Math.random().toString(36).slice(2,5), fileName:file.name, fileUrl, fileType:file.type});
+                      }
+                      set('spartiti',[...(f.spartiti||[]),...newItems]);
+                      e.target.value='';
+                    }})
+              )
+          )
+          , (f.spartiti||[]).length > 0 && React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:4}}
+              , (f.spartiti||[]).map((s,i) => React.createElement('div', {key:s.id||i,
+                    style:{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',
+                      borderRadius:7,border:`1px solid ${C.border}`,background:C.bg}}
+                  , React.createElement(Ic,{n:'paperclip',size:12,stroke:C.red})
+                  , s.fileUrl
+                    ? React.createElement('a',{href:s.fileUrl,target:'_blank',rel:'noopener noreferrer',
+                          style:{flex:1,fontSize:12,color:C.blue,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, s.fileName||'Spartito')
+                    : React.createElement('span',{style:{flex:1,fontSize:12,color:C.text}},s.fileName||'Spartito')
+                  , React.createElement('button',{onClick:()=>set('spartiti',(f.spartiti||[]).filter((_,j)=>j!==i)),
+                      style:{background:'none',border:'none',cursor:'pointer',padding:2,color:C.textMuted},
+                      onMouseEnter:e=>e.currentTarget.style.color=C.red,
+                      onMouseLeave:e=>e.currentTarget.style.color=C.textMuted}
+                    , React.createElement(Ic,{n:'x',size:12,stroke:'currentColor'}))
+                ))
+            )
+        )
+
+        /* ── File allegati audio/video/altro ── */
+        , React.createElement('div', null
+          , React.createElement('div', {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}
+            , React.createElement('label', {style:{fontSize:11,fontWeight:600,color:'rgba(255,255,255,0.5)',letterSpacing:'.08em',textTransform:'uppercase'}}, 'File allegati')
+            , React.createElement('label', {style:{fontSize:11,color:C.blue,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}
+                , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.blue}), 'Carica file'
+                , React.createElement('input', {type:'file', multiple:true, style:{display:'none'},
+                    onChange: async e => {
+                      const sb = window.supabaseClient;
+                      const newItems = [];
+                      for (const file of Array.from(e.target.files||[])) {
+                        const path = `brani/${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
+                        let fileUrl = null;
+                        if (sb) {
+                          try {
+                            await sb.storage.from('allegati').upload(path, file, {upsert:true});
+                            const {data:u} = sb.storage.from('allegati').getPublicUrl(path);
+                            fileUrl = u?.publicUrl||null;
+                          } catch(er){}
+                        }
+                        newItems.push({id:'fa_'+Date.now()+'_'+Math.random().toString(36).slice(2,5), fileName:file.name, fileUrl, fileType:file.type});
+                      }
+                      set('files',[...(f.files||[]),...newItems]);
+                      e.target.value='';
+                    }})
+              )
+          )
+          , (f.files||[]).length > 0 && React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:4}}
+              , (f.files||[]).map((fi,i) => React.createElement('div', {key:fi.id||i,
+                    style:{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',
+                      borderRadius:7,border:`1px solid ${C.border}`,background:C.bg}}
+                  , React.createElement(Ic,{n:'paperclip',size:12,stroke:C.blue})
+                  , fi.fileUrl
+                    ? React.createElement('a',{href:fi.fileUrl,target:'_blank',rel:'noopener noreferrer',
+                          style:{flex:1,fontSize:12,color:C.blue,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, fi.fileName||'File')
+                    : React.createElement('span',{style:{flex:1,fontSize:12,color:C.text}},fi.fileName||'File')
+                  , React.createElement('button',{onClick:()=>set('files',(f.files||[]).filter((_,j)=>j!==i)),
+                      style:{background:'none',border:'none',cursor:'pointer',padding:2,color:C.textMuted},
+                      onMouseEnter:e=>e.currentTarget.style.color=C.red,
+                      onMouseLeave:e=>e.currentTarget.style.color=C.textMuted}
+                    , React.createElement(Ic,{n:'x',size:12,stroke:'currentColor'}))
+                ))
+            )
+        )
       )
-      , React.createElement('div', { style: {padding:compact?"10px 10px":"14px 22px", borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:"env(safe-area-inset-bottom,12px)", display:"flex", justifyContent:"flex-end", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5036}}
-        , React.createElement(Btn, { small: compact, variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5037}}, "Annulla")
-        , React.createElement(Btn, { small: compact, onClick: handleSave, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5038}}, React.createElement(Ic, { n: "check", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 5038}}), _optionalChain([initial, 'optionalAccess', _50 => _50.id])?"Salva modifiche":"Aggiungi brano")
+      , React.createElement('div', { style: {padding:compact?"10px 10px":"14px 22px", borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:"env(safe-area-inset-bottom,12px)", display:"flex", justifyContent:"flex-end", gap:8}}
+        , React.createElement(Btn, { small: compact, variant: "secondary", onClick: onClose}, "Annulla")
+        , React.createElement(Btn, { small: compact, onClick: handleSave}, React.createElement(Ic, { n: "check", size: 14, stroke: "#ffffff"}), _optionalChain([initial, 'optionalAccess', _50 => _50.id])?"Salva modifiche":"Aggiungi brano")
       )
     )
   );
@@ -10618,23 +10921,53 @@ const RuoloBadge = ({ ruolo }) => {
 };
 
 // ─── ALLEGATI VIEW ────────────────────────────────────────────────────────────
-const AllegatiView = ({ allegati:propAllegati, lessons:propLessons, students:propStudents, courses:propCourses }) => {
-  const allegati  = propAllegati  || [];
+const AllegatiView = ({ allegati:propAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani }) => {
+  const allegatiLezioni  = propAllegati  || [];
   const lessons   = propLessons   || [];
   const students  = propStudents  || [];
+  const brani     = propBrani     || [];
   const [search,  setSearch]  = useState("");
   const [fCorso,  setFCorso]  = useState("");
   const [fAllievo,setFAllievo]= useState("");
+  const [fTipo,   setFTipo]   = useState(""); // 'lezione'|'spartito'|'file_brano'
+
+  // Unisce allegati lezioni + files/spartiti dei brani in un unico array
+  const allegatiBrani = [];
+  brani.forEach(b => {
+    (b.spartiti||[]).forEach(s => {
+      if(s.fileUrl||s.fileName) allegatiBrani.push({
+        id: s.id||('sp_'+b.id+'_'+s.fileName),
+        fileName: s.fileName||'Spartito', fileUrl: s.fileUrl||null, fileType: s.fileType||'application/pdf',
+        descrizione: `Spartito: ${b.title||b.titolo||''}`,
+        corso: b.title||b.titolo||'', allievoNome:'', lezioneId:null,
+        branoId: b.id, _categoria:'spartito', createdAt: s.createdAt||null,
+      });
+    });
+    (b.files||[]).forEach(fi => {
+      if(fi.fileUrl||fi.fileName) allegatiBrani.push({
+        id: fi.id||('fa_'+b.id+'_'+fi.fileName),
+        fileName: fi.fileName||'File', fileUrl: fi.fileUrl||null, fileType: fi.fileType||'',
+        descrizione: `File brano: ${b.title||b.titolo||''}`,
+        corso: b.title||b.titolo||'', allievoNome:'', lezioneId:null,
+        branoId: b.id, _categoria:'file_brano', createdAt: fi.createdAt||null,
+      });
+    });
+  });
+  const allegati = [
+    ...allegatiLezioni.map(a=>({...a, _categoria:'lezione'})),
+    ...allegatiBrani,
+  ];
 
   const corsiList   = [...new Set(allegati.map(a=>a.corso).filter(Boolean))].sort();
-  const allieviList = [...new Set(allegati.map(a=>a.allievoNome||a.allievoId).filter(Boolean))].sort();
+  const allieviList = [...new Set(allegatiLezioni.map(a=>a.allievoNome||a.allievoId).filter(Boolean))].sort();
 
   const filtered = allegati.filter(a => {
     const q = search.toLowerCase();
     const matchQ = !q || (a.fileName||"").toLowerCase().includes(q) || (a.descrizione||"").toLowerCase().includes(q);
     const matchC = !fCorso   || a.corso === fCorso;
     const matchA = !fAllievo || (a.allievoNome||a.allievoId) === fAllievo;
-    return matchQ && matchC && matchA;
+    const matchT = !fTipo    || a._categoria === fTipo;
+    return matchQ && matchC && matchA && matchT;
   }).sort((a,b)=>(b.createdAt||b.id||"").localeCompare(a.createdAt||a.id||""));
 
   const getLessonLabel = (lessonId) => {
@@ -10647,8 +10980,8 @@ const AllegatiView = ({ allegati:propAllegati, lessons:propLessons, students:pro
     React.createElement('div', { style: {padding:"28px 32px", maxWidth:1100, margin:"0 auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 0}}
       , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:24}}
         , React.createElement('div', null
-          , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif", fontWeight:600, fontSize:26, letterSpacing:"0.02em", color:C.text}}, "Allegati lezioni")
-          , React.createElement('p', { style: {fontSize:13, color:C.textMuted, marginTop:4}}, allegati.length, " allegati totali")
+          , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif", fontWeight:600, fontSize:26, letterSpacing:"0.02em", color:C.text}}, "Allegati")
+          , React.createElement('p', { style: {fontSize:13, color:C.textMuted, marginTop:4}}, allegati.length, " allegati totali (", allegatiLezioni.length, " lezioni · ", allegatiBrani.length, " brani)")
         )
       )
       , React.createElement('div', { style: {display:"flex", gap:12, marginBottom:20, flexWrap:"wrap"}}
@@ -10662,6 +10995,15 @@ const AllegatiView = ({ allegati:propAllegati, lessons:propLessons, students:pro
             background:C.surface, color:fCorso?C.text:C.textMuted, fontSize:13, fontFamily:"'Open Sans',sans-serif", cursor:"pointer"}}
           , React.createElement('option', {value:""}, "Tutti gli strumenti")
           , corsiList.map(c=>React.createElement('option', {key:c,value:c}, c))
+        )
+        , React.createElement('select', { value: fTipo, onChange: e=>setFTipo(e.target.value),
+          style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`,
+            background:C.surface, color:fTipo?C.text:C.textMuted, fontSize:12,
+            fontFamily:"'Open Sans',sans-serif", outline:"none"}}
+          , React.createElement('option', {value:""}, "Tutti i tipi")
+          , React.createElement('option', {value:"lezione"}, "📁 Allegati lezione")
+          , React.createElement('option', {value:"spartito"}, "🎼 Spartiti")
+          , React.createElement('option', {value:"file_brano"}, "🎵 File brani")
         )
         , React.createElement('select', { value: fAllievo, onChange: e=>setFAllievo(e.target.value),
           style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`,
@@ -12080,6 +12422,7 @@ function App() {
   const [sharedRepertorio,     setSharedRepertorio]     = useState(_d.brani      || INIT_BRANI);
   const [sharedConcerti,       setSharedConcerti]       = useState(_d.concerti   || INIT_CONCERTI);
   const [sharedAllegati,       setSharedAllegati]       = useState(_d.allegati   || []);
+  const [sharedRichieste,      setSharedRichieste]      = useState([]);
   const [sharedConfig,         setSharedConfig]         = useState(_d.config ? {...CONFIG_DEFAULT, ..._d.config} : CONFIG_DEFAULT);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
   const [sharedSpese,          setSharedSpese]          = useState(_d.spese      || INIT_SPESE);
@@ -12113,6 +12456,10 @@ function App() {
             setSharedRuolo(profilo.ruolo||"admin");
             try{ window.__currentUserName__=profilo.nome||""; }catch(e){}
             setSchermata("app");
+            // Carica richieste in attesa per le notifiche
+            if ((profilo.ruolo||'admin')==='admin' && window.FM_AUTH.getRichieste) {
+              try { const r = await window.FM_AUTH.getRichieste(); setSharedRichieste(r||[]); } catch(e){}
+            }
           }
         }
       } catch(e){}
@@ -12162,6 +12509,7 @@ function App() {
       if (data.entrate)   setSharedEntrate(data.entrate);
       if (data.concerti)  setSharedConcerti(data.concerti);
       if (data.allegati)  setSharedAllegati(data.allegati);
+      if (data.richieste) setSharedRichieste(data.richieste);
     };
     return () => { window.__FM_RELOAD__ = null; };
   }, []);
@@ -12224,6 +12572,7 @@ function App() {
                    spese: sharedSpese,
                    docenti: sharedDocenti, lessons: sharedLessons,
                    concerti: sharedConcerti,
+                   richieste: sharedRichieste,
                    onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
     allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
     docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user,
@@ -12232,7 +12581,7 @@ function App() {
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
     repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
-    allegati:    React.createElement(AllegatiView, { allegati: sharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
+    allegati:    React.createElement(AllegatiView, { allegati: sharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      (user?.ruolo||"admin")==="admin" && React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
     sitoWeb:       null,
