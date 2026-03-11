@@ -6,7 +6,7 @@
 (function () {
   // ── CONFIGURA QUESTE DUE RIGHE CON I TUOI VALORI SUPABASE ────
   const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
-  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjE0NDAsImV4cCI6MjA4NzkzNzQ0MH0.ScXeqKD73hu1zMwVWppybmNRqCtKWnR9C_pfNMjwQio';
+  const SUPABASE_ANON = 'INCOLLA_QUI_LA_TUA_ANON_KEY';
   // URL della Edge Function (dopo averla deployata)
   const EDGE_APPROVE  = `${SUPABASE_URL}/functions/v1/approve-user`;
   // ─────────────────────────────────────────────────────────────
