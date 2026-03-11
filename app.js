@@ -2612,6 +2612,17 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
           : (_students.find(s=>(s.name||s.nome||"").toLowerCase()===myNome.toLowerCase())||null))
       : null;
     const myStudentId = myStudentRecord ? myStudentRecord.id : null;
+    // teacherKey = il valore salvato nel campo "teacher" delle lezioni
+    const myDocTeacherKey = myDocRecord
+      ? (myDocRecord.teacherKey || myDocRecord.nome || myDocNome)
+      : myDocNome;
+    // Helper per matchare una lezione al docente loggato
+    const matchDocLezione = (l) => {
+      if (!myDocTeacherKey) return false;
+      const t = (l.teacher || l.docente || '').toLowerCase().trim();
+      const k = myDocTeacherKey.toLowerCase().trim();
+      return t === k || t.includes(k) || k.includes(t);
+    };
     const allieviAttivi    = _students.filter(a=>a.status==="attivo"||a.stato==="attivo").length;
     const morosi           = _students.filter(a=>a.status==="scaduto"||a.stato==="scaduto").length;
     const oraNum  = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
@@ -2779,7 +2790,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               )
               , React.createElement('p', { style: {fontSize:13,color:C.textMuted,marginTop:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2171}}
                 , config.annoScolastico
-                , ruolo==="docente" ? " · " + _lessons.filter(l=>(l.teacher||l.docente||"").toLowerCase().includes(myDocNome.toLowerCase())).length + " mie lezioni"
+                , ruolo==="docente" ? " · " + _lessons.filter(matchDocLezione).length + " mie lezioni"
                 : ruolo==="allievo" ? " · " + _lessons.filter(l=>(l.student||l.allievo||"").toLowerCase().includes(myNome.toLowerCase())).length + " lezioni assegnate"
                 : " · " + lezioniOggi + " lezioni oggi · " + lezComplete + " completate · " + (lezioniOggi-lezComplete) + " rimanenti"
               )
@@ -2800,10 +2811,10 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2188}}
               , ruolo==="docente" ? React.createElement(React.Fragment, null
                   , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni settimana",
-                      value: _lessons.filter(l=>(l.teacher||l.docente||"").toLowerCase().includes(myDocNome.toLowerCase())).length,
+                      value: _lessons.filter(matchDocLezione).length,
                       sub: "mie lezioni", hex: C.teal})
                   , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
-                      value: (()=>{ const p=_lessons.filter(l=>(l.teacher||l.docente||"").toLowerCase().includes(myDocNome.toLowerCase())&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0]; return p?new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}):"—"; })(),
+                      value: (()=>{ const p=_lessons.filter(l=>matchDocLezione(l)&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0]; return p?new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}):"—"; })(),
                       sub: "data più vicina", hex: C.gold})
                   , React.createElement(KpiCard, { icon: "euro", label: "Compensi anno",
                       value: fmt((_spese||[]).filter(s=>myDocRecord?s.docenteId===myDocRecord.id:false).reduce((t,s)=>t+(s.importo||0),0)),
@@ -2897,7 +2908,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     , React.createElement('div', { style: {padding:14,maxHeight:380,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2252}}
                       , React.createElement(LessonTimeline, { lezioni: ruolo==="allievo"
                         ? LEZIONI_OGGI.filter(l=>(l.allievo||l.student||"").toLowerCase().includes(myNome.toLowerCase()))
-                        : ruolo==="docente" ? LEZIONI_OGGI.filter(l=>(l.docente||l.teacher||"").toLowerCase().includes(myDocNome.toLowerCase()))
+                        : ruolo==="docente" ? LEZIONI_OGGI.filter(matchDocLezione)
                         : LEZIONI_OGGI, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2253}})
                     )
                     , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2255}}
@@ -3044,7 +3055,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     , React.createElement('div', { style: {padding:"6px 4px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2374}}
                       , React.createElement(AttivitaFeed, { items: ruolo==="allievo"
                         ? ATTIVITA_RECENTE_LIVE.filter(a=>(a.sogg||"").toLowerCase().includes(myNome.toLowerCase()))
-                        : ruolo==="docente" ? ATTIVITA_RECENTE_LIVE.filter(a=>(a.sogg||"").toLowerCase().includes(myDocNome.toLowerCase()))
+                        : ruolo==="docente" ? ATTIVITA_RECENTE_LIVE.filter(a=>matchDocLezione({teacher:a.sogg}))
                         : ATTIVITA_RECENTE_LIVE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2375}})
                     )
                   )
@@ -4535,10 +4546,15 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
   const _allStudents = _nullishCoalesce(propStudents, () => ( _students));
   const setStudents  = _nullishCoalesce(propSetStudents, () => ( _setStudents));
-  const students = _ruoloAV==="docente" && _nomeAV
-    ? _allStudents.filter(s=>{ const t=(s.teacher||""); return t===_nomeAV||t.toLowerCase().includes(_nomeAV.toLowerCase())||_nomeAV.toLowerCase().includes(t.toLowerCase()); })
-    : _ruoloAV==="allievo" && _nomeAV
-    ? _allStudents.filter(s=>(s.name||s.nome||"").toLowerCase()===_nomeAV.toLowerCase())
+  // Se c'è docenteId, trova il teacherKey dal record docente, altrimenti fallback a nome
+  const _avDocenteId = (_appUserAV && _appUserAV.docenteId) || null;
+  const _avDocRecord = _avDocenteId ? (propDocentiAV||[]).find(d=>String(d.id)===String(_avDocenteId)) : null;
+  const _avTeacherKey = _avDocRecord ? (_avDocRecord.teacherKey||_avDocRecord.nome||_nomeAV) : _nomeAV;
+  const _avAllievoId = (_appUserAV && _appUserAV.allievoId) || null;
+  const students = _ruoloAV==="docente" && _avTeacherKey
+    ? _allStudents.filter(s=>{ const t=(s.teacher||"").toLowerCase().trim(); const k=_avTeacherKey.toLowerCase().trim(); return t===k||t.includes(k)||k.includes(t); })
+    : _ruoloAV==="allievo" && (_avAllievoId||_nomeAV)
+    ? (_avAllievoId ? _allStudents.filter(s=>String(s.id)===String(_avAllievoId)) : _allStudents.filter(s=>(s.name||s.nome||"").toLowerCase()===_nomeAV.toLowerCase()))
     : _allStudents;
   const courses     = _nullishCoalesce(propCourses, () => ( _courses));
   const setCourses  = _nullishCoalesce(propSetCourses, () => ( _setCourses));
@@ -6953,7 +6969,7 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
-const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo }) => {
+const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
   const propStudents = _propStudentsRaw || [];
@@ -6971,7 +6987,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const [selLesson, setSelLesson] = useState(null);
     const [addDate,   setAddDate]   = useState(null);
     const role = propUserRuolo || "admin"; // ricevuto dall'App; admin | docente | allievo
-    const currentStudent = "Sofia Marchetti"; // in produzione verrà dal sistema di login
+    const _cvDocenteId = (_appUserCV && _appUserCV.docenteId) || null;
+    const _cvAllievoId = (_appUserCV && _appUserCV.allievoId) || null;
+    const _cvNome = (_appUserCV && _appUserCV.nome) || window.__currentUserName__ || "";
+    const currentStudent = _cvNome; // usa il nome dall'utente loggato
     const [appView,     setAppView]    = useState("calendario"); // calendario | repertorio
   
     const closeModal = () => { setModal(null); setSelLesson(null); setAddDate(null); setNextLessonCreated(null); };
@@ -7211,9 +7230,13 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
     const visibleLessons = useMemo(() => {
       let ls = role === "allievo"
-        ? lessons.filter(l => studentInLesson(l, currentStudent))
-        : role === "docente" && window.__currentUserName__
-        ? lessons.filter(l => (l.teacher||"").toLowerCase().includes((window.__currentUserName__||"").toLowerCase()))
+        ? (_cvAllievoId
+            ? lessons.filter(l => String(l.studentId||'')===String(_cvAllievoId) || studentInLesson(l, currentStudent))
+            : lessons.filter(l => studentInLesson(l, currentStudent)))
+        : role === "docente"
+        ? (_cvDocenteId
+            ? lessons.filter(l => { const d=propDocenti.find(x=>String(x.id)===String(_cvDocenteId)); const k=(d?(d.teacherKey||d.nome||''):_cvNome).toLowerCase().trim(); const t=(l.teacher||"").toLowerCase().trim(); return t===k||t.includes(k)||k.includes(t); })
+            : _cvNome ? lessons.filter(l => (l.teacher||"").toLowerCase().includes(_cvNome.toLowerCase())) : lessons)
         : lessons;
       if (filterCorso) {
         ls = ls.filter(l =>
@@ -11699,7 +11722,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 
       , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9969}}
         , (ruoloDocView==="docente"
-          ? (docenti||[]).filter(d=>{ const ln=(_appUserDocView&&_appUserDocView.nome)||""; return d.teacherKey===ln||(d.nome||"").toLowerCase().includes(ln.toLowerCase()); })
+          ? (()=>{ const did=(_appUserDocView&&_appUserDocView.docenteId)||null; if(did) return (docenti||[]).filter(d=>String(d.id)===String(did)); const ln=(_appUserDocView&&_appUserDocView.nome)||""; return (docenti||[]).filter(d=>d.teacherKey===ln||(d.nome||"").toLowerCase().includes(ln.toLowerCase())); })()
           : (docenti||[])).map(d=>{
           const all = allievi(d);
           return (
