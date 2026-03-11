@@ -86,8 +86,11 @@
     async signIn(email, password) {
       const { data, error } = await sb.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      // Leggi il ruolo dal profilo
       const profilo = await window.FM_AUTH.getProfilo(data.user.id);
+      if (profilo && profilo.stato === 'sospeso') {
+        await sb.auth.signOut();
+        throw new Error("Account sospeso. Contatta l'amministratore.");
+      }
       return { user: data.user, profilo };
     },
 
@@ -143,55 +146,37 @@
       return json;
     },
 
-    // Admin: rifiuta richiesta
+    // Admin: rifiuta richiesta — aggiorna direttamente il DB (non serve Edge Function)
     async rifiutaRichiesta({ richiestaId }) {
-      const session = await window.FM_AUTH.getSession();
-      const res = await fetch(window.SUPABASE_EDGE_APPROVE, {
-        method: 'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey':        SUPABASE_ANON,
-        },
-        body: JSON.stringify({ action: 'rifiuta', richiestaId }),
-      });
-      const json = await res.json();
-      if (!res.ok || json.error) throw new Error(json.error || 'Errore rifiuto');
-      return json;
+      const { error } = await sb.from("richieste_accesso")
+        .update({ stato: "rifiutata", updated_at: new Date().toISOString() })
+        .eq("id", richiestaId);
+      if (error) throw new Error(error.message || "Errore rifiuto");
+      return { ok: true };
     },
 
-    // Admin: sospendi / riattiva utente
+    // Admin: sospendi / riattiva utente — aggiorna solo il profilo nel DB
     async sospendiUtente({ userId, sospendi }) {
-      const session = await window.FM_AUTH.getSession();
-      const res = await fetch(window.SUPABASE_EDGE_APPROVE, {
-        method: 'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey':        SUPABASE_ANON,
-        },
-        body: JSON.stringify({ action: sospendi ? 'sospendi' : 'riattiva', userId }),
-      });
-      const json = await res.json();
-      if (!res.ok || json.error) throw new Error(json.error || 'Errore sospensione');
-      return json;
+      const stato = sospendi ? "sospeso" : "attivo";
+      const { error } = await sb.from("profili")
+        .update({ stato, updated_at: new Date().toISOString() })
+        .eq("id", userId);
+      if (error) throw new Error(error.message || "Errore sospensione");
+      // Nota: il ban Auth-side richiede service_role (Edge Function)
+      // Per ora blocchiamo solo a livello profilo — il login fallirà perché
+      // loadProfile restituirà stato=sospeso e lapp mostra errore
+      return { ok: true };
     },
 
-    // Admin: elimina utente
+    // Admin: elimina utente — rimuove solo il profilo nel DB
     async eliminaUtente({ userId }) {
-      const session = await window.FM_AUTH.getSession();
-      const res = await fetch(window.SUPABASE_EDGE_APPROVE, {
-        method: 'POST',
-        headers: {
-          'Content-Type':  'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey':        SUPABASE_ANON,
-        },
-        body: JSON.stringify({ action: 'elimina', userId }),
-      });
-      const json = await res.json();
-      if (!res.ok || json.error) throw new Error(json.error || 'Errore eliminazione');
-      return json;
+      const { error } = await sb.from("profili")
+        .delete()
+        .eq("id", userId);
+      if (error) throw new Error(error.message || "Errore eliminazione");
+      // Nota: la cancellazione auth-side richiede service_role (Edge Function)
+      // Il profilo viene rimosso, laccesso risulterà negato al prossimo login
+      return { ok: true };
     },
 
     // Carica tutte le richieste in attesa (solo admin)
