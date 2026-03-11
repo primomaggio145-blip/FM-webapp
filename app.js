@@ -2475,7 +2475,36 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate }) => {
     }
   }
 
-  // 5. Allievi sospesi
+  // 5. Lezioni in recupero scadute (fine mese superata senza recupero)
+  const oggi_d = new Date(); oggi_d.setHours(0,0,0,0);
+  const recuperiScaduti = (lessons||[]).filter(l => l.inRecupero && l.recuperoScadenza && new Date(l.recuperoScadenza+'T00:00:00') < oggi_d);
+  const recuperiInScadenza = (lessons||[]).filter(l => {
+    if (!l.inRecupero || !l.recuperoScadenza) return false;
+    const scad = new Date(l.recuperoScadenza+'T00:00:00');
+    const diff = (scad - oggi_d) / 86400000;
+    return diff >= 0 && diff <= 5; // scade entro 5 giorni
+  });
+  if (recuperiScaduti.length > 0) {
+    notifs.push({
+      id:'recuperi_scaduti', tipo:'warning',
+      icon:'alert-triangle', color: C.red,
+      titolo: `${recuperiScaduti.length} ${recuperiScaduti.length===1?'lezione in recupero scaduta':'lezioni in recupero scadute'}`,
+      desc: 'Verranno segnate come ASSENTE e pagate al docente',
+      action: () => { onNavigate('calendario'); setOpen(false); },
+      actionLabel: 'Gestisci recuperi',
+    });
+  } else if (recuperiInScadenza.length > 0) {
+    notifs.push({
+      id:'recuperi_in_scadenza', tipo:'warning',
+      icon:'clock', color: C.orange,
+      titolo: `${recuperiInScadenza.length} ${recuperiInScadenza.length===1?'lezione in recupero':'lezioni in recupero'} in scadenza`,
+      desc: recuperiInScadenza.slice(0,3).map(l=>l.student||'—').join(', '),
+      action: () => { onNavigate('calendario'); setOpen(false); },
+      actionLabel: 'Vedi recuperi',
+    });
+  }
+
+  // 6. Allievi sospesi
   const sospesi = (students||[]).filter(s=>s.status==='sospeso'||s.stato==='sospeso');
   if (sospesi.length > 0) {
     notifs.push({
@@ -4879,7 +4908,13 @@ const INIT_LESSONS = (() => {
 })();
 
 // ─── FORM LEZIONE ─────────────────────────────────────────────────────────────
-const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"Nessuna", notes:"", exercises:"", repertorioIds:[], linkUrl:"", allegati:[] };
+// Presenza che conta come lezione svolta (pagabile al docente)
+const PRESENZE_PAGATE = ['presente','assente'];
+const PRESENZE_SVOLTE = ['presente','assente'];
+const isLezionePagabile = (l) => PRESENZE_PAGATE.includes((l.attendance||'').toLowerCase());
+const isLezioneSvolta   = (l) => PRESENZE_SVOLTE.includes((l.attendance||'').toLowerCase());
+
+const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"Nessuna", notes:"", exercises:"", repertorioIds:[], linkUrl:"", allegati:[], inRecupero:false, recuperoScadenza:null };
 
 const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, role:_roleLF }) => {
   const roleLF = _roleLF || "admin"; // admin = può modificare data; docente = data readOnly
@@ -4942,10 +4977,11 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
   };
 
   const ATT_STYLES = {
-    presente:    { bg:C.greenBg,  fg:C.green,  bd:C.greenBorder  },
-    assente:     { bg:C.redBg,    fg:C.red,    bd:C.redBorder    },
-    giustificato:{ bg:"#e8edf5",  fg:C.gold,   bd:C.goldDim      },
-    recupero:    { bg:C.blueBg,   fg:C.blue,   bd:C.blueBorder   },
+    presente:    { bg:C.greenBg,  fg:C.green,  bd:C.greenBorder,  label:'Presente'   },
+    assente:     { bg:C.redBg,    fg:C.red,    bd:C.redBorder,    label:'Assente'    },
+    giustificato:{ bg:"#e8edf5",  fg:C.gold,   bd:C.goldDim,      label:'Giustificato'},
+    recupero:    { bg:C.blueBg,   fg:C.blue,   bd:C.blueBorder,   label:'Recupero'   },
+    in_recupero: { bg:'rgba(255,160,0,0.10)', fg:'#f59e0b', bd:'rgba(245,158,11,0.4)', label:'In recupero' },
   };
 
   const SDiv = ({ label }) => (
@@ -5599,23 +5635,31 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4636}}
           , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4637}}, "Segna presenza" )
           , React.createElement('div', { className: "att-row", style: {display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4638}}
-            , ["presente","assente","giustificato","recupero"].map(a => {
-              const s = ATT_STYLES[a];
-              const active = lesson.attendance === a;
+            , ["presente","assente","giustificato","recupero","in_recupero"].map(a => {
+              const s = ATT_STYLES[a] || ATT_STYLES.presente;
+              // in_recupero non usa attendance, usa il flag
+              const active = a === 'in_recupero' ? lesson.inRecupero : lesson.attendance === a;
               return (
                 React.createElement('button', { key: a, onClick: () => canEdit && onAttendance(lesson.id, active ? "" : a),
                   style: {flex:1, padding:"9px 0", borderRadius:8,
                     border:`2px solid ${active ? s.bd : C.border}`,
                     background: active ? s.bg : C.bg,
-                    cursor: canEdit ? "pointer" : "default", fontSize:12,
+                    cursor: canEdit ? "pointer" : "default", fontSize:11,
                     color: active ? s.fg : C.textMuted,
                     opacity: canEdit ? 1 : 0.5,
                     fontFamily:"'Open Sans',sans-serif", fontWeight: active ? 600 : 400,
-                    textTransform:"capitalize", transition:"all 0.12s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4643}}
-                  , a
+                    transition:"all 0.12s"},}
+                  , s.label || a
                 )
               );
             })
+            /* Badge scadenza recupero */
+            , lesson.inRecupero && lesson.recuperoScadenza && (
+              React.createElement('div', {style:{marginTop:6, padding:'6px 10px', borderRadius:7, background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.25)', fontSize:11, color:'#f59e0b', display:'flex', alignItems:'center', gap:5}}
+                , React.createElement(Ic,{n:'clock',size:12,stroke:'#f59e0b'})
+                , 'Lezione in recupero — scade il ', lesson.recuperoScadenza
+              )
+            )
           )
           /* Feedback prossima lezione */
           , lesson.recurrence && lesson.recurrence !== "Nessuna" && (
@@ -6991,7 +7035,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const _cvAllievoId = (_appUserCV && _appUserCV.allievoId) || null;
     const _cvNome = (_appUserCV && _appUserCV.nome) || window.__currentUserName__ || "";
     const currentStudent = _cvNome; // usa il nome dall'utente loggato
-    const [appView,     setAppView]    = useState("calendario"); // calendario | repertorio
+    const [appView,     setAppView]    = useState("calendario"); // calendario | repertorio | recupero | lezioni_admin
   
     const closeModal = () => { setModal(null); setSelLesson(null); setAddDate(null); setNextLessonCreated(null); };
   React.useEffect(()=>{ if(qaCV==="addLezione"){ setModal("add"); if(clearQaCV)clearQaCV(); } },[qaCV]);
@@ -7189,11 +7233,29 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const handleDelete     = ()          => { setLessons(p => p.filter(l => l.id !== _optionalChain([selLesson, 'optionalAccess', _54 => _54.id]))); closeModal(); };
     const handleAttendance = (id, val) => {
       setLessons(prev => {
-        const updated = prev.map(l => l.id === id ? {...l, attendance:val} : l);
+        const lesson = prev.find(l => l.id === id);
+        let extraProps = {};
+        // Logica IN RECUPERO:
+        // - Se si segna "in_recupero" → imposta flag e scadenza fine mese
+        // - Se si segna "recupero" → chiudi il recupero
+        // - Se si toglie la presenza da lezione in recupero → mantieni il flag
+        if (val === 'in_recupero') {
+          const d = lesson?.date ? new Date(lesson.date+'T00:00:00') : new Date();
+          const lastDay = new Date(d.getFullYear(), d.getMonth()+1, 0);
+          extraProps = { inRecupero: true, recuperoScadenza: lastDay.toISOString().split('T')[0] };
+        } else if (val === 'recupero') {
+          extraProps = { inRecupero: false, recuperoScadenza: null };
+        } else if (!val) {
+          // toglie la presenza: mantieni inRecupero se era già impostato
+          extraProps = {};
+        } else {
+          // presente/assente/giustificato: rimuovi il flag recupero
+          extraProps = { inRecupero: false, recuperoScadenza: null };
+        }
+        const updated = prev.map(l => l.id === id ? {...l, attendance: val === 'in_recupero' ? '' : val, ...extraProps} : l);
 
         // Se segno presenza (qualsiasi valore) su lezione ricorrente → crea la prossima
-        const lesson = prev.find(l => l.id === id);
-        if (lesson && val && val !== "" && lesson.recurrence && lesson.recurrence !== "Nessuna") {
+        if (lesson && val && val !== "" && val !== 'in_recupero' && lesson.recurrence && lesson.recurrence !== "Nessuna") {
           const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
           const gap     = daysMap[lesson.recurrence] || 7;
           const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap));
@@ -7302,9 +7364,231 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             ))
           )
 
+          /* Sub-tabs Calendario / Recupero / Elenco Lezioni */
+          , React.createElement('div', {style:{display:'flex', borderBottom:`1px solid ${C.border}`, background:C.surface, flexShrink:0}}
+            , [
+                {id:'calendario', label:'Calendario', icon:'cal'},
+                {id:'recupero',   label:'Recuperi',   icon:'clock'},
+                ...(role==='admin'?[{id:'lezioni_admin', label:'Elenco Lezioni', icon:'list'}]:[]),
+              ].map(t => React.createElement('button', {key:t.id, onClick:()=>setAppView(t.id),
+                style:{padding:'10px 18px', border:'none', background:'none', cursor:'pointer',
+                  fontSize:12, fontFamily:"'Open Sans',sans-serif", display:'flex', alignItems:'center', gap:5,
+                  color: appView===t.id ? C.gold : C.textMuted,
+                  borderBottom:`2px solid ${appView===t.id ? C.gold : 'transparent'}`,
+                  transition:'all .15s'}}
+                , React.createElement(Ic,{n:t.icon,size:13,stroke:appView===t.id?C.gold:C.textMuted})
+                , t.label
+              ))
+          )
+
+          /* ── VISTA RECUPERO ─────────────────────────────── */
+          , appView==='recupero' && (() => {
+            const oggi_r = new Date(); oggi_r.setHours(0,0,0,0);
+            const lezioniRec = visibleLessons.filter(l=>l.inRecupero);
+            const [rfCorso, setRfCorso] = React.useState('');
+            const [rfDocente, setRfDocente] = React.useState('');
+            const [rfAllievo, setRfAllievo] = React.useState('');
+            const docenteOptsR = [...new Set(lezioniRec.map(l=>l.teacher).filter(Boolean))].sort();
+            const allievoOptsR = [...new Set(lezioniRec.map(l=>l.student).filter(Boolean))].sort();
+            const corsoOptsR   = [...new Set(lezioniRec.map(l=>l.instrument||l.courseId).filter(Boolean))].sort();
+            const filtered = lezioniRec.filter(l =>
+              (!rfCorso   || l.instrument===rfCorso   || l.courseId===rfCorso) &&
+              (!rfDocente || l.teacher===rfDocente) &&
+              (!rfAllievo || l.student===rfAllievo)
+            );
+            return React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
+              , React.createElement('div', {style:{marginBottom:16, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}
+                , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif", fontSize:22, fontWeight:600, margin:0}}, 'Lezioni in Recupero')
+                , React.createElement('span', {style:{background:'rgba(245,158,11,0.1)', color:'#f59e0b', border:'1px solid rgba(245,158,11,0.3)', borderRadius:20, padding:'3px 10px', fontSize:12}}, lezioniRec.length+' lezioni')
+              )
+              /* Filtri */
+              , React.createElement('div', {style:{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}}
+                , React.createElement('select', {value:rfCorso, onChange:e=>setRfCorso(e.target.value),
+                  style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfCorso?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
+                  , React.createElement('option',{value:''},'Tutti i corsi')
+                  , corsoOptsR.map(c=>React.createElement('option',{key:c,value:c},c))
+                )
+                , React.createElement('select', {value:rfDocente, onChange:e=>setRfDocente(e.target.value),
+                  style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfDocente?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
+                  , React.createElement('option',{value:''},'Tutti i docenti')
+                  , docenteOptsR.map(d=>React.createElement('option',{key:d,value:d},d))
+                )
+                , React.createElement('select', {value:rfAllievo, onChange:e=>setRfAllievo(e.target.value),
+                  style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfAllievo?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
+                  , React.createElement('option',{value:''},'Tutti gli allievi')
+                  , allievoOptsR.map(a=>React.createElement('option',{key:a,value:a},a))
+                )
+              )
+              , filtered.length===0
+                ? React.createElement('div',{style:{textAlign:'center', padding:'60px 20px', color:C.textMuted}}
+                  , React.createElement('div',{style:{fontSize:40,marginBottom:12}},'✓')
+                  , React.createElement('div',{style:{fontSize:16,fontWeight:600,marginBottom:8}},'Nessuna lezione in recupero')
+                  , React.createElement('p',{style:{fontSize:13,color:C.textDim}},'Tutte le lezioni sono in regola.')
+                )
+                : React.createElement('div',{style:{background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, overflow:'hidden'}}
+                  , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
+                    , React.createElement('thead',null
+                      , React.createElement('tr',{style:{background:C.bg, borderBottom:`1px solid ${C.border}`}}
+                        , ['Data','Allievo','Docente','Strumento','Scadenza','Stato','Azioni'].map(h=>
+                          React.createElement('th',{key:h,style:{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},h)
+                        )
+                      )
+                    )
+                    , React.createElement('tbody',null
+                      , filtered.map(l => {
+                        const scad = l.recuperoScadenza ? new Date(l.recuperoScadenza+'T00:00:00') : null;
+                        const scaduto = scad && scad < oggi_r;
+                        const urgente = scad && !scaduto && (scad - oggi_r)/86400000 <= 5;
+                        return React.createElement('tr',{key:l.id, style:{borderBottom:`1px solid ${C.border}`},
+                          onMouseEnter:e=>e.currentTarget.style.background=C.bg,
+                          onMouseLeave:e=>e.currentTarget.style.background='transparent'}
+                          , React.createElement('td',{style:{padding:'11px 14px',fontSize:13}},l.date||'—')
+                          , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,fontWeight:500}},l.student||'—')
+                          , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,color:C.textMuted}},l.teacher||'—')
+                          , React.createElement('td',{style:{padding:'11px 14px',fontSize:12}}
+                            , React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},l.instrument||l.courseId||'—')
+                          )
+                          , React.createElement('td',{style:{padding:'11px 14px',fontSize:12,color:scaduto?C.red:urgente?C.orange:C.textMuted}},
+                            l.recuperoScadenza ? l.recuperoScadenza : '—'
+                          )
+                          , React.createElement('td',{style:{padding:'11px 14px'}}
+                            , scaduto
+                              ? React.createElement('span',{style:{background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},'SCADUTO → ASSENTE')
+                              : urgente
+                              ? React.createElement('span',{style:{background:'rgba(245,158,11,0.1)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.3)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In scadenza')
+                              : React.createElement('span',{style:{background:'rgba(245,158,11,0.08)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.2)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In recupero')
+                          )
+                          , React.createElement('td',{style:{padding:'11px 14px'}}
+                            , React.createElement('button',{onClick:()=>{setSelLesson(l);setModal(role==='docente'?'edit':'detail');},
+                              style:{padding:'4px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
+                              , 'Apri'
+                            )
+                          )
+                        );
+                      })
+                    )
+                  )
+                )
+            );
+          })()
+
+          /* ── ELENCO LEZIONI ADMIN ───────────────────────── */
+          , appView==='lezioni_admin' && role==='admin' && (() => {
+            const [laSearch, setLaSearch] = React.useState('');
+            const [laDocente, setLaDocente] = React.useState('');
+            const [laAllievo, setLaAllievo] = React.useState('');
+            const [laPresenza, setLaPresenza] = React.useState('');
+            const [confirmDel, setConfirmDel] = React.useState(null);
+            const docenteOptsA = [...new Set(lessons.map(l=>l.teacher).filter(Boolean))].sort();
+            const allievoOptsA = [...new Set(lessons.map(l=>l.student).filter(Boolean))].sort();
+            const laFiltered = lessons.filter(l =>
+              (!laDocente  || l.teacher===laDocente) &&
+              (!laAllievo  || l.student===laAllievo) &&
+              (!laPresenza || l.attendance===laPresenza || (laPresenza==='in_recupero'&&l.inRecupero)) &&
+              (!laSearch   || (l.student||'').toLowerCase().includes(laSearch.toLowerCase()) ||
+                              (l.teacher||'').toLowerCase().includes(laSearch.toLowerCase()) ||
+                              (l.topic||'').toLowerCase().includes(laSearch.toLowerCase()))
+            ).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+            const handleEditLa = (l) => { setSelLesson(l); setModal('edit'); };
+            const handleDeleteLa = (l) => {
+              setLessons(p=>p.filter(x=>x.id!==l.id));
+              // Sync Supabase
+              const sb=window.supabaseClient;
+              if(sb) sb.from('lezioni').delete().eq('id',l.id).then(({error})=>{ if(error) console.warn('[FM] delete lezione error:',error.message); });
+              setConfirmDel(null);
+            };
+            return React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
+              , React.createElement('div',{style:{marginBottom:16,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}
+                , React.createElement('h2',{style:{fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,margin:0}},'Elenco Lezioni')
+                , React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'3px 10px',fontSize:12}},laFiltered.length+' lezioni')
+              )
+              , React.createElement('div',{style:{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}
+                , React.createElement('input',{type:'text',placeholder:'Cerca allievo, docente, argomento...',value:laSearch,onChange:e=>setLaSearch(e.target.value),
+                  style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",minWidth:220}})
+                , React.createElement('select',{value:laDocente,onChange:e=>setLaDocente(e.target.value),
+                  style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:laDocente?C.text:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+                  , React.createElement('option',{value:''},'Tutti i docenti')
+                  , docenteOptsA.map(d=>React.createElement('option',{key:d,value:d},d))
+                )
+                , React.createElement('select',{value:laAllievo,onChange:e=>setLaAllievo(e.target.value),
+                  style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:laAllievo?C.text:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+                  , React.createElement('option',{value:''},'Tutti gli allievi')
+                  , allievoOptsA.map(a=>React.createElement('option',{key:a,value:a},a))
+                )
+                , React.createElement('select',{value:laPresenza,onChange:e=>setLaPresenza(e.target.value),
+                  style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:laPresenza?C.text:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+                  , React.createElement('option',{value:''},'Tutte le presenze')
+                  , ['presente','assente','giustificato','recupero','in_recupero',''].map((v,i)=>
+                    v!=='' && React.createElement('option',{key:v,value:v}, v==='in_recupero'?'In recupero':v.charAt(0).toUpperCase()+v.slice(1))
+                  )
+                  , React.createElement('option',{value:'__nessuna__'},'Nessuna presenza')
+                )
+              )
+              , React.createElement('div',{style:{background:C.surface,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}
+                , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
+                  , React.createElement('thead',null
+                    , React.createElement('tr',{style:{background:C.bg,borderBottom:`1px solid ${C.border}`}}
+                      , ['Data','Ora','Allievo','Docente','Strumento','Argomento','Presenza','Azioni'].map(h=>
+                        React.createElement('th',{key:h,style:{padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},h)
+                      )
+                    )
+                  )
+                  , React.createElement('tbody',null
+                    , laFiltered.slice(0,200).map(l => {
+                      const att = l.inRecupero ? 'in_recupero' : (l.attendance||'');
+                      const s = ATT_STYLES[att] || {bg:'transparent',fg:C.textDim,bd:C.border};
+                      return React.createElement('tr',{key:l.id,style:{borderBottom:`1px solid ${C.border}`},
+                        onMouseEnter:e=>e.currentTarget.style.background=C.bg,
+                        onMouseLeave:e=>e.currentTarget.style.background='transparent'}
+                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:13}},l.date||'—')
+                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:13,color:C.textMuted}},l.hour||'—')
+                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:13,fontWeight:500}},l.student||l.courseId||'—')
+                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:13,color:C.textMuted}},l.teacher||'—')
+                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:12}}
+                          , React.createElement('span',{style:{background:C.blueBg,color:C.blue,borderRadius:20,padding:'2px 7px',fontSize:11}},l.instrument||'—')
+                        )
+                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:12,color:C.textDim,maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},l.topic||'—')
+                        , React.createElement('td',{style:{padding:'9px 12px'}}
+                          , att
+                            ? React.createElement('span',{style:{background:s.bg,color:s.fg,border:`1px solid ${s.bd}`,borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:500}},
+                                ATT_STYLES[att]?.label||att)
+                            : React.createElement('span',{style:{color:C.textDim,fontSize:11}},'—')
+                        )
+                        , React.createElement('td',{style:{padding:'9px 12px'}}
+                          , React.createElement('div',{style:{display:'flex',gap:6}}
+                            , React.createElement('button',{onClick:()=>handleEditLa(l),
+                              style:{padding:'4px 9px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:11,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:4}}
+                              , React.createElement(Ic,{n:'edit',size:11,stroke:C.text}), 'Modifica'
+                            )
+                            , React.createElement('button',{onClick:()=>setConfirmDel(l),
+                              style:{padding:'4px 9px',borderRadius:7,border:`1px solid ${C.redBorder}`,background:C.redBg,color:C.red,fontSize:11,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:4}}
+                              , React.createElement(Ic,{n:'trash',size:11,stroke:C.red}), 'Elimina'
+                            )
+                          )
+                        )
+                      );
+                    })
+                  )
+                )
+              )
+              , laFiltered.length > 200 && React.createElement('p',{style:{textAlign:'center',padding:12,fontSize:12,color:C.textDim}},`Mostrate 200 di ${laFiltered.length} lezioni — usa i filtri per restringere`)
+              /* Confirm delete dialog */
+              , confirmDel && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
+                , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:400,width:'100%',border:`1px solid ${C.border}`}}
+                  , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:8,color:C.red}},'Elimina lezione')
+                  , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:20}}, 'Eliminare la lezione del ', confirmDel.date, ' — ', confirmDel.student||confirmDel.courseId||'?', '? Questa azione non è reversibile.')
+                  , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+                    , React.createElement('button',{onClick:()=>setConfirmDel(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+                    , React.createElement('button',{onClick:()=>handleDeleteLa(confirmDel),style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.red,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}},'Elimina')
+                  )
+                )
+              )
+            );
+          })()
+
           /* Toolbar */
-          , React.createElement('div', { className: "cal-toolbar", style: {padding:isMobile?"10px 12px":"14px 24px", display:"flex", justifyContent:"space-between",
-            alignItems:"center", flexShrink:0, gap:isMobile?8:12, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5985}}
+          , appView==='calendario' && React.createElement('div', { className: "cal-toolbar", style: {padding:isMobile?"10px 12px":"14px 24px", display:"flex", justifyContent:"space-between",
+            alignItems:"center", flexShrink:0, gap:isMobile?8:12, flexWrap:"wrap"}}
             , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5987}}
               , React.createElement('button', { onClick: () => navigate(-1), style: {background:C.surface, border:`1px solid ${C.border}`,
                 borderRadius:8, color:C.textMuted, padding:"7px 10px", cursor:"pointer", display:"flex"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5988}}
@@ -7445,9 +7729,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           /* Contenuto */
           , React.createElement('div', { style: {flex:1, padding:"0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
             , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden"}, className: "table-scroll", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
-              , viewMode === "day"   && React.createElement('div', { style: {padding:20}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6127}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, onSelect: l => { setSelLesson(l); setModal(role==="docente"?"edit":"detail"); }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6127}}))
-              , viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, onSelect: l => { setSelLesson(l); setModal(role==="docente"?"edit":"detail"); }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6128}})
-              , viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, onSelect: l => { setSelLesson(l); setModal(role==="docente"?"edit":"detail"); }, onDayClick: d => { setCurDate(d); setViewMode("day"); }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6129}})
+              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding:20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, onSelect: l => { setSelLesson(l); setModal(role==="docente"?"edit":"detail"); }}))
+              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, onSelect: l => { setSelLesson(l); setModal(role==="docente"?"edit":"detail"); }})
+              , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, onSelect: l => { setSelLesson(l); setModal(role==="docente"?"edit":"detail"); }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
             )
           )
           )
@@ -10987,7 +11271,7 @@ const RuoloBadge = ({ ruolo }) => {
 };
 
 // ─── ALLEGATI VIEW ────────────────────────────────────────────────────────────
-const AllegatiView = ({ allegati:propAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani }) => {
+const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani, setBrani:propSetBrani }) => {
   const allegatiLezioni  = propAllegati  || [];
   const lessons   = propLessons   || [];
   const students  = propStudents  || [];
@@ -10996,6 +11280,24 @@ const AllegatiView = ({ allegati:propAllegati, lessons:propLessons, students:pro
   const [fCorso,  setFCorso]  = useState("");
   const [fAllievo,setFAllievo]= useState("");
   const [fTipo,   setFTipo]   = useState(""); // 'lezione'|'spartito'|'file_brano'
+  const [editAllegato, setEditAllegato] = useState(null);
+  const [confirmDelAll, setConfirmDelAll] = useState(null);
+
+  const handleDeleteAllegato = (a) => {
+    if (a._categoria === 'lezione') {
+      // Rimuovi dalla tabella allegati su Supabase
+      const sb = window.supabaseClient;
+      if (sb) sb.from('allegati').delete().eq('id', a.id).then(({error}) => {
+        if (error) console.warn('[FM] delete allegato error:', error.message);
+      });
+      if (propSetAllegati) propSetAllegati(p => p.filter(x => x.id !== a.id));
+    } else if (a._categoria === 'spartito' && a.branoId && propSetBrani) {
+      propSetBrani(p => p.map(b => b.id===a.branoId ? {...b, spartiti:(b.spartiti||[]).filter(s=>s.id!==a.id&&('sp_'+b.id+'_'+s.fileName)!==a.id)} : b));
+    } else if (a._categoria === 'file_brano' && a.branoId && propSetBrani) {
+      propSetBrani(p => p.map(b => b.id===a.branoId ? {...b, files:(b.files||[]).filter(f=>f.id!==a.id&&('fa_'+b.id+'_'+f.fileName)!==a.id)} : b));
+    }
+    setConfirmDelAll(null);
+  };
 
   // Unisce allegati lezioni + files/spartiti dei brani in un unico array
   const allegatiBrani = [];
@@ -11119,17 +11421,61 @@ const AllegatiView = ({ allegati:propAllegati, lessons:propLessons, students:pro
                   , React.createElement('td', { style: {padding:"12px 16px", fontSize:12, color:C.textMuted}}, getLessonLabel(a.lezioneId))
                   , React.createElement('td', { style: {padding:"12px 16px", fontSize:13, color:C.text}}, a.allievoNome||a.allievoId||"—")
                   , React.createElement('td', { style: {padding:"12px 16px"}}
-                    , a.fileUrl && React.createElement('a', { href:a.fileUrl, target:"_blank", rel:"noopener noreferrer",
-                        style:{display:"flex", alignItems:"center", gap:5, fontSize:12, color:C.blue, textDecoration:"none",
-                          padding:"5px 10px", borderRadius:7, border:`1px solid ${C.blueBorder}`, background:C.blueBg}}
-                        , React.createElement(Ic, {n:"download", size:12, stroke:C.blue}), "Apri"
-                      )
+                    , React.createElement('div',{style:{display:'flex',gap:6,alignItems:'center'}}
+                      , a.fileUrl && React.createElement('a', { href:a.fileUrl, target:"_blank", rel:"noopener noreferrer",
+                          style:{display:"flex", alignItems:"center", gap:5, fontSize:12, color:C.blue, textDecoration:"none",
+                            padding:"5px 9px", borderRadius:7, border:`1px solid ${C.blueBorder}`, background:C.blueBg}}
+                          , React.createElement(Ic, {n:"download", size:12, stroke:C.blue}), "Apri"
+                        )
+                      , a._categoria==='lezione' && React.createElement('button',{onClick:()=>setEditAllegato(a),
+                          style:{display:'flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 9px',borderRadius:7,
+                            border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
+                          , React.createElement(Ic,{n:'edit',size:11,stroke:C.text}), 'Modifica'
+                        )
+                      , React.createElement('button',{onClick:()=>setConfirmDelAll(a),
+                          style:{display:'flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 9px',borderRadius:7,
+                            border:`1px solid ${C.redBorder}`,background:C.redBg,color:C.red,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
+                          , React.createElement(Ic,{n:'trash',size:11,stroke:C.red}), 'Elimina'
+                        )
+                    )
                   )
                 )
               ))
             )
           )
         )
+    )
+    /* ── Confirm Delete Allegato ── */
+    , confirmDelAll && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
+      , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:400,width:'100%',border:`1px solid ${C.border}`}}
+        , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:8,color:C.red}},'Elimina allegato')
+        , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:20}},'Eliminare "', confirmDelAll.fileName, '"? Questa azione non è reversibile.')
+        , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+          , React.createElement('button',{onClick:()=>setConfirmDelAll(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+          , React.createElement('button',{onClick:()=>handleDeleteAllegato(confirmDelAll),style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.red,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}},'Elimina')
+        )
+      )
+    )
+    , editAllegato && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
+      , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:440,width:'100%',border:`1px solid ${C.border}`}}
+        , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}},'Modifica allegato')
+        , React.createElement('div',{style:{marginBottom:14}}
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
+          , React.createElement('input',{type:'text', defaultValue:editAllegato.descrizione||'',
+            id:'edit-allegato-desc',
+            style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none',boxSizing:'border-box'}})
+        )
+        , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+          , React.createElement('button',{onClick:()=>setEditAllegato(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+          , React.createElement('button',{onClick:()=>{
+              const desc=document.getElementById('edit-allegato-desc')?.value||'';
+              if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===editAllegato.id?{...x,descrizione:desc}:x));
+              const sb=window.supabaseClient;
+              if(sb) sb.from('allegati').update({descrizione:desc}).eq('id',editAllegato.id).then(({error})=>{ if(error) console.warn('[FM] edit allegato error:',error.message); });
+              setEditAllegato(null);
+            }, style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.gold,color:'#0d1f4a',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},'Salva')
+        )
+      )
     )
   );
 };
@@ -11217,21 +11563,28 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
     const salvaUtente=(draft)=>{
       setUtenti(p=>p.map(u=>u.id===draft.id?{...draft}:u));
       setDrawer(null);
-      showToast(`${draft.nome} aggiornato`);
-      // Salva su Supabase: nome, ruolo, note, docente_id, allievo_id
-      const sb = window.supabaseClient;
-      if (sb) {
-        sb.from('profili').update({
+      // Salva su Supabase in modo affidabile
+      (async()=>{
+        const sb = window.supabaseClient;
+        if (!sb) { showToast(`${draft.nome} aggiornato (offline)`); return; }
+        // Normalizza gli ID: potrebbero essere stringhe da <select>
+        const docenteIdVal = draft.docenteId ? (isNaN(Number(draft.docenteId)) ? draft.docenteId : Number(draft.docenteId)) : null;
+        const allievoIdVal = draft.allievoId ? (isNaN(Number(draft.allievoId)) ? draft.allievoId : Number(draft.allievoId)) : null;
+        const { error } = await sb.from('profili').update({
           nome:       draft.nome,
           ruolo:      draft.ruolo,
           note:       draft.note||null,
-          docente_id: draft.docenteId ? parseInt(draft.docenteId,10)||draft.docenteId : null,
-          allievo_id: draft.allievoId ? parseInt(draft.allievoId,10)||draft.allievoId : null,
+          docente_id: docenteIdVal,
+          allievo_id: allievoIdVal,
           updated_at: new Date().toISOString(),
-        }).eq('id', draft.id).then(({error}) => {
-          if (error) console.warn('[FM] salvaUtente error:', error.message);
-        });
-      }
+        }).eq('id', draft.id);
+        if (error) {
+          console.warn('[FM] salvaUtente error:', error.message);
+          showToast(`Errore salvataggio: ${error.message}`, C.red);
+        } else {
+          showToast(`${draft.nome} aggiornato ✓`, C.green);
+        }
+      })();
     };
     const sospendiUtente=(u)=>{
       const nuovoStato=u.stato==="sospeso"?"attivo":"sospeso";
@@ -12667,7 +13020,7 @@ function App() {
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
     repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
-    allegati:    React.createElement(AllegatiView, { allegati: sharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
+    allegati:    React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      (user?.ruolo||"admin")==="admin" && React.createElement(UtentiView, { students: sharedStudents, docenti: sharedDocenti }),
     sitoWeb:       null,
