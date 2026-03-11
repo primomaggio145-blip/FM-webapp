@@ -133,7 +133,9 @@
     async approvaRichiesta({ richiestaId, nome, email, ruolo }) {
       // Usa session token se disponibile, altrimenti anon key (admin senza sessione Auth)
       const session = await window.FM_AUTH.getSession();
+      console.log('[FM] approvaRichiesta session:', session ? 'OK uid='+session.user?.id : 'NULL');
       const token = (session && session.access_token) ? session.access_token : SUPABASE_ANON;
+      console.log('[FM] approvaRichiesta token starts with:', token ? token.substring(0,20) : 'NULL');
       const res = await fetch(window.SUPABASE_EDGE_APPROVE, {
         method: 'POST',
         headers: {
