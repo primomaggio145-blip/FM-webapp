@@ -471,6 +471,7 @@
       { t: 'docenti',  k: 'docenti',  o: 'nome',  a: adaptDocente  },
       { t: 'corsi',    k: 'courses',  o: 'nome',  a: adaptCorso    },
       { t: 'lezioni',  k: 'lessons',  o: 'data',  a: (r) => adaptLezione(r, [])  },
+  { t: 'allegati', k: 'allegati', o: 'created_at', a: r => ({ id:r.id, lezioneId:r.lezione_id||null, allievoNome:r.allievo_nome||null, corso:r.corso||null, descrizione:r.descrizione||null, fileUrl:r.file_url||null, fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null }) },
       { t: 'quote',    k: 'entrate',  o: 'mese',  a: adaptQuota    },
       { t: 'spese',    k: 'spese',    o: 'data',  a: adaptSpesa    },
       { t: 'brani',    k: 'brani',    o: 'titolo', a: adaptBrano    },

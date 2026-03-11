@@ -2393,7 +2393,7 @@ const CONFIG_DEFAULT = {
   },
 };
 
-const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, onQuickAction }) => {
+const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, onQuickAction }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
     const [panels,  setPanels]  = useState({});  // pannelli visibili (default = tutti on)
     const [_config,  _setConfig]  = useState(CONFIG_DEFAULT);
@@ -2438,6 +2438,65 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const saldoAnnoLiveLive = _entrate.filter(e=>e.anno===annoCorrente).reduce((t,e)=>t+(e.importo||0),0)
                         - _spese.filter(e=>e.anno===annoCorrente).reduce((t,e)=>t+(e.importo||0),0);
   
+    // ── Dati live per la dashboard (sostituiscono costanti hardcoded) ──────────
+    const _concerti = propConcertiDash || [];
+
+    // ALLIEVI live: prende da _students con formato compatibile AlertPanel/StatoAllievi
+    const ALLIEVI_LIVE = _students.map(s => ({
+      id: s.id, name: s.name || s.nome || '',
+      instrument: s.instrument || s.strumento || '',
+      teacher: s.teacher || s.docente || '',
+      stato: s.status || s.stato || 'pagato',
+      monthlyFee: s.monthlyFee || s.quota || 0,
+    }));
+
+    // LEZIONI_OGGI live: lezioni di oggi con formato compatibile AlertPanel
+    const todayStr = yyyymmdd(oggi);
+    const LEZIONI_OGGI_LIVE = _lessons
+      .filter(l => (l.date || l.data || '') === todayStr)
+      .map(l => ({
+        id: l.id,
+        ora: l.hour || l.ora || '',
+        durata: l.duration || l.durata || 60,
+        allievo: l.student || l.allievo || '',
+        strumento: l.instrument || l.strumento || '',
+        docente: l.teacher || l.docente || '',
+        aula: l.room || l.aula || '',
+        tipo: l.type || 'individuale',
+        confermata: (l.attendance || '') !== '',
+      }));
+
+    // PROSSIMI_EVENTI live: concerti/eventi futuri
+    const PROSSIMI_EVENTI_LIVE = _concerti
+      .filter(e => (e.data || e.date || '') >= todayStr)
+      .sort((a,b) => (a.data||a.date||'').localeCompare(b.data||b.date||''))
+      .slice(0, 5)
+      .map(e => ({
+        data: e.data || e.date || '',
+        titolo: e.nome || e.titolo || e.name || '',
+        luogo: e.luogo || e.location || '',
+        tipo: e.tipo || e.type || 'evento',
+      }));
+
+    // ATTIVITA_RECENTE live: ultimi movimenti da entrate + spese
+    const attivistaEntrate = (_entrate || []).slice().sort((a,b)=>(b.data||'').localeCompare(a.data||'')).slice(0,5).map((e,i)=>({
+      id: 'e'+e.id, tipo:'pagamento',
+      desc: e.desc || 'Pagamento quota',
+      sogg: e.studentName || e.allievo || '',
+      quando: (() => { try { const d=new Date((e.data||'')+'T00:00:00'); const diff=Math.floor((oggi-d)/86400000); return diff===0?'Oggi':diff===1?'Ieri':`${diff} giorni fa`; } catch(er){return '';} })(),
+      importo: e.importo || 0, segno: 1,
+    }));
+    const attivistaSpese = (_spese || []).slice().sort((a,b)=>(b.data||'').localeCompare(a.data||'')).slice(0,3).map((e,i)=>({
+      id: 's'+e.id, tipo:'spesa',
+      desc: e.desc || 'Spesa',
+      sogg: e.docenteNome || e.fornitore || '',
+      quando: (() => { try { const d=new Date((e.data||'')+'T00:00:00'); const diff=Math.floor((oggi-d)/86400000); return diff===0?'Oggi':diff===1?'Ieri':`${diff} giorni fa`; } catch(er){return '';} })(),
+      importo: e.importo || 0, segno: -1,
+    }));
+    const ATTIVITA_RECENTE_LIVE = [...attivistaEntrate, ...attivistaSpese]
+      .sort((a,b)=>a.quando.localeCompare(b.quando))
+      .slice(0, 8);
+
     // Render logo navbar
     const LogoMark = () => {
       if(config.logoUrl) return (
@@ -2718,7 +2777,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                               ));
                             })()
                           )
-                        : React.createElement(StatoAllievi, { allievi: ALLIEVI, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2321}})
+                        : React.createElement(StatoAllievi, { allievi: ALLIEVI_LIVE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2321}})
                     )
                   )
                 )
@@ -2729,7 +2788,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       , React.createElement('span', { style: {fontSize:12,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2329}}, "Prossimi eventi" )
                     )
                     , React.createElement('div', { style: {padding:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2331}}
-                      , React.createElement(EventiCard, { eventi: PROSSIMI_EVENTI, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2332}})
+                      , React.createElement(EventiCard, { eventi: PROSSIMI_EVENTI_LIVE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2332}})
                     )
                   )
                 )
@@ -2755,7 +2814,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       )
                     )
                     , React.createElement('div', { style: {padding:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2357}}
-                      , React.createElement(AlertPanel, { allievi: ALLIEVI, lezioniOggi: LEZIONI_OGGI, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2358}})
+                      , React.createElement(AlertPanel, { allievi: ALLIEVI_LIVE, lezioniOggi: LEZIONI_OGGI_LIVE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2358}})
                     )
                     , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2360}}
                       , React.createElement('button', { onClick: ()=>onNavigate("allievi"),
@@ -2773,9 +2832,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     )
                     , React.createElement('div', { style: {padding:"6px 4px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2374}}
                       , React.createElement(AttivitaFeed, { items: ruolo==="allievo"
-                        ? ATTIVITA_RECENTE.filter(a=>(a.sogg||"").toLowerCase().includes(myNome.toLowerCase()))
-                        : ruolo==="docente" ? ATTIVITA_RECENTE.filter(a=>(a.sogg||"").toLowerCase().includes(myDocNome.toLowerCase()))
-                        : ATTIVITA_RECENTE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2375}})
+                        ? ATTIVITA_RECENTE_LIVE.filter(a=>(a.sogg||"").toLowerCase().includes(myNome.toLowerCase()))
+                        : ruolo==="docente" ? ATTIVITA_RECENTE_LIVE.filter(a=>(a.sogg||"").toLowerCase().includes(myDocNome.toLowerCase()))
+                        : ATTIVITA_RECENTE_LIVE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2375}})
                     )
                   )
                 )
@@ -5295,8 +5354,14 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                     }
                     const updated = [...(localAllegati||[]), ...newAllegati];
                     setLocalAllegati(updated);
-                    // Aggiorna anche sharedAllegati globale se disponibile
-                    if (window.__FM_RELOAD__) window.__FM_RELOAD__();
+                    // Aggiorna sharedAllegati subito senza aspettare realtime
+                    if (window.__FM_RELOAD__) {
+                      const sb2 = window.supabaseClient;
+                      if (sb2) {
+                        const { data: allAl } = await sb2.from('allegati').select('*').order('created_at', {ascending:false});
+                        if (allAl) window.__FM_RELOAD__({ allegati: allAl.map(r=>({ id:r.id, lezioneId:r.lezione_id||null, allievoNome:r.allievo_nome||null, corso:r.corso||null, descrizione:r.descrizione||null, fileUrl:r.file_url||null, fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null })) });
+                      }
+                    }
                     e.target.value='';
                   }})
             )
@@ -12158,6 +12223,7 @@ function App() {
                    students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate,
                    spese: sharedSpese,
                    docenti: sharedDocenti, lessons: sharedLessons,
+                   concerti: sharedConcerti,
                    onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
     allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
     docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user,
