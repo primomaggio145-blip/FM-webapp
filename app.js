@@ -7013,6 +7013,206 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
+// ─── RECUPERO VIEW (sub-tab di CalendarioView) ───────────────────────────────
+const RecuperoView = ({ lessons, onOpenLesson, role }) => {
+  const [rfCorso,   setRfCorso]   = useState('');
+  const [rfDocente, setRfDocente] = useState('');
+  const [rfAllievo, setRfAllievo] = useState('');
+  const oggi_r = new Date(); oggi_r.setHours(0,0,0,0);
+  const lezioniRec = (lessons||[]).filter(l=>l.inRecupero);
+  const docenteOptsR = [...new Set(lezioniRec.map(l=>l.teacher).filter(Boolean))].sort();
+  const allievoOptsR = [...new Set(lezioniRec.map(l=>l.student).filter(Boolean))].sort();
+  const corsoOptsR   = [...new Set(lezioniRec.map(l=>l.instrument||l.courseId).filter(Boolean))].sort();
+  const filtered_r = lezioniRec.filter(l =>
+    (!rfCorso   || l.instrument===rfCorso   || l.courseId===rfCorso) &&
+    (!rfDocente || l.teacher===rfDocente) &&
+    (!rfAllievo || l.student===rfAllievo)
+  );
+  return React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
+    , React.createElement('div', {style:{marginBottom:16, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}
+      , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif", fontSize:22, fontWeight:600, margin:0}}, 'Lezioni in Recupero')
+      , React.createElement('span', {style:{background:'rgba(245,158,11,0.1)', color:'#f59e0b', border:'1px solid rgba(245,158,11,0.3)', borderRadius:20, padding:'3px 10px', fontSize:12}}, lezioniRec.length+' lezioni')
+    )
+    , React.createElement('div', {style:{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}}
+      , React.createElement('select', {value:rfCorso, onChange:e=>setRfCorso(e.target.value),
+        style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfCorso?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
+        , React.createElement('option',{value:''},'Tutti i corsi')
+        , corsoOptsR.map(c=>React.createElement('option',{key:c,value:c},c))
+      )
+      , React.createElement('select', {value:rfDocente, onChange:e=>setRfDocente(e.target.value),
+        style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfDocente?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
+        , React.createElement('option',{value:''},'Tutti i docenti')
+        , docenteOptsR.map(d=>React.createElement('option',{key:d,value:d},d))
+      )
+      , React.createElement('select', {value:rfAllievo, onChange:e=>setRfAllievo(e.target.value),
+        style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfAllievo?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
+        , React.createElement('option',{value:''},'Tutti gli allievi')
+        , allievoOptsR.map(a=>React.createElement('option',{key:a,value:a},a))
+      )
+    )
+    , filtered_r.length===0
+      ? React.createElement('div',{style:{textAlign:'center', padding:'60px 20px', color:C.textMuted}}
+        , React.createElement('div',{style:{fontSize:40,marginBottom:12}},'✓')
+        , React.createElement('div',{style:{fontSize:16,fontWeight:600,marginBottom:8}},'Nessuna lezione in recupero')
+        , React.createElement('p',{style:{fontSize:13,color:C.textDim}},'Tutte le lezioni sono in regola.')
+      )
+      : React.createElement('div',{style:{background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, overflow:'hidden'}}
+        , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
+          , React.createElement('thead',null
+            , React.createElement('tr',{style:{background:C.bg, borderBottom:`1px solid ${C.border}`}}
+              , ['Data','Allievo','Docente','Strumento','Scadenza','Stato','Azioni'].map(h=>
+                React.createElement('th',{key:h,style:{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},h)
+              )
+            )
+          )
+          , React.createElement('tbody',null
+            , filtered_r.map(l => {
+              const scad = l.recuperoScadenza ? new Date(l.recuperoScadenza+'T00:00:00') : null;
+              const scaduto = scad && scad < oggi_r;
+              const urgente = scad && !scaduto && (scad - oggi_r)/86400000 <= 5;
+              return React.createElement('tr',{key:l.id, style:{borderBottom:`1px solid ${C.border}`},
+                onMouseEnter:e=>e.currentTarget.style.background=C.bg,
+                onMouseLeave:e=>e.currentTarget.style.background='transparent'}
+                , React.createElement('td',{style:{padding:'11px 14px',fontSize:13}},l.date||'—')
+                , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,fontWeight:500}},l.student||'—')
+                , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,color:C.textMuted}},l.teacher||'—')
+                , React.createElement('td',{style:{padding:'11px 14px',fontSize:12}}
+                  , React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},l.instrument||l.courseId||'—')
+                )
+                , React.createElement('td',{style:{padding:'11px 14px',fontSize:12,color:scaduto?C.red:urgente?C.orange:C.textMuted}},
+                  l.recuperoScadenza||'—'
+                )
+                , React.createElement('td',{style:{padding:'11px 14px'}}
+                  , scaduto
+                    ? React.createElement('span',{style:{background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},'SCADUTO → ASSENTE')
+                    : urgente
+                    ? React.createElement('span',{style:{background:'rgba(245,158,11,0.1)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.3)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In scadenza')
+                    : React.createElement('span',{style:{background:'rgba(245,158,11,0.08)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.2)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In recupero')
+                )
+                , React.createElement('td',{style:{padding:'11px 14px'}}
+                  , React.createElement('button',{onClick:()=>onOpenLesson&&onOpenLesson(l),
+                    style:{padding:'4px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
+                    ,'Apri'
+                  )
+                )
+              );
+            })
+          )
+        )
+      )
+  );
+};
+
+// ─── LEZIONI ADMIN VIEW (sub-tab di CalendarioView) ──────────────────────────
+const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
+  const [laSearch,   setLaSearch]   = useState('');
+  const [laDocente,  setLaDocente]  = useState('');
+  const [laAllievo,  setLaAllievo]  = useState('');
+  const [laPresenza, setLaPresenza] = useState('');
+  const [confirmDel, setConfirmDel] = useState(null);
+  const docenteOptsA = [...new Set((lessons||[]).map(l=>l.teacher).filter(Boolean))].sort();
+  const allievoOptsA = [...new Set((lessons||[]).map(l=>l.student).filter(Boolean))].sort();
+  const laFiltered = (lessons||[]).filter(l =>
+    (!laDocente  || l.teacher===laDocente) &&
+    (!laAllievo  || l.student===laAllievo) &&
+    (!laPresenza || (laPresenza==='in_recupero' ? l.inRecupero : l.attendance===laPresenza)) &&
+    (!laSearch   || (l.student||'').toLowerCase().includes(laSearch.toLowerCase()) ||
+                    (l.teacher||'').toLowerCase().includes(laSearch.toLowerCase()) ||
+                    (l.topic||'').toLowerCase().includes(laSearch.toLowerCase()))
+  ).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const handleDelConfirm = (l) => {
+    if (onDeleteLesson) onDeleteLesson(l);
+    setConfirmDel(null);
+  };
+  return React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
+    , React.createElement('div',{style:{marginBottom:16,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}
+      , React.createElement('h2',{style:{fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,margin:0}},'Elenco Lezioni')
+      , React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'3px 10px',fontSize:12}},laFiltered.length+' lezioni')
+    )
+    , React.createElement('div',{style:{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}
+      , React.createElement('input',{type:'text',placeholder:'Cerca allievo, docente, argomento...',value:laSearch,onChange:e=>setLaSearch(e.target.value),
+        style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",minWidth:200}})
+      , React.createElement('select',{value:laDocente,onChange:e=>setLaDocente(e.target.value),
+        style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:laDocente?C.text:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+        , React.createElement('option',{value:''},'Tutti i docenti')
+        , docenteOptsA.map(d=>React.createElement('option',{key:d,value:d},d))
+      )
+      , React.createElement('select',{value:laAllievo,onChange:e=>setLaAllievo(e.target.value),
+        style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:laAllievo?C.text:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+        , React.createElement('option',{value:''},'Tutti gli allievi')
+        , allievoOptsA.map(a=>React.createElement('option',{key:a,value:a},a))
+      )
+      , React.createElement('select',{value:laPresenza,onChange:e=>setLaPresenza(e.target.value),
+        style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:laPresenza?C.text:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+        , React.createElement('option',{value:''},'Tutte le presenze')
+        , ['presente','assente','giustificato','recupero','in_recupero'].map(v=>
+          React.createElement('option',{key:v,value:v}, v==='in_recupero'?'In recupero':v.charAt(0).toUpperCase()+v.slice(1))
+        )
+      )
+    )
+    , React.createElement('div',{style:{background:C.surface,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}
+      , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
+        , React.createElement('thead',null
+          , React.createElement('tr',{style:{background:C.bg,borderBottom:`1px solid ${C.border}`}}
+            , ['Data','Ora','Allievo','Docente','Strumento','Argomento','Presenza','Azioni'].map(h=>
+              React.createElement('th',{key:h,style:{padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},h)
+            )
+          )
+        )
+        , React.createElement('tbody',null
+          , laFiltered.slice(0,200).map(l => {
+            const att = l.inRecupero ? 'in_recupero' : (l.attendance||'');
+            const s = ATT_STYLES[att] || {bg:'transparent',fg:C.textDim,bd:C.border,label:'—'};
+            return React.createElement('tr',{key:l.id,style:{borderBottom:`1px solid ${C.border}`},
+              onMouseEnter:e=>e.currentTarget.style.background=C.bg,
+              onMouseLeave:e=>e.currentTarget.style.background='transparent'}
+              , React.createElement('td',{style:{padding:'9px 12px',fontSize:13}},l.date||'—')
+              , React.createElement('td',{style:{padding:'9px 12px',fontSize:13,color:C.textMuted}},l.hour||'—')
+              , React.createElement('td',{style:{padding:'9px 12px',fontSize:13,fontWeight:500}},l.student||l.courseId||'—')
+              , React.createElement('td',{style:{padding:'9px 12px',fontSize:13,color:C.textMuted}},l.teacher||'—')
+              , React.createElement('td',{style:{padding:'9px 12px',fontSize:12}}
+                , React.createElement('span',{style:{background:C.blueBg,color:C.blue,borderRadius:20,padding:'2px 7px',fontSize:11}},l.instrument||'—')
+              )
+              , React.createElement('td',{style:{padding:'9px 12px',fontSize:12,color:C.textDim,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},l.topic||'—')
+              , React.createElement('td',{style:{padding:'9px 12px'}}
+                , att
+                  ? React.createElement('span',{style:{background:s.bg,color:s.fg,border:`1px solid ${s.bd}`,borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:500}},s.label||att)
+                  : React.createElement('span',{style:{color:C.textDim,fontSize:11}},'—')
+              )
+              , React.createElement('td',{style:{padding:'9px 12px'}}
+                , React.createElement('div',{style:{display:'flex',gap:6}}
+                  , React.createElement('button',{onClick:()=>onEditLesson&&onEditLesson(l),
+                    style:{padding:'4px 9px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:11,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:4}}
+                    , React.createElement(Ic,{n:'edit',size:11,stroke:C.text}), 'Modifica'
+                  )
+                  , React.createElement('button',{onClick:()=>setConfirmDel(l),
+                    style:{padding:'4px 9px',borderRadius:7,border:`1px solid ${C.redBorder}`,background:C.redBg,color:C.red,fontSize:11,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:4}}
+                    , React.createElement(Ic,{n:'trash',size:11,stroke:C.red}), 'Elimina'
+                  )
+                )
+              )
+            );
+          })
+        )
+      )
+    )
+    , laFiltered.length > 200 && React.createElement('p',{style:{textAlign:'center',padding:12,fontSize:12,color:C.textDim}},
+      'Mostrate 200 di '+laFiltered.length+' lezioni — usa i filtri per restringere')
+    , confirmDel && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
+      , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:400,width:'100%',border:`1px solid ${C.border}`}}
+        , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:8,color:C.red}},'Elimina lezione')
+        , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:20}},
+          'Eliminare la lezione del ',confirmDel.date,' — ',(confirmDel.student||confirmDel.courseId||'?'),'? Questa azione non è reversibile.')
+        , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+          , React.createElement('button',{onClick:()=>setConfirmDel(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+          , React.createElement('button',{onClick:()=>handleDelConfirm(confirmDel),style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.red,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}},'Elimina')
+        )
+      )
+    )
+  );
+};
+
+
 const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
@@ -7036,6 +7236,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const _cvNome = (_appUserCV && _appUserCV.nome) || window.__currentUserName__ || "";
     const currentStudent = _cvNome; // usa il nome dall'utente loggato
     const [appView,     setAppView]    = useState("calendario"); // calendario | repertorio | recupero | lezioni_admin
+
   
     const closeModal = () => { setModal(null); setSelLesson(null); setAddDate(null); setNextLessonCreated(null); };
   React.useEffect(()=>{ if(qaCV==="addLezione"){ setModal("add"); if(clearQaCV)clearQaCV(); } },[qaCV]);
@@ -7382,209 +7583,22 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           )
 
           /* ── VISTA RECUPERO ─────────────────────────────── */
-          , appView==='recupero' && (() => {
-            const oggi_r = new Date(); oggi_r.setHours(0,0,0,0);
-            const lezioniRec = visibleLessons.filter(l=>l.inRecupero);
-            const [rfCorso, setRfCorso] = React.useState('');
-            const [rfDocente, setRfDocente] = React.useState('');
-            const [rfAllievo, setRfAllievo] = React.useState('');
-            const docenteOptsR = [...new Set(lezioniRec.map(l=>l.teacher).filter(Boolean))].sort();
-            const allievoOptsR = [...new Set(lezioniRec.map(l=>l.student).filter(Boolean))].sort();
-            const corsoOptsR   = [...new Set(lezioniRec.map(l=>l.instrument||l.courseId).filter(Boolean))].sort();
-            const filtered = lezioniRec.filter(l =>
-              (!rfCorso   || l.instrument===rfCorso   || l.courseId===rfCorso) &&
-              (!rfDocente || l.teacher===rfDocente) &&
-              (!rfAllievo || l.student===rfAllievo)
-            );
-            return React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
-              , React.createElement('div', {style:{marginBottom:16, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}
-                , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif", fontSize:22, fontWeight:600, margin:0}}, 'Lezioni in Recupero')
-                , React.createElement('span', {style:{background:'rgba(245,158,11,0.1)', color:'#f59e0b', border:'1px solid rgba(245,158,11,0.3)', borderRadius:20, padding:'3px 10px', fontSize:12}}, lezioniRec.length+' lezioni')
-              )
-              /* Filtri */
-              , React.createElement('div', {style:{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}}
-                , React.createElement('select', {value:rfCorso, onChange:e=>setRfCorso(e.target.value),
-                  style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfCorso?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
-                  , React.createElement('option',{value:''},'Tutti i corsi')
-                  , corsoOptsR.map(c=>React.createElement('option',{key:c,value:c},c))
-                )
-                , React.createElement('select', {value:rfDocente, onChange:e=>setRfDocente(e.target.value),
-                  style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfDocente?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
-                  , React.createElement('option',{value:''},'Tutti i docenti')
-                  , docenteOptsR.map(d=>React.createElement('option',{key:d,value:d},d))
-                )
-                , React.createElement('select', {value:rfAllievo, onChange:e=>setRfAllievo(e.target.value),
-                  style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfAllievo?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
-                  , React.createElement('option',{value:''},'Tutti gli allievi')
-                  , allievoOptsR.map(a=>React.createElement('option',{key:a,value:a},a))
-                )
-              )
-              , filtered.length===0
-                ? React.createElement('div',{style:{textAlign:'center', padding:'60px 20px', color:C.textMuted}}
-                  , React.createElement('div',{style:{fontSize:40,marginBottom:12}},'✓')
-                  , React.createElement('div',{style:{fontSize:16,fontWeight:600,marginBottom:8}},'Nessuna lezione in recupero')
-                  , React.createElement('p',{style:{fontSize:13,color:C.textDim}},'Tutte le lezioni sono in regola.')
-                )
-                : React.createElement('div',{style:{background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, overflow:'hidden'}}
-                  , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
-                    , React.createElement('thead',null
-                      , React.createElement('tr',{style:{background:C.bg, borderBottom:`1px solid ${C.border}`}}
-                        , ['Data','Allievo','Docente','Strumento','Scadenza','Stato','Azioni'].map(h=>
-                          React.createElement('th',{key:h,style:{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},h)
-                        )
-                      )
-                    )
-                    , React.createElement('tbody',null
-                      , filtered.map(l => {
-                        const scad = l.recuperoScadenza ? new Date(l.recuperoScadenza+'T00:00:00') : null;
-                        const scaduto = scad && scad < oggi_r;
-                        const urgente = scad && !scaduto && (scad - oggi_r)/86400000 <= 5;
-                        return React.createElement('tr',{key:l.id, style:{borderBottom:`1px solid ${C.border}`},
-                          onMouseEnter:e=>e.currentTarget.style.background=C.bg,
-                          onMouseLeave:e=>e.currentTarget.style.background='transparent'}
-                          , React.createElement('td',{style:{padding:'11px 14px',fontSize:13}},l.date||'—')
-                          , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,fontWeight:500}},l.student||'—')
-                          , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,color:C.textMuted}},l.teacher||'—')
-                          , React.createElement('td',{style:{padding:'11px 14px',fontSize:12}}
-                            , React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},l.instrument||l.courseId||'—')
-                          )
-                          , React.createElement('td',{style:{padding:'11px 14px',fontSize:12,color:scaduto?C.red:urgente?C.orange:C.textMuted}},
-                            l.recuperoScadenza ? l.recuperoScadenza : '—'
-                          )
-                          , React.createElement('td',{style:{padding:'11px 14px'}}
-                            , scaduto
-                              ? React.createElement('span',{style:{background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},'SCADUTO → ASSENTE')
-                              : urgente
-                              ? React.createElement('span',{style:{background:'rgba(245,158,11,0.1)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.3)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In scadenza')
-                              : React.createElement('span',{style:{background:'rgba(245,158,11,0.08)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.2)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In recupero')
-                          )
-                          , React.createElement('td',{style:{padding:'11px 14px'}}
-                            , React.createElement('button',{onClick:()=>{setSelLesson(l);setModal(role==='docente'?'edit':'detail');},
-                              style:{padding:'4px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
-                              , 'Apri'
-                            )
-                          )
-                        );
-                      })
-                    )
-                  )
-                )
-            );
-          })()
+          , appView==='recupero' && React.createElement(RecuperoView, {
+              lessons: visibleLessons,
+              role: role,
+              onOpenLesson: (l) => { setSelLesson(l); setModal(role==='docente'?'edit':'detail'); },
+            })
 
           /* ── ELENCO LEZIONI ADMIN ───────────────────────── */
-          , appView==='lezioni_admin' && role==='admin' && (() => {
-            const [laSearch, setLaSearch] = React.useState('');
-            const [laDocente, setLaDocente] = React.useState('');
-            const [laAllievo, setLaAllievo] = React.useState('');
-            const [laPresenza, setLaPresenza] = React.useState('');
-            const [confirmDel, setConfirmDel] = React.useState(null);
-            const docenteOptsA = [...new Set(lessons.map(l=>l.teacher).filter(Boolean))].sort();
-            const allievoOptsA = [...new Set(lessons.map(l=>l.student).filter(Boolean))].sort();
-            const laFiltered = lessons.filter(l =>
-              (!laDocente  || l.teacher===laDocente) &&
-              (!laAllievo  || l.student===laAllievo) &&
-              (!laPresenza || l.attendance===laPresenza || (laPresenza==='in_recupero'&&l.inRecupero)) &&
-              (!laSearch   || (l.student||'').toLowerCase().includes(laSearch.toLowerCase()) ||
-                              (l.teacher||'').toLowerCase().includes(laSearch.toLowerCase()) ||
-                              (l.topic||'').toLowerCase().includes(laSearch.toLowerCase()))
-            ).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-            const handleEditLa = (l) => { setSelLesson(l); setModal('edit'); };
-            const handleDeleteLa = (l) => {
-              setLessons(p=>p.filter(x=>x.id!==l.id));
-              // Sync Supabase
-              const sb=window.supabaseClient;
-              if(sb) sb.from('lezioni').delete().eq('id',l.id).then(({error})=>{ if(error) console.warn('[FM] delete lezione error:',error.message); });
-              setConfirmDel(null);
-            };
-            return React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
-              , React.createElement('div',{style:{marginBottom:16,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}
-                , React.createElement('h2',{style:{fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,margin:0}},'Elenco Lezioni')
-                , React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'3px 10px',fontSize:12}},laFiltered.length+' lezioni')
-              )
-              , React.createElement('div',{style:{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}
-                , React.createElement('input',{type:'text',placeholder:'Cerca allievo, docente, argomento...',value:laSearch,onChange:e=>setLaSearch(e.target.value),
-                  style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",minWidth:220}})
-                , React.createElement('select',{value:laDocente,onChange:e=>setLaDocente(e.target.value),
-                  style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:laDocente?C.text:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
-                  , React.createElement('option',{value:''},'Tutti i docenti')
-                  , docenteOptsA.map(d=>React.createElement('option',{key:d,value:d},d))
-                )
-                , React.createElement('select',{value:laAllievo,onChange:e=>setLaAllievo(e.target.value),
-                  style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:laAllievo?C.text:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
-                  , React.createElement('option',{value:''},'Tutti gli allievi')
-                  , allievoOptsA.map(a=>React.createElement('option',{key:a,value:a},a))
-                )
-                , React.createElement('select',{value:laPresenza,onChange:e=>setLaPresenza(e.target.value),
-                  style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:laPresenza?C.text:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
-                  , React.createElement('option',{value:''},'Tutte le presenze')
-                  , ['presente','assente','giustificato','recupero','in_recupero',''].map((v,i)=>
-                    v!=='' && React.createElement('option',{key:v,value:v}, v==='in_recupero'?'In recupero':v.charAt(0).toUpperCase()+v.slice(1))
-                  )
-                  , React.createElement('option',{value:'__nessuna__'},'Nessuna presenza')
-                )
-              )
-              , React.createElement('div',{style:{background:C.surface,borderRadius:12,border:`1px solid ${C.border}`,overflow:'hidden'}}
-                , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
-                  , React.createElement('thead',null
-                    , React.createElement('tr',{style:{background:C.bg,borderBottom:`1px solid ${C.border}`}}
-                      , ['Data','Ora','Allievo','Docente','Strumento','Argomento','Presenza','Azioni'].map(h=>
-                        React.createElement('th',{key:h,style:{padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},h)
-                      )
-                    )
-                  )
-                  , React.createElement('tbody',null
-                    , laFiltered.slice(0,200).map(l => {
-                      const att = l.inRecupero ? 'in_recupero' : (l.attendance||'');
-                      const s = ATT_STYLES[att] || {bg:'transparent',fg:C.textDim,bd:C.border};
-                      return React.createElement('tr',{key:l.id,style:{borderBottom:`1px solid ${C.border}`},
-                        onMouseEnter:e=>e.currentTarget.style.background=C.bg,
-                        onMouseLeave:e=>e.currentTarget.style.background='transparent'}
-                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:13}},l.date||'—')
-                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:13,color:C.textMuted}},l.hour||'—')
-                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:13,fontWeight:500}},l.student||l.courseId||'—')
-                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:13,color:C.textMuted}},l.teacher||'—')
-                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:12}}
-                          , React.createElement('span',{style:{background:C.blueBg,color:C.blue,borderRadius:20,padding:'2px 7px',fontSize:11}},l.instrument||'—')
-                        )
-                        , React.createElement('td',{style:{padding:'9px 12px',fontSize:12,color:C.textDim,maxWidth:180,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},l.topic||'—')
-                        , React.createElement('td',{style:{padding:'9px 12px'}}
-                          , att
-                            ? React.createElement('span',{style:{background:s.bg,color:s.fg,border:`1px solid ${s.bd}`,borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:500}},
-                                ATT_STYLES[att]?.label||att)
-                            : React.createElement('span',{style:{color:C.textDim,fontSize:11}},'—')
-                        )
-                        , React.createElement('td',{style:{padding:'9px 12px'}}
-                          , React.createElement('div',{style:{display:'flex',gap:6}}
-                            , React.createElement('button',{onClick:()=>handleEditLa(l),
-                              style:{padding:'4px 9px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:11,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:4}}
-                              , React.createElement(Ic,{n:'edit',size:11,stroke:C.text}), 'Modifica'
-                            )
-                            , React.createElement('button',{onClick:()=>setConfirmDel(l),
-                              style:{padding:'4px 9px',borderRadius:7,border:`1px solid ${C.redBorder}`,background:C.redBg,color:C.red,fontSize:11,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:4}}
-                              , React.createElement(Ic,{n:'trash',size:11,stroke:C.red}), 'Elimina'
-                            )
-                          )
-                        )
-                      );
-                    })
-                  )
-                )
-              )
-              , laFiltered.length > 200 && React.createElement('p',{style:{textAlign:'center',padding:12,fontSize:12,color:C.textDim}},`Mostrate 200 di ${laFiltered.length} lezioni — usa i filtri per restringere`)
-              /* Confirm delete dialog */
-              , confirmDel && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
-                , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:400,width:'100%',border:`1px solid ${C.border}`}}
-                  , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:8,color:C.red}},'Elimina lezione')
-                  , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:20}}, 'Eliminare la lezione del ', confirmDel.date, ' — ', confirmDel.student||confirmDel.courseId||'?', '? Questa azione non è reversibile.')
-                  , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
-                    , React.createElement('button',{onClick:()=>setConfirmDel(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
-                    , React.createElement('button',{onClick:()=>handleDeleteLa(confirmDel),style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.red,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}},'Elimina')
-                  )
-                )
-              )
-            );
-          })()
+          , appView==='lezioni_admin' && role==='admin' && React.createElement(LezioniAdminView, {
+              lessons: lessons,
+              onEditLesson: (l) => { setSelLesson(l); setModal('edit'); },
+              onDeleteLesson: (l) => {
+                setLessons(p=>p.filter(x=>x.id!==l.id));
+                const sb=window.supabaseClient;
+                if(sb) sb.from('lezioni').delete().eq('id',l.id).then(({error})=>{ if(error) console.warn('[FM] delete lezione error:',error.message); });
+              },
+            })
 
           /* Toolbar */
           , appView==='calendario' && React.createElement('div', { className: "cal-toolbar", style: {padding:isMobile?"10px 12px":"14px 24px", display:"flex", justifyContent:"space-between",
@@ -11281,6 +11295,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   const [fAllievo,setFAllievo]= useState("");
   const [fTipo,   setFTipo]   = useState(""); // 'lezione'|'spartito'|'file_brano'
   const [editAllegato, setEditAllegato] = useState(null);
+  const [editAllegatoDesc, setEditAllegatoDesc] = useState('');
   const [confirmDelAll, setConfirmDelAll] = useState(null);
 
   const handleDeleteAllegato = (a) => {
@@ -11427,7 +11442,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
                             padding:"5px 9px", borderRadius:7, border:`1px solid ${C.blueBorder}`, background:C.blueBg}}
                           , React.createElement(Ic, {n:"download", size:12, stroke:C.blue}), "Apri"
                         )
-                      , a._categoria==='lezione' && React.createElement('button',{onClick:()=>setEditAllegato(a),
+                      , a._categoria==='lezione' && React.createElement('button',{onClick:()=>{setEditAllegato(a);setEditAllegatoDesc(a.descrizione||'');},
                           style:{display:'flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 9px',borderRadius:7,
                             border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
                           , React.createElement(Ic,{n:'edit',size:11,stroke:C.text}), 'Modifica'
@@ -11462,16 +11477,15 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
         , React.createElement('div',{style:{marginBottom:14}}
           , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
           , React.createElement('input',{type:'text', defaultValue:editAllegato.descrizione||'',
-            id:'edit-allegato-desc',
+            onChange:e=>setEditAllegatoDesc(e.target.value),
             style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none',boxSizing:'border-box'}})
         )
         , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
           , React.createElement('button',{onClick:()=>setEditAllegato(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
           , React.createElement('button',{onClick:()=>{
-              const desc=document.getElementById('edit-allegato-desc')?.value||'';
-              if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===editAllegato.id?{...x,descrizione:desc}:x));
+              if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===editAllegato.id?{...x,descrizione:editAllegatoDesc}:x));
               const sb=window.supabaseClient;
-              if(sb) sb.from('allegati').update({descrizione:desc}).eq('id',editAllegato.id).then(({error})=>{ if(error) console.warn('[FM] edit allegato error:',error.message); });
+              if(sb) sb.from('allegati').update({descrizione:editAllegatoDesc}).eq('id',editAllegato.id).then(({error})=>{ if(error) console.warn('[FM] edit allegato error:',error.message); });
               setEditAllegato(null);
             }, style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.gold,color:'#0d1f4a',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},'Salva')
         )
