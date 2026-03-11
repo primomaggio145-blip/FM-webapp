@@ -120,14 +120,21 @@
       };
     },
     docenti(d) {
+      // strumenti: l'app usa stringa "Piano · Violino", il DB può avere jsonb array o text
+      const strumentiVal = Array.isArray(d.strumenti)
+        ? d.strumenti
+        : (d.strumenti ? d.strumenti.split(' · ').map(s => s.trim()).filter(Boolean) : null);
       return {
         id: d.id || null,
         nome: d.nome || d.name || '',
         teacher_key: d.teacherKey || d.nome || '',
         email: d.email || null, phone: d.phone || null,
-        strumenti: d.strumenti || null, bio: d.bio || null,
+        strumenti: strumentiVal,
+        colore: d.colore || null,
+        bio: d.bio || null,
         tariffa_ora: parseFloat(d.tariffaOra) || 0,
-        contratto: d.contratto || null, data_inizio: d.dataInizio || null,
+        contratto: d.contratto || null,
+        data_inizio: d.dataInizio || null,
         attivo: d.attivo !== false,
       };
     },
@@ -135,9 +142,11 @@
       return {
         id: c.id || null,
         nome: c.name || c.nome || '',
-        tipo: c.type || c.tipo || 'individuale',
-        descrizione: c.description || null, livelli: c.livelli || null,
-        foto: c.foto || null, visible: c.visible !== false,
+        tipo: c.type || c.tipo || 'individuale',  // DB usa "tipo"
+        descrizione: c.description || null,
+        livelli: c.livelli || null,
+        foto: c.foto || null,
+        visible: c.visible !== false,
       };
     },
     lezioni(l) {

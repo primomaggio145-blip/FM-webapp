@@ -6,7 +6,7 @@
 (function () {
   // ── CONFIGURA QUESTE DUE RIGHE CON I TUOI VALORI SUPABASE ────
   const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
-  const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjE0NDAsImV4cCI6MjA4NzkzNzQ0MH0.ScXeqKD73hu1zMwVWppybmNRqCtKWnR9C_pfNMjwQio';
+  const SUPABASE_ANON = 'INCOLLA_QUI_LA_TUA_ANON_KEY';
   // URL della Edge Function (dopo averla deployata)
   const EDGE_APPROVE  = `${SUPABASE_URL}/functions/v1/approve-user`;
   // ─────────────────────────────────────────────────────────────
@@ -45,27 +45,35 @@
       };
     },
     docente(r) {
+      // strumenti può essere array (jsonb) o stringa — normalizziamo a stringa
+      let strumentiStr = '';
+      if (Array.isArray(r.strumenti)) strumentiStr = r.strumenti.join(' · ');
+      else if (typeof r.strumenti === 'string') strumentiStr = r.strumenti;
       return {
-        id:         r.id,
-        nome:       r.nome        || '',
-        email:      r.email       || '',
-        phone:      r.phone       || '',
-        strumenti:  r.strumenti   || [],
-        colore:     r.colore      || '#1a4fa0',
-        teacherKey: r.teacher_key || r.nome || '',
-        bio:        r.bio         || '',
-        stato:      r.stato       || 'attivo',
+        id:          r.id,
+        nome:        r.nome           || '',
+        email:       r.email          || '',
+        phone:       r.phone          || '',
+        strumenti:   strumentiStr,
+        colore:      r.colore         || '#1a4fa0',
+        teacherKey:  r.teacher_key    || r.nome || '',
+        bio:         r.bio            || '',
+        stato:       r.stato          || 'attivo',
+        tariffaOra:  parseFloat(r.tariffa_ora) || 0,
+        contratto:   r.contratto      || '',
+        dataInizio:  r.data_inizio    || '',
+        corsi:       r.corsi          || [],
       };
     },
     corso(r) {
-      const docentiIds = (r.corsi_docenti || []).map(cd => cd.docente_id);
+      // docenti: array di ID dalla join corsi_docenti
+      const docenti = (r.corsi_docenti || []).map(cd => cd.docente_id);
       return {
         id:          r.id,
-        name:        r.nome       || '',
-        instrument:  r.strumento  || '',
-        tipo:        r.tipo       || 'individuale',
-        description: r.descrizione|| '',
-        docentiIds,
+        name:        r.nome           || '',
+        type:        r.tipo           || 'individuale',  // app usa "type" non "tipo"
+        description: r.descrizione    || '',
+        docenti,                                          // app usa "docenti" non "docentiIds"
       };
     },
   };
