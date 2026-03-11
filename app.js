@@ -12594,7 +12594,7 @@ function App() {
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
       , React.createElement('div', { style: {display:"flex",height:"100vh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: ()=>{ if(window.FM_AUTH) window.FM_AUTH.signOut().catch(()=>{}); setUser(null); setSharedRuolo("admin"); try{window.__currentUserName__="";}catch(e){}}, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: async ()=>{ try{ if(window.FM_AUTH) await window.FM_AUTH.signOut(); }catch(e){} setUser(null); setSharedRuolo("admin"); setView("dashboard"); setSchermata("login"); setPanKey(p=>p+1); try{window.__currentUserName__="";}catch(e){}}, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , settingsDrawerOpen && React.createElement(SettingsDrawer, {
             open: settingsDrawerOpen,
             onClose: ()=>setSettingsDrawerOpen(false),
