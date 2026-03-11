@@ -43,7 +43,21 @@
     const FA = window.FMAdapter;
     return FA ? FA.corso(r) : r;
   }
-  function adaptLezione(r) {
+  function adaptLezione(r, allegatiAll) {
+    // Collega gli allegati di questa lezione (dal array globale allegati)
+    const allegati = allegatiAll
+      ? allegatiAll.filter(a => a.lezione_id === r.id).map(a => ({
+          id: a.id,
+          fileName: a.file_name || '',
+          fileUrl: a.file_url || null,
+          fileType: a.file_type || '',
+          descrizione: a.descrizione || '',
+          corso: a.corso || '',
+          lezioneId: a.lezione_id || null,
+          allievoNome: a.allievo_nome || '',
+          createdAt: a.created_at || null,
+        }))
+      : [];
     return {
       id: r.id, date: r.data, hour: r.ora || '', student: r.student || '',
       instrument: r.strumento || r.instrument || '', teacher: r.teacher || '', room: r.room || '',
@@ -51,6 +65,8 @@
       recurrence: r.recurrence || 'Nessuna', notes: r.notes || '',
       exercises: r.exercises || '', repertorio: r.repertorio || '',
       type: r.tipo || 'individuale',
+      linkUrl: r.link_url || '',
+      allegati,
     };
   }
   function adaptQuota(r) {
@@ -414,7 +430,7 @@
         students: (sS || []).map(adaptStudente),
         docenti:  (sD || []).map(adaptDocente),
         courses:  (sC || []).map(adaptCorso),
-        lessons:  (sL || []).map(adaptLezione),
+        lessons:  (sL || []).map(r => adaptLezione(r, sAL || [])),
         brani:    (sB || []).map(adaptBrano),
         spese:    (sP || []).map(adaptSpesa),
         entrate:  (sQ || []).map(adaptQuota),
@@ -454,7 +470,7 @@
       { t: 'studenti', k: 'students', o: 'nome',  a: adaptStudente },
       { t: 'docenti',  k: 'docenti',  o: 'nome',  a: adaptDocente  },
       { t: 'corsi',    k: 'courses',  o: 'nome',  a: adaptCorso    },
-      { t: 'lezioni',  k: 'lessons',  o: 'data',  a: adaptLezione  },
+      { t: 'lezioni',  k: 'lessons',  o: 'data',  a: (r) => adaptLezione(r, [])  },
       { t: 'quote',    k: 'entrate',  o: 'mese',  a: adaptQuota    },
       { t: 'spese',    k: 'spese',    o: 'data',  a: adaptSpesa    },
       { t: 'brani',    k: 'brani',    o: 'titolo', a: adaptBrano    },
