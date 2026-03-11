@@ -1215,6 +1215,66 @@ const FormRecupero = ({onBack})=>{
 // ════════════════════════════════════════════════════════════════════════════════
 
 // ─── COSTANTI ─────────────────────────────────────────────────────────────────
+// ─── FORM IMPOSTA PASSWORD (da link invito/reset) ─────────────────────────────
+const FormSetPassword = ({onSuccess}) => {
+  const [pw1,     setPw1]     = useState("");
+  const [pw2,     setPw2]     = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err,     setErr]     = useState("");
+  const [done,    setDone]    = useState(false);
+
+  const handleSave = async () => {
+    if (pw1.length < 8) { setErr("La password deve essere di almeno 8 caratteri"); return; }
+    if (pw1 !== pw2)    { setErr("Le password non coincidono"); return; }
+    setLoading(true); setErr("");
+    try {
+      const sb = window.supabaseClient;
+      const { error } = await sb.auth.updateUser({ password: pw1 });
+      if (error) throw error;
+      setDone(true);
+      setTimeout(() => onSuccess(), 2000);
+    } catch(e) {
+      setErr(e.message || "Errore durante il salvataggio");
+      setLoading(false);
+    }
+  };
+
+  if (done) return (
+    React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:20,alignItems:"center",textAlign:"center",paddingTop:16}}
+      , React.createElement('div', {style:{width:60,height:60,borderRadius:"50%",background:C.greenBg,border:`2px solid ${C.greenBorder}`,
+          display:"flex",alignItems:"center",justifyContent:"center"}}
+        , React.createElement(Ic, {n:"check",size:26,stroke:C.green})
+      )
+      , React.createElement('div', null
+        , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:24,fontWeight:600,marginBottom:8}}, "Password impostata!")
+        , React.createElement('p', {style:{fontSize:13,color:C.textMuted,lineHeight:1.7}}, "Accesso in corso...")
+      )
+    )
+  );
+
+  return (
+    React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:22}}
+      , React.createElement('div', null
+        , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,marginBottom:6}}, "Imposta la password")
+        , React.createElement('p', {style:{fontSize:13,color:C.textMuted,lineHeight:1.6}}, "Scegli una password per accedere al portale.")
+      )
+      , React.createElement(Input, {label:"Nuova password *", type:"password",
+          value:pw1, onChange:e=>{setPw1(e.target.value);setErr("");}})
+      , React.createElement(Input, {label:"Conferma password *", type:"password",
+          value:pw2, onChange:e=>{setPw2(e.target.value);setErr("");}})
+      , err && React.createElement('div', {style:{fontSize:12,color:C.red,background:C.redBg,
+          border:`1px solid ${C.redBorder}`,borderRadius:8,padding:"10px 14px"}}, err)
+      , React.createElement('button', {onClick:handleSave, disabled:loading,
+          style:{padding:"13px",borderRadius:10,background:C.gold,border:"none",
+            color:"#ffffff",cursor:loading?"not-allowed":"pointer",fontSize:14,
+            fontWeight:600,fontFamily:"'Open Sans',sans-serif",opacity:loading?0.7:1}}
+        , loading ? "Salvataggio..." : "Imposta password e accedi"
+      )
+    )
+  );
+};
+
+
 const oggi   = new Date();
 const ANNO   = oggi.getFullYear();
 const MESE   = oggi.getMonth();
@@ -4923,7 +4983,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson }) => {
+const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali }) => {
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
   const hex = insHex(lesson.instrument);
@@ -4941,7 +5001,11 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
   const [localTopic,     setLocalTopic]     = useState(lesson.topic     || "");
   const [localExercises, setLocalExercises] = useState(lesson.exercises || "");
   const [localLinkUrl,   setLocalLinkUrl]   = useState(lesson.linkUrl   || "");
-  const [localAllegati,  setLocalAllegati]  = useState(lesson.allegati  || []);
+  // Allegati: usa prima quelli da allegatiGlobali (da Supabase), poi lesson.allegati
+  const allegatiFiltrati = (allegatiGlobali||[]).filter(a=>(a.lezioneId||a.lezione_id)===lesson.id);
+  const [localAllegati,  setLocalAllegati]  = useState(allegatiFiltrati.length > 0 ? allegatiFiltrati : (lesson.allegati || []));
+  // Aggiorna se cambiano gli allegati globali
+  useEffect(()=>{ if(allegatiGlobali){ const f=(allegatiGlobali||[]).filter(a=>(a.lezioneId||a.lezione_id)===lesson.id); setLocalAllegati(f); } },[allegatiGlobali]);
   const [saving, setSaving] = useState(false);
 
   const saveField = (patch) => {
@@ -5204,16 +5268,35 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                           }
                         } catch(err) { console.warn('[FM] upload error', err); }
                       }
-                      newAllegati.push({
-                        id: 'att_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+                      const attId = 'att_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+                      const attRow = {
+                        id: attId,
                         fileName: file.name, fileUrl, fileType: file.type, descrizione:'',
                         corso: lesson.instrument||'', lezioneId: lesson.id,
                         allievoNome: lesson.student||'', createdAt: new Date().toISOString(),
-                      });
+                      };
+                      // Salva subito su Supabase allegati
+                      if (sb && fileUrl) {
+                        try {
+                          await sb.from('allegati').insert({
+                            id: attId,
+                            lezione_id: lesson.id,
+                            allievo_nome: lesson.student||'',
+                            corso: lesson.instrument||'',
+                            file_url: fileUrl,
+                            file_name: file.name,
+                            file_type: file.type,
+                            descrizione: '',
+                            created_at: new Date().toISOString(),
+                          });
+                        } catch(dbErr) { console.warn('[FM] allegato DB error', dbErr); }
+                      }
+                      newAllegati.push(attRow);
                     }
                     const updated = [...(localAllegati||[]), ...newAllegati];
                     setLocalAllegati(updated);
-                    saveField({allegati: updated});
+                    // Aggiorna anche sharedAllegati globale se disponibile
+                    if (window.__FM_RELOAD__) window.__FM_RELOAD__();
                     e.target.value='';
                   }})
             )
@@ -6988,6 +7071,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             onAttendance: handleAttendance,
             onIscrizione: handleIscrizioneProva,
             onUpdateLesson: (updated) => { setLessons(p => p.map(l => l.id === updated.id ? {...l,...updated} : l)); },
+            allegatiGlobali: propAllegati,
             students: propStudents,
             nextLessonDate: _optionalChain([selLesson, 'optionalAccess', _55 => _55.recurrence]) && selLesson.recurrence !== 'Nessuna' ? nextLessonCreated : null,
             onClose: closeModal,
@@ -11941,11 +12025,21 @@ function App() {
   const [sharedRuolo,   setSharedRuolo]   = useState("admin");
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
 
-  // ── Ripristina sessione Auth al refresh pagina ──────────────────
+  // ── Ripristina sessione Auth al refresh pagina + gestisci link invito ──────
   useEffect(()=>{
     if(!window.FM_AUTH) return;
     (async()=>{
       try {
+        // Controlla se siamo arrivati da un link di invito/reset (hash nell'URL)
+        const hash = window.location.hash;
+        if (hash && hash.includes('access_token') && hash.includes('type=invite')) {
+          // Supabase ha già gestito il token e creato la sessione
+          setSchermata("setpassword");
+          // Pulisci l'URL
+          window.history.replaceState(null, '', window.location.pathname);
+          return;
+        }
+
         const session = await window.FM_AUTH.getSession();
         if(session?.user){
           const profilo = await window.FM_AUTH.getProfilo(session.user.id);
@@ -11953,6 +12047,7 @@ function App() {
             setUser({email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id});
             setSharedRuolo(profilo.ruolo||"admin");
             try{ window.__currentUserName__=profilo.nome||""; }catch(e){}
+            setSchermata("app");
           }
         }
       } catch(e){}
@@ -12028,6 +12123,26 @@ function App() {
               )
               , schermata==="register" && React.createElement(FormRegistrazione, { onBack: ()=>cambiaSchermata("login"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10758}})
               , schermata==="recover"   && React.createElement(FormRecupero, { onBack: ()=>cambiaSchermata("login"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10759}})
+              , schermata==="setpassword" && React.createElement(FormSetPassword, {
+                  onSuccess: async () => {
+                    // Dopo aver impostato la password, carica il profilo e fa login
+                    try {
+                      const sb = window.supabaseClient;
+                      const { data: { session } } = await sb.auth.getSession();
+                      if (session?.user) {
+                        const profilo = await window.FM_AUTH.getProfilo(session.user.id);
+                        if (profilo) {
+                          // Aggiorna profilo da invitato ad attivo
+                          await sb.from('profili').update({ stato: 'attivo' }).eq('id', session.user.id);
+                          setUser({email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id});
+                          setSharedRuolo(profilo.ruolo||"admin");
+                          try{ window.__currentUserName__=profilo.nome||""; }catch(e){}
+                          setSchermata("app");
+                        }
+                      }
+                    } catch(e) { cambiaSchermata("login"); }
+                  }
+                })
             )
           )
         )
