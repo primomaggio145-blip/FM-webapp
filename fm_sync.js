@@ -382,6 +382,7 @@
         { data: sL, error: e4 }, { data: sB, error: e5 },
         { data: sP, error: e6 }, { data: sQ, error: e7 },
         { data: sEV, error: e8 }, { data: sAL, error: e9 },
+        { data: sCFG },
       ] = await Promise.all([
         sb.from('studenti').select('*').order('nome'),
         sb.from('docenti').select('*').order('nome'),
@@ -392,6 +393,7 @@
         sb.from('quote').select('*').order('anno').order('mese'),
         sb.from('concerti').select('*').order('data', { ascending: false }),
         sb.from('allegati').select('*').order('created_at', { ascending: false }),
+        sb.from('sito_config').select('*'),
       ]);
 
       // Log errori
@@ -400,7 +402,15 @@
         if (e) fail(`Errore lettura ${t}:`, e.message);
       });
 
+      // Converti array di righe sito_config in oggetto config
+      const configFromDB = {};
+      (sCFG || []).forEach(r => {
+        try { configFromDB[r.chiave] = JSON.parse(r.valore); }
+        catch(e) { configFromDB[r.chiave] = r.valore; }
+      });
+
       const data = {
+        config: Object.keys(configFromDB).length > 0 ? configFromDB : null,
         students: (sS || []).map(adaptStudente),
         docenti:  (sD || []).map(adaptDocente),
         courses:  (sC || []).map(adaptCorso),

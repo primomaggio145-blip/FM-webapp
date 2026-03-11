@@ -11931,7 +11931,7 @@ function App() {
   const [sharedRepertorio,     setSharedRepertorio]     = useState(_d.brani      || INIT_BRANI);
   const [sharedConcerti,       setSharedConcerti]       = useState(_d.concerti   || INIT_CONCERTI);
   const [sharedAllegati,       setSharedAllegati]       = useState(_d.allegati   || []);
-  const [sharedConfig,         setSharedConfig]         = useState(CONFIG_DEFAULT);
+  const [sharedConfig,         setSharedConfig]         = useState(_d.config ? {...CONFIG_DEFAULT, ..._d.config} : CONFIG_DEFAULT);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
   const [sharedSpese,          setSharedSpese]          = useState(_d.spese      || INIT_SPESE);
   const [sharedAnniScolastici, setSharedAnniScolastici] = useState(INIT_ANNI_SCOLASTICI);
@@ -12132,10 +12132,22 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
   const ruolo     = propRuolo     !== undefined ? propRuolo     : _lRuolo;
   const setRuolo  = propSetRuolo  !== undefined ? propSetRuolo  : _setLRuolo;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setConfig(draft);
     setSaved(true);
     setTimeout(()=>setSaved(false), 2000);
+    // Salva su Supabase sito_config
+    const sb = window.supabaseClient;
+    if (sb) {
+      try {
+        const rows = Object.entries(draft).map(([chiave, valore]) => ({
+          chiave,
+          valore: typeof valore === 'object' ? JSON.stringify(valore) : String(valore ?? ''),
+          updated_at: new Date().toISOString(),
+        }));
+        await sb.from('sito_config').upsert(rows, { onConflict: 'chiave' });
+      } catch(e) { console.warn('[FM] Errore salvataggio config:', e); }
+    }
   };
 
   return React.createElement('div', {style:{maxWidth:800,margin:"0 auto",padding:"24px 24px"}}
