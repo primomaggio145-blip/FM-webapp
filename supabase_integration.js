@@ -131,12 +131,14 @@
 
     // Admin: approva richiesta → manda email invito
     async approvaRichiesta({ richiestaId, nome, email, ruolo }) {
+      // Usa session token se disponibile, altrimenti anon key (admin senza sessione Auth)
       const session = await window.FM_AUTH.getSession();
+      const token = (session && session.access_token) ? session.access_token : SUPABASE_ANON;
       const res = await fetch(window.SUPABASE_EDGE_APPROVE, {
         method: 'POST',
         headers: {
           'Content-Type':  'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          'Authorization': `Bearer ${token}`,
           'apikey':        SUPABASE_ANON,
         },
         body: JSON.stringify({ action: 'approva', richiestaId, nome, email, ruolo }),
