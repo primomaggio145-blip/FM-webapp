@@ -902,7 +902,7 @@ const FormLogin = ({onSuccess,onRegistrazione,onRecupero})=>{
           if(!profilo){ setErr({form:"Profilo non trovato. Contatta l'amministratore."}); setLoading(false); return; }
           if(profilo.stato==='sospeso'){ setErr({form:"Il tuo account è stato sospeso. Contatta l'amministratore."}); setLoading(false); return; }
           if(profilo.stato==='invitato'){ setErr({form:"Account non ancora attivato. Imposta la password dal link nell'email di invito."}); setLoading(false); return; }
-          onSuccess({email:user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:user.id});
+          onSuccess({email:user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null});
         } else {
           // Fallback DEMO (sviluppo locale senza Supabase)
           const DEMO={"admin@accademia.it":{password:"admin123",nome:"Marco Bianchi",ruolo:"admin"},"rossi@accademia.it":{password:"musica2024",nome:"Prof. Rossi",ruolo:"docente"},"sofia@accademia.it":{password:"sofia2024",nome:"Sofia Marchetti",ruolo:"allievo"}};
@@ -2598,9 +2598,18 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     // Dati filtrati per allievo loggato (definiti dopo _students/_entrate)
     const myNome = (appUser && appUser.nome) || "";
     const myDocNome = ruolo==="docente" ? myNome : "";
-    const myDocRecord = ruolo==="docente" ? (_docenti||[]).find(d=>d.teacherKey===myNome||(d.nome||"").toLowerCase().includes(myNome.toLowerCase())) : null;
+    // Preferisci ID diretto dal profilo, fallback a match per nome
+    const myDocenteId = (appUser && appUser.docenteId) || null;
+    const myAllievoId = (appUser && appUser.allievoId) || null;
+    const myDocRecord = ruolo==="docente"
+      ? (myDocenteId
+          ? (_docenti||[]).find(d=>String(d.id)===String(myDocenteId))
+          : (_docenti||[]).find(d=>d.teacherKey===myNome||(d.nome||"").toLowerCase().includes(myNome.toLowerCase())))
+      : null;
     const myStudentRecord = ruolo==="allievo"
-      ? (_students.find(s=>(s.name||s.nome||"").toLowerCase()===myNome.toLowerCase())||null)
+      ? (myAllievoId
+          ? (_students.find(s=>String(s.id)===String(myAllievoId))||null)
+          : (_students.find(s=>(s.name||s.nome||"").toLowerCase()===myNome.toLowerCase())||null))
       : null;
     const myStudentId = myStudentRecord ? myStudentRecord.id : null;
     const allieviAttivi    = _students.filter(a=>a.status==="attivo"||a.stato==="attivo").length;
@@ -10557,8 +10566,8 @@ const INIT_RICHIESTE = [
 ];
 
 // ─── DRAWER DETTAGLIO UTENTE ──────────────────────────────────────────────────
-const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin})=>{
-  const [draft,setDraft]=useState({...utente});
+const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin,students,docenti})=>{
+  const [draft,setDraft]=useState({...utente, docenteId:utente.docenteId||null, allievoId:utente.allievoId||null});
   const [tab,setTab]=useState("profilo");
   const r=ruoloById(draft.ruolo);
   const isSelf=isCurrentAdmin&&utente.id==="u1";// non può modificare se stesso
@@ -10649,8 +10658,42 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
                     fontFamily:"'Open Sans',sans-serif",resize:"vertical"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9227}})
               )
 
+              /* ── Collega record allievo/docente ── */
+              , (draft.ruolo==='allievo'||draft.ruolo==='docente') && (
+                React.createElement('div', {style:{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:'14px 16px'}}
+                  , React.createElement('div', {style:{fontSize:10,color:C.textMuted,letterSpacing:'.08em',textTransform:'uppercase',marginBottom:10}}
+                    , React.createElement(Ic,{n:'link',size:11,stroke:C.textMuted}), ' Collega record '
+                    , React.createElement('span',{style:{color:C.gold}}, draft.ruolo==='allievo'?'Allievo':'Docente')
+                  )
+                  , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:12,lineHeight:1.5}},
+                    'Collega questo utente al suo record nel gestionale. I dati (lezioni, pagamenti, ecc.) verranno filtrati in base a questa associazione.')
+                  , React.createElement('select', {
+                      value: draft.ruolo==='allievo' ? (draft.allievoId||'') : (draft.docenteId||''),
+                      onChange: e => {
+                        const val = e.target.value||null;
+                        if (draft.ruolo==='allievo') setD('allievoId', val);
+                        else setD('docenteId', val);
+                      },
+                      style:{width:'100%',padding:'10px 12px',borderRadius:8,
+                        border:`1px solid ${C.border}`,background:C.surface,
+                        color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none'}
+                    }
+                    , React.createElement('option',{value:''},'— Nessun collegamento —')
+                    , draft.ruolo==='allievo'
+                      ? (students||[]).map(s=>React.createElement('option',{key:s.id,value:String(s.id)},s.name||s.nome||''))
+                      : (docenti||[]).map(d=>React.createElement('option',{key:d.id,value:String(d.id)},d.nome||d.name||''))
+                  )
+                  , (draft.ruolo==='allievo'?draft.allievoId:draft.docenteId) && (
+                    React.createElement('div',{style:{marginTop:8,fontSize:11,color:C.green,display:'flex',alignItems:'center',gap:5}}
+                      , React.createElement(Ic,{n:'check',size:11,stroke:C.green})
+                      , 'Collegato — i dati vengono filtrati automaticamente al login'
+                    )
+                  )
+                )
+              )
+
               /* Info di sistema */
-              , React.createElement('div', { style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 16px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9235}}
+              , React.createElement('div', { style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 16px"}}
                 , React.createElement('div', { style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9236}}, "Informazioni account" )
                 , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:7}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9237}}
                   , [
@@ -11068,8 +11111,10 @@ const AllegatiView = ({ allegati:propAllegati, lessons:propLessons, students:pro
   );
 };
 
-const UtentiView = () => {
+const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
   const isMobile = useIsMobile();
+  const allStudents = propStudents || [];
+  const allDocenti  = propDocenti  || [];
   const [utenti,    setUtenti]    = useState(INIT_UTENTI);
     const [richieste, setRichieste] = useState(INIT_RICHIESTE);
     const [tab,       setTab]       = useState("utenti");
@@ -11104,6 +11149,8 @@ const UtentiView = () => {
               ultimoAccesso:p.updated_at?.split("T")[0]||null,
               permessi:     {...(PERM_DEFAULT[p.ruolo]||{})},
               note:         p.note||'',
+              docenteId:    p.docente_id||null,
+              allievoId:    p.allievo_id||null,
             })));
           }
           if(richiesteLive.length>0){
@@ -11148,6 +11195,20 @@ const UtentiView = () => {
       setUtenti(p=>p.map(u=>u.id===draft.id?{...draft}:u));
       setDrawer(null);
       showToast(`${draft.nome} aggiornato`);
+      // Salva su Supabase: nome, ruolo, note, docente_id, allievo_id
+      const sb = window.supabaseClient;
+      if (sb) {
+        sb.from('profili').update({
+          nome:       draft.nome,
+          ruolo:      draft.ruolo,
+          note:       draft.note||null,
+          docente_id: draft.docenteId ? parseInt(draft.docenteId,10)||draft.docenteId : null,
+          allievo_id: draft.allievoId ? parseInt(draft.allievoId,10)||draft.allievoId : null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', draft.id).then(({error}) => {
+          if (error) console.warn('[FM] salvaUtente error:', error.message);
+        });
+      }
     };
     const sospendiUtente=(u)=>{
       const nuovoStato=u.stato==="sospeso"?"attivo":"sospeso";
@@ -11456,9 +11517,11 @@ const UtentiView = () => {
             onClose: ()=>setDrawer(null),
             onSave: salvaUtente,
             isCurrentAdmin: true,
+            students: allStudents,
+            docenti: allDocenti,
             onSospendi: u=>{setSelUtente(u);setModal("confirm_sospendi");},
-            onElimina: u=>{setSelUtente(u);setModal("confirm_elimina");}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9807}}
-          )
+            onElimina: u=>{setSelUtente(u);setModal("confirm_elimina");}
+          })
         )
 
         /* ── MODALI ── */
@@ -12452,7 +12515,7 @@ function App() {
         if(session?.user){
           const profilo = await window.FM_AUTH.getProfilo(session.user.id);
           if(profilo && profilo.stato!=='sospeso'){
-            setUser({email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id});
+            setUser({email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null});
             setSharedRuolo(profilo.ruolo||"admin");
             try{ window.__currentUserName__=profilo.nome||""; }catch(e){}
             setSchermata("app");
@@ -12529,7 +12592,7 @@ function App() {
             , React.createElement('div', { key: panKey, style: {width:"100%",maxWidth:400,padding:"0 4px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10750}}
               , schermata==="login" && (
                 React.createElement(FormLogin, {
-                  onSuccess: u=>{setUser(u);setSharedRuolo(u.ruolo||"admin");setView("dashboard"); try{window.__currentUserName__=u.nome||"";}catch(e){}},
+                  onSuccess: u=>{setUser(u);setSharedRuolo(u.ruolo||"admin");setView("dashboard"); try{window.__currentUserName__=u.nome||"";}catch(e){}; if(u.ruolo==="admin"&&window.FM_AUTH?.getRichieste){window.FM_AUTH.getRichieste().then(r=>setSharedRichieste(r||[])).catch(()=>{});}},  
                   onRegistrazione: ()=>cambiaSchermata("register"),
                   onRecupero: ()=>cambiaSchermata("recover"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10752}}
                 )
@@ -12547,7 +12610,7 @@ function App() {
                         if (profilo) {
                           // Aggiorna profilo da invitato ad attivo
                           await sb.from('profili').update({ stato: 'attivo' }).eq('id', session.user.id);
-                          setUser({email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id});
+                          setUser({email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null});
                           setSharedRuolo(profilo.ruolo||"admin");
                           try{ window.__currentUserName__=profilo.nome||""; }catch(e){}
                           setSchermata("app");
@@ -12583,7 +12646,7 @@ function App() {
     repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
     allegati:    React.createElement(AllegatiView, { allegati: sharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
-    utenti:      (user?.ruolo||"admin")==="admin" && React.createElement(UtentiView, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10780}}),
+    utenti:      (user?.ruolo||"admin")==="admin" && React.createElement(UtentiView, { students: sharedStudents, docenti: sharedDocenti }),
     sitoWeb:       null,
     impostazioni:  React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo }),
     schedaScuola:  React.createElement(SchedaScuolaView, { config: sharedConfig }),
