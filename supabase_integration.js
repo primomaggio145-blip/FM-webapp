@@ -109,7 +109,7 @@
     },
 
     async getProfilo(userId) {
-      const { data, error } = await sb.from('profili').select('*').eq('id', userId).single();
+      const { data, error } = await sb.from('profili').select('*').eq('id', userId).maybeSingle();
       if (error) return null;
       return data;
     },

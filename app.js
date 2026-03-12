@@ -13598,7 +13598,7 @@ const ModulisticaView = () => {
       const { data, error: listErr } = await sb.storage.from(BUCKET).list(MOD_PREFIX, { limit: 200, sortBy:{column:'created_at',order:'desc'} });
       if (listErr) throw listErr;
       // Carica metadati (categoria) da sito_config
-      const { data: metaRow } = await sb.from('sito_config').select('valore').eq('chiave', META_KEY).single();
+      const { data: metaRow } = await sb.from('sito_config').select('valore').eq('chiave', META_KEY).maybeSingle();
       const meta = (() => { try { return JSON.parse(metaRow?.valore||'{}'); } catch { return {}; } })();
       const rows = (data||[]).filter(f=>f.name&&f.name!=='.emptyFolderPlaceholder').map(f => {
         const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(MOD_PREFIX+f.name);
