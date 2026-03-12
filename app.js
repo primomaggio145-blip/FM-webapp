@@ -12278,11 +12278,45 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const initDoc = { nome:"", email:"", phone:"", bio:"", tariffaOra:35, contratto:"Collaborazione", dataInizio:"", colore:C.gold, corsi:[] };
 
   const openNew  = () => { setDraft({...initDoc}); setModal("new"); };
-  const openEdit = (d) => { setDraft({...d}); setModal("edit"); };
-  const saveDoc  = () => {
-    if(modal==="new")  setDocenti(p=>[...p,{...draft,id:uid(),colore:draft.colore||C.gold,teacherKey:draft.teacherKey||draft.nome}]);
-    if(modal==="edit") { setDocenti(p=>p.map(d=>d.id===draft.id?{...draft}:d)); if(_optionalChain([selected, 'optionalAccess', _83 => _83.id])===draft.id) setSelected({...draft}); }
+  const openEdit = (d) => {
+    // Ricava i corsi assegnati dal docente dalla lista corsi (junction corsi_docenti)
+    // Se d.corsi è vuoto (come viene dal DB senza join dedicato), usa la lista courses
+    const corsiCalcolati = (_coursesDocView||[])
+      .filter(c => (c.docenti||[]).map(String).includes(String(d.id)))
+      .map(c => c.id);
+    setDraft({...d, corsi: (d.corsi||[]).length > 0 ? d.corsi : corsiCalcolati});
+    setModal("edit");
+  };
+  const saveDoc  = async () => {
+    const isNew = modal === "new";
+    const saved = isNew
+      ? {...draft, id:uid(), colore:draft.colore||C.gold, teacherKey:draft.teacherKey||draft.nome}
+      : {...draft};
+    if(isNew)  setDocenti(p=>[...p, saved]);
+    if(!isNew) { setDocenti(p=>p.map(d=>d.id===saved.id?saved:d)); if(_optionalChain([selected, 'optionalAccess', _83 => _83.id])===saved.id) setSelected(saved); }
     setModal(null);
+
+    // Persiste corsi_docenti su Supabase
+    const sb = window.supabaseClient;
+    if (sb && saved.id) {
+      try {
+        // Prima: elimina tutte le associazioni esistenti per questo docente
+        await sb.from('corsi_docenti').delete().eq('docente_id', saved.id);
+        // Poi: inserisce le nuove associazioni
+        const nuovi = (saved.corsi||[]).map(corsoId => ({ docente_id: saved.id, corso_id: corsoId }));
+        if (nuovi.length > 0) {
+          const { error } = await sb.from('corsi_docenti').insert(nuovi);
+          if (error) console.warn('[FM] corsi_docenti insert:', error.message);
+        }
+        // Aggiorna anche la tabella docenti su Supabase via toDB
+        const row = window.FMAdapter ? window.FMAdapter.docente(saved) : saved;
+        if (isNew) {
+          await sb.from('docenti').insert(row);
+        } else {
+          await sb.from('docenti').update(row).eq('id', saved.id);
+        }
+      } catch(e) { console.warn('[FM] saveDoc Supabase error:', e); }
+    }
   };
   const delDoc = (id) => { setDocenti(p=>p.filter(d=>d.id!==id)); if(_optionalChain([selected, 'optionalAccess', _84 => _84.id])===id) setSelected(null); setModal(null); };
 
@@ -12313,6 +12347,14 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   });
   // Nota: lezioniMese già funziona per collettive perché l.teacher è sempre valorizzato
   const stipendioMese = (d, m=curMonth, y=curYear) => lezioniMese(d,m,y).length * d.tariffaOra;
+
+  // Tutte le lezioni del mese di un docente (indipendentemente dalla presenza)
+  // Usata nel tab Lezioni per mostrare il conteggio reale, non solo le retribuite
+  const tutteLezioniMese = (d, m, y) => lessons.filter(l => {
+    if(!matchTeacher(d, l.teacher)) return false;
+    const [ly,lm] = l.date.split("-").map(Number);
+    return ly===y && lm===m;
+  });
 
   // Strumenti di un docente: usa d.strumenti se presente, altrimenti ricava
   // dai corsi individuali assegnati (i nomi dei corsi individuali = gli strumenti)
@@ -12460,16 +12502,19 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 
 
   // Dati del mese selezionato
+  // lezSel/lezPrev = solo presente+assente → usate per il compenso
+  // lezSelAll       = tutte le lezioni      → usate per il tab Lezioni
   const lezSel   = lezioniMese(selected, selMese.m, selMese.y);
   const lezPrevM = selMese.m===1 ? 12 : selMese.m-1;
   const lezPrevY = selMese.m===1 ? selMese.y-1 : selMese.y;
   const lezPrev  = lezioniMese(selected, lezPrevM, lezPrevY);
   const stipSel  = lezSel.length * selected.tariffaOra;
   const stipPrev = lezPrev.length * selected.tariffaOra;
+  const lezSelAll = tutteLezioniMese(selected, selMese.m, selMese.y);
 
   // andamento anno scolastico (tutte le lezioni per il grafico)
   const andamento = MESI_AS.map(x => {
-    const n = lezioniMese(selected, x.m, x.y).length;
+    const n = tutteLezioniMese(selected, x.m, x.y).length;
     return { label:MESI_LABEL_S[x.m-1], n, comp:n*selected.tariffaOra, m:x.m, y:x.y,
              isSel: x.m===selMese.m && x.y===selMese.y, isFut: isFuture(x) };
   });
@@ -12668,29 +12713,29 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                 )
               )
               , React.createElement('div', { style: {display:"flex",gap:12,alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10296}}
-                , React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10297}}, lezSel.length, " lezioni" )
-                , lezSel.filter(l=>l.attendance==="presente").length>0 && (
+                , React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10297}}, lezSelAll.length, " lezioni" )
+                , lezSelAll.filter(l=>l.attendance==="presente").length>0 && (
                   React.createElement('span', { style: {fontSize:11,background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`,borderRadius:4,padding:"2px 8px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10299}}
-                    , lezSel.filter(l=>l.attendance==="presente").length, " pres."
+                    , lezSelAll.filter(l=>l.attendance==="presente").length, " pres."
                   )
                 )
-                , lezSel.filter(l=>l.attendance==="assente").length>0 && (
+                , lezSelAll.filter(l=>l.attendance==="assente").length>0 && (
                   React.createElement('span', { style: {fontSize:11,background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`,borderRadius:4,padding:"2px 8px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10304}}
-                    , lezSel.filter(l=>l.attendance==="assente").length, " ass."
+                    , lezSelAll.filter(l=>l.attendance==="assente").length, " ass."
                   )
                 )
               )
             )
-            , lezSel.length===0 ? (
+            , lezSelAll.length===0 ? (
               React.createElement('div', { style: {textAlign:"center",padding:"48px 0",color:C.textMuted,fontSize:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10311}}
                 , isFuture(selMese) ? "Mese non ancora iniziato" : "Nessuna lezione registrata"
               )
             ) : (
-              lezSel.slice().sort((a,b)=>a.date.localeCompare(b.date)||a.hour.localeCompare(b.hour)).map((l,i)=>{
+              lezSelAll.slice().sort((a,b)=>a.date.localeCompare(b.date)||a.hour.localeCompare(b.hour)).map((l,i)=>{
                 const insHex2 = (typeof INS_HEX !== "undefined" && INS_HEX[l.instrument]) || C.gold;
                 return (
                   React.createElement('div', { key: l.id, style: {display:"grid",gridTemplateColumns:"90px 1fr 1fr auto",gap:12,alignItems:"center",
-                    padding:"12px 20px",borderBottom:i<lezSel.length-1?`1px solid ${C.border}`:"none",
+                    padding:"12px 20px",borderBottom:i<lezSelAll.length-1?`1px solid ${C.border}`:"none",
                     borderLeft:`3px solid ${isColl(l)?C.purple:"transparent"}`,
                     background:isColl(l)?`${C.purple}06`:"transparent"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10318}}
                     , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10322}}
@@ -12738,10 +12783,11 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               )
               , React.createElement('tbody', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10365}}
                 , MESI_AS.map((x,i)=>{
-                  const lm = lezioniMese(selected,x.m,x.y);
+                  const lm = tutteLezioniMese(selected,x.m,x.y);
                   const pres = lm.filter(l=>l.attendance==="presente").length;
                   const ass  = lm.filter(l=>l.attendance==="assente").length;
-                  const tasso = lm.length>0 ? Math.round((pres/lm.filter(l=>l.attendance).length||0)*100) : null;
+                  const attended = lm.filter(l=>l.attendance).length;
+                  const tasso = attended>0 ? Math.round((pres/attended)*100) : null;
                   const isS  = x.m===selMese.m&&x.y===selMese.y;
                   const isF  = isFuture(x);
                   return (
@@ -12783,8 +12829,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       , andamento.reduce((t,x)=>t+x.n,0)
                     )
                   )
-                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10412}}, andamento.reduce((t,x)=>t+lezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="presente").length,0))
-                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10413}}, andamento.reduce((t,x)=>t+lezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="assente").length,0))
+                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10412}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="presente").length,0))
+                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10413}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="assente").length,0))
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10414}}, "—")
                 )
               )
