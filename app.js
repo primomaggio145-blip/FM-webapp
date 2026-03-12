@@ -1726,6 +1726,7 @@ const AlertPanel = ({ allievi, lezioniOggi }) => {
 const PANNELLI_DEF = [
   {id:"kpi",       label:"KPI Cards",            desc:"Allievi, lezioni, entrate, uscite, saldo", icon:"chart",    sempre:true},
   {id:"lezioni",   label:"Lezioni di oggi",       desc:"Timeline con orari e stato",               icon:"calendar"},
+  {id:"recuperi",  label:"Recuperi in sospeso",   desc:"Lezioni in recupero con scadenze",          icon:"clock"},
   {id:"grafico",   label:"Andamento finanziario", desc:"Grafico mensile entrate/uscite",            icon:"chart"},
   {id:"pagamenti", label:"Stato pagamenti",       desc:"Donut con distribuzione allievi",           icon:"users"},
   {id:"eventi",    label:"Prossimi eventi",       desc:"Elenco eventi in calendario",               icon:"flag"},
@@ -2603,9 +2604,11 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate }) => {
 };
 
 
-const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, onQuickAction }) => {
+const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, panels:propPanels, setPanels:propSetPanels, onQuickAction }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
-    const [panels,  setPanels]  = useState({});  // pannelli visibili (default = tutti on)
+    const [_localPanels, _setLocalPanels]  = useState({});
+    const panels    = propPanels    !== undefined ? propPanels    : _localPanels;
+    const setPanels = propSetPanels !== undefined ? propSetPanels : _setLocalPanels;
     const [_config,  _setConfig]  = useState(CONFIG_DEFAULT);
     const [_anni,    _setAnni]    = useState(INIT_ANNI_SCOLASTICI);
     const config         = _nullishCoalesce(propConfig, () => ( _config));
@@ -2915,7 +2918,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             )
 
             /* ── RIGA 3: LEZIONI + GRAFICO ── */
-            , (isVisible("lezioni")||isVisible("grafico")) && (
+            , (isVisible("lezioni")||isVisible("grafico")||isVisible("recuperi")) && (
               React.createElement('div', { style: {display:"grid",gap:16,gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2234}}
 
                 /* Lezioni oggi */
@@ -2936,9 +2939,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     )
                     , React.createElement('div', { style: {padding:14,maxHeight:380,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2252}}
                       , React.createElement(LessonTimeline, { lezioni: ruolo==="allievo"
-                        ? LEZIONI_OGGI.filter(l=>(l.allievo||l.student||"").toLowerCase().includes(myNome.toLowerCase()))
-                        : ruolo==="docente" ? LEZIONI_OGGI.filter(matchDocLezione)
-                        : LEZIONI_OGGI, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2253}})
+                        ? LEZIONI_OGGI_LIVE.filter(l=>(l.allievo||l.student||"").toLowerCase().includes(myNome.toLowerCase()))
+                        : ruolo==="docente" ? LEZIONI_OGGI_LIVE.filter(matchDocLezione)
+                        : LEZIONI_OGGI_LIVE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2253}})
                     )
                     , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2255}}
                       , React.createElement('button', { onClick: ()=>onNavigate("calendario"),
@@ -2948,6 +2951,66 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     )
                   )
                 )
+
+                /* ── Card Recuperi ── */
+                , isVisible("recuperi") && (() => {
+                  const oggi_r = new Date(); oggi_r.setHours(0,0,0,0);
+                  const lezioniRec = (_lessons||[]).filter(l=>l.inRecupero);
+                  const scaduti = lezioniRec.filter(l=>l.recuperoScadenza && new Date(l.recuperoScadenza+'T00:00:00') < oggi_r);
+                  const urgenti = lezioniRec.filter(l=>{
+                    const s=l.recuperoScadenza?new Date(l.recuperoScadenza+'T00:00:00'):null;
+                    return s && s >= oggi_r && (s - oggi_r)/86400000 <= 5;
+                  });
+                  const recOk = lezioniRec.filter(l=>{
+                    const s=l.recuperoScadenza?new Date(l.recuperoScadenza+'T00:00:00'):null;
+                    return !s || (s >= oggi_r && (s - oggi_r)/86400000 > 5);
+                  });
+                  return React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+                    , React.createElement('div', { style: {padding:"14px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}
+                      , React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8}}
+                        , React.createElement(Ic, { n: "clock", size: 14, stroke: '#f59e0b'})
+                        , React.createElement('span', { style: {fontSize:12,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted}}, "Recuperi in sospeso")
+                      )
+                      , React.createElement('span', { style: {fontSize:22,fontWeight:700,fontFamily:"'Oswald',sans-serif",color:lezioniRec.length>0?'#f59e0b':C.green}}, lezioniRec.length)
+                    )
+                    , React.createElement('div', { style: {padding:"14px 18px"}}
+                      , lezioniRec.length === 0
+                        ? React.createElement('div',{style:{textAlign:'center',padding:'20px 0',color:C.textDim}}
+                            , React.createElement('div',{style:{fontSize:24,marginBottom:6}},'✓')
+                            , React.createElement('p',{style:{fontSize:13}},'Nessuna lezione in recupero')
+                          )
+                        : React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
+                            , scaduti.length>0 && React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderRadius:9,background:C.redBg,border:`1px solid ${C.redBorder}`}}
+                              , React.createElement('div',{style:{width:6,height:6,borderRadius:'50%',background:C.red,flexShrink:0}})
+                              , React.createElement('div',{style:{flex:1}}
+                                , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.red}}, scaduti.length+' scadut'+(scaduti.length===1?'a':'e'))
+                                , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, scaduti.slice(0,2).map(l=>l.student||l.courseId||'?').join(', ')+(scaduti.length>2?' +altri':''))
+                              )
+                            )
+                            , urgenti.length>0 && React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderRadius:9,background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.3)'}}
+                              , React.createElement('div',{style:{width:6,height:6,borderRadius:'50%',background:'#f59e0b',flexShrink:0}})
+                              , React.createElement('div',{style:{flex:1}}
+                                , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:'#b45309'}}, urgenti.length+' in scadenza (≤5 giorni)')
+                                , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, urgenti.slice(0,2).map(l=>l.student||l.courseId||'?').join(', ')+(urgenti.length>2?' +altri':''))
+                              )
+                            )
+                            , recOk.length>0 && React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderRadius:9,background:'rgba(245,158,11,0.04)',border:'1px solid rgba(245,158,11,0.15)'}}
+                              , React.createElement('div',{style:{width:6,height:6,borderRadius:'50%',background:'#f59e0b',flexShrink:0}})
+                              , React.createElement('div',{style:{flex:1}}
+                                , React.createElement('div',{style:{fontSize:13,fontWeight:500,color:'#92400e'}}, recOk.length+' in recupero')
+                                , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, 'Nessuna scadenza imminente')
+                              )
+                            )
+                          )
+                    )
+                    , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`}}
+                      , React.createElement('button', { onClick: ()=>onNavigate("calendario"),
+                        style: {background:"none",border:"none",cursor:"pointer",fontSize:12,color:'#f59e0b',fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",gap:5}}
+                        , React.createElement(Ic, { n: "clock", size: 12, stroke: '#f59e0b'}), "Vai ai recuperi →"
+                      )
+                    )
+                  );
+                })()
 
                 /* Grafico andamento */
                 , isVisible("grafico") && ruolo==="admin" && (
@@ -13024,6 +13087,7 @@ function App() {
                    docenti: sharedDocenti, lessons: sharedLessons,
                    concerti: sharedConcerti,
                    richieste: sharedRichieste,
+                   panels: sharedPanels, setPanels: setSharedPanels,
                    onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
     allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
     docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user,
@@ -13515,41 +13579,81 @@ const SchedaScuolaView = ({ config }) => {
 
 // ─── MODULISTICA VIEW ─────────────────────────────────────────────────────────
 const ModulisticaView = () => {
-  const [docs, setDocs] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("fm_modulistica")||"[]"); } catch{ return []; }
-  });
+  const [docs,     setDocs]     = useState([]);
+  const [loading,  setLoading]  = useState(true);
+  const [uploading,setUploading]= useState(false);
   const [dragging, setDragging] = useState(false);
+  const [error,    setError]    = useState(null);
 
-  const saveDocs = (d) => {
-    setDocs(d);
-    try { localStorage.setItem("fm_modulistica", JSON.stringify(d)); } catch{}
-  };
+  const BUCKET = 'allegati';
+  const MOD_PREFIX = 'modulistica/';
+  const META_KEY   = 'fm_modulistica_meta';
 
-  const handleFiles = (files) => {
-    Array.from(files).forEach(file => {
-      const r = new FileReader();
-      r.onload = (e) => {
-        const newDoc = {
-          id: Date.now()+Math.random(),
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          data: e.target.result,
-          categoria: "generale",
-          uploadDate: new Date().toLocaleDateString("it-IT"),
+  // Carica metadati + lista file da Supabase Storage
+  const loadDocs = async () => {
+    setLoading(true);
+    const sb = window.supabaseClient;
+    if (!sb) { setLoading(false); return; }
+    try {
+      const { data, error: listErr } = await sb.storage.from(BUCKET).list(MOD_PREFIX, { limit: 200, sortBy:{column:'created_at',order:'desc'} });
+      if (listErr) throw listErr;
+      // Carica metadati (categoria) da sito_config
+      const { data: metaRow } = await sb.from('sito_config').select('valore').eq('chiave', META_KEY).single();
+      const meta = (() => { try { return JSON.parse(metaRow?.valore||'{}'); } catch { return {}; } })();
+      const rows = (data||[]).filter(f=>f.name&&f.name!=='.emptyFolderPlaceholder').map(f => {
+        const { data: urlData } = sb.storage.from(BUCKET).getPublicUrl(MOD_PREFIX+f.name);
+        return {
+          id:   f.name,
+          name: f.name,
+          size: f.metadata?.size || 0,
+          type: f.metadata?.mimetype || '',
+          fileUrl: urlData?.publicUrl || '',
+          categoria: meta[f.name] || 'generale',
+          uploadDate: f.created_at ? new Date(f.created_at).toLocaleDateString('it-IT') : '',
         };
-        setDocs(prev => {
-          const updated = [...prev, newDoc];
-          try { localStorage.setItem("fm_modulistica", JSON.stringify(updated)); } catch{}
-          return updated;
-        });
-      };
-      r.readAsDataURL(file);
-    });
+      });
+      setDocs(rows);
+    } catch(e) { setError('Errore caricamento: '+e.message); }
+    finally { setLoading(false); }
   };
 
-  const removeDoc = (id) => saveDocs(docs.filter(d=>d.id!==id));
-  const updateCat = (id, cat) => saveDocs(docs.map(d=>d.id===id?{...d,categoria:cat}:d));
+  useEffect(() => { loadDocs(); }, []);
+
+  // Salva metadati categoria su sito_config
+  const saveMeta = async (newMeta) => {
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    await sb.from('sito_config').upsert({chiave:META_KEY, valore:JSON.stringify(newMeta), updated_at:new Date().toISOString()},{onConflict:'chiave'});
+  };
+
+  const handleFiles = async (files) => {
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    setUploading(true);
+    for (const file of Array.from(files)) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g,'_');
+      const path = MOD_PREFIX + Date.now() + '_' + safeName;
+      const { error: upErr } = await sb.storage.from(BUCKET).upload(path, file, { upsert:false });
+      if (upErr) { console.warn('[FM] upload modulistica error:', upErr.message); }
+    }
+    setUploading(false);
+    await loadDocs();
+  };
+
+  const removeDoc = async (id) => {
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    await sb.storage.from(BUCKET).remove([MOD_PREFIX+id]);
+    setDocs(prev=>prev.filter(d=>d.id!==id));
+  };
+
+  const updateCat = async (id, cat) => {
+    setDocs(prev=>prev.map(d=>d.id===id?{...d,categoria:cat}:d));
+    const meta = {};
+    docs.forEach(d=>{ meta[d.id]=d.categoria; });
+    meta[id]=cat;
+    await saveMeta(meta);
+  };
 
   const CATS = ["generale","iscrizione","regolamento","verbale","contratto","modulo","altro"];
   const [filterCat, setFilterCat] = useState("tutti");
@@ -13558,15 +13662,20 @@ const ModulisticaView = () => {
   const getIcon = t => t.includes("pdf")?"file":t.includes("image")?"image":t.includes("word")?"file":"file";
 
   return React.createElement('div', {style:{maxWidth:900,margin:"0 auto",padding:"24px"}}
+    , loading && React.createElement('div',{style:{textAlign:'center',padding:'60px 0',color:C.textMuted}}
+      , React.createElement('div',{style:{fontSize:13}},'Caricamento modulistica...')
+    )
+    , !loading && React.createElement(React.Fragment, null
     , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}
       , React.createElement('div', null
         , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,margin:0}}, "Modulistica")
-        , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}}, docs.length, " documenti caricati")
+        , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}}, docs.length, " documenti caricati · Storage Supabase")
       )
       , React.createElement('label', {style:{display:"flex",alignItems:"center",gap:8,padding:"10px 18px",borderRadius:9,
-          border:`1px solid ${C.border}`,background:C.goldBg,color:C.gold,cursor:"pointer",fontSize:13,fontFamily:"'Open Sans',sans-serif"}}
-        , React.createElement(Ic,{n:"upload",size:14,stroke:C.gold}), " Carica documenti"
-        , React.createElement('input', {type:"file",multiple:true,accept:".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg",style:{display:"none"},
+          border:`1px solid ${C.border}`,background:uploading?C.surface:C.goldBg,color:uploading?C.textMuted:C.gold,
+          cursor:uploading?"not-allowed":"pointer",fontSize:13,fontFamily:"'Open Sans',sans-serif",opacity:uploading?0.7:1}}
+        , uploading ? "Upload in corso..." : React.createElement(React.Fragment,null,React.createElement(Ic,{n:"upload",size:14,stroke:C.gold}), " Carica documenti")
+        , !uploading && React.createElement('input', {type:"file",multiple:true,accept:".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg",style:{display:"none"},
             onChange:e=>handleFiles(e.target.files)})
       )
     )
@@ -13590,6 +13699,7 @@ const ModulisticaView = () => {
         , cat==="tutti"?`Tutti (${docs.length})`:cat))
     )
 
+    , error && React.createElement('div',{style:{padding:'12px 16px',borderRadius:9,background:C.redBg,border:`1px solid ${C.redBorder}`,color:C.red,fontSize:13,marginBottom:16}}, error)
     , filtered.length===0 && docs.length===0 && React.createElement('div', {style:{textAlign:"center",padding:"60px 0",color:C.textDim,border:`1px dashed ${C.border}`,borderRadius:12}}
       , React.createElement(Ic,{n:"file",size:32,stroke:C.textDim})
       , React.createElement('p',{style:{marginTop:12,fontSize:14}}, "Nessun documento caricato")
@@ -13613,12 +13723,12 @@ const ModulisticaView = () => {
             )
           )
           , React.createElement('div', {style:{padding:"10px 16px",borderTop:`1px solid ${C.border}`,display:"flex",gap:8}}
-            , React.createElement('a', {href:doc.data, target:"_blank", rel:"noreferrer",
+            , React.createElement('a', {href:doc.fileUrl, target:"_blank", rel:"noreferrer",
                 style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"7px 0",
                   borderRadius:7,border:`1px solid ${C.border}`,color:C.textMuted,fontSize:11,textDecoration:"none",fontFamily:"'Open Sans',sans-serif"}}
               , React.createElement(Ic,{n:"eye",size:12,stroke:C.textMuted}), " Visualizza"
             )
-            , React.createElement('a', {href:doc.data, download:doc.name,
+            , React.createElement('a', {href:doc.fileUrl, download:doc.name,
                 style:{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"7px 0",
                   borderRadius:7,background:C.goldBg,border:`1px solid ${C.goldDim}`,color:C.gold,fontSize:11,textDecoration:"none",fontFamily:"'Open Sans',sans-serif"}}
               , React.createElement(Ic,{n:"download",size:12,stroke:C.gold}), " Scarica"
@@ -13633,6 +13743,7 @@ const ModulisticaView = () => {
           )
         ))
     )
+    )  // end !loading Fragment
   );
 };
 
