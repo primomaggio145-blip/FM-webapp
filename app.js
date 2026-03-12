@@ -4916,6 +4916,15 @@ const isLezioneSvolta   = (l) => PRESENZE_SVOLTE.includes((l.attendance||'').toL
 
 const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"Nessuna", notes:"", exercises:"", repertorioIds:[], linkUrl:"", allegati:[], inRecupero:false, recuperoScadenza:null };
 
+// ─── ATT_STYLES globale (usato da LessonForm, LessonDetailModal, LezioniAdminView, RecuperoView)
+const ATT_STYLES = {
+  presente:    { bg:C.greenBg,  fg:C.green,  bd:C.greenBorder,  label:'Presente'    },
+  assente:     { bg:C.redBg,    fg:C.red,    bd:C.redBorder,    label:'Assente'     },
+  giustificato:{ bg:"#e8edf5",  fg:C.gold,   bd:C.goldDim,      label:'Giustificato'},
+  recupero:    { bg:C.blueBg,   fg:C.blue,   bd:C.blueBorder,   label:'Recupero'    },
+  in_recupero: { bg:'rgba(255,160,0,0.10)', fg:'#f59e0b', bd:'rgba(245,158,11,0.4)', label:'In recupero' },
+};
+
 const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, role:_roleLF }) => {
   const roleLF = _roleLF || "admin"; // admin = può modificare data; docente = data readOnly
   const _teacherOptsLes = (_docentiFLes||[]).map(d=>({value:d.nome||d.name||"",label:d.nome||d.name||""}));
@@ -4976,13 +4985,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     onSave({ ...f, _newBrani: newlyCreatedBraniRef.current });
   };
 
-  const ATT_STYLES = {
-    presente:    { bg:C.greenBg,  fg:C.green,  bd:C.greenBorder,  label:'Presente'   },
-    assente:     { bg:C.redBg,    fg:C.red,    bd:C.redBorder,    label:'Assente'    },
-    giustificato:{ bg:"#e8edf5",  fg:C.gold,   bd:C.goldDim,      label:'Giustificato'},
-    recupero:    { bg:C.blueBg,   fg:C.blue,   bd:C.blueBorder,   label:'Recupero'   },
-    in_recupero: { bg:'rgba(255,160,0,0.10)', fg:'#f59e0b', bd:'rgba(245,158,11,0.4)', label:'In recupero' },
-  };
+  // ATT_STYLES: vedi definizione globale
 
   const SDiv = ({ label }) => (
     React.createElement('div', { style: {gridColumn:"1/-1", fontSize:10, color:C.textDim, letterSpacing:"0.12em",
@@ -5309,12 +5312,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
   const hex = insHex(lesson.instrument);
-  const ATT_STYLES = {
-    presente:    { bg:C.greenBg,  fg:C.green,  bd:C.greenBorder  },
-    assente:     { bg:C.redBg,    fg:C.red,    bd:C.redBorder    },
-    giustificato:{ bg:"#e8edf5",  fg:C.gold,   bd:C.goldDim      },
-    recupero:    { bg:C.blueBg,   fg:C.blue,   bd:C.blueBorder   },
-  };
+  // ATT_STYLES: vedi definizione globale
 
   const [showIscrizionePanel, setShowIscrizionePanel] = useState(false);
   const [iscrizioneStudent, setIscrizioneStudent] = useState("");
