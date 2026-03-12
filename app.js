@@ -5666,7 +5666,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                         // Aggiorna sharedAllegati
                         if (window.__FM_RELOAD__) {
                           const { data: allAl } = await sb.from('allegati').select('*').order('created_at',{ascending:false});
-                          if (allAl) window.__FM_RELOAD__({ allegati: allAl.map(r=>({ id:r.id, lezioneId:r.lezione_id||null, allievoNome:r.allievo_nome||null, corso:r.corso||null, descrizione:r.descrizione||null, fileUrl:r.file_url||null, fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null })) });
+                          if (allAl) window.__FM_RELOAD__({ allegati: allAl.map(r=>({ id:r.id, lezioneId:r.lezione_id||null, allievoId:r.allievo_id||null, allievoNome:r.allievo_nome||null, corso:r.corso||null, descrizione:r.descrizione||null, fileUrl:r.file_url||null, fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null })) });
                         }
                       }
                       // 2. Aggiorna stato locale
@@ -5738,7 +5738,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                       const sb2 = window.supabaseClient;
                       if (sb2) {
                         const { data: allAl } = await sb2.from('allegati').select('*').order('created_at', {ascending:false});
-                        if (allAl) window.__FM_RELOAD__({ allegati: allAl.map(r=>({ id:r.id, lezioneId:r.lezione_id||null, allievoNome:r.allievo_nome||null, corso:r.corso||null, descrizione:r.descrizione||null, fileUrl:r.file_url||null, fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null })) });
+                        if (allAl) window.__FM_RELOAD__({ allegati: allAl.map(r=>({ id:r.id, lezioneId:r.lezione_id||null, allievoId:r.allievo_id||null, allievoNome:r.allievo_nome||null, corso:r.corso||null, descrizione:r.descrizione||null, fileUrl:r.file_url||null, fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null })) });
                       }
                     }
                     e.target.value='';
@@ -11463,7 +11463,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
         // Ricarica sharedAllegati e sharedLessons via FM_RELOAD
         if (window.__FM_RELOAD__) {
           const {data:allAl} = await sb.from('allegati').select('*').order('created_at',{ascending:false});
-          if (allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
+          if (allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoId:r.allievo_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
         }
       }
       if (propSetAllegati) propSetAllegati(p => p.filter(x => x.id !== a.id));
@@ -11655,7 +11655,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
                     .then(async({error})=>{
                       if(error){ console.warn('[FM] edit allegato:',error.message); return; }
                       const {data:allAl}=await sb2.from('allegati').select('*').order('created_at',{ascending:false});
-                      if(allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
+                      if(allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoId:r.allievo_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
                     });
                 }
               } else {
@@ -13164,6 +13164,9 @@ function App() {
       if (data.concerti)  setSharedConcerti(data.concerti);
       if (data.allegati)  setSharedAllegati(data.allegati);
       if (data.richieste) setSharedRichieste(data.richieste);
+      // Aggiorna _prev in fm_sync per evitare che syncState rilevi i dati appena
+      // scritti su Supabase come "nuovi" e li riscriva (doppio write)
+      if (window.__FM_SYNC_PREV__) window.__FM_SYNC_PREV__(data);
     };
     return () => { window.__FM_RELOAD__ = null; };
   }, []);
