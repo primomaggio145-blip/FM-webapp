@@ -12325,7 +12325,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     return nomi.length > 0 ? nomi.join(' · ') : '—';
   };
 
- — usa il prop dall'admin (fallback: auto da data corrente)
+  // Anno scolastico — usa il prop dall'admin (fallback: auto da data corrente)
   const annoInizio = _nullishCoalesce(annoInizioAttivo, () => ( (curMonth >= 9 ? curYear : curYear-1)));
   const MESI_AS = [
     {m:9, y:annoInizio},{m:10,y:annoInizio},{m:11,y:annoInizio},{m:12,y:annoInizio},
