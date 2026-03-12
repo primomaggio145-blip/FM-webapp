@@ -314,6 +314,7 @@ const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
     qr:       React.createElement(React.Fragment, null, React.createElement('rect', { x: "3", y: "3", width: "7", height: "7", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "14", y: "3", width: "7", height: "7", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "14", y: "14", width: "7", height: "7", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "3", y: "14", width: "7", height: "7", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "5", y: "5", width: "3", height: "3", fill: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "16", y: "5", width: "3", height: "3", fill: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "16", y: "16", width: "3", height: "3", fill: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}}), React.createElement('rect', { x: "5", y: "16", width: "3", height: "3", fill: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 308}})),
     report:   React.createElement(React.Fragment, null, React.createElement('path', { d: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"                 , __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('polyline', { points: "14 2 14 8 20 8"     , __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('line', { x1: "16", y1: "13", x2: "8", y2: "13", __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('line', { x1: "16", y1: "17", x2: "8", y2: "17", __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('polyline', { points: "10 9 9 9 8 9"     , __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}})),
     globe:    React.createElement(React.Fragment, null, React.createElement('circle', { cx: "12", cy: "12", r: "10"}), React.createElement('line', { x1: "2", y1: "12", x2: "22", y2: "12"}), React.createElement('path', { d: "M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"})),
+    paperclip: React.createElement('path', { d: "m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"}),
   };
   return (
     React.createElement('svg', { width: size, height: size, viewBox: "0 0 24 24"   , fill: fill,
@@ -2876,7 +2877,35 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             )
 
             /* ── RIGA 2: AZIONI RAPIDE (full width) ── */
-            , isVisible("azioni") && (
+            , isVisible("azioni") && ruolo==="docente" && (
+              React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+                , React.createElement('div', { style: {padding:"13px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
+                  , React.createElement(Ic, { n: "plus", size: 14, stroke: C.gold})
+                  , React.createElement('span', { style: {fontSize:12,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted}}, "Scorciatoie" )
+                )
+                , React.createElement('div', { style: {padding:"14px 16px",display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}
+                  , [
+                      {icon:"music",    label:"Nuovo brano",     hex:C.blue,   bg:C.blueBg,   bd:C.blueBorder,   action:"addBrano",   nav:"repertorio"},
+                      {icon:"calendar", label:"Vai al calendario",hex:C.teal,  bg:C.tealBg,   bd:C.tealBorder,   nav:"calendario"},
+                    ].map(a=>(
+                    React.createElement('button', { key: a.label, onClick: ()=>{ if(a.action&&onQuickAction) onQuickAction(a.action); if(a.nav) onNavigate(a.nav); },
+                      className: "quick-action",
+                      style: {display:"flex",alignItems:"center",gap:10,padding:"12px 16px",
+                        background:a.bg,border:`1px solid ${a.bd}`,borderRadius:10,
+                        cursor:"pointer",fontFamily:"'Open Sans',sans-serif",textAlign:"left",
+                        width:"100%",transition:"all 0.15s"},
+                      onMouseEnter: e=>{e.currentTarget.style.filter="brightness(1.15)";},
+                      onMouseLeave: e=>{e.currentTarget.style.filter="";}}
+                      , React.createElement('div', { style: {width:32,height:32,borderRadius:8,background:`${a.hex}20`,border:`1px solid ${a.bd}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                        , React.createElement(Ic, { n: a.icon, size: 16, stroke: a.hex})
+                      )
+                      , React.createElement('span', { style: {fontSize:13,color:a.hex,fontWeight:500}}, a.label)
+                    ))
+                  )
+                )
+              )
+            )
+            , isVisible("azioni") && ruolo==="admin" && (
               React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2198}}
                 , React.createElement('div', { style: {padding:"13px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2199}}
                   , React.createElement(Ic, { n: "plus", size: 14, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2200}})
@@ -2886,7 +2915,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   , (function(){
                       const allAzioni = [
                         {icon:"receipt",  label:"Registra pagamento",  hex:C.green,  bg:C.greenBg,  bd:C.greenBorder,  action:"addEntrata", ruoli:["admin"]},
-                        {icon:"calendar", label:"Aggiungi lezione",     hex:C.teal,   bg:C.tealBg,   bd:C.tealBorder,   action:"addLezione", ruoli:["admin","docente"]},
+                        {icon:"calendar", label:"Aggiungi lezione",     hex:C.teal,   bg:C.tealBg,   bd:C.tealBorder,   action:"addLezione", ruoli:["admin"]},
                         {icon:"user",     label:"Nuovo allievo",        hex:C.gold,   bg:C.goldBg,   bd:C.goldDim,      action:"addAllievo", ruoli:["admin"]},
                         {icon:"down",     label:"Registra spesa",       hex:C.red,    bg:C.redBg,    bd:C.redBorder,    action:"addSpesa",   ruoli:["admin"]},
                         {icon:"music",    label:"Nuovo brano",          hex:C.blue,   bg:C.blueBg,   bd:C.blueBorder,   action:"addBrano",   ruoli:["admin","docente"]},
@@ -2955,7 +2984,8 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                 /* ── Card Recuperi ── */
                 , isVisible("recuperi") && (() => {
                   const oggi_r = new Date(); oggi_r.setHours(0,0,0,0);
-                  const lezioniRec = (_lessons||[]).filter(l=>l.inRecupero);
+                  const _lessonsFiltered = ruolo==="docente" ? (_lessons||[]).filter(l=>matchDocLezione(l)) : (_lessons||[]);
+                  const lezioniRec = _lessonsFiltered.filter(l=>l.inRecupero);
                   const scaduti = lezioniRec.filter(l=>l.recuperoScadenza && new Date(l.recuperoScadenza+'T00:00:00') < oggi_r);
                   const urgenti = lezioniRec.filter(l=>{
                     const s=l.recuperoScadenza?new Date(l.recuperoScadenza+'T00:00:00'):null;
@@ -3004,7 +3034,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                           )
                     )
                     , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`}}
-                      , React.createElement('button', { onClick: ()=>onNavigate("calendario"),
+                      , React.createElement('button', { onClick: ()=>{ onNavigate("calendario"); if(onQuickAction) setTimeout(()=>onQuickAction("showRecuperi"),80); },
                         style: {background:"none",border:"none",cursor:"pointer",fontSize:12,color:'#f59e0b',fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",gap:5}}
                         , React.createElement(Ic, { n: "clock", size: 12, stroke: '#f59e0b'}), "Vai ai recuperi →"
                       )
@@ -5658,11 +5688,10 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                         corso: lesson.instrument||'', lezioneId: lesson.id,
                         allievoNome: lesson.student||'', createdAt: new Date().toISOString(),
                       };
-                      // Salva subito su Supabase allegati
+                      // Salva subito su Supabase allegati (NO id: lascia auto UUID)
                       if (sb && fileUrl) {
                         try {
-                          await sb.from('allegati').insert({
-                            id: attId,
+                          const { data: insData, error: insErr } = await sb.from('allegati').insert({
                             lezione_id: lesson.id,
                             allievo_nome: lesson.student||'',
                             corso: lesson.instrument||'',
@@ -5670,8 +5699,9 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                             file_name: file.name,
                             file_type: file.type,
                             descrizione: '',
-                            created_at: new Date().toISOString(),
-                          });
+                          }).select('id').single();
+                          if (!insErr && insData?.id) attRow.id = insData.id;
+                          else if (insErr) console.warn('[FM] allegato DB error', insErr.message);
                         } catch(dbErr) { console.warn('[FM] allegato DB error', dbErr); }
                       }
                       newAllegati.push(attRow);
@@ -7300,7 +7330,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
   
     const closeModal = () => { setModal(null); setSelLesson(null); setAddDate(null); setNextLessonCreated(null); };
-  React.useEffect(()=>{ if(qaCV==="addLezione"){ setModal("add"); if(clearQaCV)clearQaCV(); } },[qaCV]);
+  React.useEffect(()=>{
+    if(qaCV==="addLezione"){ setModal("add"); if(clearQaCV)clearQaCV(); }
+    else if(qaCV==="showRecuperi"){ setAppView("recupero"); if(clearQaCV)clearQaCV(); }
+    else if(qaCV==="showElenco"){ setAppView("lezioni_admin"); if(clearQaCV)clearQaCV(); }
+    else if(qaCV==="showCalendario"){ setAppView("calendario"); if(clearQaCV)clearQaCV(); }
+  },[qaCV]);
 
     const navigate = (dir) => {
       const d = new Date(curDate);
@@ -11346,11 +11381,39 @@ const RuoloBadge = ({ ruolo }) => {
 };
 
 // ─── ALLEGATI VIEW ────────────────────────────────────────────────────────────
-const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani, setBrani:propSetBrani }) => {
-  const allegatiLezioni  = propAllegati  || [];
+const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani, setBrani:propSetBrani, userRuolo:_avRuolo, appUser:_avUser }) => {
   const lessons   = propLessons   || [];
   const students  = propStudents  || [];
   const brani     = propBrani     || [];
+  // Merge: allegati da propAllegati (DB) + allegati embedded nelle lezioni (lesson.allegati)
+  // Filtra lezioni per docente se necessario
+  const _avNome = (_avUser && _avUser.nome) || '';
+  const _avLessons = _avRuolo === 'docente' && _avNome
+    ? lessons.filter(l => {
+        const t = (l.teacher||'').toLowerCase().trim();
+        const k = _avNome.toLowerCase().trim();
+        return t === k || t.includes(k) || k.includes(t);
+      })
+    : lessons;
+  const _avLessonIds = new Set(_avLessons.map(l=>l.id));
+  // Filtra allegati DB per docente (solo lezioni visibili)
+  const fromDB = (_avRuolo === 'docente' && _avNome)
+    ? (propAllegati||[]).filter(a => !a.lezioneId || _avLessonIds.has(a.lezioneId))
+    : (propAllegati || []);
+  const fromLessons = [];
+  _avLessons.forEach(l => {
+    (l.allegati||[]).forEach(a => {
+      if (!fromDB.find(x=>x.id===a.id)) {
+        fromLessons.push({
+          id: a.id, lezioneId: l.id, allievoId: l.studentId||null,
+          allievoNome: l.student||null, corso: l.instrument||null,
+          descrizione: a.descrizione||null, fileUrl: a.fileUrl||null,
+          fileName: a.fileName||null, fileType: a.fileType||null, createdAt: a.createdAt||null,
+        });
+      }
+    });
+  });
+  const allegatiLezioni = [...fromDB, ...fromLessons];
   const [search,  setSearch]  = useState("");
   const [fCorso,  setFCorso]  = useState("");
   const [fAllievo,setFAllievo]= useState("");
@@ -12690,9 +12753,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 // ═══════════════════════════════════════════════════════════════════════════════
 // Permessi navigazione per ruolo (sidebar): false = voce nascosta
 const ROLE_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, utenti:true, impostazioni:true, schedaScuola:true, modulistica:true},
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false,contabilita:true, repertorio:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, allegati:true, utenti:true, impostazioni:true, schedaScuola:true, modulistica:true},
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, allegati:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false,contabilita:true, repertorio:true, allegati:false,utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
 };
 
 const NAV_ITEMS = [
@@ -12700,7 +12763,13 @@ const NAV_ITEMS = [
   { id:"allievi",     label:"Allievi",      icon:"users"    },
   { id:"docenti",     label:"Docenti",      icon:"user"     },
   { id:"corsi",       label:"Corsi",        icon:"courses"  },
-  { id:"calendario",  label:"Calendario",   icon:"calendar" },
+  { id:"calendario",  label:"Calendario",   icon:"calendar",
+    subItems: [
+      { qaKey:"showCalendario", label:"Calendario",    icon:"cal"      },
+      { qaKey:"showRecuperi",   label:"Recuperi",      icon:"clock"    },
+      { qaKey:"showElenco",     label:"Elenco lezioni", icon:"list", adminOnly:true },
+    ]
+  },
   { id:"concerti",    label:"Concerti",     icon:"mic"      },
   { id:"contabilita", label:"Contabilità",  icon:"euro"     },
   { id:"repertorio",  label:"Repertorio",   icon:"music"    },
@@ -12708,7 +12777,7 @@ const NAV_ITEMS = [
   { id:"utenti",      label:"Utenti",       icon:"shield"   },
 ];
 
-const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo }) => {
+const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction }) => {
   const ruoloHex = {admin:C.gold, docente:C.teal, allievo:C.blue}[_optionalChain([user, 'optionalAccess', _89 => _89.ruolo])] || C.gold;
   const ini = _optionalChain([user, 'optionalAccess', _90 => _90.nome]) ? user.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase() : "??";
   // Primary nav items shown in bottom bar (most used)
@@ -12747,17 +12816,36 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
               return perms[item.id] !== false;
             }).map(item => {
             const active = current === item.id;
+            const userRole2 = (user&&user.ruolo)||'admin';
             return (
-              React.createElement('button', { key: item.id, onClick: ()=>{ setView(item.id);},
-                style: {width:"100%",display:"flex",alignItems:"center",gap:10,
-                  padding:"9px 12px",borderRadius:0,border:"none",cursor:"pointer",
-                  background:active?"rgba(255,255,255,0.15)":"transparent",
-                  color:active?"#ffffff":C.sidebarText,
-                  fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:active?600:400,
-                  textAlign:"left",transition:"all 0.15s",marginBottom:1,
-                  borderLeft:active?"3px solid #8c1818":"3px solid transparent"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10606}}
-                , React.createElement(Ic, { n: item.icon, size: 15, stroke: active?"#ffffff":C.sidebarText, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10614}})
-                , item.label
+              React.createElement(React.Fragment, {key:item.id}
+                , React.createElement('button', { onClick: ()=>{ setView(item.id); if(item.subItems&&onQuickAction) setTimeout(()=>onQuickAction('showCalendario'),80); },
+                  style: {width:"100%",display:"flex",alignItems:"center",gap:10,
+                    padding:"9px 12px",borderRadius:0,border:"none",cursor:"pointer",
+                    background:active?"rgba(255,255,255,0.15)":"transparent",
+                    color:active?"#ffffff":C.sidebarText,
+                    fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:active?600:400,
+                    textAlign:"left",transition:"all 0.15s",marginBottom:1,
+                    borderLeft:active?"3px solid #8c1818":"3px solid transparent"}}
+                  , React.createElement(Ic, { n: item.icon, size: 15, stroke: active?"#ffffff":C.sidebarText})
+                  , item.label
+                )
+                , active && item.subItems && React.createElement('div', {style:{paddingLeft:18,paddingBottom:4}}
+                  , item.subItems
+                    .filter(s=>!s.adminOnly || userRole2==='admin')
+                    .map(s => React.createElement('button', {key:s.qaKey,
+                      onClick:()=>{ setView(item.id); if(onQuickAction) setTimeout(()=>onQuickAction(s.qaKey),120); },
+                      style:{width:'100%',display:'flex',alignItems:'center',gap:8,
+                        padding:'6px 10px',border:'none',borderRadius:0,cursor:'pointer',
+                        background:'transparent',
+                        color:'rgba(255,255,255,0.6)',
+                        fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:400,
+                        textAlign:'left',transition:'all .12s',
+                        borderLeft:'2px solid rgba(255,255,255,0.15)'}}
+                      , React.createElement(Ic,{n:s.icon,size:12,stroke:'rgba(255,255,255,0.5)'})
+                      , s.label
+                    ))
+                )
               )
             );
           })
@@ -13093,10 +13181,10 @@ function App() {
     docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user,
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
-    calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
+    calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
     repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
-    allegati:    React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
+    allegati:    React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      (user?.ruolo||"admin")==="admin" && React.createElement(UtentiView, { students: sharedStudents, docenti: sharedDocenti }),
     sitoWeb:       null,
@@ -13109,7 +13197,7 @@ function App() {
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
       , React.createElement('div', { style: {display:"flex",height:"100vh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: async ()=>{ try{ if(window.FM_AUTH) await window.FM_AUTH.signOut(); }catch(e){} setUser(null); setSharedRuolo("admin"); setView("dashboard"); setSchermata("login"); setPanKey(p=>p+1); try{window.__currentUserName__="";}catch(e){}}, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: async ()=>{ try{ if(window.FM_AUTH) await window.FM_AUTH.signOut(); }catch(e){} setUser(null); setSharedRuolo("admin"); setView("dashboard"); setSchermata("login"); setPanKey(p=>p+1); try{window.__currentUserName__="";}catch(e){}}, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , settingsDrawerOpen && React.createElement(SettingsDrawer, {
             open: settingsDrawerOpen,
             onClose: ()=>setSettingsDrawerOpen(false),
