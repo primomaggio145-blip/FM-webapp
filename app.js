@@ -315,6 +315,8 @@ const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
     report:   React.createElement(React.Fragment, null, React.createElement('path', { d: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"                 , __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('polyline', { points: "14 2 14 8 20 8"     , __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('line', { x1: "16", y1: "13", x2: "8", y2: "13", __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('line', { x1: "16", y1: "17", x2: "8", y2: "17", __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}}), React.createElement('polyline', { points: "10 9 9 9 8 9"     , __self: this, __source: {fileName: _jsxFileName, lineNumber: 309}})),
     globe:    React.createElement(React.Fragment, null, React.createElement('circle', { cx: "12", cy: "12", r: "10"}), React.createElement('line', { x1: "2", y1: "12", x2: "22", y2: "12"}), React.createElement('path', { d: "M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"})),
     paperclip: React.createElement('path', { d: "m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"}),
+    download: React.createElement(React.Fragment, null, React.createElement('path',{d:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}), React.createElement('polyline',{points:"7 10 12 15 17 10"}), React.createElement('line',{x1:"12",y1:"15",x2:"12",y2:"3"})),
+    upload:   React.createElement(React.Fragment, null, React.createElement('path',{d:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}), React.createElement('polyline',{points:"17 8 12 3 7 8"}), React.createElement('line',{x1:"12",y1:"3",x2:"12",y2:"15"})),
   };
   return (
     React.createElement('svg', { width: size, height: size, viewBox: "0 0 24 24"   , fill: fill,
@@ -5647,7 +5649,30 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                   , a.descrizione && React.createElement('div', {style:{fontSize:11, color:C.textMuted}}, a.descrizione)
                 )
                 , canEdit && React.createElement('button', {
-                    onClick: () => { const updated = (localAllegati||[]).filter((_,j)=>j!==i); setLocalAllegati(updated); saveField({allegati:updated}); },
+                    onClick: async () => {
+                      const att = (localAllegati||[])[i];
+                      // 1. Rimuovi da Supabase allegati
+                      if (att && att.id && window.supabaseClient) {
+                        const sb = window.supabaseClient;
+                        const { error } = await sb.from('allegati').delete().eq('id', att.id);
+                        if (error) console.warn('[FM] delete allegato:', error.message);
+                        // Rimuovi file dallo Storage se ha un URL storage
+                        if (att.fileUrl) {
+                          try {
+                            const urlPath = att.fileUrl.split('/object/public/allegati/')[1];
+                            if (urlPath) await sb.storage.from('allegati').remove([urlPath]);
+                          } catch(e) { console.warn('[FM] storage delete:', e); }
+                        }
+                        // Aggiorna sharedAllegati
+                        if (window.__FM_RELOAD__) {
+                          const { data: allAl } = await sb.from('allegati').select('*').order('created_at',{ascending:false});
+                          if (allAl) window.__FM_RELOAD__({ allegati: allAl.map(r=>({ id:r.id, lezioneId:r.lezione_id||null, allievoNome:r.allievo_nome||null, corso:r.corso||null, descrizione:r.descrizione||null, fileUrl:r.file_url||null, fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null })) });
+                        }
+                      }
+                      // 2. Aggiorna stato locale
+                      const updated = (localAllegati||[]).filter((_,j)=>j!==i);
+                      setLocalAllegati(updated);
+                    },
                     style:{background:"none",border:"none",cursor:"pointer",padding:4,color:C.textMuted,display:"flex",borderRadius:4},
                     onMouseEnter:e=>e.currentTarget.style.color=C.red,
                     onMouseLeave:e=>e.currentTarget.style.color=C.textMuted}
@@ -5699,7 +5724,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                             file_name: file.name,
                             file_type: file.type,
                             descrizione: '',
-                          }).select('id').single();
+                          }).select('id').maybeSingle();
                           if (!insErr && insData?.id) attRow.id = insData.id;
                           else if (insErr) console.warn('[FM] allegato DB error', insErr.message);
                         } catch(dbErr) { console.warn('[FM] allegato DB error', dbErr); }
@@ -11422,13 +11447,25 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   const [editAllegatoDesc, setEditAllegatoDesc] = useState('');
   const [confirmDelAll, setConfirmDelAll] = useState(null);
 
-  const handleDeleteAllegato = (a) => {
+  const handleDeleteAllegato = async (a) => {
     if (a._categoria === 'lezione') {
-      // Rimuovi dalla tabella allegati su Supabase
       const sb = window.supabaseClient;
-      if (sb) sb.from('allegati').delete().eq('id', a.id).then(({error}) => {
+      if (sb) {
+        const { error } = await sb.from('allegati').delete().eq('id', a.id);
         if (error) console.warn('[FM] delete allegato error:', error.message);
-      });
+        // Rimuovi file dallo Storage
+        if (a.fileUrl) {
+          try {
+            const urlPath = a.fileUrl.split('/object/public/allegati/')[1];
+            if (urlPath) await sb.storage.from('allegati').remove([urlPath]);
+          } catch(e) { console.warn('[FM] storage delete:', e); }
+        }
+        // Ricarica sharedAllegati e sharedLessons via FM_RELOAD
+        if (window.__FM_RELOAD__) {
+          const {data:allAl} = await sb.from('allegati').select('*').order('created_at',{ascending:false});
+          if (allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
+        }
+      }
       if (propSetAllegati) propSetAllegati(p => p.filter(x => x.id !== a.id));
     } else if (a._categoria === 'spartito' && a.branoId && propSetBrani) {
       propSetBrani(p => p.map(b => b.id===a.branoId ? {...b, spartiti:(b.spartiti||[]).filter(s=>s.id!==a.id&&('sp_'+b.id+'_'+s.fileName)!==a.id)} : b));
@@ -11600,16 +11637,31 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
         , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}},'Modifica allegato')
         , React.createElement('div',{style:{marginBottom:14}}
           , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
-          , React.createElement('input',{type:'text', defaultValue:editAllegato.descrizione||'',
+          , React.createElement('input',{type:'text', value:editAllegatoDesc,
             onChange:e=>setEditAllegatoDesc(e.target.value),
             style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none',boxSizing:'border-box'}})
         )
         , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
           , React.createElement('button',{onClick:()=>setEditAllegato(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
           , React.createElement('button',{onClick:()=>{
+              // 1. Aggiorna sharedAllegati (array globale)
               if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===editAllegato.id?{...x,descrizione:editAllegatoDesc}:x));
-              const sb=window.supabaseClient;
-              if(sb) sb.from('allegati').update({descrizione:editAllegatoDesc}).eq('id',editAllegato.id).then(({error})=>{ if(error) console.warn('[FM] edit allegato error:',error.message); });
+              // 2. Aggiorna la descrizione nell'allegato embedded dentro sharedLessons
+              if(window.__FM_RELOAD__){
+                // Rilegge allegati da DB dopo UPDATE per sincronizzare tutto
+                const sb2=window.supabaseClient;
+                if(sb2){
+                  sb2.from('allegati').update({descrizione:editAllegatoDesc}).eq('id',editAllegato.id)
+                    .then(async({error})=>{
+                      if(error){ console.warn('[FM] edit allegato:',error.message); return; }
+                      const {data:allAl}=await sb2.from('allegati').select('*').order('created_at',{ascending:false});
+                      if(allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
+                    });
+                }
+              } else {
+                const sb=window.supabaseClient;
+                if(sb) sb.from('allegati').update({descrizione:editAllegatoDesc}).eq('id',editAllegato.id).then(({error})=>{ if(error) console.warn('[FM] edit allegato:',error.message); });
+              }
               setEditAllegato(null);
             }, style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.gold,color:'#0d1f4a',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},'Salva')
         )
