@@ -11478,6 +11478,15 @@ const RuoloBadge = ({ ruolo }) => {
   );
 };
 
+
+// ─── PORTAL HELPER ──────────────────────────────────────────────────────────
+// Monta elementi su document.body, evitando che overflow:auto+animation
+// sul contenitore padre intrappoli i position:fixed
+const _Portal = ({ children }) => {
+  if (typeof document === 'undefined' || !window.ReactDOM || !window.ReactDOM.createPortal) return null;
+  return window.ReactDOM.createPortal(children, document.body);
+};
+
 // ─── ALLEGATI VIEW ────────────────────────────────────────────────────────────
 const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani, setBrani:propSetBrani, userRuolo:_avRuolo, appUser:_avUser }) => {
   const lessons   = propLessons   || [];
@@ -12293,15 +12302,30 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const prevMonth = curMonth===1 ? 12 : curMonth-1;
   const prevYear  = curMonth===1 ? curYear-1 : curYear;
 
+  // Lezioni del mese di un docente: SOLO presenza "presente" o "assente" contano per il compenso
+  // (giustificato, recupero, in_recupero, vuoto → non retribuiti)
   const lezioniMese = (d, m, y) => lessons.filter(l => {
     if(!matchTeacher(d, l.teacher)) return false;
+    const att = l.attendance || '';
+    if(att !== 'presente' && att !== 'assente') return false;
     const [ly,lm] = l.date.split("-").map(Number);
     return ly===y && lm===m;
   });
   // Nota: lezioniMese già funziona per collettive perché l.teacher è sempre valorizzato
   const stipendioMese = (d, m=curMonth, y=curYear) => lezioniMese(d,m,y).length * d.tariffaOra;
 
-  // Anno scolastico — usa il prop dall'admin (fallback: auto da data corrente)
+  // Strumenti di un docente: usa d.strumenti se presente, altrimenti ricava
+  // dai corsi individuali assegnati (i nomi dei corsi individuali = gli strumenti)
+  const strumentiDocente = (d) => {
+    if (d.strumenti) return d.strumenti;
+    const corsiIds = d.corsi || [];
+    const nomi = (_coursesDocView || [])
+      .filter(c => c.type === 'individuale' && corsiIds.includes(c.id))
+      .map(c => c.name);
+    return nomi.length > 0 ? nomi.join(' · ') : '—';
+  };
+
+ — usa il prop dall'admin (fallback: auto da data corrente)
   const annoInizio = _nullishCoalesce(annoInizioAttivo, () => ( (curMonth >= 9 ? curYear : curYear-1)));
   const MESI_AS = [
     {m:9, y:annoInizio},{m:10,y:annoInizio},{m:11,y:annoInizio},{m:12,y:annoInizio},
@@ -12385,7 +12409,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   , React.createElement(Avatar, { initials: d.nome.replace("Prof.ssa ","").replace("Prof. ","").split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(), hex: d.colore, size: 44, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9980}})
                   , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 9981}}
                     , React.createElement('div', { style: {fontSize:15,fontWeight:600,marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9982}}, d.nome)
-                    , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9983}}, d.strumenti)
+                    , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9983}}, strumentiDocente(d))
                   )
                 )
                 , ruoloDocView==="admin" && React.createElement('button', { onClick: e=>{e.stopPropagation();openEdit(d);},
@@ -12531,7 +12555,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             , React.createElement(Avatar, { initials: selected.nome.replace("Prof.ssa ","").replace("Prof. ","").split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(), hex: selected.colore, size: 56, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10126}})
             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10127}}
               , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600,marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10128}}, selected.nome)
-              , React.createElement('div', { style: {fontSize:13,color:C.textMuted,marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10129}}, selected.strumenti)
+              , React.createElement('div', { style: {fontSize:13,color:C.textMuted,marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10129}}, strumentiDocente(selected))
               , React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10130}}
                 , React.createElement('span', { style: {fontSize:11,background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,borderRadius:4,padding:"2px 8px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10131}}, selected.contratto)
                 , selected.dataInizio && React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10132}}, "Dal " , new Date(selected.dataInizio+"T00:00:00").toLocaleDateString("it-IT",{month:"long",year:"numeric"}))
@@ -12578,7 +12602,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           , [
             {label:"Email",    value:selected.email||"—", icon:"mail"},
             {label:"Telefono", value:selected.phone||"—", icon:"phone"},
-            {label:"Strumenti insegnati", value:selected.strumenti||"—", icon:"music"},
+            {label:"Strumenti insegnati", value:strumentiDocente(selected), icon:"music"},
             {label:"Tipo contratto",      value:selected.contratto||"—", icon:"tag"},
             {label:"Tariffa oraria",      value:`€${selected.tariffaOra}/h`, icon:"euro"},
             {label:"Data inizio",         value:selected.dataInizio||"—", icon:"calendar"},
