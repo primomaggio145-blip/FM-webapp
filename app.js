@@ -7777,8 +7777,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             )
           )
 
-          /* Barra filtri */
-          , (role === "admin" || role === "docente") && (() => {
+          /* Barra filtri — solo nella tab Calendario, non in Elenco Lezioni (che ha i suoi filtri) */
+          , appView === 'calendario' && (role === "admin" || role === "docente") && (() => {
             // Valori unici di docente e corso dalle lezioni
             const docenteOpts = [...new Set(lessons.map(l=>l.teacher).filter(Boolean))].sort();
             // Corsi: collettivi (dal nome) + strumenti individuali
@@ -11405,6 +11405,15 @@ const RuoloBadge = ({ ruolo }) => {
   );
 };
 
+
+// ─── PORTAL HELPER ──────────────────────────────────────────────────────────
+// Monta elementi su document.body, evitando che overflow:auto+animation
+// sul contenitore padre intrappoli i position:fixed
+const _Portal = ({ children }) => {
+  if (typeof document === 'undefined' || !window.ReactDOM || !window.ReactDOM.createPortal) return null;
+  return window.ReactDOM.createPortal(children, document.body);
+};
+
 // ─── ALLEGATI VIEW ────────────────────────────────────────────────────────────
 const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani, setBrani:propSetBrani, userRuolo:_avRuolo, appUser:_avUser }) => {
   const lessons   = propLessons   || [];
@@ -11622,19 +11631,22 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
         )
     )
     /* ── Confirm Delete Allegato ── */
-    , confirmDelAll && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
-      , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:400,width:'100%',border:`1px solid ${C.border}`}}
-        , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:8,color:C.red}},'Elimina allegato')
-        , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:20}},'Eliminare "', confirmDelAll.fileName, '"? Questa azione non è reversibile.')
-        , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
-          , React.createElement('button',{onClick:()=>setConfirmDelAll(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
-          , React.createElement('button',{onClick:()=>handleDeleteAllegato(confirmDelAll),style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.red,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}},'Elimina')
+    , confirmDelAll && React.createElement(_Portal, null,
+      React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
+        , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:400,width:'100%',border:`1px solid ${C.border}`}}
+          , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:8,color:C.red}},'Elimina allegato')
+          , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:20}},'Eliminare "', confirmDelAll.fileName, '"? Questa azione non è reversibile.')
+          , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+            , React.createElement('button',{onClick:()=>setConfirmDelAll(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+            , React.createElement('button',{onClick:()=>handleDeleteAllegato(confirmDelAll),style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.red,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}},'Elimina')
+          )
         )
       )
     )
-    , editAllegato && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
-      , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:440,width:'100%',border:`1px solid ${C.border}`}}
-        , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}},'Modifica allegato')
+    , editAllegato && React.createElement(_Portal, null,
+      React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
+        , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:440,width:'100%',border:`1px solid ${C.border}`}}
+          , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}},'Modifica allegato')
         , React.createElement('div',{style:{marginBottom:14}}
           , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
           , React.createElement('input',{type:'text', value:editAllegatoDesc,
@@ -11666,6 +11678,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
             }, style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.gold,color:'#0d1f4a',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},'Salva')
         )
       )
+    )
     )
   );
 };
