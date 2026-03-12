@@ -5666,7 +5666,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                         // Aggiorna sharedAllegati
                         if (window.__FM_RELOAD__) {
                           const { data: allAl } = await sb.from('allegati').select('*').order('created_at',{ascending:false});
-                          if (allAl) window.__FM_RELOAD__({ allegati: allAl.map(r=>({ id:r.id, lezioneId:r.lezione_id||null, allievoId:r.allievo_id||null, allievoNome:r.allievo_nome||null, corso:r.corso||null, descrizione:r.descrizione||null, fileUrl:r.file_url||null, fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null })) });
+                          if (allAl) window.__FM_RELOAD__({ allegati: allAl.map(r=>({ id:r.id, lezioneId:r.lezione_id||null, allievoNome:r.allievo_nome||null, corso:r.corso||null, descrizione:r.descrizione||null, fileUrl:r.file_url||null, fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null })) });
                         }
                       }
                       // 2. Aggiorna stato locale
@@ -5738,7 +5738,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                       const sb2 = window.supabaseClient;
                       if (sb2) {
                         const { data: allAl } = await sb2.from('allegati').select('*').order('created_at', {ascending:false});
-                        if (allAl) window.__FM_RELOAD__({ allegati: allAl.map(r=>({ id:r.id, lezioneId:r.lezione_id||null, allievoId:r.allievo_id||null, allievoNome:r.allievo_nome||null, corso:r.corso||null, descrizione:r.descrizione||null, fileUrl:r.file_url||null, fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null })) });
+                        if (allAl) window.__FM_RELOAD__({ allegati: allAl.map(r=>({ id:r.id, lezioneId:r.lezione_id||null, allievoNome:r.allievo_nome||null, corso:r.corso||null, descrizione:r.descrizione||null, fileUrl:r.file_url||null, fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null })) });
                       }
                     }
                     e.target.value='';
@@ -7777,7 +7777,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             )
           )
 
-          /* Barra filtri — solo nella tab Calendario, non in Elenco Lezioni (che ha i suoi filtri) */
+          /* Barra filtri — solo nella tab Calendario, non in Elenco Lezioni che ha la propria barra */
           , appView === 'calendario' && (role === "admin" || role === "docente") && (() => {
             // Valori unici di docente e corso dalle lezioni
             const docenteOpts = [...new Set(lessons.map(l=>l.teacher).filter(Boolean))].sort();
@@ -9134,7 +9134,7 @@ const INIT_BRANI = [
 
 // ─── FORM BRANO ──────────────────────────────────────────────────────────────
 const BranoForm = ({initial,onSave,onClose,students:_studBranoIn})=>{
-  const empty={title:"",composer:"",periodo:"",tonality:"",difficulty:"Intermedio",tipo:"individuale",note:""};
+  const empty={title:"",composer:"",periodo:"",tonality:"",difficulty:"Intermedio",tipo:"individuale",note:"",linkBacking:"",files:[],spartiti:[]};
   const [f,setF]=useState(initial||empty);
   const [err,setErr]=useState({});
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -9169,19 +9169,92 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn})=>{
 
 
         /* Note */
-        , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7426}}
-          , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7427}}, "Note tecniche / annotazioni"   )
+        , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:5}}
+          , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase"}},"Note tecniche / annotazioni")
           , React.createElement('textarea', { value: f.note, onChange: e=>set("note",e.target.value), rows: 3,
-            placeholder: "Indicazioni tecniche, riferimenti, obiettivi didattici..."    ,
+            placeholder: "Indicazioni tecniche, riferimenti, obiettivi didattici...",
             style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
               color:C.text,fontSize:13,padding:"9px 13px",width:"100%",
-              fontFamily:"'Open Sans',sans-serif",resize:"vertical"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7428}})
+              fontFamily:"'Open Sans',sans-serif",resize:"vertical"}})
+        )
+
+        /* ── Link Backing Track ── */
+        , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:5}}
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase"}},'Link Backing / YouTube / Drive')
+          , React.createElement('input',{
+              type:'url', value:f.linkBacking||'', placeholder:'https://youtube.com/...',
+              onChange:e=>set('linkBacking',e.target.value),
+              style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,
+                background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",
+                outline:'none',boxSizing:'border-box'}})
+        )
+
+        /* ── Spartiti (PDF) ── */
+        , React.createElement('div', null
+          , React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}
+            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase'}},'Spartiti')
+            , React.createElement('label',{style:{fontSize:11,color:C.blue,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}
+              , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.blue}),' Carica PDF'
+              , React.createElement('input',{type:'file',accept:'.pdf,image/*',multiple:true,style:{display:'none'},
+                  onChange:async e=>{
+                    const sb=window.supabaseClient; const newItems=[];
+                    for(const file of Array.from(e.target.files||[])){
+                      const path=`spartiti/${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
+                      let fileUrl=null;
+                      if(sb){try{await sb.storage.from('allegati').upload(path,file,{upsert:true});const{data:u}=sb.storage.from('allegati').getPublicUrl(path);fileUrl=u?.publicUrl||null;}catch(er){}}
+                      newItems.push({id:'sp_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),fileName:file.name,fileUrl,fileType:file.type});
+                    }
+                    set('spartiti',[...(f.spartiti||[]),...newItems]);e.target.value='';
+                  }})
+            )
+          )
+          , (f.spartiti||[]).length>0 && React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:4}}
+            , (f.spartiti||[]).map((s,i)=>React.createElement('div',{key:s.id||i,style:{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg}}
+              , React.createElement(Ic,{n:'paperclip',size:12,stroke:C.red})
+              , s.fileUrl
+                ? React.createElement('a',{href:s.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{flex:1,fontSize:12,color:C.blue,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},s.fileName||'Spartito')
+                : React.createElement('span',{style:{flex:1,fontSize:12,color:C.text}},s.fileName||'Spartito')
+              , React.createElement('button',{onClick:()=>set('spartiti',(f.spartiti||[]).filter((_,j)=>j!==i)),style:{background:'none',border:'none',cursor:'pointer',padding:2,color:C.textMuted},onMouseEnter:e=>e.currentTarget.style.color=C.red,onMouseLeave:e=>e.currentTarget.style.color=C.textMuted}
+                , React.createElement(Ic,{n:'x',size:12,stroke:'currentColor'}))
+            ))
+          )
+        )
+
+        /* ── File allegati (audio/video/altro) ── */
+        , React.createElement('div', null
+          , React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}
+            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase'}},'File allegati')
+            , React.createElement('label',{style:{fontSize:11,color:C.blue,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}
+              , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.blue}),' Carica file'
+              , React.createElement('input',{type:'file',multiple:true,style:{display:'none'},
+                  onChange:async e=>{
+                    const sb=window.supabaseClient; const newItems=[];
+                    for(const file of Array.from(e.target.files||[])){
+                      const path=`brani/${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
+                      let fileUrl=null;
+                      if(sb){try{await sb.storage.from('allegati').upload(path,file,{upsert:true});const{data:u}=sb.storage.from('allegati').getPublicUrl(path);fileUrl=u?.publicUrl||null;}catch(er){}}
+                      newItems.push({id:'fa_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),fileName:file.name,fileUrl,fileType:file.type});
+                    }
+                    set('files',[...(f.files||[]),...newItems]);e.target.value='';
+                  }})
+            )
+          )
+          , (f.files||[]).length>0 && React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:4}}
+            , (f.files||[]).map((fi,i)=>React.createElement('div',{key:fi.id||i,style:{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg}}
+              , React.createElement(Ic,{n:'paperclip',size:12,stroke:C.blue})
+              , fi.fileUrl
+                ? React.createElement('a',{href:fi.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{flex:1,fontSize:12,color:C.blue,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},fi.fileName||'File')
+                : React.createElement('span',{style:{flex:1,fontSize:12,color:C.text}},fi.fileName||'File')
+              , React.createElement('button',{onClick:()=>set('files',(f.files||[]).filter((_,j)=>j!==i)),style:{background:'none',border:'none',cursor:'pointer',padding:2,color:C.textMuted},onMouseEnter:e=>e.currentTarget.style.color=C.red,onMouseLeave:e=>e.currentTarget.style.color=C.textMuted}
+                , React.createElement(Ic,{n:'x',size:12,stroke:'currentColor'}))
+            ))
+          )
         )
       )
 
-      , React.createElement('div', { style: {padding:"13px 22px",borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"flex-end",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7436}}
-        , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7437}}, "Annulla")
-        , React.createElement(Btn, { onClick: handleSave, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7438}}, React.createElement(Ic, { n: "check", size: 13, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7438}}), _optionalChain([initial, 'optionalAccess', _69 => _69.id])?"Salva modifiche":"Aggiungi brano")
+      , React.createElement('div', { style: {padding:"13px 22px",borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"flex-end",gap:8}}
+        , React.createElement(Btn, { variant: "secondary", onClick: onClose}, "Annulla")
+        , React.createElement(Btn, { onClick: handleSave}, React.createElement(Ic, { n: "check", size: 13, stroke: "#ffffff"}), _optionalChain([initial, 'optionalAccess', _69 => _69.id])?"Salva modifiche":"Aggiungi brano")
       )
     )
   );
@@ -11405,15 +11478,6 @@ const RuoloBadge = ({ ruolo }) => {
   );
 };
 
-
-// ─── PORTAL HELPER ──────────────────────────────────────────────────────────
-// Monta elementi su document.body, evitando che overflow:auto+animation
-// sul contenitore padre intrappoli i position:fixed
-const _Portal = ({ children }) => {
-  if (typeof document === 'undefined' || !window.ReactDOM || !window.ReactDOM.createPortal) return null;
-  return window.ReactDOM.createPortal(children, document.body);
-};
-
 // ─── ALLEGATI VIEW ────────────────────────────────────────────────────────────
 const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani, setBrani:propSetBrani, userRuolo:_avRuolo, appUser:_avUser }) => {
   const lessons   = propLessons   || [];
@@ -11456,6 +11520,16 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   const [editAllegatoDesc, setEditAllegatoDesc] = useState('');
   const [confirmDelAll, setConfirmDelAll] = useState(null);
 
+  // Sync modali verso lo slot globale di App (fuori da main-scroll animato)
+  const _closeConfirmDel = () => {
+    setConfirmDelAll(null);
+    if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
+  };
+  const _closeEditAll = () => {
+    setEditAllegato(null);
+    if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
+  };
+
   const handleDeleteAllegato = async (a) => {
     if (a._categoria === 'lezione') {
       const sb = window.supabaseClient;
@@ -11472,7 +11546,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
         // Ricarica sharedAllegati e sharedLessons via FM_RELOAD
         if (window.__FM_RELOAD__) {
           const {data:allAl} = await sb.from('allegati').select('*').order('created_at',{ascending:false});
-          if (allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoId:r.allievo_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
+          if (allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
         }
       }
       if (propSetAllegati) propSetAllegati(p => p.filter(x => x.id !== a.id));
@@ -11481,8 +11555,73 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     } else if (a._categoria === 'file_brano' && a.branoId && propSetBrani) {
       propSetBrani(p => p.map(b => b.id===a.branoId ? {...b, files:(b.files||[]).filter(f=>f.id!==a.id&&('fa_'+b.id+'_'+f.fileName)!==a.id)} : b));
     }
+    if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
     setConfirmDelAll(null);
   };
+
+  // useEffect: aggiorna lo slot modale globale ogni volta che confirmDelAll o editAllegato cambiano
+  useEffect(() => {
+    if (confirmDelAll) {
+      if (window.__FM_SHOW_MODAL__) window.__FM_SHOW_MODAL__(
+        React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
+          , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:400,width:'90%',border:`1px solid ${C.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}
+            , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:8,color:C.red}},'Elimina allegato')
+            , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:20}},'Eliminare "', confirmDelAll.fileName, '"? Questa azione non è reversibile.')
+            , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+              , React.createElement('button',{onClick:()=>{ setConfirmDelAll(null); if(window.__FM_HIDE_MODAL__)window.__FM_HIDE_MODAL__(); },style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+              , React.createElement('button',{onClick:()=>handleDeleteAllegato(confirmDelAll),style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.red,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}},'Elimina')
+            )
+          )
+        )
+      );
+    } else if (!editAllegato) {
+      if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
+    }
+  }, [confirmDelAll]);  // eslint-disable-line
+
+  useEffect(() => {
+    if (editAllegato) {
+      const _descRef = { v: editAllegatoDesc };
+      const _renderEditModal = (desc) => {
+        if (window.__FM_SHOW_MODAL__) window.__FM_SHOW_MODAL__(
+          React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
+            , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:440,width:'90%',border:`1px solid ${C.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}
+              , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}},'Modifica allegato')
+              , React.createElement('div',{style:{marginBottom:14}}
+                , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
+                , React.createElement('input',{type:'text', autoFocus:true, defaultValue:desc,
+                    onChange:e=>{ _descRef.v=e.target.value; },
+                    style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none',boxSizing:'border-box'}})
+              )
+              , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+                , React.createElement('button',{onClick:()=>{ setEditAllegato(null); if(window.__FM_HIDE_MODAL__)window.__FM_HIDE_MODAL__(); },style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+                , React.createElement('button',{onClick:()=>{
+                    const newDesc = _descRef.v;
+                    if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===editAllegato.id?{...x,descrizione:newDesc}:x));
+                    const sb2=window.supabaseClient;
+                    if(sb2){
+                      sb2.from('allegati').update({descrizione:newDesc}).eq('id',editAllegato.id)
+                        .then(async({error})=>{
+                          if(error){ console.warn('[FM] edit allegato:',error.message); return; }
+                          if(window.__FM_RELOAD__){
+                            const {data:allAl}=await sb2.from('allegati').select('*').order('created_at',{ascending:false});
+                            if(allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoId:r.allievo_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
+                          }
+                        });
+                    }
+                    setEditAllegato(null);
+                    if(window.__FM_HIDE_MODAL__)window.__FM_HIDE_MODAL__();
+                  }, style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.gold,color:'#0d1f4a',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},'Salva')
+              )
+            )
+          )
+        );
+      };
+      _renderEditModal(editAllegatoDesc);
+    } else {
+      if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
+    }
+  }, [editAllegato, editAllegatoDesc]);  // eslint-disable-line
 
   // Unisce allegati lezioni + files/spartiti dei brani in un unico array
   const allegatiBrani = [];
@@ -11630,56 +11769,10 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
           )
         )
     )
-    /* ── Confirm Delete Allegato ── */
-    , confirmDelAll && React.createElement(_Portal, null,
-      React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
-        , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:400,width:'100%',border:`1px solid ${C.border}`}}
-          , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:8,color:C.red}},'Elimina allegato')
-          , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:20}},'Eliminare "', confirmDelAll.fileName, '"? Questa azione non è reversibile.')
-          , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
-            , React.createElement('button',{onClick:()=>setConfirmDelAll(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
-            , React.createElement('button',{onClick:()=>handleDeleteAllegato(confirmDelAll),style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.red,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}},'Elimina')
-          )
-        )
-      )
-    )
-    , editAllegato && React.createElement(_Portal, null,
-      React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
-        , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:440,width:'100%',border:`1px solid ${C.border}`}}
-          , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}},'Modifica allegato')
-        , React.createElement('div',{style:{marginBottom:14}}
-          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
-          , React.createElement('input',{type:'text', value:editAllegatoDesc,
-            onChange:e=>setEditAllegatoDesc(e.target.value),
-            style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none',boxSizing:'border-box'}})
-        )
-        , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
-          , React.createElement('button',{onClick:()=>setEditAllegato(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
-          , React.createElement('button',{onClick:()=>{
-              // 1. Aggiorna sharedAllegati (array globale)
-              if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===editAllegato.id?{...x,descrizione:editAllegatoDesc}:x));
-              // 2. Aggiorna la descrizione nell'allegato embedded dentro sharedLessons
-              if(window.__FM_RELOAD__){
-                // Rilegge allegati da DB dopo UPDATE per sincronizzare tutto
-                const sb2=window.supabaseClient;
-                if(sb2){
-                  sb2.from('allegati').update({descrizione:editAllegatoDesc}).eq('id',editAllegato.id)
-                    .then(async({error})=>{
-                      if(error){ console.warn('[FM] edit allegato:',error.message); return; }
-                      const {data:allAl}=await sb2.from('allegati').select('*').order('created_at',{ascending:false});
-                      if(allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoId:r.allievo_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
-                    });
-                }
-              } else {
-                const sb=window.supabaseClient;
-                if(sb) sb.from('allegati').update({descrizione:editAllegatoDesc}).eq('id',editAllegato.id).then(({error})=>{ if(error) console.warn('[FM] edit allegato:',error.message); });
-              }
-              setEditAllegato(null);
-            }, style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.gold,color:'#0d1f4a',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},'Salva')
-        )
-      )
-    )
-    )
+    /* ── I modali (confirm delete / modifica) sono gestiti tramite
+       window.__FM_SHOW_MODAL__ nello slot globalModal di App,
+       fuori dal div main-scroll animato (fadeIn) che crea un
+       compositing layer che intrappola position:fixed. ── */
   );
 };
 
@@ -13100,6 +13193,7 @@ function App() {
   const [sharedRuolo,   setSharedRuolo]   = useState("admin");
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
 
+  const [globalModal,        setGlobalModal]        = useState(null); // overlay top-level fuori da main-scroll animato
   // ── Ripristina sessione Auth al refresh pagina + gestisci link invito ──────
   useEffect(()=>{
     if(!window.FM_AUTH) return;
@@ -13177,11 +13271,18 @@ function App() {
       if (data.concerti)  setSharedConcerti(data.concerti);
       if (data.allegati)  setSharedAllegati(data.allegati);
       if (data.richieste) setSharedRichieste(data.richieste);
-      // Aggiorna _prev in fm_sync per evitare che syncState rilevi i dati appena
-      // scritti su Supabase come "nuovi" e li riscriva (doppio write)
-      if (window.__FM_SYNC_PREV__) window.__FM_SYNC_PREV__(data);
     };
-    return () => { window.__FM_RELOAD__ = null; };
+    // Overlay globale: renderizzato FUORI da main-scroll che ha animation opacity
+    // → crea compositing layer che intrappola position:fixed dei figli.
+    // Componenti come AllegatiView chiamano window.__FM_SHOW_MODAL__(element)
+    // per mostrare modali che risiedono direttamente nel Fragment root di App.
+    window.__FM_SHOW_MODAL__ = (element) => setGlobalModal(element);
+    window.__FM_HIDE_MODAL__ = ()        => setGlobalModal(null);
+    return () => {
+      window.__FM_RELOAD__ = null;
+      window.__FM_SHOW_MODAL__ = null;
+      window.__FM_HIDE_MODAL__ = null;
+    };
   }, []);
   // ─────────────────────────────────────────────────────────────
 
@@ -13283,6 +13384,12 @@ function App() {
           , views[view] || null
         )
       )
+      /* ─── Global Modal Slot ───────────────────────────────────────────────────
+         Renderizzato come fratello del div principale, FUORI da main-scroll.
+         main-scroll ha animation:"fadeIn" che crea un compositing layer:
+         i position:fixed dentro vengono trappola da esso. Qui siamo nel Fragment
+         root, quindi position:fixed si aggancia al viewport come previsto.  */
+      , globalModal
     )
   );
 }
