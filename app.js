@@ -12538,8 +12538,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                 , [
                   {label:"Allievi",  value:all.length,                                      hex:d.colore},
                   {label:"Lez/mese", value:tutteLezioniMese(d,curMonth,curYear).length,        hex:_optionalChain([selected, 'optionalAccess', _88 => _88.id])===d.id?d.colore:C.textMuted},
-                  // Compenso: solo admin
-                  ...(ruoloDocView==="admin" ? [{label:"Compenso", value:`€${stipendioMese(d).toLocaleString("it-IT")}`, hex:C.green}] : []),
+                  // Compenso visibile sempre (docente vede solo sé stesso nella lista)
+                  {label:"Compenso", value:`€${stipendioMese(d).toLocaleString("it-IT")}`, hex:C.green},
                 ].map(s=>(
                   React.createElement('div', { key: s.label, style: {textAlign:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9999}}
                     , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,color:s.hex,lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10000}}, s.value)
@@ -12570,8 +12570,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     {id:"profilo",  label:"Profilo",  icon:"user"},
     {id:"allievi",  label:"Allievi",  icon:"users"},
     {id:"lezioni",  label:"Lezioni",  icon:"calendar"},
-    // Compenso: solo per admin — il docente non vede la propria paga
-    ...(ruoloDocView==="admin" ? [{id:"compenso", label:"Compenso", icon:"euro"}] : []),
+    // Tab Compenso visibile sempre (docente vede solo sé stesso)
+    {id:"compenso", label:"Compenso", icon:"euro"},
   ];
   const stip = stipendioMese(selected);
 
@@ -12692,11 +12692,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           , [
             {label:"Allievi totali",  value:all.length,                          hex:selected.colore},
             {label:`Lez. ${MESI_LABEL_S[selMese.m-1]}`, value:lezSelAll.length, hex:C.textMuted},
-            // tariffa e compenso: solo admin
-            ...(ruoloDocView==="admin" ? [
-              {label:"Tariffa/ora",     value:`€${selected.tariffaOra}`,           hex:C.gold},
-              {label:`Compenso ${MESI_LABEL_S[selMese.m-1]}`, value:`€${stipSel.toLocaleString("it-IT")}`, hex:C.green},
-            ] : []),
+            // Tariffa e Compenso sempre visibili (docente vede solo sé stesso)
+            {label:"Tariffa/ora",     value:`€${selected.tariffaOra}`,           hex:C.gold},
+            {label:`Compenso ${MESI_LABEL_S[selMese.m-1]}`, value:`€${stipSel.toLocaleString("it-IT")}`, hex:C.green},
           ].map(k=>(
             React.createElement('div', { key: k.label, style: {background:C.bg,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10149}}
               , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600,color:k.hex,lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10150}}, k.value)
@@ -12726,11 +12724,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             {label:"Email",    value:selected.email||"—", icon:"mail"},
             {label:"Telefono", value:selected.phone||"—", icon:"phone"},
             {label:"Strumenti insegnati", value:strumentiDocente(selected), icon:"music"},
-            // Contratto, tariffa e compenso: dati contabili, visibili solo all'admin
-            ...(ruoloDocView==="admin" ? [
-              {label:"Tipo contratto", value:selected.contratto||"—", icon:"tag"},
-              {label:"Tariffa oraria", value:`€${selected.tariffaOra}/h`, icon:"euro"},
-            ] : []),
+            // Contratto e tariffa sempre visibili (docente vede solo sé stesso)
+            {label:"Tipo contratto", value:selected.contratto||"—", icon:"tag"},
+            {label:"Tariffa oraria", value:`€${selected.tariffaOra}/h`, icon:"euro"},
             {label:"Data inizio", value:selected.dataInizio||"—", icon:"calendar"},
           ].map(f=>(
             React.createElement('div', { key: f.label, style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 18px",display:"flex",alignItems:"center",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10181}}
