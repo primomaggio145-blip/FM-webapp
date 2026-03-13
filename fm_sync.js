@@ -145,7 +145,6 @@
         enroll_date: s.enrollDate || null,
         complementary_course: s.complementaryCourse || null,
         notes: s.notes || null,
-        repertorio: Array.isArray(s.repertorio) ? JSON.stringify(s.repertorio) : (s.repertorio || null),
         updated_at: new Date().toISOString(),
       };
     },
