@@ -9500,7 +9500,7 @@ const AllievoBraniView = ({allievo,brani,allStudents,lessons,onBack})=>{
         )
       )
 
-      , individuali.length>0&&(
+      , suoiBrani.length>0&&(
         React.createElement('div', { style: {marginBottom:22}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7618}}
           , React.createElement('div', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7619}}
             , React.createElement(Ic, { n: "music", size: 13, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7620}}), " Brani in repertorio ("   , suoiBrani.length, ")"
