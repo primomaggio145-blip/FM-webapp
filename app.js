@@ -4036,7 +4036,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
               )
             )
           )
-          , React.createElement('div', { style: {display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3224}}
+          , sdRuolo !== "docente" && React.createElement('div', { style: {display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3224}}
             , React.createElement(Btn, { variant: "secondary", onClick: onEdit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3225}}, React.createElement(Ic, { n: "edit", size: 14, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3225}}), "Modifica")
             , React.createElement(Btn, { danger: true, onClick: onDelete, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3226}}, React.createElement(Ic, { n: "trash", size: 14, accentHex: C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3226}}))
           )
@@ -4044,10 +4044,15 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
         /* KPI strip — aggiornano col mese selezionato */
         , React.createElement('div', { style: {display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)",gap:isMobile?10:12,marginTop:20,paddingTop:20,borderTop:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3230}}
           , [
-            {label:"Quota mensile",        value:`€ ${student.monthlyFee}`,    sub:student.feeType,   hex:C.gold},
+            // Quota mensile e Versato anno: nascosti al docente
+            ...(sdRuolo !== "docente" ? [
+              {label:"Quota mensile",      value:`€ ${student.monthlyFee}`,    sub:student.feeType,   hex:C.gold},
+            ] : []),
             {label:`Lez. ${MESI_LABEL_S[selMese.m-1]}`, value:lezSel.length,  sub:"lezioni",          hex:accentHex},
             {label:"Brani in studio",      value:repInStudio.length,           sub:"repertorio",       hex:C.purple},
-            {label:"Versato anno",         value:`€ ${totaleVersato}`,         sub:`${entrateStudent.length} rate pagate`, hex:C.green},
+            ...(sdRuolo !== "docente" ? [
+              {label:"Versato anno",       value:`€ ${totaleVersato}`,         sub:`${entrateStudent.length} rate pagate`, hex:C.green},
+            ] : []),
           ].map(k => (
             React.createElement('div', { key: k.label, style: {background:C.bg,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3237}}
               , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,color:k.hex,lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3238}}, k.value)
