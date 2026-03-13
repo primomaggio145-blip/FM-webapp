@@ -3115,7 +3115,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                         : ruolo==="allievo"
                         ? React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:8}},
                             (()=>{
-                              const miei=_entrate.filter(e=>myStudentId?e.studentId===myStudentId:(e.studentName||"").toLowerCase().includes(myNome.toLowerCase())).sort((a,b)=>b.data.localeCompare(a.data)).slice(0,5);
+                              const miei=_entrate.filter(e=>myStudentId?e.studentId===myStudentId:(e.studentName||"").toLowerCase().includes(myNome.toLowerCase())).sort((a,b)=>(b.data||'').localeCompare(a.data||'')).slice(0,5);
                               if(!miei.length) return React.createElement('p',{style:{fontSize:13,color:C.textDim,textAlign:"center",padding:"12px 0"}},"Nessun pagamento registrato");
                               return miei.map((e,i)=>React.createElement('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.border}`}},
                                 React.createElement('div',null,
@@ -8751,7 +8751,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         &&(!q||s.desc.toLowerCase().includes(q)||(s.note||"").toLowerCase().includes(q))
         &&(!filterCat||s.categoria===filterCat)
         &&(!filterMese||s.mese===Number(filterMese));
-    }).sort((a,b)=>b.data.localeCompare(a.data));
+    }).sort((a,b)=>(b.data||'').localeCompare(a.data||''));
   
     // Aggregato docenti
     const docenteStats = useMemo(()=>DOCENTI.map(d=>({
@@ -8926,14 +8926,14 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                   return (!q||((e.studentName||"").toLowerCase().includes(q)||(e.desc||"").toLowerCase().includes(q)))
                     && (!filterQMese||Number(filterQMese)===e.mese);
                 })
-                .sort((a,b)=>b.data.localeCompare(a.data));
+                .sort((a,b)=>(b.data||'').localeCompare(a.data||''));
               const totQFiltrate = qFiltrate.reduce((t,e)=>t+e.importo,0);
 
               // Riepilogo per allievo (usato in tabella studenti)
               const stSummary = students.map(s=>{
                 const pagamenti = entrate.filter(e=>e.studentId===s.id);
                 const totPag    = pagamenti.reduce((t,e)=>t+e.importo,0);
-                const ultPag    = pagamenti.sort((a,b)=>b.data.localeCompare(a.data))[0];
+                const ultPag    = pagamenti.sort((a,b)=>(b.data||'').localeCompare(a.data||''))[0];
                 return {...s, totPag, ultPag:_optionalChain([ultPag, 'optionalAccess', _68 => _68.data])||null, nPagamenti:pagamenti.length};
               });
 
@@ -8994,7 +8994,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                               color:C.green,border:`1px solid ${C.greenBorder}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7189}}, c.label);})()
                         )
                         , React.createElement('div', { style: {fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7192}}
-                          , new Date(e.data+"T00:00:00").toLocaleDateString("it-IT")
+                          , e.data ? new Date(e.data+"T00:00:00").toLocaleDateString("it-IT") : "—"
                         )
                         , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7195}}, e.metodo)
                         , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:17,fontWeight:600,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7196}}, fmt(e.importo))
@@ -10882,7 +10882,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
       return base && (e.partecipanti||[]).some(p=>(p.studentName||"").toLowerCase().includes(_myNomeConc.toLowerCase()));
     if(ruoloConc==="docente") return base;
     return base;
-  }).sort((a,b)=>b.data.localeCompare(a.data));
+  }).sort((a,b)=>(b.data||'').localeCompare(a.data||''));
 
   const handleSave   = ev => { setConcerti(p=>[...p.filter(x=>x.id!==ev.id),ev]); setModal(null); if(_optionalChain([selected, 'optionalAccess', _77 => _77.id])===ev.id) setSelected(ev); };
   const handleDelete = () => { setConcerti(p=>p.filter(x=>x.id!==_optionalChain([selected, 'optionalAccess', _78 => _78.id]))); setSelected(null); setModal(null); };

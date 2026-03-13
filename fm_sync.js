@@ -60,6 +60,7 @@
       : [];
     return {
       id: r.id, date: r.data, hour: r.ora || '', student: r.student || '',
+      tipo: r.tipo || 'individuale',
       studentId: r.studente_id || null,
       instrument: r.strumento || r.instrument || '', teacher: r.teacher || '', room: r.room || '',
       topic: r.topic || '', attendance: r.attendance || '',
@@ -177,7 +178,6 @@
         id: l.id || null,
         data: l.date, ora: l.hour || null,
         student: l.student || null,
-        studente_id: l.studentId || null,
         strumento: l.instrument || l.strumento || null,
         teacher: l.teacher || null, room: l.room || null,
         topic: l.topic || null, attendance: l.attendance || null,
@@ -466,8 +466,7 @@
         `studenti:${data.students.length}`,
         `docenti:${data.docenti.length}`,
         `corsi:${data.courses.length}`,
-        `lezioni:${data.lessons.length}`,
-        `allegati:${data.allegati.length}`
+        `lezioni:${data.lessons.length}`
       );
       return data;
     } catch(e) { fail('loadAll fallito:', e); return null; }
@@ -517,19 +516,6 @@
     if (!_ready) return;
     clearTimeout(_timer);
     _timer = setTimeout(() => syncState(state), DEBOUNCE);
-  };
-
-  // Aggiorna snapshot _prev dall'esterno (usato da __FM_RELOAD__ per evitare doppio write)
-  window.__FM_SYNC_PREV__ = function(updates) {
-    if (updates.students)  _prev.students  = [...updates.students];
-    if (updates.courses)   _prev.courses   = [...updates.courses];
-    if (updates.docenti)   _prev.docenti   = [...updates.docenti];
-    if (updates.lessons)   _prev.lessons   = [...updates.lessons];
-    if (updates.entrate)   _prev.entrate   = [...updates.entrate];
-    if (updates.spese)     _prev.spese     = [...updates.spese];
-    if (updates.brani)     _prev.brani     = [...updates.brani];
-    if (updates.concerti)  _prev.concerti  = [...updates.concerti];
-    if (updates.allegati)  _prev.allegati  = [...updates.allegati];
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
