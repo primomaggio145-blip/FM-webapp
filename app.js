@@ -7375,7 +7375,19 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const _cvDocenteId = (_appUserCV && _appUserCV.docenteId) || null;
     const _cvAllievoId = (_appUserCV && _appUserCV.allievoId) || null;
     const _cvNome = (_appUserCV && _appUserCV.nome) || window.__currentUserName__ || "";
-    const currentStudent = _cvNome; // usa il nome dall'utente loggato
+    // Per allievo: usa il nome canonico dal record studente nel DB (non il nome del profilo)
+    const currentStudent = React.useMemo(() => {
+      if (role !== "allievo") return _cvNome;
+      if (_cvAllievoId) {
+        const stu = propStudents.find(s => String(s.id) === String(_cvAllievoId));
+        if (stu) return stu.name || stu.nome || _cvNome;
+      }
+      // fallback: cerca per nome profilo (case-insensitive)
+      const stu = propStudents.find(s =>
+        (s.name||s.nome||'').toLowerCase().trim() === _cvNome.toLowerCase().trim()
+      );
+      return stu ? (stu.name || stu.nome || _cvNome) : _cvNome;
+    }, [role, _cvAllievoId, _cvNome, propStudents]);
     const [appView,     setAppView]    = useState("calendario"); // calendario | repertorio | recupero | lezioni_admin
 
   
@@ -7667,9 +7679,19 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
     const visibleLessons = useMemo(() => {
       let ls = role === "allievo"
-        ? (_cvAllievoId
-            ? lessons.filter(l => studentInLesson(l, currentStudent, _cvAllievoId))
-            : lessons.filter(l => studentInLesson(l, currentStudent)))
+        ? lessons.filter(l => {
+            if (isColl(l)) {
+              // collettiva: controlla per ID o nome
+              return (l.students||[]).some(s =>
+                (_cvAllievoId && String(s.id)===String(_cvAllievoId)) || s.name===currentStudent
+              );
+            }
+            // individuale: prima per studentId (campo numerico certo), poi per nome
+            if (_cvAllievoId && l.studentId != null) {
+              return String(l.studentId) === String(_cvAllievoId);
+            }
+            return studentInLesson(l, currentStudent);
+          })
         : role === "docente"
         ? (_cvDocenteId
             ? lessons.filter(l => { const d=propDocenti.find(x=>String(x.id)===String(_cvDocenteId)); const k=(d?(d.teacherKey||d.nome||''):_cvNome).toLowerCase().trim(); const t=(l.teacher||"").toLowerCase().trim(); return t===k||t.includes(k)||k.includes(t); })
