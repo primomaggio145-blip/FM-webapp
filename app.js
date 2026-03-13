@@ -12308,8 +12308,27 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           const { error } = await sb.from('corsi_docenti').insert(nuovi);
           if (error) console.warn('[FM] corsi_docenti insert:', error.message);
         }
-        // Aggiorna anche la tabella docenti su Supabase via toDB
-        const row = window.FMAdapter ? window.FMAdapter.docente(saved) : saved;
+        // Aggiorna la tabella docenti con i nomi colonne del DB (non campi app)
+        // NON usare FMAdapter.docente (è DB→App); costruiamo il row App→DB qui
+        const strumentiDb = typeof saved.strumenti === 'string' && saved.strumenti
+          ? saved.strumenti.split(' · ').map(s=>s.trim()).filter(Boolean)
+          : (Array.isArray(saved.strumenti) ? saved.strumenti : null);
+        const row = {
+          id:          saved.id,
+          nome:        saved.nome        || '',
+          email:       saved.email       || null,
+          phone:       saved.phone       || null,
+          strumenti:   strumentiDb,
+          colore:      saved.colore      || null,
+          teacher_key: saved.teacherKey  || saved.nome || '',
+          bio:         saved.bio         || null,
+          tariffa_ora: parseFloat(saved.tariffaOra) || 0,
+          contratto:   saved.contratto   || null,
+          data_inizio: saved.dataInizio  || null,
+          attivo:      saved.attivo !== false,
+        };
+        // rimuove undefined
+        Object.keys(row).forEach(k => { if (row[k] === undefined) delete row[k]; });
         if (isNew) {
           await sb.from('docenti').insert(row);
         } else {
