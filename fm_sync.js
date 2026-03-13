@@ -33,7 +33,11 @@
   // ═══════════════════════════════════════════════════════════════════════════
   function adaptStudente(r) {
     const FA = window.FMAdapter;
-    return FA ? FA.studente(r) : r;
+    const base = FA ? FA.studente(r) : r;
+    // Aggiunge 'repertorio' che FMAdapter.studente non mappa
+    const parseJson = (v, fallback=[]) => { if (!v) return fallback; if (Array.isArray(v)) return v; try { return JSON.parse(v); } catch(e) { return fallback; } };
+    base.repertorio = parseJson(r.repertorio, []);
+    return base;
   }
   function adaptDocente(r) {
     const FA = window.FMAdapter;
@@ -140,7 +144,9 @@
         fee_type: s.feeType || 'fisso', birthdate: s.birthdate || null,
         enroll_date: s.enrollDate || null,
         complementary_course: s.complementaryCourse || null,
-        notes: s.notes || null, updated_at: new Date().toISOString(),
+        notes: s.notes || null,
+        repertorio: Array.isArray(s.repertorio) ? JSON.stringify(s.repertorio) : (s.repertorio || null),
+        updated_at: new Date().toISOString(),
       };
     },
     docenti(d) {

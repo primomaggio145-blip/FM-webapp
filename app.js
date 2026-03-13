@@ -3910,7 +3910,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const config = _nullishCoalesce(propConfig, () => ( CONFIG_DEFAULT));
 
   // Lezioni globali per questo allievo
-  const lezStudente = lessons.filter(l => studentInLesson(l, student.name));
+  const lezStudente = lessons.filter(l => studentInLesson(l, student.name, student.id));
   const lezMese     = (m, y) => lezStudente.filter(l => { const [ly,lm] = l.date.split("-").map(Number); return ly===y && lm===m; });
   const lezSel      = lezMese(selMese.m, selMese.y);
 
@@ -3925,7 +3925,8 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   // Quote anno scolastico corrente
   // Quote: leggiamo da sharedEntrate (fonte unica di verità)
   const entrateStudent = allEntrate.filter(e =>
-    e.studentId === student.id &&
+    (String(e.studentId)===String(student.id) ||
+     (e.studentName||'').toLowerCase().trim()===(student.name||'').toLowerCase().trim()) &&
     MESI_AS.some(x => x.m === e.mese && x.y === e.anno)
   );
   const totaleVersato   = entrateStudent.reduce((t,e) => t + e.importo, 0);
@@ -4778,8 +4779,8 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
       , React.createElement(CourseManager, {
         courses: _ruoloCorsi==="docente" && _nomeCorsi
           ? (()=>{ const myD=(propDocenti||[]).find(d=>d.teacherKey===_nomeCorsi||(d.nome||"").toLowerCase().includes(_nomeCorsi.toLowerCase())); return myD?courses.filter(c=>(c.docenti||[]).includes(myD.id)):courses; })()
-          : _ruoloCorsi==="allievo" && _nomeCorsi
-          ? (()=>{ const me=students.find(s=>(s.name||s.nome||"").toLowerCase()===_nomeCorsi.toLowerCase()); if(!me) return []; const ids=new Set([...(me.instrument?courses.filter(c=>c.name===me.instrument).map(c=>c.id):[]),...(me.complementaryCourse?[me.complementaryCourse]:[])]); return courses.filter(c=>ids.has(c.id)); })()
+          : _ruoloCorsi==="allievo"
+          ? (()=>{ const _avId=(_aC&&_aC.allievoId)||null; const me=_avId?students.find(s=>String(s.id)===String(_avId)):students.find(s=>(s.name||s.nome||"").toLowerCase()===_nomeCorsi.toLowerCase()); if(!me) return []; const ids=new Set([...(me.instrument?courses.filter(c=>c.name===me.instrument).map(c=>c.id):[]),...(me.complementaryCourse?[me.complementaryCourse]:[])]); return courses.filter(c=>ids.has(c.id)); })()
           : courses,
         students: students,
         docenti: docenti,
@@ -4857,8 +4858,13 @@ const addDays  = (d, n) => { const dt = new Date(d); dt.setDate(dt.getDate()+n);
 const isColl      = l => _optionalChain([l, 'optionalAccess', _46 => _46.tipo]) === "collettivo";
 const isProva     = l => _optionalChain([l, 'optionalAccess', _47 => _47.tipo]) === "prova";
 const lessonHex   = l => isColl(l) ? C.purple : isProva(l) ? C.teal : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
-const studentInLesson = (l, name) =>
-  isColl(l) ? (l.students||[]).some(s=>s.name===name) : l.student===name;
+const studentInLesson = (l, name, studentId) => {
+  if (isColl(l)) return (l.students||[]).some(s=>s.name===name);
+  if (studentId && l.studentId && String(l.studentId)===String(studentId)) return true;
+  const ln = (l.student||'').toLowerCase().trim();
+  const nn = (name||'').toLowerCase().trim();
+  return ln===nn || ln.includes(nn) || nn.includes(ln);
+};
 const lessonLabel = l => isColl(l)
   ? (l.courseName||"Collettiva")
   : (l.student||"");
@@ -7662,7 +7668,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const visibleLessons = useMemo(() => {
       let ls = role === "allievo"
         ? (_cvAllievoId
-            ? lessons.filter(l => String(l.studentId||'')===String(_cvAllievoId) || studentInLesson(l, currentStudent))
+            ? lessons.filter(l => studentInLesson(l, currentStudent, _cvAllievoId))
             : lessons.filter(l => studentInLesson(l, currentStudent)))
         : role === "docente"
         ? (_cvDocenteId
@@ -8920,8 +8926,10 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                   if(ruoloCV==="docente") return false;
                   // allievo vede solo i propri pagamenti
                   if(ruoloCV==="allievo"){
-                    const myName = (typeof window!=="undefined" && window.__currentUserName__) || "";
-                    return (e.studentName||"").toLowerCase().includes(myName.toLowerCase()) || !myName;
+                    const myId = (_appUserCV&&_appUserCV.allievoId)||null;
+                    const myName = (_appUserCV&&_appUserCV.nome)||(typeof window!=="undefined"&&window.__currentUserName__)||"";
+                    if(myId) return String(e.studentId)===String(myId);
+                    return myName ? (e.studentName||"").toLowerCase().includes(myName.toLowerCase()) : true;
                   }
                   return (!q||((e.studentName||"").toLowerCase().includes(q)||(e.desc||"").toLowerCase().includes(q)))
                     && (!filterQMese||Number(filterQMese)===e.mese);
@@ -9465,10 +9473,12 @@ const BranoDrawer = ({brano,lezioniCount,allieviList,onClose,onEdit,onDelete})=>
 };
 
 // ─── VISTA ALLIEVO ───────────────────────────────────────────────────────────
-const AllievoBraniView = ({allievo,brani,allStudents,lessons,onBack})=>{
+const AllievoBraniView = ({allievo,allievoId,brani,allStudents,lessons,onBack})=>{
   const isMobile = useIsMobile();
-  const _stu = (allStudents||[]).find(s=>(s.name||s.nome||"")=== allievo);
-  const suoiBrani = _stu ? brani.filter(b=>(_stu.repertorio||[]).some(r=>r.id===b.id)) : brani.filter(b=>([]||[]).includes(allievo));
+  const _stu = allievoId
+    ? (allStudents||[]).find(s=>String(s.id)===String(allievoId))
+    : (allStudents||[]).find(s=>(s.name||s.nome||"").toLowerCase().trim()===( allievo||"").toLowerCase().trim());
+  const suoiBrani = _stu ? brani.filter(b=>(_stu.repertorio||[]).some(r=>r.id===b.id)) : [];
   
   return(
     React.createElement('div', { style: {flex:1,padding:isMobile?"12px":"20px 24px",overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7588}}
@@ -9609,6 +9619,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
           , ruoloRep==="allievo" && _nomeAllievoRep ? (
             React.createElement(AllievoBraniView, {
               allievo: _nomeAllievoRep,
+              allievoId: (_appUserRep&&_appUserRep.allievoId)||null,
               brani: brani,
               allStudents: _studBranoRep,
               lessons: _lessonsRep,
