@@ -4174,7 +4174,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
             , React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3364}}
               , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3365}}
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3366}}
-                  , ["Mese","Lezioni","Presenti","Assenti","Tasso pres."].map(h=>(
+                  , ["Mese","Lezioni","Presenti","Assenti","Giustificati","Da recuperare","Tasso pres."].map(h=>(
                     React.createElement('th', { key: h, style: {padding:"10px 18px",textAlign:"left",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3368}}, h)
                   ))
                 )
@@ -7498,6 +7498,34 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     };
     const handleEdit = (data) => {
       setLessons(p => p.map(l => l.id === data.id ? { ...l, ...data } : l));
+
+      // Write diretto su Supabase — non aspetta il debounce di fm_sync
+      // Evita che il realtime listener sovrascriva la modifica prima che syncState giri
+      const sb = window.supabaseClient;
+      if (sb && data.id) {
+        const row = {
+          data:             data.date        || null,
+          ora:              data.hour        || null,
+          student:          data.student     || null,
+          studente_id:      data.studentId   || null,
+          strumento:        data.instrument  || data.strumento || null,
+          teacher:          data.teacher     || null,
+          room:             data.room        || null,
+          topic:            data.topic       || null,
+          attendance:       data.attendance  || null,
+          recurrence:       data.recurrence  || 'Nessuna',
+          notes:            data.notes       || null,
+          tipo:             data.type        || 'individuale',
+          link_url:         data.linkUrl     || null,
+          in_recupero:      data.inRecupero  || false,
+          recupero_scadenza:data.recuperoScadenza || null,
+          updated_at:       new Date().toISOString(),
+        };
+        sb.from('lezioni').update(row).eq('id', data.id)
+          .then(({ error }) => {
+            if (error) console.warn('[FM] handleEdit update error:', error.message);
+          });
+      }
 
       // ── 1. Aggiungi i brani NUOVI al catalogo globale ──
       if (data._newBrani && Object.keys(data._newBrani).length > 0) {
@@ -12803,8 +12831,10 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               , React.createElement('tbody', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10365}}
                 , MESI_AS.map((x,i)=>{
                   const lm = tutteLezioniMese(selected,x.m,x.y);
-                  const pres = lm.filter(l=>l.attendance==="presente").length;
-                  const ass  = lm.filter(l=>l.attendance==="assente").length;
+                  const pres  = lm.filter(l=>l.attendance==="presente").length;
+                  const ass   = lm.filter(l=>l.attendance==="assente").length;
+                  const giust = lm.filter(l=>l.attendance==="giustificato").length;
+                  const rec   = lm.filter(l=>l.attendance==="in_recupero"||l.inRecupero).length;
                   const attended = lm.filter(l=>l.attendance).length;
                   const tasso = attended>0 ? Math.round((pres/attended)*100) : null;
                   const isS  = x.m===selMese.m&&x.y===selMese.y;
@@ -12826,6 +12856,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10388}}, isF?"—":pres||"—")
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:ass>0?C.red:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10389}}, isF?"—":ass||"—")
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:giust>0?C.gold:C.textDim}}, isF?"—":giust||"—")
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:rec>0?C.purple:C.textDim}}, isF?"—":rec||"—")
                       , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10390}}
                         , !isF && tasso!==null && !isNaN(tasso) ? (
                           React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10392}}
@@ -12850,6 +12882,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   )
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10412}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="presente").length,0))
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10413}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="assente").length,0))
+                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.gold}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="giustificato").length,0)||"—")
+                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.purple}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="in_recupero"||l.inRecupero).length,0)||"—")
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10414}}, "—")
                 )
               )
