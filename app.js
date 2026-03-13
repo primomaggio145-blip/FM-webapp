@@ -3632,8 +3632,8 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
     const bg  = badgeColor==="purple" ? C.purpleBg : "#e8edf5";
     const bd  = badgeColor==="purple" ? C.purpleBorder : C.goldDim;
     return (
-      React.createElement('div', { onClick: ()=>setSelectedCourse(c),
-        style: {display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,cursor:"pointer",transition:"all 0.15s"},
+      React.createElement('div', { onClick: _ruoloCorsi==="allievo" ? undefined : ()=>setSelectedCourse(c),
+        style: {display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,cursor:_ruoloCorsi==="allievo"?"default":"pointer",transition:"all 0.15s"},
         onMouseEnter: e=>{ e.currentTarget.style.borderColor=col; e.currentTarget.style.background=bg+"55"; },
         onMouseLeave: e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.background=C.bg; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2824}}
         , React.createElement('div', { style: {width:38,height:38,borderRadius:8,background:bg,border:`1px solid ${bd}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2828}}
@@ -7691,7 +7691,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         else if (filterTipo === "normale")    ls = ls.filter(l => !isProva(l) && !isColl(l));
       }
       return ls;
-    }, [lessons, role, filterCorso, filterDocente, filterTipo]);
+    }, [lessons, role, filterCorso, filterDocente, filterTipo, _cvAllievoId, currentStudent, _cvDocenteId, _cvNome]);
   
     const todayStr     = yyyymmdd(today);
     const todayLessons = visibleLessons.filter(l => l.date === todayStr);
@@ -9478,7 +9478,21 @@ const AllievoBraniView = ({allievo,allievoId,brani,allStudents,lessons,onBack})=
   const _stu = allievoId
     ? (allStudents||[]).find(s=>String(s.id)===String(allievoId))
     : (allStudents||[]).find(s=>(s.name||s.nome||"").toLowerCase().trim()===( allievo||"").toLowerCase().trim());
-  const suoiBrani = _stu ? brani.filter(b=>(_stu.repertorio||[]).some(r=>r.id===b.id)) : [];
+  // Cerca prima in student.repertorio, poi nelle lezioni tramite repertorioIds
+  const _braniIds = React.useMemo(()=>{
+    const ids = new Set();
+    // da student.repertorio in memoria
+    if(_stu) (_stu.repertorio||[]).forEach(r=>ids.add(r.id));
+    // da lezioni (fonte persistente su DB tramite repertorioIds)
+    (lessons||[]).forEach(l=>{
+      const match = allievoId
+        ? String(l.studentId||'')===String(allievoId)
+        : (l.student||'').toLowerCase().trim()===(allievo||'').toLowerCase().trim();
+      if(match) (l.repertorioIds||[]).forEach(id=>ids.add(id));
+    });
+    return ids;
+  },[_stu,lessons,allievo,allievoId]);
+  const suoiBrani = (brani||[]).filter(b=>_braniIds.has(b.id));
   
   return(
     React.createElement('div', { style: {flex:1,padding:isMobile?"12px":"20px 24px",overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7588}}
