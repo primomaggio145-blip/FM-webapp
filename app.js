@@ -318,7 +318,14 @@ const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
     paperclip: React.createElement('path', { d: "m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"}),
     download: React.createElement(React.Fragment, null, React.createElement('path',{d:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}), React.createElement('polyline',{points:"7 10 12 15 17 10"}), React.createElement('line',{x1:"12",y1:"15",x2:"12",y2:"3"})),
     upload:   React.createElement(React.Fragment, null, React.createElement('path',{d:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}), React.createElement('polyline',{points:"17 8 12 3 7 8"}), React.createElement('line',{x1:"12",y1:"3",x2:"12",y2:"15"})),
-    drum:     React.createElement(React.Fragment, null, React.createElement('ellipse',{cx:"12",cy:"8",rx:"9",ry:"4"}), React.createElement('path',{d:"M3 8v8c0 2.21 4.03 4 9 4s9-1.79 9-4V8"}), React.createElement('line',{x1:"16",y1:"2",x2:"20",y2:"6"}), React.createElement('line',{x1:"8",y1:"2",x2:"4",y2:"6"})),
+    drum:     React.createElement(React.Fragment, null,
+      React.createElement('circle',{cx:"12",cy:"13",r:"5"}),
+      React.createElement('path',{d:"M9 8 Q10 2 12 1 Q14 2 15 8"}),
+      React.createElement('path',{d:"M7 7 Q5 2 7 0"}),
+      React.createElement('path',{d:"M17 7 Q19 2 17 0"}),
+      React.createElement('line',{x1:"10",y1:"14",x2:"10",y2:"14.5",strokeWidth:"2",strokeLinecap:"round"}),
+      React.createElement('line',{x1:"14",y1:"14",x2:"14",y2:"14.5",strokeWidth:"2",strokeLinecap:"round"}),
+      React.createElement('path',{d:"M10 17 Q12 19 14 17",strokeLinecap:"round",fill:"none"})),
   };
   return (
     React.createElement('svg', { width: size, height: size, viewBox: "0 0 24 24"   , fill: fill,
@@ -5417,7 +5424,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
             )
             , lesson.tipo==="sala_prove" && (
               React.createElement('span', { style: {fontSize:9, color:C.orange2, fontWeight:700, textTransform:"uppercase", flexShrink:0} }
-                , lesson.stato==="in_attesa" ? "⏳" : "🎸"
+                , lesson.stato==="in_attesa" ? "⏳" : "🤘"
               )
             )
             , lesson.tipo!=="collettivo" && lesson.tipo!=="prova" && lesson.tipo!=="sala_prove" && lesson.attendance && (
@@ -5960,7 +5967,7 @@ const DayView = ({ date, lessons, onSelect }) => {
             )
             , React.createElement('div',{style:{flex:1,minWidth:0}}
               , React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}
-                , React.createElement('span',{style:{fontSize:15,fontWeight:600,color:pending?"#92400e":C.orange2}},"🎸 Sala Prove")
+                , React.createElement('span',{style:{fontSize:15,fontWeight:600,color:pending?"#92400e":C.orange2}},"🤘 Sala Prove")
                 , React.createElement('span',{style:{fontSize:11,background:pending?"#fffbeb":C.orange2Bg,
                     color:pending?"#92400e":C.orange2,border:`1px solid ${pending?"#fde68a":C.orange2Border}`,
                     borderRadius:4,padding:"1px 7px",letterSpacing:"0.05em"}},
@@ -6253,25 +6260,30 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
                   , React.createElement('div',{style:{fontSize:9,fontWeight:700,color:accent,
                       whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:1.3}}
                     , isSala
-                      ? `🎸 ${normHour}–${normFine}`
+                      ? `🤘 ${normHour}–${normFine}`
                       : `${normHour} · ${
                           isColl(l)  ? (l.courseName||"Coll.")
                         : isProva(l) ? (l.contactName||"Prova")
                         : (l.student||"").split(" ")[0]
                         }`
                   )
+                  /* Riga 2: caption tipo / richiedente */
                   , l._h > 26 && React.createElement('div',{style:{fontSize:9,color:accent,
                       opacity:0.85,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:1.3}}
                     , isSala
-                      ? (l.richiedente||l.student||"")
+                      ? "SALA PROVE"
                       : isColl(l)
                         ? `${(l.students||[]).length} allievi`
                         : (l.instrument||"")
                   )
-                  , l._h > 42 && !isSala && React.createElement('div',{style:{fontSize:9,
+                  /* Riga 3: richiedente sala / docente lezione */
+                  , l._h > 42 && React.createElement('div',{style:{fontSize:9,
                       color:accent,opacity:0.7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
-                    , l.teacher||"")
-                  , isSala && pending && l._h > 40 && React.createElement('div',{
+                    , isSala
+                      ? (l.richiedente||l.student||"")
+                      : (l.teacher||"")
+                  )
+                  , isSala && pending && l._h > 56 && React.createElement('div',{
                       style:{fontSize:8,color:"#92400e",fontWeight:700,marginTop:"auto"}},"⏳ in attesa")
                 );
               })
@@ -7647,7 +7659,7 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
     React.createElement('div', { style:{padding:"8px 0",display:"flex",flexDirection:"column",gap:16} }
       , React.createElement('div', { style:{background:C.orange2Bg,border:`1px solid ${C.orange2Border}`,
           borderRadius:10,padding:"12px 14px",fontSize:12,color:"#92400e"} }
-        , React.createElement('b', null, "🎸 Sala Prove  ·  ")
+        , React.createElement('b', null, "🤘 Sala Prove  ·  ")
         , role === "admin"
           ? "Come amministratore la prenotazione viene confermata immediatamente."
           : "La richiesta sarà inviata all'amministratore per l'approvazione."
@@ -8777,7 +8789,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             , React.createElement('div', { style:{padding:"8px 0",display:"flex",flexDirection:"column",gap:14} }
               , React.createElement('div', { style:{background:C.orange2Bg,border:`1px solid ${C.orange2Border}`,
                   borderRadius:10,padding:"14px 16px"} }
-                , React.createElement('div', { style:{fontSize:13,fontWeight:600,color:C.orange2,marginBottom:6} }, "🎸 Prenotazione Sala Prove")
+                , React.createElement('div', { style:{fontSize:13,fontWeight:600,color:C.orange2,marginBottom:6} }, "🤘 Prenotazione Sala Prove")
                 , React.createElement('div', { style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:13} }
                   , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Data"), React.createElement('div',{style:{fontWeight:600}}, fmtDate(selLesson._original.data)))
                   , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Orario"), React.createElement('div',{style:{fontWeight:600}}, (selLesson._original.oraInizio||"").slice(0,5), " → ", (selLesson._original.oraFine||"").slice(0,5)))
@@ -9556,7 +9568,10 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota, ruoloCV })
 const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, spese:propSpese, setSpese:propSetSpese, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV, quickAction, clearQuickAction, userRuolo:_ruoloCV, appUser:_appUserCV }) => {
   const ruoloCV = _ruoloCV || "admin";
   const _loginNomeCV = (_appUserCV && _appUserCV.nome) || "";
-  const myDocIdCV = ruoloCV==="docente" ? (()=>{ const d=(propDocentiCV||[]).find(x=>x.teacherKey===_loginNomeCV||(x.nome||"").toLowerCase().includes(_loginNomeCV.toLowerCase())); return d?d.id:null; })() : null;
+  const myDocIdCV = ruoloCV==="docente"
+    ? ((_appUserCV && _appUserCV.docenteId)
+        || (()=>{ const d=(propDocentiCV||[]).find(x=>x.teacherKey===_loginNomeCV||(x.nome||"").toLowerCase().includes(_loginNomeCV.toLowerCase())); return d?d.id:null; })())
+    : null;
   const [catSpese,   setCatSpese]   = useState(CATEGORIE_DEFAULT);
   const [catEntrate, setCatEntrate] = useState(CAT_ENTRATE_DEFAULT);
   // Handle quick action from dashboard
@@ -9612,7 +9627,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
     const filtered = spese.filter(s=>{
       const q=search.toLowerCase();
       if(ruoloCV==="allievo") return false;
-      if(ruoloCV==="docente") return myDocIdCV ? s.docenteId===myDocIdCV : false;
+      if(ruoloCV==="docente") return myDocIdCV ? String(s.docenteId)===String(myDocIdCV) : false;
       return s.anno===ANNO_ATT
         &&(!q||s.desc.toLowerCase().includes(q)||(s.note||"").toLowerCase().includes(q))
         &&(!filterCat||s.categoria===filterCat)
