@@ -3593,8 +3593,9 @@ const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, o
 };
 
 // ── Lista corsi ───────────────────────────────────────────────────────────────
-const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, onDelete }) => {
+const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, onDelete, userRuolo:_cmRuolo }) => {
   const docenti = _docentiRaw || [];
+  const _ruoloCorsi = _cmRuolo || "admin";
   const [modal,         setModal]         = useState(null);
   const [target,        setTarget]        = useState(null);
   const [selectedCourse,setSelectedCourse]= useState(null);
@@ -4786,6 +4787,7 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
           : courses,
         students: students,
         docenti: docenti,
+        userRuolo: _ruoloCorsi,
         onAdd: _ruoloCorsi==="admin" ? handleAddCourse : undefined,
         onEdit: _ruoloCorsi==="admin" ? handleEditCourse : undefined,
         onDelete: _ruoloCorsi==="admin" ? handleDelCourse : undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3934}}
@@ -7843,12 +7845,14 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
               color:C.text} }, navLabel)
           , React.createElement('div', { style:{marginLeft:"auto",display:"flex",background:C.surface,
               border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"} }
-            , [["week","Settimana"],["month","Mese"]].map(([v,lbl])=>
+            , [["week","Settimana","week"],["month","Mese","cal"]].map(([v,lbl,icon])=>
               React.createElement('button',{key:v,onClick:()=>setSvCalMode(v),
                 style:{padding:"6px 12px",border:"none",fontSize:12,fontFamily:"'Open Sans',sans-serif",
                   cursor:"pointer",background:svCalMode===v?C.orange2Bg:"transparent",
                   color:svCalMode===v?C.orange2:C.textMuted,
-                  borderRight:`1px solid ${C.border}`,transition:"all .15s"}},lbl)
+                  borderRight:`1px solid ${C.border}`,transition:"all .15s",
+                  display:"flex",alignItems:"center",gap:4}}
+                , React.createElement(Ic,{n:icon,size:13,stroke:svCalMode===v?C.orange2:C.textMuted}), lbl)
             )
           )
         )
@@ -8312,9 +8316,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       const spEvents = prenotazioniSala
         .filter(p => p.stato === "approvata" || p.stato === "in_attesa")
         .filter(p => {
-          // Allievo vede solo le sue; admin/docente vedono tutte
-          if (role === "allievo") return p.userId === (_appUserCV && _appUserCV.userId);
-          return true;
+          const myUserId = _appUserCV && _appUserCV.userId;
+          // Allievo e Docente vedono solo le proprie prenotazioni nel calendario lezioni
+          // Admin vede tutto
+          if (role === "admin") return true;
+          return p.userId === myUserId;
         })
         .map(p => ({
           id: "sala_" + p.id,
@@ -8479,21 +8485,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                     style: {border:`1px solid ${C.purple}`,color:C.purple,background:C.purpleBg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6028}}
                     , React.createElement(Ic, { n: "group", size: 14, stroke: C.purple, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6030}}), React.createElement('span', { className: "tb-label", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6030}}, "Collettiva")
                   )
-                  , React.createElement(Btn, { variant: "secondary", onClick: () => setModal("addsala"),
-                    style: {border:`1px solid ${C.orange2}`,color:C.orange2,background:C.orange2Bg}}
-                    , React.createElement(Ic, { n: "drum", size: 14, stroke: C.orange2}), React.createElement('span', { className: "tb-label"}, " Sala prove")
-                  )
                   , React.createElement(Btn, { onClick: () => { setAddDate(viewMode === "day" ? yyyymmdd(curDate) : yyyymmdd(today)); setModal("add"); }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6032}}
                     , React.createElement(Ic, { n: "plus", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6033}}), React.createElement('span', { className: "tb-label", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6033}}, "Nuova lezione" )
-                  )
-                )
-              )
-              , (role === "docente" || role === "allievo") && (
-                React.createElement('div', { style:{display:"flex",gap:8} }
-                  , React.createElement(Btn, { variant:"secondary", onClick:()=>setModal("addsala"),
-                      style:{border:`1px solid ${C.orange2}`,color:C.orange2,background:C.orange2Bg} }
-                    , React.createElement(Ic, {n:"drum", size:14, stroke:C.orange2})
-                    , React.createElement('span', {className:"tb-label"}, " Sala prove")
                   )
                 )
               )
