@@ -6074,107 +6074,147 @@ const DayView = ({ date, lessons, onSelect }) => {
 // ─── VISTA SETTIMANALE ────────────────────────────────────────────────────────
 const WeekView = ({ weekStart, lessons, onSelect }) => {
   const days = Array.from({length:7}, (_, i) => addDays(weekStart, i));
-  const HOUR_H = 58; // px per slot orario — deve combaciare con minHeight sotto
+  const HOUR_H = 64; // px per slot orario
 
-  // Separa i sala_prove dagli altri per renderizzarli come blocchi assoluti
-  const normalLessons  = lessons.filter(l => !isSalaProve(l));
-  const salaLessons    = lessons.filter(l => isSalaProve(l));
+  // Helper: orario "HH:MM" → numero decimale di ore (es. "09:30" → 9.5)
+  const toH = (t) => { if(!t) return 0; const [h,m]=(t||"00:00").split(":"); return parseInt(h)+(parseInt(m||0)/60); };
+  const HOUR_START = 8;
+
+  // Per ogni cella (giorno × ora) calcola gli eventi che "occupano" quell'ora:
+  //   - lezioni normali: l.hour === hour (già come prima)
+  //   - sala_prove: la loro fascia [oraInizio, oraFine) include quest'ora,
+  //     ma il blocco viene reso UNA SOLA VOLTA nella riga corrispondente all'ora di inizio
+  //     con altezza pari alla durata, usando position:absolute dentro la cella.
+  //     Nelle righe successive la cella RISERVA SPAZIO (padding sinistro) per non coprire.
+
+  // Pre-calcola per ogni giorno i blocchi sala_prove
+  const salaByDay = {};
+  days.forEach(d => {
+    const ds = yyyymmdd(d);
+    salaByDay[ds] = lessons.filter(l => isSalaProve(l) && l.date === ds);
+  });
 
   return (
-    React.createElement('div', { style: {overflowX:"auto",WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4887}}
-      , React.createElement('div', { style: {minWidth:480}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4888}}
-        /* header */
-        , React.createElement('div', { style: {display:"grid", gridTemplateColumns:"52px repeat(7,1fr)",
-          borderBottom:`1px solid ${C.border}`, position:"sticky", top:0, background:C.surface, zIndex:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4890}}
-          , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4892}})
+    React.createElement('div', { style: {overflowX:"auto",WebkitOverflowScrolling:"touch"}}
+      , React.createElement('div', { style: {minWidth:520}}
+        /* ── HEADER ── */
+        , React.createElement('div', { style: {display:"grid", gridTemplateColumns:`52px repeat(7,1fr)`,
+          borderBottom:`1px solid ${C.border}`, position:"sticky", top:0, background:C.surface, zIndex:4}}
+          , React.createElement('div')
           , days.map((d, i) => {
             const isToday = isSameDay(d, today);
-            return (
-              React.createElement('div', { key: i, style: {padding:"8px 4px", textAlign:"center", borderLeft:`1px solid ${C.border}`, minWidth:0, overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4896}}
-                , React.createElement('div', { style: {fontSize:11, color:C.textMuted, letterSpacing:"0.06em", textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4897}}, DAYS_SHORT[i])
-                , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif", fontSize:20, fontWeight:600, marginTop:2,
-                  color: isToday ? C.gold : C.text,
-                  background: isToday ? `${C.gold}15` : undefined,
-                  borderRadius: isToday ? 6 : undefined,
-                  padding: isToday ? "1px 6px" : undefined}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4898}}
-                  , d.getDate()
-                )
-              )
+            return React.createElement('div', { key:i, style:{padding:"8px 4px",textAlign:"center",
+              borderLeft:`1px solid ${C.border}`,minWidth:0,overflow:"hidden"}}
+              , React.createElement('div',{style:{fontSize:11,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase"}},DAYS_SHORT[i])
+              , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,marginTop:2,
+                color:isToday?C.gold:C.text,background:isToday?`${C.gold}15`:undefined,
+                borderRadius:isToday?6:undefined,padding:isToday?"1px 6px":undefined}},d.getDate())
             );
           })
         )
-        /* corpo: griglia righe orarie con overlay per sala_prove */
+        /* ── BODY ── */
         , React.createElement('div', { style:{position:"relative"} }
-          /* righe orarie normali */
-          , HOURS.map(hour => (
-            React.createElement('div', { key: hour, style: {display:"grid", gridTemplateColumns:"52px repeat(7,1fr)",
-              borderBottom:`1px solid ${C.border}20`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4911}}
-              , React.createElement('div', { style: {padding:"8px 6px 0", fontSize:11, color:C.textDim, textAlign:"right", paddingRight:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4913}}, hour)
-              , days.map((d, i) => {
-                const cellLessons = normalLessons.filter(l => l.date === yyyymmdd(d) && l.hour === hour);
-                return (
-                  React.createElement('div', { key: i, style: {borderLeft:`1px solid ${C.border}20`, minHeight:HOUR_H, padding:3,
-                    display:"flex", flexDirection:"column", gap:2, minWidth:0, overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4917}}
-                    , cellLessons.map(l => (
-                      React.createElement(LessonPill, { key: l.id, lesson: l, onClick: () => onSelect(l), compact: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4920}})
-                    ))
+          , HOURS.map(hour => {
+            const hourNum = toH(hour); // es. 9 per "09:00"
+            return React.createElement('div', { key:hour,
+              style:{display:"grid", gridTemplateColumns:`52px repeat(7,1fr)`,
+                borderBottom:`1px solid ${C.border}20`}}
+              /* etichetta ora */
+              , React.createElement('div', {style:{padding:"8px 6px 0",fontSize:11,color:C.textDim,
+                  textAlign:"right",paddingRight:8, height:HOUR_H, boxSizing:"border-box",
+                  flexShrink:0}}, hour)
+              /* celle per ogni giorno */
+              , days.map((d, colIdx) => {
+                const ds = yyyymmdd(d);
+                // Lezioni normali che iniziano esattamente a quest'ora
+                const normal = lessons.filter(l =>
+                  !isSalaProve(l) && l.date === ds && l.hour === hour
+                );
+                // Sala_prove che INIZIANO a quest'ora (rese come blocco assoluto verticale)
+                const salaStart = (salaByDay[ds]||[]).filter(l => {
+                  const sh = toH(l.hour);
+                  return Math.floor(sh) === Math.floor(hourNum) && Math.round((sh%1)*60) < 30
+                    ? sh >= hourNum && sh < hourNum+1
+                    : false;
+                });
+                // Più preciso: sala_prove che iniziano in [hourNum, hourNum+1)
+                const salaStartHere = (salaByDay[ds]||[]).filter(l => {
+                  const sh = toH(l.hour||"00:00");
+                  return sh >= hourNum && sh < hourNum + 1;
+                });
+                // Sala_prove che si sovrappongono a quest'ora ma NON iniziano qui
+                // (dobbiamo fare spazio per loro nella colonna)
+                const salaOverlap = (salaByDay[ds]||[]).filter(l => {
+                  const sh = toH(l.hour||"00:00");
+                  const eh = toH(l.oraFine||l.hour||"00:00");
+                  return sh < hourNum + 1 && eh > hourNum && sh < hourNum; // inizia prima, finisce dopo
+                });
+
+                const hasSala = salaStartHere.length > 0 || salaOverlap.length > 0;
+                const salaWidth = hasSala ? Math.min(salaStartHere.length + salaOverlap.length, 2) : 0;
+                // Larghezza riservata ai blocchi sala in percentuale della cella
+                const salaReservedPct = salaWidth > 0 ? Math.min(salaWidth * 42, 84) : 0;
+
+                return React.createElement('div', { key:colIdx,
+                  style:{borderLeft:`1px solid ${C.border}20`,
+                    minHeight:HOUR_H, height:HOUR_H,
+                    padding:"2px 2px 2px 2px",
+                    display:"flex", flexDirection:"row", gap:2,
+                    minWidth:0, overflow:"visible",
+                    position:"relative", boxSizing:"border-box"}}
+
+                  /* Colonna lezioni normali */
+                  , React.createElement('div', {style:{
+                      flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2,
+                      paddingRight: salaReservedPct > 0 ? `${salaReservedPct}%` : 0,
+                    }}
+                    , normal.map(l => React.createElement(LessonPill, {
+                        key:l.id, lesson:l, onClick:()=>onSelect(l), compact:true}))
                   )
+
+                  /* Blocchi sala_prove che iniziano qui — position absolute per estendersi verso il basso */
+                  , salaStartHere.map((l, si) => {
+                    const sh = toH(l.hour||"00:00");
+                    const eh = toH(l.oraFine||l.hour||"00:00");
+                    const dur = Math.max(eh - sh, 0.25);
+                    const blockH = dur * HOUR_H - 3;
+                    const topOff = (sh - hourNum) * HOUR_H;
+                    const pending = l.stato === "in_attesa";
+                    // Posiziona da destra, lasciando spazio per più blocchi affiancati
+                    const slotW = 100 / Math.max(salaStartHere.length, 1);
+                    const leftPct = 100 - salaReservedPct + si * (salaReservedPct / Math.max(salaStartHere.length,1));
+                    return React.createElement('div', { key:l.id,
+                      onClick:()=>onSelect(l),
+                      style:{
+                        position:"absolute",
+                        top: topOff + 2,
+                        right: 2,
+                        width:`${salaReservedPct / Math.max(salaStartHere.length,1) - 1}%`,
+                        height: blockH,
+                        background: pending?"#fffbeb":C.orange2Bg,
+                        border:`1px solid ${C.orange2Border}`,
+                        borderLeft:`3px solid ${pending?"#f59e0b":C.orange2}`,
+                        borderRadius:4,
+                        cursor:"pointer",
+                        zIndex:3,
+                        overflow:"hidden",
+                        display:"flex",flexDirection:"column",gap:1,
+                        padding:"2px 4px",
+                        boxSizing:"border-box",
+                      }}
+                      , React.createElement('div',{style:{fontSize:9,fontWeight:700,color:C.orange2,
+                          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
+                        ,"🎸 ",(l.hour||"").slice(0,5),"–",(l.oraFine||"").slice(0,5))
+                      , blockH > 24 && React.createElement('div',{style:{fontSize:9,color:C.orange2,opacity:0.85,
+                          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
+                        ,l.richiedente||l.student)
+                      , pending && blockH > 38 && React.createElement('div',{style:{fontSize:8,color:"#92400e",fontWeight:700}},"⏳ att.")
+                    );
+                  })
                 );
               })
-            )
-          ))
-          /* overlay assoluto per blocchi sala_prove */
-          , (() => {
-            const HOUR_START = 8; // prima ora in HOURS
-            return days.map((d, colIdx) => {
-              const ds = yyyymmdd(d);
-              const daySala = salaLessons.filter(l => l.date === ds);
-              if (!daySala.length) return null;
-              // Calcola larghezza/posizione colonna (1/7 del totale meno la colonna ore 52px)
-              // Usiamo CSS calc per rispettare il grid
-              const colW = `calc((100% - 52px) / 7)`;
-              const colLeft = `calc(52px + ${colIdx} * (100% - 52px) / 7)`;
-              return daySala.map(l => {
-                const startH = parseInt((l.hour||"08:00").split(":")[0]);
-                const startM = parseInt((l.hour||"08:00").split(":")[1]||"0");
-                const endH   = parseInt((l.oraFine||l.hour||"09:00").split(":")[0]);
-                const endM   = parseInt((l.oraFine||l.hour||"09:00").split(":")[1]||"0");
-                const startOffset = (startH - HOUR_START + startM/60) * HOUR_H;
-                const duration    = Math.max((endH + endM/60) - (startH + startM/60), 0.5);
-                const blockH      = duration * HOUR_H - 4;
-                return React.createElement('div', { key: l.id,
-                  onClick: () => onSelect(l),
-                  style:{
-                    position:"absolute",
-                    top: startOffset + 2,
-                    left: colLeft,
-                    width: colW,
-                    height: blockH,
-                    padding:"3px 5px",
-                    background: l.stato==="in_attesa" ? "#fffbeb" : C.orange2Bg,
-                    border:`1px solid ${C.orange2Border}`,
-                    borderLeft:`3px solid ${l.stato==="in_attesa"?"#f59e0b":C.orange2}`,
-                    borderRadius:5,
-                    cursor:"pointer",
-                    zIndex:3,
-                    overflow:"hidden",
-                    display:"flex",flexDirection:"column",justifyContent:"flex-start",gap:1,
-                    boxSizing:"border-box",
-                  }}
-                  , React.createElement('div',{style:{fontSize:9,fontWeight:700,color:C.orange2,
-                      whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
-                    , "🎸 ",(l.hour||"").slice(0,5),"–",(l.oraFine||"").slice(0,5))
-                  , blockH > 22 && React.createElement('div',{style:{fontSize:9,color:C.orange2,opacity:0.9,
-                      whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
-                    , l.richiedente||l.student)
-                  , blockH > 38 && l._original && l._original.telefono && React.createElement('div',{style:{fontSize:9,color:C.orange2,opacity:0.7,
-                      whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
-                    , l._original.telefono)
-                  , l.stato==="in_attesa" && React.createElement('div',{style:{fontSize:8,color:"#92400e",fontWeight:700,marginTop:"auto"}},"⏳ in attesa")
-                );
-              });
-            });
-          })()
+            );
+          })
         )
       )
     )
