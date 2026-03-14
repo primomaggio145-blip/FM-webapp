@@ -5039,7 +5039,7 @@ const PRESENZE_SVOLTE = ['presente','assente'];
 const isLezionePagabile = (l) => PRESENZE_PAGATE.includes((l.attendance||'').toLowerCase());
 const isLezioneSvolta   = (l) => PRESENZE_SVOLTE.includes((l.attendance||'').toLowerCase());
 
-const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"Nessuna", notes:"", exercises:"", repertorioIds:[], linkUrl:"", allegati:[], inRecupero:false, recuperoScadenza:null };
+const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"Nessuna", notes:"", exercises:"", repertorioIds:[], linkUrl:"", allegati:[], inRecupero:false, recuperoScadenza:null, durata:45 };
 
 // ─── ATT_STYLES globale (usato da LessonForm, LessonDetailModal, LezioniAdminView, RecuperoView)
 const ATT_STYLES = {
@@ -5125,6 +5125,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
         , roleLF !== "docente" && React.createElement(SDiv, { label: "Quando", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4225}})
         , roleLF !== "docente" && React.createElement(Input, { label: "Data *" , type: "date", value: f.date, onChange: e => set("date", e.target.value), error: err.date, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4226}})
         , roleLF !== "docente" && React.createElement(Sel, { label: "Orario *" , value: f.hour, onChange: e => set("hour", e.target.value), options: hours, error: err.hour, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4227}})
+        , roleLF !== "docente" && React.createElement(Sel, { label: "Durata" , value: String(f.durata||45), onChange: e => set("durata", parseInt(e.target.value)), options: [{value:"30",label:"30 min"},{value:"45",label:"45 min"},{value:"60",label:"60 min"},{value:"90",label:"1h 30min"},{value:"120",label:"2 ore"}] })
 
         , roleLF !== "docente" && React.createElement(SDiv, { label: "Chi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4229}})
         , roleLF !== "docente" && React.createElement(Sel, { label: "Allievo *" ,    value: f.student,    onChange: e => set("student", e.target.value),    options: dynamicStudents.length > 0 ? dynamicStudents : STUDENTS_LIST, error: err.student, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4230}})
@@ -6074,141 +6075,129 @@ const DayView = ({ date, lessons, onSelect }) => {
 // ─── VISTA SETTIMANALE ────────────────────────────────────────────────────────
 const WeekView = ({ weekStart, lessons, onSelect }) => {
   const days = Array.from({length:7}, (_, i) => addDays(weekStart, i));
-  const HOUR_H = 64; // px per slot orario
+  const HOUR_H   = 64;  // px per slot di 1h
+  const HOUR_START = 8; // prima riga = 08:00
 
-  // Helper: orario "HH:MM" → numero decimale di ore (es. "09:30" → 9.5)
-  const toH = (t) => { if(!t) return 0; const [h,m]=(t||"00:00").split(":"); return parseInt(h)+(parseInt(m||0)/60); };
-  const HOUR_START = 8;
+  // Normalizza "HH:MM:SS" → "HH:MM" (sicurezza contro orari con secondi dal DB)
+  const normH = (t) => t ? String(t).slice(0,5) : "";
 
-  // Per ogni cella (giorno × ora) calcola gli eventi che "occupano" quell'ora:
-  //   - lezioni normali: l.hour === hour (già come prima)
-  //   - sala_prove: la loro fascia [oraInizio, oraFine) include quest'ora,
-  //     ma il blocco viene reso UNA SOLA VOLTA nella riga corrispondente all'ora di inizio
-  //     con altezza pari alla durata, usando position:absolute dentro la cella.
-  //     Nelle righe successive la cella RISERVA SPAZIO (padding sinistro) per non coprire.
+  // Orario "HH:MM" → numero decimale (es. "09:30" → 9.5)
+  const toDecH = (t) => {
+    if(!t) return 0;
+    const s = normH(t);
+    const [h,m] = s.split(":");
+    return parseInt(h||0) + parseInt(m||0)/60;
+  };
 
-  // Pre-calcola per ogni giorno i blocchi sala_prove
-  const salaByDay = {};
-  days.forEach(d => {
-    const ds = yyyymmdd(d);
-    salaByDay[ds] = lessons.filter(l => isSalaProve(l) && l.date === ds);
-  });
+  // Durata effettiva di una lezione in ore
+  const durH = (l) => {
+    const d = l.durata || (isColl(l) ? 60 : isProva(l) ? 30 : isSalaProve(l) ? 60 : 45);
+    return d / 60;
+  };
+
+  // Pre-calcola per ogni lezione: ora_inizio decimale, durata ore
+  const enriched = lessons.map(l => ({
+    ...l,
+    _normHour: normH(l.hour),
+    _startH:   toDecH(l.hour),
+    _durH:     durH(l),
+  }));
+
+  // Per ogni cella (giorno × slot-ora), trova lezioni che iniziano in questo slot
+  const forCell = (ds, slotH) =>
+    enriched.filter(l => l.date === ds && Math.floor(l._startH) === slotH);
 
   return (
-    React.createElement('div', { style: {overflowX:"auto",WebkitOverflowScrolling:"touch"}}
-      , React.createElement('div', { style: {minWidth:520}}
+    React.createElement('div', { style:{overflowX:"auto", WebkitOverflowScrolling:"touch"}}
+      , React.createElement('div', { style:{minWidth:520}}
+
         /* ── HEADER ── */
-        , React.createElement('div', { style: {display:"grid", gridTemplateColumns:`52px repeat(7,1fr)`,
+        , React.createElement('div', { style:{display:"grid", gridTemplateColumns:`52px repeat(7,1fr)`,
           borderBottom:`1px solid ${C.border}`, position:"sticky", top:0, background:C.surface, zIndex:4}}
           , React.createElement('div')
           , days.map((d, i) => {
             const isToday = isSameDay(d, today);
-            return React.createElement('div', { key:i, style:{padding:"8px 4px",textAlign:"center",
-              borderLeft:`1px solid ${C.border}`,minWidth:0,overflow:"hidden"}}
+            return React.createElement('div', { key:i, style:{padding:"8px 4px", textAlign:"center",
+              borderLeft:`1px solid ${C.border}`, minWidth:0, overflow:"hidden"}}
               , React.createElement('div',{style:{fontSize:11,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase"}},DAYS_SHORT[i])
               , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,marginTop:2,
-                color:isToday?C.gold:C.text,background:isToday?`${C.gold}15`:undefined,
-                borderRadius:isToday?6:undefined,padding:isToday?"1px 6px":undefined}},d.getDate())
+                color:isToday?C.gold:C.text,
+                background:isToday?`${C.gold}15`:undefined,
+                borderRadius:isToday?6:undefined,
+                padding:isToday?"1px 6px":undefined}},d.getDate())
             );
           })
         )
+
         /* ── BODY ── */
-        , React.createElement('div', { style:{position:"relative"} }
+        , React.createElement('div', { style:{position:"relative"}}
           , HOURS.map(hour => {
-            const hourNum = toH(hour); // es. 9 per "09:00"
+            const slotH = parseInt(hour.split(":")[0]); // 8, 9, 10 …
             return React.createElement('div', { key:hour,
               style:{display:"grid", gridTemplateColumns:`52px repeat(7,1fr)`,
                 borderBottom:`1px solid ${C.border}20`}}
               /* etichetta ora */
-              , React.createElement('div', {style:{padding:"8px 6px 0",fontSize:11,color:C.textDim,
-                  textAlign:"right",paddingRight:8, height:HOUR_H, boxSizing:"border-box",
-                  flexShrink:0}}, hour)
+              , React.createElement('div', {style:{padding:"8px 6px 0", fontSize:11, color:C.textDim,
+                  textAlign:"right", paddingRight:8,
+                  height:HOUR_H, boxSizing:"border-box", flexShrink:0}}, hour)
               /* celle per ogni giorno */
               , days.map((d, colIdx) => {
                 const ds = yyyymmdd(d);
-                // Lezioni normali che iniziano esattamente a quest'ora
-                const normal = lessons.filter(l =>
-                  !isSalaProve(l) && l.date === ds && l.hour === hour
-                );
-                // Sala_prove che INIZIANO a quest'ora (rese come blocco assoluto verticale)
-                const salaStart = (salaByDay[ds]||[]).filter(l => {
-                  const sh = toH(l.hour);
-                  return Math.floor(sh) === Math.floor(hourNum) && Math.round((sh%1)*60) < 30
-                    ? sh >= hourNum && sh < hourNum+1
-                    : false;
-                });
-                // Più preciso: sala_prove che iniziano in [hourNum, hourNum+1)
-                const salaStartHere = (salaByDay[ds]||[]).filter(l => {
-                  const sh = toH(l.hour||"00:00");
-                  return sh >= hourNum && sh < hourNum + 1;
-                });
-                // Sala_prove che si sovrappongono a quest'ora ma NON iniziano qui
-                // (dobbiamo fare spazio per loro nella colonna)
-                const salaOverlap = (salaByDay[ds]||[]).filter(l => {
-                  const sh = toH(l.hour||"00:00");
-                  const eh = toH(l.oraFine||l.hour||"00:00");
-                  return sh < hourNum + 1 && eh > hourNum && sh < hourNum; // inizia prima, finisce dopo
-                });
-
-                const hasSala = salaStartHere.length > 0 || salaOverlap.length > 0;
-                const salaWidth = hasSala ? Math.min(salaStartHere.length + salaOverlap.length, 2) : 0;
-                // Larghezza riservata ai blocchi sala in percentuale della cella
-                const salaReservedPct = salaWidth > 0 ? Math.min(salaWidth * 42, 84) : 0;
-
+                const cellLessons = forCell(ds, slotH);
                 return React.createElement('div', { key:colIdx,
                   style:{borderLeft:`1px solid ${C.border}20`,
-                    minHeight:HOUR_H, height:HOUR_H,
-                    padding:"2px 2px 2px 2px",
-                    display:"flex", flexDirection:"row", gap:2,
+                    height:HOUR_H, minHeight:HOUR_H,
+                    position:"relative",
                     minWidth:0, overflow:"visible",
-                    position:"relative", boxSizing:"border-box"}}
-
-                  /* Colonna lezioni normali */
-                  , React.createElement('div', {style:{
-                      flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2,
-                      paddingRight: salaReservedPct > 0 ? `${salaReservedPct}%` : 0,
-                    }}
-                    , normal.map(l => React.createElement(LessonPill, {
-                        key:l.id, lesson:l, onClick:()=>onSelect(l), compact:true}))
-                  )
-
-                  /* Blocchi sala_prove che iniziano qui — position absolute per estendersi verso il basso */
-                  , salaStartHere.map((l, si) => {
-                    const sh = toH(l.hour||"00:00");
-                    const eh = toH(l.oraFine||l.hour||"00:00");
-                    const dur = Math.max(eh - sh, 0.25);
-                    const blockH = dur * HOUR_H - 3;
-                    const topOff = (sh - hourNum) * HOUR_H;
-                    const pending = l.stato === "in_attesa";
-                    // Posiziona da destra, lasciando spazio per più blocchi affiancati
-                    const slotW = 100 / Math.max(salaStartHere.length, 1);
-                    const leftPct = 100 - salaReservedPct + si * (salaReservedPct / Math.max(salaStartHere.length,1));
+                    boxSizing:"border-box"}}
+                  , cellLessons.map((l, li) => {
+                    // Posizione verticale dentro la cella (per lezioni che iniziano a :15, :30, :45)
+                    const fracOffset = (l._startH - slotH) * HOUR_H;
+                    const blockH     = Math.max(l._durH * HOUR_H - 3, 20);
+                    const isSala     = isSalaProve(l);
+                    const hex        = lessonHex(l);
+                    // Con più lezioni nella stessa cella → affianca orizzontalmente
+                    const total = cellLessons.length;
+                    const wPct  = 100 / total;
+                    const lPct  = li * wPct;
+                    const pending = isSala && l.stato === "in_attesa";
+                    const bg   = isSala ? (pending ? "#fffbeb" : C.orange2Bg)  : `${hex}15`;
+                    const bord = isSala ? (pending ? "#fde68a" : C.orange2Border) : `${hex}35`;
+                    const accent = isSala ? (pending ? "#f59e0b" : C.orange2) : hex;
                     return React.createElement('div', { key:l.id,
-                      onClick:()=>onSelect(l),
+                      onClick: ()=>onSelect(l),
                       style:{
                         position:"absolute",
-                        top: topOff + 2,
-                        right: 2,
-                        width:`${salaReservedPct / Math.max(salaStartHere.length,1) - 1}%`,
+                        top:    fracOffset + 1,
+                        left:   `${lPct}%`,
+                        width:  `calc(${wPct}% - 2px)`,
                         height: blockH,
-                        background: pending?"#fffbeb":C.orange2Bg,
-                        border:`1px solid ${C.orange2Border}`,
-                        borderLeft:`3px solid ${pending?"#f59e0b":C.orange2}`,
-                        borderRadius:4,
+                        background: bg,
+                        border:`1px solid ${bord}`,
+                        borderLeft:`3px solid ${accent}`,
+                        borderRadius:5,
                         cursor:"pointer",
-                        zIndex:3,
+                        zIndex:2,
                         overflow:"hidden",
-                        display:"flex",flexDirection:"column",gap:1,
                         padding:"2px 4px",
                         boxSizing:"border-box",
+                        display:"flex", flexDirection:"column", gap:1,
                       }}
-                      , React.createElement('div',{style:{fontSize:9,fontWeight:700,color:C.orange2,
+                      /* Riga 1: ora + nome/etichetta */
+                      , React.createElement('div',{style:{fontSize:9,fontWeight:700,color:accent,
                           whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
-                        ,"🎸 ",(l.hour||"").slice(0,5),"–",(l.oraFine||"").slice(0,5))
-                      , blockH > 24 && React.createElement('div',{style:{fontSize:9,color:C.orange2,opacity:0.85,
+                        , isSala
+                          ? `🎸 ${normH(l.hour)}–${normH(l.oraFine)}`
+                          : `${normH(l.hour)} · ${isColl(l) ? (l.courseName||"Coll.") : isProva(l) ? (l.contactName||"Prova") : (l.student||"").split(" ")[0]}`
+                      )
+                      /* Riga 2: strumento / richiedente (solo se c'è spazio) */
+                      , blockH > 26 && React.createElement('div',{style:{fontSize:9,color:accent,opacity:0.8,
                           whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
-                        ,l.richiedente||l.student)
-                      , pending && blockH > 38 && React.createElement('div',{style:{fontSize:8,color:"#92400e",fontWeight:700}},"⏳ att.")
+                        , isSala
+                          ? (l.richiedente||l.student)
+                          : isColl(l) ? `${(l.students||[]).length} allievi` : (l.instrument||"")
+                      )
+                      , isSala && pending && blockH > 40 && React.createElement('div',{style:{fontSize:8,color:"#92400e",fontWeight:700}},"⏳ in attesa")
                     );
                   })
                 );
@@ -6730,6 +6719,7 @@ const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, repertor
   const [form, setForm] = useState({
     date:      yyyymmdd(today),
     hour:      "15:00",
+    durata:    60,
     teacherId: "",
     room:      "",
     topic:     "",
@@ -6805,6 +6795,7 @@ const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, repertor
       students:      studObjs,
       // brani aggiunti durante la lezione collettiva
       repertorioIds: repertorioIds,
+      durata: form.durata || 60,
     });
   };
 
@@ -6932,6 +6923,9 @@ const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, repertor
             onChange: e=>set("date",e.target.value), error: err.date, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5543}})
           , React.createElement(Input, { label: "Orario *" , type: "time", value: form.hour,
             onChange: e=>set("hour",e.target.value), error: err.hour, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5545}})
+          , React.createElement(Sel, { label: "Durata", value: String(form.durata||60),
+            onChange: e=>set("durata",parseInt(e.target.value)),
+            options: [{value:"45",label:"45 min"},{value:"60",label:"60 min"},{value:"90",label:"1h 30min"},{value:"120",label:"2 ore"}]})
           , React.createElement(Input, { label: "Sala", value: form.room,
             onChange: e=>set("room",e.target.value), placeholder: "Es. Sala A"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 5547}})
         )
@@ -7150,6 +7144,7 @@ const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, repertor
 const emptyProva = {
   date: yyyymmdd(today), hour:"09:00", teacher:"", instrument:"",
   room:"", phone:"", contactName:"", notes:"", student:"", iscritto:false, attendance:"",
+  durata: 30,
 };
 
 const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, onSave, onClose, date }) => {
@@ -7184,6 +7179,7 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
       ...f, id: uid(), tipo:"prova",
       student: "", iscritto: false, attendance:"",
       recurrence:"Nessuna", repertorioIds:[],
+      durata: f.durata || 30,
     });
   };
 
@@ -7268,6 +7264,16 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
               style: {width:"100%",background:C.surface,border:`1px solid ${err.hour?C.red:C.border}`,
                 borderRadius:8,color:C.text,fontSize:13,padding:"10px 14px",fontFamily:"'Open Sans',sans-serif",boxSizing:"border-box"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5782}})
             , err.hour && React.createElement('div', { style: {fontSize:11,color:C.red,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5785}}, err.hour)
+          )
+          , React.createElement('div', null
+            , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6} }, "Durata" )
+            , React.createElement('select', { value: String(f.durata||30), onChange: e=>set("durata",parseInt(e.target.value)),
+                style: {width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,
+                  color:C.text,fontSize:13,padding:"10px 14px",fontFamily:"'Open Sans',sans-serif",appearance:"none",cursor:"pointer"} }
+              , React.createElement('option',{value:"30"},"30 min")
+              , React.createElement('option',{value:"45"},"45 min")
+              , React.createElement('option',{value:"60"},"60 min")
+            )
           )
         )
 

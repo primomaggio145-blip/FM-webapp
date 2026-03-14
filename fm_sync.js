@@ -63,7 +63,10 @@
         }))
       : [];
     return {
-      id: r.id, date: r.data, hour: r.ora || '', student: r.student || '',
+      id: r.id, date: r.data,
+      // Normalizza ora da "HH:MM:SS" (TIME Postgres) a "HH:MM"
+      hour: r.ora ? r.ora.slice(0,5) : '',
+      student: r.student || '',
       tipo: r.tipo || 'individuale',
       studentId: r.studente_id || null,
       instrument: r.strumento || r.instrument || '', teacher: r.teacher || '', room: r.room || '',
@@ -74,6 +77,10 @@
       linkUrl: r.link_url || '',
       inRecupero: r.in_recupero || false,
       recuperoScadenza: r.recupero_scadenza || null,
+      // Durata in minuti (default per tipo se non salvata)
+      durata: r.durata
+        ? parseInt(r.durata)
+        : (r.tipo === 'collettivo' ? 60 : r.tipo === 'prova' ? 30 : 45),
       allegati,
     };
   }
@@ -209,6 +216,7 @@
         link_url: l.linkUrl || null,
         in_recupero: l.inRecupero || false,
         recupero_scadenza: l.recuperoScadenza || null,
+        durata: l.durata ? parseInt(l.durata) : null,
       };
     },
     quote(q) {
