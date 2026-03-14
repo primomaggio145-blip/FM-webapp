@@ -6074,132 +6074,205 @@ const DayView = ({ date, lessons, onSelect }) => {
 
 // ─── VISTA SETTIMANALE ────────────────────────────────────────────────────────
 const WeekView = ({ weekStart, lessons, onSelect }) => {
-  const days = Array.from({length:7}, (_, i) => addDays(weekStart, i));
-  const HOUR_H   = 64;  // px per slot di 1h
-  const HOUR_START = 8; // prima riga = 08:00
+  const days      = Array.from({length:7}, (_, i) => addDays(weekStart, i));
+  const HOUR_H    = 64;   // px per 1 ora
+  const H_START   = 8;    // prima riga visibile
+  const H_END     = 23;   // ultima riga visibile (esclusa)
+  const N_HOURS   = H_END - H_START; // 15 slot
 
-  // Normalizza "HH:MM:SS" → "HH:MM" (sicurezza contro orari con secondi dal DB)
-  const normH = (t) => t ? String(t).slice(0,5) : "";
-
-  // Orario "HH:MM" → numero decimale (es. "09:30" → 9.5)
-  const toDecH = (t) => {
-    if(!t) return 0;
-    const s = normH(t);
-    const [h,m] = s.split(":");
-    return parseInt(h||0) + parseInt(m||0)/60;
+  // "HH:MM:SS" | "HH:MM" → numero decimale di ore
+  const toH = (t) => {
+    if (!t) return 0;
+    const parts = String(t).split(":");
+    return parseInt(parts[0]||0) + parseInt(parts[1]||0)/60;
   };
 
-  // Durata effettiva di una lezione in ore
-  const durH = (l) => {
-    const d = l.durata || (isColl(l) ? 60 : isProva(l) ? 30 : isSalaProve(l) ? 60 : 45);
-    return d / 60;
+  // Durata in ore di una lezione (priorità: durata salvata → calcolo da oraFine → default per tipo)
+  const getDurH = (l) => {
+    if (isSalaProve(l)) {
+      // Sala prove: calcola sempre da oraFine - hour
+      const sh = toH(l.hour);
+      const eh = toH(l.oraFine || l.hour);
+      return Math.max(eh - sh, 0.5);
+    }
+    if (l.durata) return l.durata / 60;
+    return (isColl(l) ? 60 : isProva(l) ? 30 : 45) / 60;
   };
 
-  // Pre-calcola per ogni lezione: ora_inizio decimale, durata ore
-  const enriched = lessons.map(l => ({
-    ...l,
-    _normHour: normH(l.hour),
-    _startH:   toDecH(l.hour),
-    _durH:     durH(l),
-  }));
+  // Pre-calcola offset e altezza per ogni lezione
+  const enriched = lessons.map(l => {
+    const startH  = toH(l.hour);
+    const durHrs  = getDurH(l);
+    // Top in px dall'inizio del contenitore body
+    const topPx   = Math.max(startH - H_START, 0) * HOUR_H;
+    const heightPx = Math.max(durHrs * HOUR_H - 3, 18);
+    return { ...l, _startH: startH, _durH: durHrs, _top: topPx, _h: heightPx };
+  }).filter(l => l._startH < H_END && l._startH >= H_START - 0.1);
 
-  // Per ogni cella (giorno × slot-ora), trova lezioni che iniziano in questo slot
-  const forCell = (ds, slotH) =>
-    enriched.filter(l => l.date === ds && Math.floor(l._startH) === slotH);
+  // Per ogni giorno raccoglie le lezioni e calcola colonne affiancate (collision detection)
+  const buildColumns = (dayLessons) => {
+    // Ordina per ora inizio
+    const sorted = [...dayLessons].sort((a,b) => a._startH - b._startH);
+    // Gruppi di lezioni che si sovrappongono
+    const columns = []; // columns[i] = array di lezioni nella colonna i
+    sorted.forEach(l => {
+      const endH = l._startH + l._durH;
+      // trova prima colonna libera
+      let placed = false;
+      for (let c = 0; c < columns.length; c++) {
+        const lastInCol = columns[c][columns[c].length - 1];
+        if (lastInCol._startH + lastInCol._durH <= l._startH + 0.01) {
+          columns[c].push(l);
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) columns.push([l]);
+    });
+    // Assegna a ogni lezione: colIdx e numCols (per calcolare larghezza)
+    const result = new Map();
+    // Per ogni lezione trova quante colonne si sovrappongono in quel momento
+    sorted.forEach(l => {
+      const endH = l._startH + l._durH;
+      let colIdx = 0;
+      for (let c = 0; c < columns.length; c++) {
+        if (columns[c].find(x => x.id === l.id)) { colIdx = c; break; }
+      }
+      // Conta quante colonne totali si sovrappongono con questa lezione
+      const overlapping = columns.filter(col =>
+        col.some(x => x._startH < endH && x._startH + x._durH > l._startH)
+      ).length;
+      result.set(l.id, { colIdx, numCols: overlapping });
+    });
+    return result;
+  };
+
+  const TOTAL_H = N_HOURS * HOUR_H; // altezza totale body in px
 
   return (
     React.createElement('div', { style:{overflowX:"auto", WebkitOverflowScrolling:"touch"}}
       , React.createElement('div', { style:{minWidth:520}}
 
         /* ── HEADER ── */
-        , React.createElement('div', { style:{display:"grid", gridTemplateColumns:`52px repeat(7,1fr)`,
-          borderBottom:`1px solid ${C.border}`, position:"sticky", top:0, background:C.surface, zIndex:4}}
+        , React.createElement('div', { style:{display:"grid",
+            gridTemplateColumns:`52px repeat(7,1fr)`,
+            borderBottom:`1px solid ${C.border}`,
+            position:"sticky", top:0, background:C.surface, zIndex:4}}
           , React.createElement('div')
           , days.map((d, i) => {
             const isToday = isSameDay(d, today);
-            return React.createElement('div', { key:i, style:{padding:"8px 4px", textAlign:"center",
-              borderLeft:`1px solid ${C.border}`, minWidth:0, overflow:"hidden"}}
-              , React.createElement('div',{style:{fontSize:11,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase"}},DAYS_SHORT[i])
-              , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,marginTop:2,
-                color:isToday?C.gold:C.text,
-                background:isToday?`${C.gold}15`:undefined,
-                borderRadius:isToday?6:undefined,
-                padding:isToday?"1px 6px":undefined}},d.getDate())
+            return React.createElement('div', { key:i,
+              style:{padding:"8px 4px", textAlign:"center",
+                borderLeft:`1px solid ${C.border}`, minWidth:0, overflow:"hidden"}}
+              , React.createElement('div',{style:{fontSize:11,color:C.textMuted,
+                  letterSpacing:"0.06em",textTransform:"uppercase"}},DAYS_SHORT[i])
+              , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",
+                  fontSize:20,fontWeight:600,marginTop:2,
+                  color:isToday?C.gold:C.text,
+                  background:isToday?`${C.gold}15`:undefined,
+                  borderRadius:isToday?6:undefined,
+                  padding:isToday?"1px 6px":undefined}},d.getDate())
             );
           })
         )
 
         /* ── BODY ── */
-        , React.createElement('div', { style:{position:"relative"}}
-          , HOURS.map(hour => {
-            const slotH = parseInt(hour.split(":")[0]); // 8, 9, 10 …
-            return React.createElement('div', { key:hour,
-              style:{display:"grid", gridTemplateColumns:`52px repeat(7,1fr)`,
-                borderBottom:`1px solid ${C.border}20`}}
-              /* etichetta ora */
-              , React.createElement('div', {style:{padding:"8px 6px 0", fontSize:11, color:C.textDim,
-                  textAlign:"right", paddingRight:8,
-                  height:HOUR_H, boxSizing:"border-box", flexShrink:0}}, hour)
-              /* celle per ogni giorno */
-              , days.map((d, colIdx) => {
-                const ds = yyyymmdd(d);
-                const cellLessons = forCell(ds, slotH);
-                return React.createElement('div', { key:colIdx,
-                  style:{borderLeft:`1px solid ${C.border}20`,
-                    height:HOUR_H, minHeight:HOUR_H,
-                    position:"relative",
-                    minWidth:0, overflow:"visible",
-                    boxSizing:"border-box"}}
-                  , cellLessons.map((l, li) => {
-                    // Posizione verticale dentro la cella (per lezioni che iniziano a :15, :30, :45)
-                    const fracOffset = (l._startH - slotH) * HOUR_H;
-                    const blockH     = Math.max(l._durH * HOUR_H - 3, 20);
-                    const isSala     = isSalaProve(l);
-                    const hex        = lessonHex(l);
-                    // Con più lezioni nella stessa cella → affianca orizzontalmente
-                    const total = cellLessons.length;
-                    const wPct  = 100 / total;
-                    const lPct  = li * wPct;
-                    const pending = isSala && l.stato === "in_attesa";
-                    const bg   = isSala ? (pending ? "#fffbeb" : C.orange2Bg)  : `${hex}15`;
-                    const bord = isSala ? (pending ? "#fde68a" : C.orange2Border) : `${hex}35`;
-                    const accent = isSala ? (pending ? "#f59e0b" : C.orange2) : hex;
-                    return React.createElement('div', { key:l.id,
-                      onClick: ()=>onSelect(l),
-                      style:{
-                        position:"absolute",
-                        top:    fracOffset + 1,
-                        left:   `${lPct}%`,
-                        width:  `calc(${wPct}% - 2px)`,
-                        height: blockH,
-                        background: bg,
-                        border:`1px solid ${bord}`,
-                        borderLeft:`3px solid ${accent}`,
-                        borderRadius:5,
-                        cursor:"pointer",
-                        zIndex:2,
-                        overflow:"hidden",
-                        padding:"2px 4px",
-                        boxSizing:"border-box",
-                        display:"flex", flexDirection:"column", gap:1,
-                      }}
-                      /* Riga 1: ora + nome/etichetta */
-                      , React.createElement('div',{style:{fontSize:9,fontWeight:700,color:accent,
-                          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
-                        , isSala
-                          ? `🎸 ${normH(l.hour)}–${normH(l.oraFine)}`
-                          : `${normH(l.hour)} · ${isColl(l) ? (l.courseName||"Coll.") : isProva(l) ? (l.contactName||"Prova") : (l.student||"").split(" ")[0]}`
-                      )
-                      /* Riga 2: strumento / richiedente (solo se c'è spazio) */
-                      , blockH > 26 && React.createElement('div',{style:{fontSize:9,color:accent,opacity:0.8,
-                          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
-                        , isSala
-                          ? (l.richiedente||l.student)
-                          : isColl(l) ? `${(l.students||[]).length} allievi` : (l.instrument||"")
-                      )
-                      , isSala && pending && blockH > 40 && React.createElement('div',{style:{fontSize:8,color:"#92400e",fontWeight:700}},"⏳ in attesa")
-                    );
-                  })
+        , React.createElement('div', { style:{display:"grid",
+            gridTemplateColumns:`52px repeat(7,1fr)`}}
+
+          /* Colonna etichette ore */
+          , React.createElement('div', { style:{position:"relative", height:TOTAL_H}}
+            , Array.from({length:N_HOURS}, (_,i) => i + H_START).map(h =>
+              React.createElement('div', { key:h,
+                style:{position:"absolute",
+                  top: (h - H_START) * HOUR_H,
+                  left:0, right:0, height:HOUR_H,
+                  borderTop:`1px solid ${C.border}20`,
+                  display:"flex", alignItems:"flex-start",
+                  padding:"3px 6px 0 0",
+                  justifyContent:"flex-end"}}
+                , React.createElement('span',{style:{fontSize:10,color:C.textDim}},
+                    `${String(h).padStart(2,"0")}:00`)
+              )
+            )
+          )
+
+          /* Colonne per ogni giorno */
+          , days.map((d, colIdx) => {
+            const ds = yyyymmdd(d);
+            const dayLessons = enriched.filter(l => l.date === ds);
+            const colMap = buildColumns(dayLessons);
+            const isToday = isSameDay(d, today);
+
+            return React.createElement('div', { key:colIdx,
+              style:{position:"relative", height:TOTAL_H,
+                borderLeft:`1px solid ${C.border}20`,
+                background: isToday ? "#fffef8" : "transparent"}}
+
+              /* Linee orizzontali di sfondo */
+              , Array.from({length:N_HOURS}, (_,i) =>
+                React.createElement('div', { key:i,
+                  style:{position:"absolute",
+                    top: i * HOUR_H, left:0, right:0, height:HOUR_H,
+                    borderTop:`1px solid ${C.border}20`}})
+              )
+
+              /* Blocchi lezione */
+              , dayLessons.map(l => {
+                const info    = colMap.get(l.id) || {colIdx:0, numCols:1};
+                const wPct    = 100 / info.numCols;
+                const lPct    = info.colIdx * wPct;
+                const isSala  = isSalaProve(l);
+                const hex     = lessonHex(l);
+                const pending = isSala && l.stato === "in_attesa";
+                const bg      = isSala ? (pending?"#fffbeb":C.orange2Bg) : `${hex}18`;
+                const bord    = isSala ? (pending?"#fde68a":C.orange2Border) : `${hex}40`;
+                const accent  = isSala ? (pending?"#f59e0b":C.orange2) : hex;
+                const normHour = String(l.hour||"").slice(0,5);
+                const normFine = String(l.oraFine||"").slice(0,5);
+
+                return React.createElement('div', { key:l.id,
+                  onClick: ()=>onSelect(l),
+                  style:{
+                    position:"absolute",
+                    top:    l._top + 1,
+                    left:   `calc(${lPct}% + 1px)`,
+                    width:  `calc(${wPct}% - 3px)`,
+                    height: l._h,
+                    background: bg,
+                    border:`1px solid ${bord}`,
+                    borderLeft:`3px solid ${accent}`,
+                    borderRadius:4,
+                    cursor:"pointer",
+                    zIndex:2,
+                    overflow:"hidden",
+                    padding:"2px 4px",
+                    boxSizing:"border-box",
+                    display:"flex", flexDirection:"column", gap:1,
+                  }}
+                  , React.createElement('div',{style:{fontSize:9,fontWeight:700,color:accent,
+                      whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:1.3}}
+                    , isSala
+                      ? `🎸 ${normHour}–${normFine}`
+                      : `${normHour} · ${
+                          isColl(l)  ? (l.courseName||"Coll.")
+                        : isProva(l) ? (l.contactName||"Prova")
+                        : (l.student||"").split(" ")[0]
+                        }`
+                  )
+                  , l._h > 26 && React.createElement('div',{style:{fontSize:9,color:accent,
+                      opacity:0.85,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:1.3}}
+                    , isSala
+                      ? (l.richiedente||l.student||"")
+                      : isColl(l)
+                        ? `${(l.students||[]).length} allievi`
+                        : (l.instrument||"")
+                  )
+                  , l._h > 42 && !isSala && React.createElement('div',{style:{fontSize:9,
+                      color:accent,opacity:0.7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
+                    , l.teacher||"")
+                  , isSala && pending && l._h > 40 && React.createElement('div',{
+                      style:{fontSize:8,color:"#92400e",fontWeight:700,marginTop:"auto"}},"⏳ in attesa")
                 );
               })
             );
