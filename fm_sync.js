@@ -131,6 +131,23 @@
     };
   }
 
+  function adaptPrenotazioneSala(r) {
+    return {
+      id:          r.id,
+      userId:      r.user_id     || null,
+      richiedente: r.richiedente || '',
+      ruolo:       r.ruolo       || 'allievo',
+      data:        r.data        || '',
+      oraInizio:   r.ora_inizio  || '',
+      oraFine:     r.ora_fine    || '',
+      motivo:      r.motivo      || '',
+      stato:       r.stato       || 'in_attesa',
+      noteAdmin:   r.note_admin  || '',
+      createdAt:   r.created_at  || '',
+      updatedAt:   r.updated_at  || '',
+    };
+  }
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  ADAPTERS  React → DB
   // ═══════════════════════════════════════════════════════════════════════════
@@ -260,6 +277,21 @@
         scaletta: JSON.stringify(c.scaletta || []),
       };
     },
+    prenotazioni_sala(p) {
+      return {
+        id:          p.id || null,
+        user_id:     p.userId || null,
+        richiedente: p.richiedente || '',
+        ruolo:       p.ruolo || 'allievo',
+        data:        p.data || null,
+        ora_inizio:  p.oraInizio || null,
+        ora_fine:    p.oraFine || null,
+        motivo:      p.motivo || null,
+        stato:       p.stato || 'in_attesa',
+        note_admin:  p.noteAdmin || null,
+        updated_at:  new Date().toISOString(),
+      };
+    },
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -371,6 +403,7 @@
       ['brani',    'brani',    toDB.brani   ],
       ['concerti', 'concerti', toDB.concerti],
       ['allegati', 'allegati', toDB.allegati],
+      ['prenotazioni_sala', 'prenotazioni_sala', toDB.prenotazioni_sala],
     ];
 
     let totalChanges = 0;
@@ -398,6 +431,7 @@
         brani:    state.brani    ? [...state.brani]    : _prev.brani,
         concerti: state.concerti ? [...state.concerti] : _prev.concerti,
         allegati: state.allegati ? [...state.allegati] : _prev.allegati,
+        prenotazioni_sala: state.prenotazioni_sala ? [...state.prenotazioni_sala] : _prev.prenotazioni_sala,
       };
       log(`Sync completato (${totalChanges} modifiche)`);
     }
@@ -417,6 +451,7 @@
         { data: sP, error: e6 }, { data: sQ, error: e7 },
         { data: sEV, error: e8 }, { data: sAL, error: e9 },
         { data: sCFG },
+        { data: sSALA, error: e10 },
       ] = await Promise.all([
         sb.from('studenti').select('*').order('nome'),
         sb.from('docenti').select('*').order('nome'),
@@ -428,11 +463,12 @@
         sb.from('concerti').select('*').order('data', { ascending: false }),
         sb.from('allegati').select('*').order('created_at', { ascending: false }),
         sb.from('sito_config').select('*'),
+        sb.from('prenotazioni_sala').select('*').order('data').order('ora_inizio'),
       ]);
 
       // Log errori
       [['studenti',e1],['docenti',e2],['corsi',e3],['lezioni',e4],
-       ['brani',e5],['spese',e6],['quote',e7],['concerti',e8],['allegati',e9]].forEach(([t,e]) => {
+       ['brani',e5],['spese',e6],['quote',e7],['concerti',e8],['allegati',e9],['prenotazioni_sala',e10]].forEach(([t,e]) => {
         if (e) fail(`Errore lettura ${t}:`, e.message);
       });
 
@@ -465,6 +501,7 @@
           fileType: r.file_type || null,
           createdAt: r.created_at || null,
         })),
+        prenotazioni_sala: (sSALA || []).map(adaptPrenotazioneSala),
       };
 
       log('Caricati →',
@@ -494,6 +531,7 @@
       { t: 'spese',    k: 'spese',    o: 'data',  a: adaptSpesa    },
       { t: 'brani',    k: 'brani',    o: 'titolo', a: adaptBrano    },
       { t: 'concerti', k: 'concerti', o: 'data',   a: adaptConcerto },
+      { t: 'prenotazioni_sala', k: 'prenotazioni_sala', o: 'data', a: adaptPrenotazioneSala },
     ];
 
     cfg.forEach(({ t, k, o, a }) => {
@@ -574,6 +612,7 @@
         entrate:  [...data.entrate],  spese:   [...data.spese],
         brani:    [...data.brani],    concerti: [...(data.concerti||[])],
         allegati: [...(data.allegati||[])],
+        prenotazioni_sala: [...(data.prenotazioni_sala||[])],
       };
     } else {
       warn('Supabase non disponibile — uso dati demo (modalità offline)');
@@ -620,7 +659,8 @@
       if (d && window.__FM_RELOAD__) {
         _prev = { students:[...d.students], docenti:[...d.docenti], courses:[...d.courses],
                   lessons:[...d.lessons], entrate:[...d.entrate], spese:[...d.spese],
-                  brani:[...d.brani], concerti:[...(d.concerti||[])], allegati:[...(d.allegati||[])] };
+                  brani:[...d.brani], concerti:[...(d.concerti||[])], allegati:[...(d.allegati||[])],
+                  prenotazioni_sala:[...(d.prenotazioni_sala||[])] };
         window.__FM_RELOAD__(d);
         log('Reload manuale OK');
       }

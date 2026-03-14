@@ -17,6 +17,7 @@ const C = {
   orange:"#c2410c",orangeBg:"#fff7ed",orangeBorder:"#fed7aa",
   purple:"#6d28d9",purpleBg:"#f5f3ff",purpleBorder:"#c4b5fd",
   teal:"#0e7490", tealBg:"#f0f9ff",  tealBorder:"#a5f3fc",
+  orange2:"#b45309", orange2Bg:"#fffbeb", orange2Border:"#fde68a",
   // Sidebar specific
   sidebar:"#1a4fa0", sidebarActive:"#123a7a", sidebarText:"rgba(255,255,255,0.85)", sidebarActiveTxt:"#ffffff",
 };
@@ -4857,7 +4858,8 @@ const addDays  = (d, n) => { const dt = new Date(d); dt.setDate(dt.getDate()+n);
 // Helpers lezioni collettive
 const isColl      = l => _optionalChain([l, 'optionalAccess', _46 => _46.tipo]) === "collettivo";
 const isProva     = l => _optionalChain([l, 'optionalAccess', _47 => _47.tipo]) === "prova";
-const lessonHex   = l => isColl(l) ? C.purple : isProva(l) ? C.teal : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
+const isSalaProve = l => _optionalChain([l, 'optionalAccess', _47b => _47b.tipo]) === "sala_prove";
+const lessonHex   = l => isColl(l) ? C.purple : isProva(l) ? C.teal : isSalaProve(l) ? C.orange2 : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
 const studentInLesson = (l, name, studentId) => {
   if (isColl(l)) return (l.students||[]).some(s=>s.name===name);
   if (studentId && l.studentId && String(l.studentId)===String(studentId)) return true;
@@ -5388,6 +5390,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
         let label = "";
         if(lesson.tipo==="collettivo") label = lesson.hour + " · " + (lesson.courseName||"Collettiva");
         else if(lesson.tipo==="prova") label = lesson.hour + " · Prova";
+        else if(lesson.tipo==="sala_prove") label = lesson.hour + " · Sala Prove";
         else label = lesson.hour + " · " + (lesson.student||"").split(" ")[0];
         // Tronca etichetta se troppo lunga per celle strette
         if(compact && label.length > 16) label = label.slice(0, 15) + "…";
@@ -5408,7 +5411,12 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
                 , lesson.iscritto ? " \u2713" : ""
               )
             )
-            , lesson.tipo!=="collettivo" && lesson.tipo!=="prova" && lesson.attendance && (
+            , lesson.tipo==="sala_prove" && (
+              React.createElement('span', { style: {fontSize:9, color:C.orange2, fontWeight:700, textTransform:"uppercase", flexShrink:0} }
+                , lesson.stato==="in_attesa" ? "⏳" : "🎸"
+              )
+            )
+            , lesson.tipo!=="collettivo" && lesson.tipo!=="prova" && lesson.tipo!=="sala_prove" && lesson.attendance && (
               React.createElement('div', { style: {width:6, height:6, borderRadius:"50%", background:dotHex, flexShrink:0, marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4459}})
             )
           )
@@ -5421,6 +5429,8 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
           ? (lesson.students||[]).length + " allievi"
           : lesson.tipo==="prova"
           ? (lesson.instrument||"") + (lesson.phone ? " \u00b7 " + lesson.phone : "")
+          : lesson.tipo==="sala_prove"
+          ? (lesson.richiedente||lesson.student||"") + (lesson.oraFine ? " → "+lesson.oraFine : "")
           : lesson.instrument||""
       )
     )
@@ -7354,6 +7364,267 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
 };
 
 
+// ── Adatta riga Supabase prenotazioni_sala → oggetto React ───────────────────
+const adaptPrenotazioneSala = (r) => ({
+  id:          r.id,
+  userId:      r.user_id     || null,
+  richiedente: r.richiedente || '',
+  ruolo:       r.ruolo       || 'allievo',
+  data:        r.data        || '',
+  oraInizio:   r.ora_inizio  || '',
+  oraFine:     r.ora_fine    || '',
+  motivo:      r.motivo      || '',
+  stato:       r.stato       || 'in_attesa',
+  noteAdmin:   r.note_admin  || '',
+  createdAt:   r.created_at  || '',
+  updatedAt:   r.updated_at  || '',
+});
+
+// ── Form prenotazione sala prove ──────────────────────────────────────────────
+const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
+  const todaySP = yyyymmdd(new Date());
+  const [spData,      setSpData]      = useState((initial && initial.data)      || todaySP);
+  const [spOraInizio, setSpOraInizio] = useState((initial && initial.oraInizio) || "09:00");
+  const [spOraFine,   setSpOraFine]   = useState((initial && initial.oraFine)   || "11:00");
+  const [spMotivo,    setSpMotivo]    = useState((initial && initial.motivo)     || "");
+  const [spSaving,    setSpSaving]    = useState(false);
+  const [spErr,       setSpErr]       = useState("");
+
+  const handleSaveSP = async () => {
+    if (!spData || !spOraInizio || !spOraFine) { setSpErr("Compila tutti i campi obbligatori."); return; }
+    if (spOraFine <= spOraInizio) { setSpErr("L'ora di fine deve essere successiva all'ora di inizio."); return; }
+    setSpSaving(true); setSpErr("");
+    try {
+      const sb = window.supabaseClient;
+      const userId = appUser && appUser.userId;
+      const richiedente = (appUser && appUser.nome) || "";
+      const ruoloR = role || "allievo";
+      const stato = role === "admin" ? "approvata" : "in_attesa";
+      const row = {
+        user_id: userId || null, richiedente, ruolo: ruoloR,
+        data: spData, ora_inizio: spOraInizio, ora_fine: spOraFine,
+        motivo: spMotivo || null, stato,
+      };
+      if (initial && initial.id) {
+        const { error } = await sb.from("prenotazioni_sala").update({...row, updated_at: new Date().toISOString()}).eq("id", initial.id);
+        if (error) throw error;
+        onSave(adaptPrenotazioneSala({ ...row, id: initial.id, created_at: initial.createdAt, updated_at: new Date().toISOString() }));
+      } else {
+        const { data: ins, error } = await sb.from("prenotazioni_sala").insert(row).select().single();
+        if (error) throw error;
+        onSave(adaptPrenotazioneSala(ins));
+      }
+    } catch(e) { setSpErr(e.message || "Errore salvataggio."); }
+    finally { setSpSaving(false); }
+  };
+
+  const inpS = { width:"100%", padding:"9px 12px", border:`1px solid ${C.border}`, borderRadius:8,
+    fontSize:13, color:C.text, background:C.bg, fontFamily:"'Open Sans',sans-serif" };
+  const lblS = { fontSize:11, color:C.textMuted, fontWeight:600, letterSpacing:"0.05em",
+    textTransform:"uppercase", marginBottom:4, display:"block" };
+
+  return (
+    React.createElement('div', { style:{padding:"8px 0",display:"flex",flexDirection:"column",gap:16} }
+      , React.createElement('div', { style:{background:C.orange2Bg,border:`1px solid ${C.orange2Border}`,
+          borderRadius:10,padding:"12px 14px",fontSize:12,color:"#92400e"} }
+        , React.createElement('b', null, "🎸 Sala Prove  ·  ")
+        , role === "admin"
+          ? "Come amministratore la prenotazione viene confermata immediatamente."
+          : "La richiesta sarà inviata all'amministratore per l'approvazione."
+      )
+      , React.createElement('div', { className:"form-2col" }
+        , React.createElement('div', null
+          , React.createElement('label', { style:lblS }, "Data *")
+          , React.createElement('input', { type:"date", value:spData, onChange:e=>setSpData(e.target.value),
+              min:todaySP, style:inpS })
+        )
+        , React.createElement('div', null)
+      )
+      , React.createElement('div', { className:"form-2col" }
+        , React.createElement('div', null
+          , React.createElement('label', { style:lblS }, "Ora inizio *")
+          , React.createElement('input', { type:"time", value:spOraInizio, onChange:e=>setSpOraInizio(e.target.value), style:inpS })
+        )
+        , React.createElement('div', null
+          , React.createElement('label', { style:lblS }, "Ora fine *")
+          , React.createElement('input', { type:"time", value:spOraFine, onChange:e=>setSpOraFine(e.target.value), style:inpS })
+        )
+      )
+      , React.createElement('div', null
+        , React.createElement('label', { style:lblS }, "Motivo / descrizione")
+        , React.createElement('textarea', { value:spMotivo, onChange:e=>setSpMotivo(e.target.value),
+            rows:3, placeholder:"Es. Prove per il saggio, band, ensemble…",
+            style:{...inpS, resize:"vertical"} })
+      )
+      , spErr && React.createElement('div', { style:{color:C.red,fontSize:12,background:C.redBg,
+          border:`1px solid ${C.redBorder}`,borderRadius:8,padding:"10px 14px"} }, spErr)
+      , React.createElement('div', { style:{display:"flex",gap:10,justifyContent:"flex-end"} }
+        , React.createElement(Btn, { variant:"secondary", onClick:onClose }, "Annulla")
+        , React.createElement(Btn, { onClick:handleSaveSP, disabled:spSaving }
+          , spSaving ? "Salvataggio…" : (role==="admin" ? "Prenota sala" : "Invia richiesta")
+        )
+      )
+    )
+  );
+};
+
+// ── Vista admin: gestione richieste sala prove ────────────────────────────────
+const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
+  const [svFilterStato, setSvFilterStato] = useState("tutti");
+  const [svNoteAdmin,   setSvNoteAdmin]   = useState({});
+  const [svLoading,     setSvLoading]     = useState({});
+  const [svModal,       setSvModal]       = useState(null); // "add"
+
+  const filtered = prenotazioni
+    .filter(p => svFilterStato === "tutti" || p.stato === svFilterStato)
+    .sort((a,b) => (a.data > b.data ? 1 : a.data < b.data ? -1 : (a.oraInizio||"") > (b.oraInizio||"") ? 1 : -1));
+
+  const statoMeta = {
+    in_attesa: { bg:C.orange2Bg, bd:C.orange2Border, tx:C.orange2, label:"In attesa", dot:"#f59e0b" },
+    approvata:  { bg:C.greenBg,  bd:C.greenBorder,   tx:C.green,   label:"Approvata", dot:C.green  },
+    rifiutata:  { bg:C.redBg,    bd:C.redBorder,     tx:C.red,     label:"Rifiutata", dot:C.red    },
+  };
+
+  const aggiornaStato = async (p, nuovoStato) => {
+    setSvLoading(l=>({...l,[p.id]:true}));
+    try {
+      const sb = window.supabaseClient;
+      const note = svNoteAdmin[p.id] || "";
+      const { error } = await sb.from("prenotazioni_sala")
+        .update({ stato: nuovoStato, note_admin: note, updated_at: new Date().toISOString() })
+        .eq("id", p.id);
+      if (error) throw error;
+      onUpdate({ ...p, stato: nuovoStato, noteAdmin: note });
+    } catch(e) { alert("Errore: " + e.message); }
+    finally { setSvLoading(l=>({...l,[p.id]:false})); }
+  };
+
+  const elimina = async (p) => {
+    if (!confirm("Eliminare la prenotazione di " + p.richiedente + "?")) return;
+    const sb = window.supabaseClient;
+    await sb.from("prenotazioni_sala").delete().eq("id", p.id);
+    onDelete(p.id);
+  };
+
+  const pending = prenotazioni.filter(p=>p.stato==="in_attesa").length;
+
+  return (
+    React.createElement('div', { style:{flex:1,overflow:"auto",padding:"16px 20px"} }
+      /* Header */
+      , React.createElement('div', { style:{display:"flex",alignItems:"center",justifyContent:"space-between",
+          marginBottom:16,flexWrap:"wrap",gap:10} }
+        , React.createElement('div', { style:{display:"flex",alignItems:"center",gap:10} }
+          , React.createElement('div', { style:{fontSize:14,fontWeight:600,color:C.text} }, "Prenotazioni Sala Prove")
+          , pending>0 && React.createElement('div', { style:{background:"#f59e0b",color:"#fff",borderRadius:20,
+              padding:"2px 10px",fontSize:11,fontWeight:700} }, pending, " in attesa")
+        )
+        , role==="admin" && React.createElement(Btn, { onClick:()=>setSvModal("add"),
+            style:{background:C.orange2,border:"none"} }
+          , React.createElement(Ic,{n:"plus",size:14,stroke:"#fff"})
+          , " Prenota (admin)"
+        )
+      )
+      /* Filtri */
+      , React.createElement('div', { style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"} }
+        , ["tutti","in_attesa","approvata","rifiutata"].map(s => {
+          const m = statoMeta[s];
+          return React.createElement('button', { key:s, onClick:()=>setSvFilterStato(s),
+            style:{padding:"5px 14px",borderRadius:20,border:`1px solid ${svFilterStato===s?(m?m.dot:C.gold):C.border}`,
+              cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif",
+              background: svFilterStato===s?(m?m.bg:C.goldBg):"transparent",
+              color: svFilterStato===s?(m?m.tx:C.gold):C.textMuted,
+              fontWeight:svFilterStato===s?600:400} }
+            , s==="tutti" ? "Tutte" : (m||{}).label||s
+          );
+        })
+      )
+      /* Lista vuota */
+      , filtered.length===0 && React.createElement('div', { style:{textAlign:"center",padding:40,
+          color:C.textMuted,fontSize:13} }, "Nessuna prenotazione trovata")
+      /* Cards */
+      , filtered.map(p => {
+        const m = statoMeta[p.stato] || statoMeta.in_attesa;
+        return (
+          React.createElement('div', { key:p.id, style:{background:C.surface,border:`1px solid ${C.border}`,
+              borderRadius:12,padding:"14px 16px",marginBottom:12,
+              borderLeft:`4px solid ${m.dot}`} }
+            , React.createElement('div', { style:{display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap"} }
+              , React.createElement('div', { style:{flex:1,minWidth:0} }
+                , React.createElement('div', { style:{fontSize:14,fontWeight:600,color:C.text,display:"flex",
+                    alignItems:"center",gap:8,flexWrap:"wrap"} }
+                  , p.richiedente
+                  , React.createElement('span', { style:{fontSize:10,color:C.textMuted,background:C.bg,
+                      border:`1px solid ${C.border}`,borderRadius:10,padding:"2px 8px"} }, p.ruolo)
+                )
+                , React.createElement('div', { style:{fontSize:13,color:C.textMuted,marginTop:4} }
+                  , React.createElement('b', null, p.data)
+                  , "  ·  ", p.oraInizio, " → ", p.oraFine
+                )
+                , p.motivo && React.createElement('div', { style:{fontSize:12,color:C.textMuted,marginTop:4,
+                    fontStyle:"italic"} }, "\"", p.motivo, "\"")
+              )
+              , React.createElement('div', { style:{background:m.bg,border:`1px solid ${m.bd}`,
+                  color:m.tx,borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700,flexShrink:0} }
+                , m.label)
+            )
+            /* Azioni admin — solo se in_attesa */
+            , role==="admin" && p.stato==="in_attesa" && (
+              React.createElement('div', { style:{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:12} }
+                , React.createElement('textarea', {
+                    placeholder:"Nota per il richiedente (opzionale)…",
+                    value:svNoteAdmin[p.id]||"",
+                    onChange:e=>setSvNoteAdmin(n=>({...n,[p.id]:e.target.value})),
+                    rows:2,
+                    style:{width:"100%",padding:"8px 10px",border:`1px solid ${C.border}`,borderRadius:8,
+                      fontSize:12,fontFamily:"'Open Sans',sans-serif",resize:"vertical",background:C.bg,marginBottom:8}
+                  })
+                , React.createElement('div', { style:{display:"flex",gap:8,justifyContent:"flex-end"} }
+                  , React.createElement('button', { onClick:()=>aggiornaStato(p,"rifiutata"),
+                      disabled:svLoading[p.id],
+                      style:{padding:"7px 16px",borderRadius:8,border:`1px solid ${C.redBorder}`,
+                        background:C.redBg,color:C.red,fontSize:12,cursor:"pointer",
+                        fontFamily:"'Open Sans',sans-serif"} }
+                    , svLoading[p.id]?"…":"✕ Rifiuta"
+                  )
+                  , React.createElement('button', { onClick:()=>aggiornaStato(p,"approvata"),
+                      disabled:svLoading[p.id],
+                      style:{padding:"7px 16px",borderRadius:8,border:`1px solid ${C.greenBorder}`,
+                        background:C.greenBg,color:C.green,fontSize:12,cursor:"pointer",fontWeight:600,
+                        fontFamily:"'Open Sans',sans-serif"} }
+                    , svLoading[p.id]?"…":"✓ Approva"
+                  )
+                )
+              )
+            )
+            , (p.noteAdmin) && (
+              React.createElement('div', { style:{marginTop:8,fontSize:12,color:C.textMuted,
+                  background:C.bg,borderRadius:8,padding:"8px 10px"} }
+                , React.createElement('b', null, "Nota: "), p.noteAdmin
+              )
+            )
+            , role==="admin" && React.createElement('div', { style:{marginTop:8,display:"flex",justifyContent:"flex-end"} }
+              , React.createElement('button', { onClick:()=>elimina(p),
+                  style:{padding:"3px 10px",borderRadius:6,border:"none",background:"none",
+                    color:C.textDim,fontSize:11,cursor:"pointer"} }
+                , "Elimina"
+              )
+            )
+          )
+        );
+      })
+      /* Modal prenota (admin diretto) */
+      , svModal==="add" && React.createElement(Modal, { title:"Prenota Sala Prove", onClose:()=>setSvModal(null), wide:true }
+        , React.createElement(SalaProveForm, {
+            onSave: (p) => { onUpdate ? onUpdate(p) : null; setSvModal(null); },
+            onClose: ()=>setSvModal(null),
+            appUser: appUser,
+            role: role,
+          })
+      )
+    )
+  );
+};
+
 const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
@@ -7396,6 +7667,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     if(qaCV==="addLezione"){ setModal("add"); if(clearQaCV)clearQaCV(); }
     else if(qaCV==="showRecuperi"){ setAppView("recupero"); if(clearQaCV)clearQaCV(); }
     else if(qaCV==="showElenco"){ setAppView("lezioni_admin"); if(clearQaCV)clearQaCV(); }
+    else if(qaCV==="showSalaProve"){ setAppView("sala_prove"); if(clearQaCV)clearQaCV(); }
     else if(qaCV==="showCalendario"){ setAppView("calendario"); if(clearQaCV)clearQaCV(); }
   },[qaCV]);
 
@@ -7421,6 +7693,18 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     window.__repertorio__ = repertorio;
   
     const [nextLessonCreated, setNextLessonCreated] = useState(null);
+
+    // ── Sala Prove ─────────────────────────────────────────────────
+    const [prenotazioniSala, setPrenotazioniSala] = useState([]);
+    const loadPrenotazioniSala = React.useCallback(async () => {
+      const sb = window.supabaseClient;
+      if (!sb) return;
+      const { data: spRows, error: spErr } = await sb
+        .from("prenotazioni_sala").select("*")
+        .order("data").order("ora_inizio");
+      if (!spErr && spRows) setPrenotazioniSala(spRows.map(adaptPrenotazioneSala));
+    }, []);
+    React.useEffect(() => { loadPrenotazioniSala(); }, []);
 
     const handleAdd = (data) => {
       const lessonId = uid();
@@ -7712,8 +7996,34 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         else if (filterTipo === "collettivo") ls = ls.filter(l => isColl(l));
         else if (filterTipo === "normale")    ls = ls.filter(l => !isProva(l) && !isColl(l));
       }
-      return ls;
-    }, [lessons, role, filterCorso, filterDocente, filterTipo, _cvAllievoId, currentStudent, _cvDocenteId, _cvNome]);
+      // Aggiungi eventi sala prove al calendario
+      const spEvents = prenotazioniSala
+        .filter(p => p.stato === "approvata" || p.stato === "in_attesa")
+        .filter(p => {
+          // Allievo vede solo le sue; admin/docente vedono tutte
+          if (role === "allievo") return p.userId === (_appUserCV && _appUserCV.userId);
+          return true;
+        })
+        .map(p => ({
+          id: "sala_" + p.id,
+          _isSalaProve: true,
+          _original: p,
+          tipo: "sala_prove",
+          date: p.data,
+          hour: p.oraInizio || "",
+          oraFine: p.oraFine || "",
+          student: p.richiedente || "",
+          richiedente: p.richiedente || "",
+          teacher: "",
+          instrument: "",
+          room: "Sala Prove",
+          topic: p.motivo || "Sala Prove",
+          attendance: p.stato === "approvata" ? "presente" : "",
+          notes: p.noteAdmin || "",
+          stato: p.stato,
+        }));
+      return [...ls, ...spEvents];
+    }, [lessons, role, filterCorso, filterDocente, filterTipo, _cvAllievoId, currentStudent, _cvDocenteId, _cvNome, prenotazioniSala]);
   
     const todayStr     = yyyymmdd(today);
     const todayLessons = visibleLessons.filter(l => l.date === todayStr);
@@ -7766,7 +8076,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             , [
                 {id:'calendario', label:'Calendario', icon:'cal'},
                 {id:'recupero',   label:'Recuperi',   icon:'clock'},
-                ...(role==='admin'?[{id:'lezioni_admin', label:'Elenco Lezioni', icon:'list'}]:[]),
+                ...(role==='admin'?[{id:'lezioni_admin', label:'Elenco Lezioni', icon:'list'},{id:'sala_prove', label:'Sala Prove', icon:'home'}]:[]),
               ].map(t => React.createElement('button', {key:t.id, onClick:()=>setAppView(t.id),
                 style:{padding:'10px 18px', border:'none', background:'none', cursor:'pointer',
                   fontSize:12, fontFamily:"'Open Sans',sans-serif", display:'flex', alignItems:'center', gap:5,
@@ -7794,6 +8104,18 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                 const sb=window.supabaseClient;
                 if(sb) sb.from('lezioni').delete().eq('id',l.id).then(({error})=>{ if(error) console.warn('[FM] delete lezione error:',error.message); });
               },
+            })
+
+          /* ── SALA PROVE ─────────────────────────────────────── */
+          , appView==='sala_prove' && React.createElement(SalaProveView, {
+              prenotazioni: prenotazioniSala,
+              onUpdate: (updated) => setPrenotazioniSala(p => {
+                const exists = p.some(x => x.id === updated.id);
+                return exists ? p.map(x => x.id===updated.id ? updated : x) : [...p, updated];
+              }),
+              onDelete: (id) => setPrenotazioniSala(p => p.filter(x => x.id !== id)),
+              role: role,
+              appUser: _appUserCV,
             })
 
           /* Toolbar */
@@ -7844,8 +8166,21 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                     style: {border:`1px solid ${C.purple}`,color:C.purple,background:C.purpleBg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6028}}
                     , React.createElement(Ic, { n: "group", size: 14, stroke: C.purple, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6030}}), React.createElement('span', { className: "tb-label", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6030}}, "Collettiva")
                   )
+                  , React.createElement(Btn, { variant: "secondary", onClick: () => setModal("addsala"),
+                    style: {border:`1px solid ${C.orange2}`,color:C.orange2,background:C.orange2Bg}}
+                    , React.createElement(Ic, { n: "home", size: 14, stroke: C.orange2}), React.createElement('span', { className: "tb-label"}, " Sala prove")
+                  )
                   , React.createElement(Btn, { onClick: () => { setAddDate(viewMode === "day" ? yyyymmdd(curDate) : yyyymmdd(today)); setModal("add"); }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6032}}
                     , React.createElement(Ic, { n: "plus", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6033}}), React.createElement('span', { className: "tb-label", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6033}}, "Nuova lezione" )
+                  )
+                )
+              )
+              , (role === "docente" || role === "allievo") && (
+                React.createElement('div', { style:{display:"flex",gap:8} }
+                  , React.createElement(Btn, { variant:"secondary", onClick:()=>setModal("addsala"),
+                      style:{border:`1px solid ${C.orange2}`,color:C.orange2,background:C.orange2Bg} }
+                    , React.createElement(Ic, {n:"home", size:14, stroke:C.orange2})
+                    , React.createElement('span', {className:"tb-label"}, " Sala prove")
                   )
                 )
               )
@@ -7939,9 +8274,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           /* Contenuto */
           , React.createElement('div', { style: {flex:1, padding:"0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
             , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden"}, className: "table-scroll", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
-              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding:20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, onSelect: l => { setSelLesson(l); setModal(role==="docente"?"edit":"detail"); }}))
-              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, onSelect: l => { setSelLesson(l); setModal(role==="docente"?"edit":"detail"); }})
-              , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, onSelect: l => { setSelLesson(l); setModal(role==="docente"?"edit":"detail"); }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
+              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding:20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal(role==="docente"?"edit":"detail");} }}))
+              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal(role==="docente"?"edit":"detail");} }})
+              , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal(role==="docente"?"edit":"detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
             )
           )
           )
@@ -7994,6 +8329,83 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               date: addDate,
               onSave: handleAddProva,
               onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6172}})
+          )
+        )
+        , modal === "addsala" && (
+          React.createElement(Modal, { title: "Prenota Sala Prove", onClose: closeModal, wide: true }
+            , React.createElement(SalaProveForm, {
+                onSave: (p) => {
+                  setPrenotazioniSala(prev => {
+                    const exists = prev.some(x => x.id === p.id);
+                    return exists ? prev.map(x => x.id===p.id ? p : x) : [...prev, p];
+                  });
+                  closeModal();
+                },
+                onClose: closeModal,
+                appUser: _appUserCV,
+                role: role,
+              })
+          )
+        )
+        , modal === "detailsala" && selLesson && selLesson._original && (
+          React.createElement(Modal, { title: "Sala Prove", onClose: closeModal }
+            , React.createElement('div', { style:{padding:"8px 0",display:"flex",flexDirection:"column",gap:14} }
+              , React.createElement('div', { style:{background:C.orange2Bg,border:`1px solid ${C.orange2Border}`,
+                  borderRadius:10,padding:"14px 16px"} }
+                , React.createElement('div', { style:{fontSize:13,fontWeight:600,color:C.orange2,marginBottom:6} }, "🎸 Prenotazione Sala Prove")
+                , React.createElement('div', { style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:13} }
+                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Data"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.data))
+                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Orario"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.oraInizio, " → ", selLesson._original.oraFine))
+                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Richiedente"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.richiedente))
+                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Ruolo"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.ruolo))
+                )
+                , selLesson._original.motivo && (
+                  React.createElement('div', { style:{marginTop:10,fontSize:12,color:C.textMuted,fontStyle:"italic"} }
+                    , "\"", selLesson._original.motivo, "\""
+                  )
+                )
+              )
+              , React.createElement('div', { style:{display:"flex",alignItems:"center",gap:10} }
+                , React.createElement('div', { style:{
+                    background: selLesson._original.stato==="approvata" ? C.greenBg : selLesson._original.stato==="rifiutata" ? C.redBg : C.orange2Bg,
+                    border:`1px solid ${selLesson._original.stato==="approvata" ? C.greenBorder : selLesson._original.stato==="rifiutata" ? C.redBorder : C.orange2Border}`,
+                    color: selLesson._original.stato==="approvata" ? C.green : selLesson._original.stato==="rifiutata" ? C.red : C.orange2,
+                    borderRadius:20,padding:"5px 14px",fontSize:12,fontWeight:700} }
+                  , selLesson._original.stato==="approvata" ? "✓ Approvata" : selLesson._original.stato==="rifiutata" ? "✕ Rifiutata" : "⏳ In attesa di approvazione"
+                )
+              )
+              , selLesson._original.noteAdmin && (
+                React.createElement('div', { style:{fontSize:12,color:C.textMuted,background:C.bg,
+                    borderRadius:8,padding:"10px 12px"} }
+                  , React.createElement('b', null, "Nota admin: "), selLesson._original.noteAdmin
+                )
+              )
+              , role==="admin" && selLesson._original.stato==="in_attesa" && (
+                React.createElement('div', { style:{display:"flex",gap:8,justifyContent:"flex-end",marginTop:4} }
+                  , React.createElement('button', { onClick: async () => {
+                      const sb=window.supabaseClient;
+                      await sb.from("prenotazioni_sala").update({stato:"rifiutata",updated_at:new Date().toISOString()}).eq("id",selLesson._original.id);
+                      setPrenotazioniSala(p=>p.map(x=>x.id===selLesson._original.id?{...x,stato:"rifiutata"}:x));
+                      closeModal();
+                    }, style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${C.redBorder}`,
+                      background:C.redBg,color:C.red,fontSize:12,cursor:"pointer",fontFamily:"'Open Sans',sans-serif"} }
+                    , "✕ Rifiuta"
+                  )
+                  , React.createElement('button', { onClick: async () => {
+                      const sb=window.supabaseClient;
+                      await sb.from("prenotazioni_sala").update({stato:"approvata",updated_at:new Date().toISOString()}).eq("id",selLesson._original.id);
+                      setPrenotazioniSala(p=>p.map(x=>x.id===selLesson._original.id?{...x,stato:"approvata"}:x));
+                      closeModal();
+                    }, style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${C.greenBorder}`,
+                      background:C.greenBg,color:C.green,fontSize:12,cursor:"pointer",fontWeight:600,fontFamily:"'Open Sans',sans-serif"} }
+                    , "✓ Approva"
+                  )
+                )
+              )
+              , React.createElement('div', { style:{display:"flex",justifyContent:"flex-end"} }
+                , React.createElement(Btn, { variant:"secondary", onClick:closeModal }, "Chiudi")
+              )
+            )
           )
         )
       )
@@ -13131,6 +13543,7 @@ const NAV_ITEMS = [
       { qaKey:"showCalendario", label:"Calendario",    icon:"cal"      },
       { qaKey:"showRecuperi",   label:"Recuperi",      icon:"clock"    },
       { qaKey:"showElenco",     label:"Elenco lezioni", icon:"list", adminOnly:true },
+      { qaKey:"showSalaProve",  label:"Sala Prove",     icon:"home", adminOnly:false },
     ]
   },
   { id:"concerti",    label:"Concerti",     icon:"mic"      },
