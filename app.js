@@ -5431,7 +5431,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
           : lesson.tipo==="prova"
           ? (lesson.instrument||"") + (lesson.phone ? " \u00b7 " + lesson.phone : "")
           : lesson.tipo==="sala_prove"
-          ? (lesson.richiedente||lesson.student||"") + (lesson.oraFine ? " → "+lesson.oraFine : "")
+          ? (lesson.richiedente||lesson.student||"") + (lesson.oraFine ? " → "+(lesson.oraFine||"").slice(0,5) : "")
           : lesson.instrument||""
       )
     )
@@ -7372,9 +7372,10 @@ const adaptPrenotazioneSala = (r) => ({
   richiedente: r.richiedente || '',
   ruolo:       r.ruolo       || 'allievo',
   data:        r.data        || '',
-  oraInizio:   r.ora_inizio  || '',
-  oraFine:     r.ora_fine    || '',
+  oraInizio:   r.ora_inizio  ? (r.ora_inizio.slice(0,5)) : '',
+  oraFine:     r.ora_fine    ? (r.ora_fine.slice(0,5))   : '',
   motivo:      r.motivo      || '',
+  telefono:    r.telefono    || '',
   stato:       r.stato       || 'in_attesa',
   noteAdmin:   r.note_admin  || '',
   createdAt:   r.created_at  || '',
@@ -7388,6 +7389,7 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
   const [spOraInizio, setSpOraInizio] = useState((initial && initial.oraInizio) || "09:00");
   const [spOraFine,   setSpOraFine]   = useState((initial && initial.oraFine)   || "11:00");
   const [spMotivo,    setSpMotivo]    = useState((initial && initial.motivo)     || "");
+  const [spTelefono,  setSpTelefono]  = useState((initial && initial.telefono)  || (appUser && appUser.phone) || "");
   const [spSaving,    setSpSaving]    = useState(false);
   const [spErr,       setSpErr]       = useState("");
 
@@ -7404,7 +7406,7 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
       const row = {
         user_id: userId || null, richiedente, ruolo: ruoloR,
         data: spData, ora_inizio: spOraInizio, ora_fine: spOraFine,
-        motivo: spMotivo || null, stato,
+        motivo: spMotivo || null, telefono: spTelefono || null, stato,
       };
       if (initial && initial.id) {
         const { error } = await sb.from("prenotazioni_sala").update({...row, updated_at: new Date().toISOString()}).eq("id", initial.id);
@@ -7439,7 +7441,11 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
           , React.createElement('input', { type:"date", value:spData, onChange:e=>setSpData(e.target.value),
               min:todaySP, style:inpS })
         )
-        , React.createElement('div', null)
+        , React.createElement('div', null
+          , React.createElement('label', { style:lblS }, "Telefono di contatto")
+          , React.createElement('input', { type:"tel", value:spTelefono, onChange:e=>setSpTelefono(e.target.value),
+              placeholder:"Es. 333 1234567", style:inpS })
+        )
       )
       , React.createElement('div', { className:"form-2col" }
         , React.createElement('div', null
@@ -7510,12 +7516,17 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
   const WeekCalSala = () => {
     const ws = spStartOfWeek(svCurDate);
     const days = Array.from({length:7},(_,i)=>spAddDays(ws,i));
-    const hours = Array.from({length:14},(_,i)=>i+8); // 08:00–21:00
+    const HOUR_H = 36; // px per ora
+    const START_H = 8, END_H = 23;
+    const totalHours = END_H - START_H; // 15 righe (8..22)
+    const hours = Array.from({length:totalHours},(_,i)=>i+START_H);
+    const fmtHHMM = (t) => t ? t.slice(0,5) : "";
+
     return (
       React.createElement('div', { style:{overflowX:"auto"} }
         , React.createElement('div', { style:{display:"grid", gridTemplateColumns:`52px repeat(7,1fr)`, minWidth:520} }
           /* intestazione giorni */
-          , React.createElement('div', {style:{background:C.surface}})
+          , React.createElement('div', {style:{background:C.surface,borderBottom:`1px solid ${C.border}`}})
           , days.map((d,i) => {
             const isToday = yyyymmdd(d)===yyyymmdd(new Date());
             return React.createElement('div', { key:i,
@@ -7526,33 +7537,66 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
               , React.createElement('div',{style:{fontSize:14,fontWeight:700}},d.getDate())
             );
           })
-          /* righe orarie */
+          /* colonna ore + celle giornaliere con position:relative */
           , hours.map(h => {
             const hStr = String(h).padStart(2,"0")+":00";
+            const isLastRow = h === END_H - 1;
             return React.createElement(React.Fragment, {key:h}
+              /* etichetta ora */
               , React.createElement('div', { style:{padding:"2px 6px",fontSize:10,color:C.textDim,
-                  borderTop:`1px solid ${C.border}`,textAlign:"right",lineHeight:"28px",
-                  background:C.bg,flexShrink:0} }, hStr)
+                  borderTop:`1px solid ${C.border}`,
+                  borderBottom: isLastRow?`1px solid ${C.border}`:"none",
+                  textAlign:"right",height:HOUR_H,
+                  background:C.bg,flexShrink:0,display:"flex",alignItems:"flex-start",paddingTop:4} }, hStr)
+              /* celle per ogni giorno */
               , days.map((d,i) => {
                 const ds = yyyymmdd(d);
-                const events = approved.filter(p => {
+                const isToday = ds===yyyymmdd(new Date());
+                // Trova prenotazioni che INIZIANO a quest'ora (renderizziamo il blocco solo alla riga iniziale)
+                const startingHere = approved.filter(p => {
                   if(p.data!==ds) return false;
                   const startH = parseInt((p.oraInizio||"00:00").split(":")[0]);
-                  const endH   = parseInt((p.oraFine||"00:00").split(":")[0]);
-                  return h>=startH && h<endH;
+                  return startH === h;
                 });
-                const isToday = ds===yyyymmdd(new Date());
                 return React.createElement('div', { key:i,
-                  style:{borderTop:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,
-                    minHeight:28,padding:"1px 2px",background:isToday?"#fffbf0":C.surface,
+                  style:{borderTop:`1px solid ${C.border}`,
+                    borderBottom: isLastRow?`1px solid ${C.border}`:"none",
+                    borderLeft:`1px solid ${C.border}`,
+                    height:HOUR_H,
+                    background:isToday?"#fffbf0":C.surface,
                     position:"relative"} }
-                  , events.map(p => React.createElement('div', { key:p.id,
-                      style:{background:C.orange2Bg,border:`1px solid ${C.orange2Border}`,
-                        borderLeft:`3px solid ${C.orange2}`,borderRadius:4,
-                        padding:"1px 4px",fontSize:9,color:C.orange2,fontWeight:600,
-                        overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",marginBottom:1} }
-                      , p.oraInizio,"–",p.oraFine," ", p.richiedente
-                    ))
+                  , startingHere.map(p => {
+                    const startH = parseInt((p.oraInizio||"00:00").split(":")[0]);
+                    const startM = parseInt((p.oraInizio||"00:00").split(":")[1]||"0");
+                    const endH   = parseInt((p.oraFine||"00:00").split(":")[0]);
+                    const endM   = parseInt((p.oraFine||"00:00").split(":")[1]||"0");
+                    const durationHours = (endH + endM/60) - (startH + startM/60);
+                    const blockHeight = Math.max(durationHours * HOUR_H - 2, HOUR_H - 2);
+                    const topOffset = (startM / 60) * HOUR_H;
+                    return React.createElement('div', { key:p.id,
+                      style:{
+                        position:"absolute",
+                        top: topOffset + 1,
+                        left:2, right:2,
+                        height: blockHeight,
+                        background:C.orange2Bg,
+                        border:`1px solid ${C.orange2Border}`,
+                        borderLeft:`3px solid ${C.orange2}`,
+                        borderRadius:4,
+                        padding:"3px 5px",
+                        fontSize:9,color:C.orange2,fontWeight:600,
+                        overflow:"hidden",
+                        zIndex:1,
+                        display:"flex",flexDirection:"column",justifyContent:"flex-start",gap:1
+                      } }
+                      , React.createElement('div',{style:{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:700}}
+                        , fmtHHMM(p.oraInizio),"–",fmtHHMM(p.oraFine))
+                      , blockHeight > 20 && React.createElement('div',{style:{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",opacity:0.85}}
+                        , p.richiedente)
+                      , blockHeight > 36 && p.telefono && React.createElement('div',{style:{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",opacity:0.7}}
+                        , p.telefono)
+                    );
+                  })
                 );
               })
             );
@@ -7594,8 +7638,9 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
                   style:{background:C.orange2Bg,border:`1px solid ${C.orange2Border}`,
                     borderLeft:`3px solid ${C.orange2}`,borderRadius:3,
                     padding:"1px 4px",fontSize:9,color:C.orange2,fontWeight:600,
-                    overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",marginBottom:1}}
-                  ,p.oraInizio,"–",p.oraFine," ",isMobile?"":p.richiedente
+                    overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",marginBottom:1},
+                  title:`${p.richiedente} · ${p.oraInizio}–${p.oraFine}${p.telefono?" · "+p.telefono:""}`}
+                  ,(p.oraInizio||"").slice(0,5),"–",(p.oraFine||"").slice(0,5),isMobile?"":" "+p.richiedente
                 ))
             );
           })
@@ -7742,9 +7787,12 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
                   , React.createElement('span',{style:{fontSize:10,color:C.textMuted,background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"2px 8px"}},p.ruolo)
                 )
                 , React.createElement('div',{style:{fontSize:13,color:C.textMuted,marginTop:4}}
-                  , React.createElement('b',null,fmtDate(p.data)),"  ·  ",p.oraInizio," → ",p.oraFine
+                  , React.createElement('b',null,fmtDate(p.data)),"  ·  ",(p.oraInizio||"").slice(0,5)," → ",(p.oraFine||"").slice(0,5)
                 )
                 , p.motivo && React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginTop:3,fontStyle:"italic"}},"\"",p.motivo,"\"")
+                , p.telefono && React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginTop:3,display:"flex",alignItems:"center",gap:5}}
+                  ,React.createElement(Ic,{n:"phone",size:11,stroke:C.textMuted}), p.telefono
+                )
               )
               , React.createElement('div',{style:{background:m.bg,border:`1px solid ${m.bd}`,color:m.tx,borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700,flexShrink:0}},m.label)
             )
@@ -8515,9 +8563,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                 , React.createElement('div', { style:{fontSize:13,fontWeight:600,color:C.orange2,marginBottom:6} }, "🎸 Prenotazione Sala Prove")
                 , React.createElement('div', { style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:13} }
                   , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Data"), React.createElement('div',{style:{fontWeight:600}}, fmtDate(selLesson._original.data)))
-                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Orario"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.oraInizio, " → ", selLesson._original.oraFine))
+                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Orario"), React.createElement('div',{style:{fontWeight:600}}, (selLesson._original.oraInizio||"").slice(0,5), " → ", (selLesson._original.oraFine||"").slice(0,5)))
                   , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Richiedente"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.richiedente))
                   , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Ruolo"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.ruolo))
+                  , selLesson._original.telefono && React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Telefono"), React.createElement('div',{style:{fontWeight:600,display:"flex",alignItems:"center",gap:5}},React.createElement(Ic,{n:"phone",size:12,stroke:C.orange2}),selLesson._original.telefono))
                 )
                 , selLesson._original.motivo && (
                   React.createElement('div', { style:{marginTop:10,fontSize:12,color:C.textMuted,fontStyle:"italic"} }
