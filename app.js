@@ -318,6 +318,7 @@ const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
     paperclip: React.createElement('path', { d: "m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"}),
     download: React.createElement(React.Fragment, null, React.createElement('path',{d:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}), React.createElement('polyline',{points:"7 10 12 15 17 10"}), React.createElement('line',{x1:"12",y1:"15",x2:"12",y2:"3"})),
     upload:   React.createElement(React.Fragment, null, React.createElement('path',{d:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}), React.createElement('polyline',{points:"17 8 12 3 7 8"}), React.createElement('line',{x1:"12",y1:"3",x2:"12",y2:"15"})),
+    drum:     React.createElement(React.Fragment, null, React.createElement('ellipse',{cx:"12",cy:"8",rx:"9",ry:"4"}), React.createElement('path',{d:"M3 8v8c0 2.21 4.03 4 9 4s9-1.79 9-4V8"}), React.createElement('line',{x1:"16",y1:"2",x2:"20",y2:"6"}), React.createElement('line',{x1:"8",y1:"2",x2:"4",y2:"6"})),
   };
   return (
     React.createElement('svg', { width: size, height: size, viewBox: "0 0 24 24"   , fill: fill,
@@ -7470,15 +7471,140 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
 
 // ── Vista admin: gestione richieste sala prove ────────────────────────────────
 const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
-  const [svFilterStato, setSvFilterStato] = useState("tutti");
-  const [svNoteAdmin,   setSvNoteAdmin]   = useState({});
-  const [svLoading,     setSvLoading]     = useState({});
-  const [svModal,       setSvModal]       = useState(null); // "add"
+  const isMobile = useIsMobile();
+  // ── Panel: "calendario" | "richieste" (admin only)
+  const [svPanel,      setSvPanel]      = useState("calendario");
+  const [svCalMode,    setSvCalMode]    = useState("week");   // "week" | "month"
+  const [svCurDate,    setSvCurDate]    = useState(new Date());
+  const [svFilterStato,setSvFilterStato]= useState("tutti");
+  const [svNoteAdmin,  setSvNoteAdmin]  = useState({});
+  const [svLoading,    setSvLoading]    = useState({});
+  const [svModal,      setSvModal]      = useState(null);
 
-  const filtered = prenotazioni
-    .filter(p => svFilterStato === "tutti" || p.stato === svFilterStato)
-    .sort((a,b) => (a.data > b.data ? 1 : a.data < b.data ? -1 : (a.oraInizio||"") > (b.oraInizio||"") ? 1 : -1));
+  // ── helpers date IT ─────────────────────────────────────────────
+  const DAYS_IT   = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
+  const MONTHS_IT = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
+                     "Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+  const spStartOfWeek = (d) => { const dt=new Date(d); const dow=dt.getDay(); dt.setDate(dt.getDate()-((dow===0?7:dow)-1)); dt.setHours(0,0,0,0); return dt; };
+  const spAddDays = (d,n) => { const dt=new Date(d); dt.setDate(dt.getDate()+n); return dt; };
 
+  // ── Solo prenotazioni approvate nel calendario ──────────────────
+  const approved = prenotazioni.filter(p=>p.stato==="approvata");
+
+  // ── navigate ────────────────────────────────────────────────────
+  const navigate = (dir) => {
+    const d = new Date(svCurDate);
+    if (svCalMode==="week")  d.setDate(d.getDate()+dir*7);
+    else d.setMonth(d.getMonth()+dir);
+    setSvCurDate(d);
+  };
+
+  // ── label navigazione ───────────────────────────────────────────
+  const navLabel = React.useMemo(()=>{
+    if(svCalMode==="month") return `${MONTHS_IT[svCurDate.getMonth()]} ${svCurDate.getFullYear()}`;
+    const ws=spStartOfWeek(svCurDate), we=spAddDays(ws,6);
+    return `${ws.getDate()} ${MONTHS_IT[ws.getMonth()].slice(0,3)} – ${we.getDate()} ${MONTHS_IT[we.getMonth()].slice(0,3)} ${we.getFullYear()}`;
+  },[svCalMode,svCurDate]);
+
+  // ── VISTA SETTIMANALE ───────────────────────────────────────────
+  const WeekCalSala = () => {
+    const ws = spStartOfWeek(svCurDate);
+    const days = Array.from({length:7},(_,i)=>spAddDays(ws,i));
+    const hours = Array.from({length:14},(_,i)=>i+8); // 08:00–21:00
+    return (
+      React.createElement('div', { style:{overflowX:"auto"} }
+        , React.createElement('div', { style:{display:"grid", gridTemplateColumns:`52px repeat(7,1fr)`, minWidth:520} }
+          /* intestazione giorni */
+          , React.createElement('div', {style:{background:C.surface}})
+          , days.map((d,i) => {
+            const isToday = yyyymmdd(d)===yyyymmdd(new Date());
+            return React.createElement('div', { key:i,
+              style:{padding:"6px 4px",textAlign:"center",background:isToday?C.goldBg:C.surface,
+                borderBottom:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,
+                fontSize:11,fontWeight:isToday?700:500,color:isToday?C.gold:C.text} }
+              , React.createElement('div',null,DAYS_IT[i])
+              , React.createElement('div',{style:{fontSize:14,fontWeight:700}},d.getDate())
+            );
+          })
+          /* righe orarie */
+          , hours.map(h => {
+            const hStr = String(h).padStart(2,"0")+":00";
+            return React.createElement(React.Fragment, {key:h}
+              , React.createElement('div', { style:{padding:"2px 6px",fontSize:10,color:C.textDim,
+                  borderTop:`1px solid ${C.border}`,textAlign:"right",lineHeight:"28px",
+                  background:C.bg,flexShrink:0} }, hStr)
+              , days.map((d,i) => {
+                const ds = yyyymmdd(d);
+                const events = approved.filter(p => {
+                  if(p.data!==ds) return false;
+                  const startH = parseInt((p.oraInizio||"00:00").split(":")[0]);
+                  const endH   = parseInt((p.oraFine||"00:00").split(":")[0]);
+                  return h>=startH && h<endH;
+                });
+                const isToday = ds===yyyymmdd(new Date());
+                return React.createElement('div', { key:i,
+                  style:{borderTop:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,
+                    minHeight:28,padding:"1px 2px",background:isToday?"#fffbf0":C.surface,
+                    position:"relative"} }
+                  , events.map(p => React.createElement('div', { key:p.id,
+                      style:{background:C.orange2Bg,border:`1px solid ${C.orange2Border}`,
+                        borderLeft:`3px solid ${C.orange2}`,borderRadius:4,
+                        padding:"1px 4px",fontSize:9,color:C.orange2,fontWeight:600,
+                        overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",marginBottom:1} }
+                      , p.oraInizio,"–",p.oraFine," ", p.richiedente
+                    ))
+                );
+              })
+            );
+          })
+        )
+      )
+    );
+  };
+
+  // ── VISTA MENSILE ───────────────────────────────────────────────
+  const MonthCalSala = () => {
+    const y=svCurDate.getFullYear(), m=svCurDate.getMonth();
+    const firstDay = new Date(y,m,1);
+    const firstDow = (firstDay.getDay()||7)-1; // 0=Lun
+    const daysInMonth = new Date(y,m+1,0).getDate();
+    const cells = [];
+    for(let i=0;i<firstDow;i++) cells.push(null);
+    for(let d=1;d<=daysInMonth;d++) cells.push(d);
+    while(cells.length%7!==0) cells.push(null);
+    const todayStr = yyyymmdd(new Date());
+    return (
+      React.createElement('div', null
+        , React.createElement('div', { style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:2} }
+          , DAYS_IT.map(d=>React.createElement('div',{key:d,style:{textAlign:"center",fontSize:11,fontWeight:600,
+              color:C.textMuted,padding:"4px 0"}},d))
+        )
+        , React.createElement('div', { style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2} }
+          , cells.map((d,i) => {
+            if(!d) return React.createElement('div',{key:i});
+            const ds = `${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const evs = approved.filter(p=>p.data===ds);
+            const isToday = ds===todayStr;
+            return React.createElement('div', { key:i,
+              style:{minHeight:60,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px",
+                background:isToday?C.goldBg:C.surface} }
+              , React.createElement('div', { style:{fontSize:11,fontWeight:isToday?700:500,
+                  color:isToday?C.gold:C.text,marginBottom:2} }, d)
+              , evs.map(p=>React.createElement('div',{key:p.id,
+                  style:{background:C.orange2Bg,border:`1px solid ${C.orange2Border}`,
+                    borderLeft:`3px solid ${C.orange2}`,borderRadius:3,
+                    padding:"1px 4px",fontSize:9,color:C.orange2,fontWeight:600,
+                    overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",marginBottom:1}}
+                  ,p.oraInizio,"–",p.oraFine," ",isMobile?"":p.richiedente
+                ))
+            );
+          })
+        )
+      )
+    );
+  };
+
+  // ── stati approvazioni ──────────────────────────────────────────
   const statoMeta = {
     in_attesa: { bg:C.orange2Bg, bd:C.orange2Border, tx:C.orange2, label:"In attesa", dot:"#f59e0b" },
     approvata:  { bg:C.greenBg,  bd:C.greenBorder,   tx:C.green,   label:"Approvata", dot:C.green  },
@@ -7507,123 +7633,156 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
   };
 
   const pending = prenotazioni.filter(p=>p.stato==="in_attesa").length;
+  const filteredRichieste = prenotazioni
+    .filter(p => svFilterStato==="tutti" || p.stato===svFilterStato)
+    .sort((a,b)=>(a.data>b.data?1:a.data<b.data?-1:(a.oraInizio||"")>(b.oraInizio||"")?1:-1));
 
   return (
-    React.createElement('div', { style:{flex:1,overflow:"auto",padding:"16px 20px"} }
-      /* Header */
-      , React.createElement('div', { style:{display:"flex",alignItems:"center",justifyContent:"space-between",
-          marginBottom:16,flexWrap:"wrap",gap:10} }
-        , React.createElement('div', { style:{display:"flex",alignItems:"center",gap:10} }
-          , React.createElement('div', { style:{fontSize:14,fontWeight:600,color:C.text} }, "Prenotazioni Sala Prove")
-          , pending>0 && React.createElement('div', { style:{background:"#f59e0b",color:"#fff",borderRadius:20,
-              padding:"2px 10px",fontSize:11,fontWeight:700} }, pending, " in attesa")
+    React.createElement('div', { style:{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"} }
+
+      /* ── TOP BAR ──────────────────────────────────────────────── */
+      , React.createElement('div', { style:{padding:"10px 20px",borderBottom:`1px solid ${C.border}`,
+          background:C.surface,display:"flex",alignItems:"center",justifyContent:"space-between",
+          gap:10,flexWrap:"wrap",flexShrink:0} }
+        /* panel tabs */
+        , React.createElement('div', { style:{display:"flex",gap:4} }
+          , React.createElement('button', { onClick:()=>setSvPanel("calendario"),
+              style:{padding:"6px 14px",borderRadius:8,border:`1px solid ${svPanel==="calendario"?C.orange2:C.border}`,
+                background:svPanel==="calendario"?C.orange2Bg:"transparent",
+                color:svPanel==="calendario"?C.orange2:C.textMuted,
+                fontSize:12,cursor:"pointer",fontFamily:"'Open Sans',sans-serif",
+                fontWeight:svPanel==="calendario"?600:400,display:"flex",alignItems:"center",gap:6} }
+            , React.createElement(Ic,{n:"cal",size:13,stroke:svPanel==="calendario"?C.orange2:C.textMuted})
+            , "Calendario occupazioni"
+          )
+          , role==="admin" && React.createElement('button', { onClick:()=>setSvPanel("richieste"),
+              style:{padding:"6px 14px",borderRadius:8,border:`1px solid ${svPanel==="richieste"?C.gold:C.border}`,
+                background:svPanel==="richieste"?C.goldBg:"transparent",
+                color:svPanel==="richieste"?C.gold:C.textMuted,
+                fontSize:12,cursor:"pointer",fontFamily:"'Open Sans',sans-serif",
+                fontWeight:svPanel==="richieste"?600:400,display:"flex",alignItems:"center",gap:6} }
+            , React.createElement(Ic,{n:"list",size:13,stroke:svPanel==="richieste"?C.gold:C.textMuted})
+            , "Richieste"
+            , pending>0 && React.createElement('span', { style:{background:"#f59e0b",color:"#fff",
+                borderRadius:20,padding:"0px 6px",fontSize:10,fontWeight:700,marginLeft:4} }, pending)
+          )
         )
-        , role==="admin" && React.createElement(Btn, { onClick:()=>setSvModal("add"),
+        /* prenota button */
+        , React.createElement(Btn, { onClick:()=>setSvModal("add"),
             style:{background:C.orange2,border:"none"} }
           , React.createElement(Ic,{n:"plus",size:14,stroke:"#fff"})
-          , " Prenota (admin)"
+          , role==="admin" ? " Prenota" : " Richiedi prenotazione"
         )
       )
-      /* Filtri */
-      , React.createElement('div', { style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"} }
-        , ["tutti","in_attesa","approvata","rifiutata"].map(s => {
-          const m = statoMeta[s];
-          return React.createElement('button', { key:s, onClick:()=>setSvFilterStato(s),
-            style:{padding:"5px 14px",borderRadius:20,border:`1px solid ${svFilterStato===s?(m?m.dot:C.gold):C.border}`,
-              cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif",
-              background: svFilterStato===s?(m?m.bg:C.goldBg):"transparent",
-              color: svFilterStato===s?(m?m.tx:C.gold):C.textMuted,
-              fontWeight:svFilterStato===s?600:400} }
-            , s==="tutti" ? "Tutte" : (m||{}).label||s
+
+      /* ── CALENDARIO OCCUPAZIONI ───────────────────────────────── */
+      , svPanel==="calendario" && React.createElement('div', { style:{flex:1,overflow:"auto",padding:"16px 20px"} }
+        /* toolbar navigazione */
+        , React.createElement('div', { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"} }
+          , React.createElement('button', { onClick:()=>navigate(-1), style:{background:C.surface,border:`1px solid ${C.border}`,
+              borderRadius:8,padding:"6px 10px",cursor:"pointer",display:"flex"} }
+            , React.createElement(Ic,{n:"left",size:15,stroke:C.textMuted}))
+          , React.createElement('button', { onClick:()=>navigate(1), style:{background:C.surface,border:`1px solid ${C.border}`,
+              borderRadius:8,padding:"6px 10px",cursor:"pointer",display:"flex"} }
+            , React.createElement(Ic,{n:"right",size:15,stroke:C.textMuted}))
+          , React.createElement('button', { onClick:()=>setSvCurDate(new Date()), style:{background:C.surface,
+              border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",cursor:"pointer",
+              fontSize:12,fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",gap:5} }
+            , React.createElement(Ic,{n:"today",size:13,stroke:C.textMuted}), "Oggi")
+          , React.createElement('span', { style:{fontFamily:"'Oswald',sans-serif",fontSize:17,fontWeight:600,
+              color:C.text} }, navLabel)
+          , React.createElement('div', { style:{marginLeft:"auto",display:"flex",background:C.surface,
+              border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"} }
+            , [["week","Settimana"],["month","Mese"]].map(([v,lbl])=>
+              React.createElement('button',{key:v,onClick:()=>setSvCalMode(v),
+                style:{padding:"6px 12px",border:"none",fontSize:12,fontFamily:"'Open Sans',sans-serif",
+                  cursor:"pointer",background:svCalMode===v?C.orange2Bg:"transparent",
+                  color:svCalMode===v?C.orange2:C.textMuted,
+                  borderRight:`1px solid ${C.border}`,transition:"all .15s"}},lbl)
+            )
+          )
+        )
+        /* info legenda */
+        , React.createElement('div', { style:{display:"flex",alignItems:"center",gap:8,marginBottom:12,fontSize:11,color:C.textMuted} }
+          , React.createElement('div', { style:{width:12,height:12,borderRadius:2,background:C.orange2Bg,
+              border:`1px solid ${C.orange2}`,flexShrink:0} })
+          , "Occupato (prenotazione approvata)"
+          , approved.length===0 && React.createElement('span',{style:{marginLeft:8,color:C.green,fontWeight:600}},"Sala libera!")
+        )
+        /* calendario */
+        , svCalMode==="week" ? React.createElement(WeekCalSala) : React.createElement(MonthCalSala)
+      )
+
+      /* ── RICHIESTE (admin only) ───────────────────────────────── */
+      , svPanel==="richieste" && role==="admin" && React.createElement('div', { style:{flex:1,overflow:"auto",padding:"16px 20px"} }
+        /* filtri */
+        , React.createElement('div', { style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"} }
+          , ["tutti","in_attesa","approvata","rifiutata"].map(s => {
+            const m=statoMeta[s];
+            return React.createElement('button',{key:s,onClick:()=>setSvFilterStato(s),
+              style:{padding:"5px 14px",borderRadius:20,cursor:"pointer",fontSize:12,
+                fontFamily:"'Open Sans',sans-serif",
+                border:`1px solid ${svFilterStato===s?(m?m.dot:C.gold):C.border}`,
+                background:svFilterStato===s?(m?m.bg:C.goldBg):"transparent",
+                color:svFilterStato===s?(m?m.tx:C.gold):C.textMuted,
+                fontWeight:svFilterStato===s?600:400} }
+              , s==="tutti"?"Tutte":(m||{}).label||s
+            );
+          })
+        )
+        , filteredRichieste.length===0 && React.createElement('div',{style:{textAlign:"center",padding:40,color:C.textMuted,fontSize:13}},"Nessuna richiesta trovata")
+        , filteredRichieste.map(p => {
+          const m=statoMeta[p.stato]||statoMeta.in_attesa;
+          return React.createElement('div',{key:p.id,style:{background:C.surface,border:`1px solid ${C.border}`,
+              borderRadius:12,padding:"14px 16px",marginBottom:12,borderLeft:`4px solid ${m.dot}`}}
+            , React.createElement('div',{style:{display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}
+              , React.createElement('div',{style:{flex:1,minWidth:0}}
+                , React.createElement('div',{style:{fontSize:14,fontWeight:600,color:C.text,display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}
+                  , p.richiedente
+                  , React.createElement('span',{style:{fontSize:10,color:C.textMuted,background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"2px 8px"}},p.ruolo)
+                )
+                , React.createElement('div',{style:{fontSize:13,color:C.textMuted,marginTop:4}}
+                  , React.createElement('b',null,fmtDate(p.data)),"  ·  ",p.oraInizio," → ",p.oraFine
+                )
+                , p.motivo && React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginTop:3,fontStyle:"italic"}},"\"",p.motivo,"\"")
+              )
+              , React.createElement('div',{style:{background:m.bg,border:`1px solid ${m.bd}`,color:m.tx,borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700,flexShrink:0}},m.label)
+            )
+            , p.stato==="in_attesa" && (
+              React.createElement('div',{style:{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:12}}
+                , React.createElement('textarea',{placeholder:"Nota per il richiedente (opzionale)…",value:svNoteAdmin[p.id]||"",onChange:e=>setSvNoteAdmin(n=>({...n,[p.id]:e.target.value})),rows:2,
+                    style:{width:"100%",padding:"8px 10px",border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,fontFamily:"'Open Sans',sans-serif",resize:"vertical",background:C.bg,marginBottom:8}})
+                , React.createElement('div',{style:{display:"flex",gap:8,justifyContent:"flex-end"}}
+                  , React.createElement('button',{onClick:()=>aggiornaStato(p,"rifiutata"),disabled:svLoading[p.id],
+                      style:{padding:"7px 16px",borderRadius:8,border:`1px solid ${C.redBorder}`,background:C.redBg,color:C.red,fontSize:12,cursor:"pointer",fontFamily:"'Open Sans',sans-serif"}}
+                    ,svLoading[p.id]?"…":"✕ Rifiuta")
+                  , React.createElement('button',{onClick:()=>aggiornaStato(p,"approvata"),disabled:svLoading[p.id],
+                      style:{padding:"7px 16px",borderRadius:8,border:`1px solid ${C.greenBorder}`,background:C.greenBg,color:C.green,fontSize:12,cursor:"pointer",fontWeight:600,fontFamily:"'Open Sans',sans-serif"}}
+                    ,svLoading[p.id]?"…":"✓ Approva")
+                )
+              )
+            )
+            , p.noteAdmin && React.createElement('div',{style:{marginTop:8,fontSize:12,color:C.textMuted,background:C.bg,borderRadius:8,padding:"8px 10px"}}
+              ,React.createElement('b',null,"Nota: "),p.noteAdmin)
+            , React.createElement('div',{style:{marginTop:8,display:"flex",justifyContent:"flex-end"}}
+              ,React.createElement('button',{onClick:()=>elimina(p),style:{padding:"3px 10px",borderRadius:6,border:"none",background:"none",color:C.textDim,fontSize:11,cursor:"pointer"}},"Elimina"))
           );
         })
       )
-      /* Lista vuota */
-      , filtered.length===0 && React.createElement('div', { style:{textAlign:"center",padding:40,
-          color:C.textMuted,fontSize:13} }, "Nessuna prenotazione trovata")
-      /* Cards */
-      , filtered.map(p => {
-        const m = statoMeta[p.stato] || statoMeta.in_attesa;
-        return (
-          React.createElement('div', { key:p.id, style:{background:C.surface,border:`1px solid ${C.border}`,
-              borderRadius:12,padding:"14px 16px",marginBottom:12,
-              borderLeft:`4px solid ${m.dot}`} }
-            , React.createElement('div', { style:{display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap"} }
-              , React.createElement('div', { style:{flex:1,minWidth:0} }
-                , React.createElement('div', { style:{fontSize:14,fontWeight:600,color:C.text,display:"flex",
-                    alignItems:"center",gap:8,flexWrap:"wrap"} }
-                  , p.richiedente
-                  , React.createElement('span', { style:{fontSize:10,color:C.textMuted,background:C.bg,
-                      border:`1px solid ${C.border}`,borderRadius:10,padding:"2px 8px"} }, p.ruolo)
-                )
-                , React.createElement('div', { style:{fontSize:13,color:C.textMuted,marginTop:4} }
-                  , React.createElement('b', null, p.data)
-                  , "  ·  ", p.oraInizio, " → ", p.oraFine
-                )
-                , p.motivo && React.createElement('div', { style:{fontSize:12,color:C.textMuted,marginTop:4,
-                    fontStyle:"italic"} }, "\"", p.motivo, "\"")
-              )
-              , React.createElement('div', { style:{background:m.bg,border:`1px solid ${m.bd}`,
-                  color:m.tx,borderRadius:20,padding:"4px 12px",fontSize:11,fontWeight:700,flexShrink:0} }
-                , m.label)
-            )
-            /* Azioni admin — solo se in_attesa */
-            , role==="admin" && p.stato==="in_attesa" && (
-              React.createElement('div', { style:{marginTop:12,borderTop:`1px solid ${C.border}`,paddingTop:12} }
-                , React.createElement('textarea', {
-                    placeholder:"Nota per il richiedente (opzionale)…",
-                    value:svNoteAdmin[p.id]||"",
-                    onChange:e=>setSvNoteAdmin(n=>({...n,[p.id]:e.target.value})),
-                    rows:2,
-                    style:{width:"100%",padding:"8px 10px",border:`1px solid ${C.border}`,borderRadius:8,
-                      fontSize:12,fontFamily:"'Open Sans',sans-serif",resize:"vertical",background:C.bg,marginBottom:8}
-                  })
-                , React.createElement('div', { style:{display:"flex",gap:8,justifyContent:"flex-end"} }
-                  , React.createElement('button', { onClick:()=>aggiornaStato(p,"rifiutata"),
-                      disabled:svLoading[p.id],
-                      style:{padding:"7px 16px",borderRadius:8,border:`1px solid ${C.redBorder}`,
-                        background:C.redBg,color:C.red,fontSize:12,cursor:"pointer",
-                        fontFamily:"'Open Sans',sans-serif"} }
-                    , svLoading[p.id]?"…":"✕ Rifiuta"
-                  )
-                  , React.createElement('button', { onClick:()=>aggiornaStato(p,"approvata"),
-                      disabled:svLoading[p.id],
-                      style:{padding:"7px 16px",borderRadius:8,border:`1px solid ${C.greenBorder}`,
-                        background:C.greenBg,color:C.green,fontSize:12,cursor:"pointer",fontWeight:600,
-                        fontFamily:"'Open Sans',sans-serif"} }
-                    , svLoading[p.id]?"…":"✓ Approva"
-                  )
-                )
-              )
-            )
-            , (p.noteAdmin) && (
-              React.createElement('div', { style:{marginTop:8,fontSize:12,color:C.textMuted,
-                  background:C.bg,borderRadius:8,padding:"8px 10px"} }
-                , React.createElement('b', null, "Nota: "), p.noteAdmin
-              )
-            )
-            , role==="admin" && React.createElement('div', { style:{marginTop:8,display:"flex",justifyContent:"flex-end"} }
-              , React.createElement('button', { onClick:()=>elimina(p),
-                  style:{padding:"3px 10px",borderRadius:6,border:"none",background:"none",
-                    color:C.textDim,fontSize:11,cursor:"pointer"} }
-                , "Elimina"
-              )
-            )
-          )
-        );
-      })
-      /* Modal prenota (admin diretto) */
-      , svModal==="add" && React.createElement(Modal, { title:"Prenota Sala Prove", onClose:()=>setSvModal(null), wide:true }
-        , React.createElement(SalaProveForm, {
-            onSave: (p) => { onUpdate ? onUpdate(p) : null; setSvModal(null); },
-            onClose: ()=>setSvModal(null),
-            appUser: appUser,
-            role: role,
+
+      /* ── MODAL PRENOTAZIONE ───────────────────────────────────── */
+      , svModal==="add" && React.createElement(Modal,{title:"Prenota Sala Prove",onClose:()=>setSvModal(null),wide:true}
+        ,React.createElement(SalaProveForm,{
+            onSave:(p)=>{if(onUpdate)onUpdate(p);setSvModal(null);},
+            onClose:()=>setSvModal(null),
+            appUser:appUser,
+            role:role,
           })
       )
     )
   );
 };
+
 
 const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV }) => {
   const isMobile = useIsMobile();
@@ -8076,7 +8235,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             , [
                 {id:'calendario', label:'Calendario', icon:'cal'},
                 {id:'recupero',   label:'Recuperi',   icon:'clock'},
-                ...(role==='admin'?[{id:'lezioni_admin', label:'Elenco Lezioni', icon:'list'},{id:'sala_prove', label:'Sala Prove', icon:'home'}]:[]),
+                ...(role==='admin'?[{id:'lezioni_admin', label:'Elenco Lezioni', icon:'list'}]:[]),
+                {id:'sala_prove', label:'Sala Prove', icon:'drum'},
               ].map(t => React.createElement('button', {key:t.id, onClick:()=>setAppView(t.id),
                 style:{padding:'10px 18px', border:'none', background:'none', cursor:'pointer',
                   fontSize:12, fontFamily:"'Open Sans',sans-serif", display:'flex', alignItems:'center', gap:5,
@@ -8168,7 +8328,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   )
                   , React.createElement(Btn, { variant: "secondary", onClick: () => setModal("addsala"),
                     style: {border:`1px solid ${C.orange2}`,color:C.orange2,background:C.orange2Bg}}
-                    , React.createElement(Ic, { n: "home", size: 14, stroke: C.orange2}), React.createElement('span', { className: "tb-label"}, " Sala prove")
+                    , React.createElement(Ic, { n: "drum", size: 14, stroke: C.orange2}), React.createElement('span', { className: "tb-label"}, " Sala prove")
                   )
                   , React.createElement(Btn, { onClick: () => { setAddDate(viewMode === "day" ? yyyymmdd(curDate) : yyyymmdd(today)); setModal("add"); }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6032}}
                     , React.createElement(Ic, { n: "plus", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6033}}), React.createElement('span', { className: "tb-label", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6033}}, "Nuova lezione" )
@@ -8179,7 +8339,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                 React.createElement('div', { style:{display:"flex",gap:8} }
                   , React.createElement(Btn, { variant:"secondary", onClick:()=>setModal("addsala"),
                       style:{border:`1px solid ${C.orange2}`,color:C.orange2,background:C.orange2Bg} }
-                    , React.createElement(Ic, {n:"home", size:14, stroke:C.orange2})
+                    , React.createElement(Ic, {n:"drum", size:14, stroke:C.orange2})
                     , React.createElement('span', {className:"tb-label"}, " Sala prove")
                   )
                 )
@@ -8354,7 +8514,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   borderRadius:10,padding:"14px 16px"} }
                 , React.createElement('div', { style:{fontSize:13,fontWeight:600,color:C.orange2,marginBottom:6} }, "🎸 Prenotazione Sala Prove")
                 , React.createElement('div', { style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:13} }
-                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Data"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.data))
+                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Data"), React.createElement('div',{style:{fontWeight:600}}, fmtDate(selLesson._original.data)))
                   , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Orario"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.oraInizio, " → ", selLesson._original.oraFine))
                   , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Richiedente"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.richiedente))
                   , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Ruolo"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.ruolo))
@@ -13543,7 +13703,7 @@ const NAV_ITEMS = [
       { qaKey:"showCalendario", label:"Calendario",    icon:"cal"      },
       { qaKey:"showRecuperi",   label:"Recuperi",      icon:"clock"    },
       { qaKey:"showElenco",     label:"Elenco lezioni", icon:"list", adminOnly:true },
-      { qaKey:"showSalaProve",  label:"Sala Prove",     icon:"home", adminOnly:false },
+      { qaKey:"showSalaProve",  label:"Sala Prove",     icon:"drum", adminOnly:false },
     ]
   },
   { id:"concerti",    label:"Concerti",     icon:"mic"      },
