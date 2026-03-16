@@ -8847,7 +8847,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         }
 
         // Se segno presenza (qualsiasi valore, incluso in_recupero) su lezione ricorrente → crea la prossima
-        if (lesson && val && val !== "" && lesson.recurrence && lesson.recurrence !== "Nessuna") {
+        // MA NON se la lezione corrente è già un recupero (non genera una catena infinita)
+        const isLezioneRecupero = lesson && (lesson.tipo === 'recupero' || lesson.inRecupero === true);
+        if (lesson && val && val !== "" && lesson.recurrence && lesson.recurrence !== "Nessuna" && !isLezioneRecupero) {
           const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
           const gap     = daysMap[lesson.recurrence] || 7;
           const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap));
@@ -8863,11 +8865,15 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           if (!exists) {
             const nextLesson = {
               ...lesson,
-              id:         uid(),
-              date:       nextDate,
-              attendance: "",
-              notes:      "",
-              exercises:  "",
+              id:               uid(),
+              date:             nextDate,
+              attendance:       "",
+              notes:            "",
+              exercises:        "",
+              // La nuova lezione NON eredita lo stato recupero dalla precedente
+              inRecupero:       false,
+              recuperoScadenza: null,
+              tipo:             lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
             };
 
             // ── Persisti la nuova lezione ricorrente su Supabase ───────────
