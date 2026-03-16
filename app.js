@@ -7826,22 +7826,24 @@ const adaptPrenotazioneSala = (r) => ({
 // ── Form prenotazione sala prove ──────────────────────────────────────────────
 const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
   const todaySP = yyyymmdd(new Date());
-  const [spData,      setSpData]      = useState((initial && initial.data)      || todaySP);
-  const [spOraInizio, setSpOraInizio] = useState((initial && initial.oraInizio) || "09:00");
-  const [spOraFine,   setSpOraFine]   = useState((initial && initial.oraFine)   || "11:00");
-  const [spMotivo,    setSpMotivo]    = useState((initial && initial.motivo)     || "");
-  const [spTelefono,  setSpTelefono]  = useState((initial && initial.telefono)  || (appUser && appUser.phone) || "");
-  const [spSaving,    setSpSaving]    = useState(false);
-  const [spErr,       setSpErr]       = useState("");
+  const [spData,        setSpData]        = useState((initial && initial.data)        || todaySP);
+  const [spOraInizio,   setSpOraInizio]   = useState((initial && initial.oraInizio)   || "09:00");
+  const [spOraFine,     setSpOraFine]     = useState((initial && initial.oraFine)     || "11:00");
+  const [spMotivo,      setSpMotivo]      = useState((initial && initial.motivo)      || "");
+  const [spTelefono,    setSpTelefono]    = useState((initial && initial.telefono)    || (appUser && appUser.phone) || "");
+  const [spRichiedente, setSpRichiedente] = useState((initial && initial.richiedente) || (appUser && appUser.nome) || "");
+  const [spSaving,      setSpSaving]      = useState(false);
+  const [spErr,         setSpErr]         = useState("");
 
   const handleSaveSP = async () => {
     if (!spData || !spOraInizio || !spOraFine) { setSpErr("Compila tutti i campi obbligatori."); return; }
+    if (!spRichiedente.trim()) { setSpErr("Inserisci il nome del richiedente."); return; }
     if (spOraFine <= spOraInizio) { setSpErr("L'ora di fine deve essere successiva all'ora di inizio."); return; }
     setSpSaving(true); setSpErr("");
     try {
       const sb = window.supabaseClient;
       const userId = appUser && appUser.userId;
-      const richiedente = (appUser && appUser.nome) || "";
+      const richiedente = spRichiedente.trim();
       const ruoloR = role || "allievo";
       const stato = role === "admin" ? "approvata" : "in_attesa";
       const row = {
@@ -7878,15 +7880,23 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
       )
       , React.createElement('div', { className:"form-2col" }
         , React.createElement('div', null
-          , React.createElement('label', { style:lblS }, "Data *")
-          , React.createElement('input', { type:"date", value:spData, onChange:e=>setSpData(e.target.value),
-              min:todaySP, style:inpS })
+          , React.createElement('label', { style:lblS }, "Nome richiedente *")
+          , React.createElement('input', { value:spRichiedente, onChange:e=>setSpRichiedente(e.target.value),
+              placeholder:"Es. Mario Rossi", style:inpS })
         )
         , React.createElement('div', null
           , React.createElement('label', { style:lblS }, "Telefono di contatto")
           , React.createElement('input', { type:"tel", value:spTelefono, onChange:e=>setSpTelefono(e.target.value),
               placeholder:"Es. 333 1234567", style:inpS })
         )
+      )
+      , React.createElement('div', { className:"form-2col" }
+        , React.createElement('div', null
+          , React.createElement('label', { style:lblS }, "Data *")
+          , React.createElement('input', { type:"date", value:spData, onChange:e=>setSpData(e.target.value),
+              min:todaySP, style:inpS })
+        )
+        , React.createElement('div', null)
       )
       , React.createElement('div', { className:"form-2col" }
         , React.createElement('div', null
