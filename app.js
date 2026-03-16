@@ -6261,11 +6261,13 @@ const DayView = ({ date, lessons, onSelect }) => {
 
 // ─── VISTA SETTIMANALE ────────────────────────────────────────────────────────
 const WeekView = ({ weekStart, lessons, onSelect }) => {
-  const days      = Array.from({length:7}, (_, i) => addDays(weekStart, i));
+  // Solo Lun–Sab (6 giorni, no domenica)
+  const days      = Array.from({length:6}, (_, i) => addDays(weekStart, i));
   const HOUR_H    = 64;   // px per 1 ora
   const H_START   = 8;    // prima riga visibile
   const H_END     = 22;   // ultima riga visibile (esclusa)
-  const N_HOURS   = H_END - H_START; // 15 slot
+  const N_HOURS   = H_END - H_START;
+  const SAB_AFTERNOON_START = 13; // sabato pomeriggio dalle 13:00
 
   // "HH:MM:SS" | "HH:MM" → numero decimale di ore
   const toH = (t) => {
@@ -6277,7 +6279,6 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
   // Durata in ore di una lezione (priorità: durata salvata → calcolo da oraFine → default per tipo)
   const getDurH = (l) => {
     if (isSalaProve(l)) {
-      // Sala prove: calcola sempre da oraFine - hour
       const sh = toH(l.hour);
       const eh = toH(l.oraFine || l.hour);
       return Math.max(eh - sh, 0.5);
@@ -6290,21 +6291,15 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
   const enriched = lessons.map(l => {
     const startH  = toH(l.hour);
     const durHrs  = getDurH(l);
-    // Top in px dall'inizio del contenitore body
     const topPx   = Math.max(startH - H_START, 0) * HOUR_H;
     const heightPx = Math.max(durHrs * HOUR_H - 3, 18);
     return { ...l, _startH: startH, _durH: durHrs, _top: topPx, _h: heightPx };
   }).filter(l => l._startH < H_END && l._startH >= H_START - 0.1);
 
-  // Per ogni giorno raccoglie le lezioni e calcola colonne affiancate (collision detection)
   const buildColumns = (dayLessons) => {
-    // Ordina per ora inizio
     const sorted = [...dayLessons].sort((a,b) => a._startH - b._startH);
-    // Gruppi di lezioni che si sovrappongono
-    const columns = []; // columns[i] = array di lezioni nella colonna i
+    const columns = [];
     sorted.forEach(l => {
-      const endH = l._startH + l._durH;
-      // trova prima colonna libera
       let placed = false;
       for (let c = 0; c < columns.length; c++) {
         const lastInCol = columns[c][columns[c].length - 1];
@@ -6316,16 +6311,13 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
       }
       if (!placed) columns.push([l]);
     });
-    // Assegna a ogni lezione: colIdx e numCols (per calcolare larghezza)
     const result = new Map();
-    // Per ogni lezione trova quante colonne si sovrappongono in quel momento
     sorted.forEach(l => {
       const endH = l._startH + l._durH;
       let colIdx = 0;
       for (let c = 0; c < columns.length; c++) {
         if (columns[c].find(x => x.id === l.id)) { colIdx = c; break; }
       }
-      // Conta quante colonne totali si sovrappongono con questa lezione
       const overlapping = columns.filter(col =>
         col.some(x => x._startH < endH && x._startH + x._durH > l._startH)
       ).length;
@@ -6334,28 +6326,31 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
     return result;
   };
 
-  const TOTAL_H = N_HOURS * HOUR_H; // altezza totale body in px
+  const TOTAL_H = N_HOURS * HOUR_H;
 
   return (
     React.createElement('div', { style:{overflowX:"auto", WebkitOverflowScrolling:"touch"}}
-      , React.createElement('div', { style:{minWidth:520}}
+      , React.createElement('div', { style:{minWidth:440}}
 
         /* ── HEADER ── */
         , React.createElement('div', { style:{display:"grid",
-            gridTemplateColumns:`52px repeat(7,1fr)`,
+            gridTemplateColumns:`52px repeat(6,1fr)`,
             borderBottom:`1px solid ${C.border}`,
             position:"sticky", top:0, background:C.surface, zIndex:4}}
           , React.createElement('div')
           , days.map((d, i) => {
             const isToday = isSameDay(d, today);
+            const isSab   = d.getDay() === 6;
             return React.createElement('div', { key:i,
               style:{padding:"8px 4px", textAlign:"center",
-                borderLeft:`1px solid ${C.border}`, minWidth:0, overflow:"hidden"}}
-              , React.createElement('div',{style:{fontSize:11,color:C.textMuted,
+                borderLeft:`1px solid ${C.border}`, minWidth:0, overflow:"hidden",
+                background: isSab ? "#f9f5f0" : undefined}}
+              , React.createElement('div',{style:{fontSize:11,
+                  color: isSab ? "#b45309" : C.textMuted,
                   letterSpacing:"0.06em",textTransform:"uppercase"}},DAYS_SHORT[i])
               , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",
                   fontSize:20,fontWeight:600,marginTop:2,
-                  color:isToday?C.gold:C.text,
+                  color:isToday?C.gold: isSab ? "#b45309" : C.text,
                   background:isToday?`${C.gold}15`:undefined,
                   borderRadius:isToday?6:undefined,
                   padding:isToday?"1px 6px":undefined}},d.getDate())
@@ -6365,7 +6360,7 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
 
         /* ── BODY ── */
         , React.createElement('div', { style:{display:"grid",
-            gridTemplateColumns:`52px repeat(7,1fr)`}}
+            gridTemplateColumns:`52px repeat(6,1fr)`}}
 
           /* Colonna etichette ore */
           , React.createElement('div', { style:{position:"relative", height:TOTAL_H}}
@@ -6384,12 +6379,16 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
             )
           )
 
-          /* Colonne per ogni giorno */
+          /* Colonne per ogni giorno (Lun–Sab) */
           , days.map((d, colIdx) => {
             const ds = yyyymmdd(d);
             const dayLessons = enriched.filter(l => l.date === ds);
             const colMap = buildColumns(dayLessons);
             const isToday = isSameDay(d, today);
+            const isSab   = d.getDay() === 6;
+            // Offset in px da cui inizia il sabato pomeriggio
+            const sabPomTopPx = (SAB_AFTERNOON_START - H_START) * HOUR_H;
+            const sabPomH     = TOTAL_H - sabPomTopPx;
 
             return React.createElement('div', { key:colIdx,
               style:{position:"relative", height:TOTAL_H,
@@ -6402,6 +6401,24 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
                   style:{position:"absolute",
                     top: i * HOUR_H, left:0, right:0, height:HOUR_H,
                     borderTop:`1px solid ${C.border}20`}})
+              )
+
+              /* Overlay sabato pomeriggio (dalle 13:00 in poi) */
+              , isSab && React.createElement('div', {
+                  style:{
+                    position:"absolute",
+                    top: sabPomTopPx, left:0, right:0,
+                    height: sabPomH,
+                    background:"repeating-linear-gradient(45deg,transparent,transparent 6px,rgba(180,83,9,0.04) 6px,rgba(180,83,9,0.04) 12px)",
+                    backgroundColor:"rgba(251,243,234,0.7)",
+                    borderTop:"1.5px dashed #f5d0a0",
+                    zIndex:1, pointerEvents:"none"
+                  }}
+                , React.createElement('div',{style:{
+                    fontSize:9,color:"#b45309",fontWeight:600,
+                    letterSpacing:"0.06em",textTransform:"uppercase",
+                    padding:"3px 5px",opacity:0.7
+                  }},"pom.")
               )
 
               /* Blocchi lezione */
@@ -6447,7 +6464,6 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
                         : (l.student||"").split(" ")[0]
                         }`
                   )
-                  /* Riga 2: caption tipo / richiedente */
                   , l._h > 26 && React.createElement('div',{style:{fontSize:9,color:accent,
                       opacity:0.85,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:1.3}}
                     , isSala
@@ -6456,7 +6472,6 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
                         ? `${(l.students||[]).length} allievi`
                         : (l.instrument||"")
                   )
-                  /* Riga 3: richiedente sala / docente lezione */
                   , l._h > 42 && React.createElement('div',{style:{fontSize:9,
                       color:accent,opacity:0.7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
                     , isSala
@@ -6478,23 +6493,37 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
 // ─── VISTA MENSILE ────────────────────────────────────────────────────────────
 const MonthView = ({ year, month, lessons, onSelect, onDayClick }) => {
   const firstDay  = new Date(year, month, 1);
-  const startDow  = (firstDay.getDay() || 7) - 1;
+  // getDay() 0=Dom,1=Lun...6=Sab → in una settimana Lun–Sab (6 giorni)
+  // startDow: quanti slot vuoti prima del primo giorno (0=Lun, 5=Sab, Dom non esiste)
+  const rawDow = firstDay.getDay(); // 0=Dom,1=Lun...6=Sab
+  // Se il primo giorno è domenica (0), la saltiamo: non appare nel calendario
+  // Il numero di celle vuote è: rawDow === 0 ? 6 (poniamo dopo Sab) : rawDow - 1
+  const startDow = rawDow === 0 ? 6 : rawDow - 1; // offset 0=Lun…5=Sab
   const totalDays = new Date(year, month+1, 0).getDate();
-  const cells = [
-    ...Array.from({length:startDow}, () => null),
-    ...Array.from({length:totalDays}, (_, i) => i+1),
-  ];
-  while(cells.length % 7 !== 0) cells.push(null);
+  // Genera celle: solo giorni Lun–Sab (salta domeniche)
+  const cells = [];
+  // Celle vuote iniziali
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  // Aggiungi i giorni del mese, escludendo domeniche
+  for (let d = 1; d <= totalDays; d++) {
+    const dt = new Date(year, month, d);
+    if (dt.getDay() !== 0) cells.push(d); // 0 = domenica, salta
+  }
+  while(cells.length % 6 !== 0) cells.push(null);
+
+  const DAYS_SHORT_6 = ["Lun","Mar","Mer","Gio","Ven","Sab"];
 
   return (
     React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4944}}
-      , React.createElement('div', { style: {display:"grid", gridTemplateColumns:"repeat(7,1fr)", borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4945}}
-        , DAYS_SHORT.map(d => (
+      , React.createElement('div', { style: {display:"grid", gridTemplateColumns:"repeat(6,1fr)", borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4945}}
+        , DAYS_SHORT_6.map((d, i) => (
           React.createElement('div', { key: d, style: {padding:"8px 0", textAlign:"center", fontSize:11,
-            letterSpacing:"0.06em", textTransform:"uppercase", color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4947}}, d)
+            letterSpacing:"0.06em", textTransform:"uppercase",
+            color: i === 5 ? "#b45309" : C.textMuted,
+            background: i === 5 ? "#fdf4e7" : undefined}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4947}}, d)
         ))
       )
-      , React.createElement('div', { style: {display:"grid", gridTemplateColumns:"repeat(7,1fr)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4951}}
+      , React.createElement('div', { style: {display:"grid", gridTemplateColumns:"repeat(6,1fr)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4951}}
         , cells.map((day, idx) => {
           if(!day) return (
             React.createElement('div', { key: idx, style: {minHeight:90, borderBottom:`1px solid ${C.border}20`, borderRight:`1px solid ${C.border}20`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4954}})
@@ -6503,15 +6532,18 @@ const MonthView = ({ year, month, lessons, onSelect, onDayClick }) => {
           const dayStr = yyyymmdd(d);
           const dayLessons = lessons.filter(l => l.date === dayStr);
           const isToday = isSameDay(d, today);
+          const isSab  = d.getDay() === 6;
           return (
             React.createElement('div', { key: idx, onClick: () => onDayClick(d),
               style: {minHeight:"clamp(60px, 10vw, 90px)", borderBottom:`1px solid ${C.border}20`,
-                borderRight:`1px solid ${C.border}20`, padding:4, cursor:"pointer", transition:"background 0.1s"},
+                borderRight:`1px solid ${C.border}20`, padding:4, cursor:"pointer", transition:"background 0.1s",
+                background: isSab ? "repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(180,83,9,0.03) 8px,rgba(180,83,9,0.03) 16px)" : undefined,
+                backgroundColor: isSab ? "rgba(253,244,231,0.7)" : undefined},
               onMouseEnter: e => { e.currentTarget.style.background = C.surfaceHover; },
-              onMouseLeave: e => { e.currentTarget.style.background = "transparent"; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4961}}
+              onMouseLeave: e => { e.currentTarget.style.background = isSab ? "rgba(253,244,231,0.7)" : "transparent"; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4961}}
               , React.createElement('div', { style: {display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4966}}
                 , React.createElement('span', { style: {fontSize:12, fontWeight:500,
-                  color: isToday ? C.gold : C.text,
+                  color: isToday ? C.gold : isSab ? "#b45309" : C.text,
                   background: isToday ? `${C.gold}15` : undefined,
                   borderRadius: isToday ? 4 : undefined,
                   padding: isToday ? "1px 5px" : undefined}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4967}}
