@@ -5196,7 +5196,7 @@ const PRESENZE_SVOLTE = ['presente','assente'];
 const isLezionePagabile = (l) => PRESENZE_PAGATE.includes((l.attendance||'').toLowerCase());
 const isLezioneSvolta   = (l) => PRESENZE_SVOLTE.includes((l.attendance||'').toLowerCase());
 
-const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"Nessuna", notes:"", exercises:"", repertorioIds:[], linkUrl:"", allegati:[], inRecupero:false, recuperoScadenza:null, durata:45 };
+const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"", notes:"", exercises:"", repertorioIds:[], linkUrl:"", allegati:[], inRecupero:false, recuperoScadenza:null, durata:45 };
 
 // ─── ATT_STYLES globale (usato da LessonForm, LessonDetailModal, LezioniAdminView, RecuperoView)
 const ATT_STYLES = {
@@ -5226,11 +5226,11 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
   const [err, setErr] = useState({});
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
 
-  const hours = Array.from({length:49}, (_, i) => {
+  const hours = Array.from({length:56}, (_, i) => {
     const h = Math.floor(i/4)+8;
     const m = (i%4)*15;
     return `${h.toString().padStart(2,"0")}:${m.toString().padStart(2,"0")}`;
-  }).filter(h => h <= "22:00");
+  }).filter(h => h <= "21:45");
 
   // Auto-compila strumento e insegnante quando si seleziona un allievo
   useEffect(() => {
@@ -5256,6 +5256,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     if(!f.student)    e.student    = "Allievo obbligatorio";
     if(!f.instrument) e.instrument = "Strumento obbligatorio";
     if(!f.teacher)    e.teacher    = "Insegnante obbligatorio";
+    if(!f.recurrence) e.recurrence = "Seleziona la ricorrenza";
     return e;
   };
 
@@ -5485,18 +5486,18 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
           )
         )
 
-        , React.createElement(SDiv, { label: "Ricorrenza", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4372}})
+        , React.createElement(SDiv, { label: err.recurrence ? `Ricorrenza * — ${err.recurrence}` : "Ricorrenza *", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4372}})
         , React.createElement('div', { style: {gridColumn:"1/-1", display:"flex", gap:8, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4373}}
           , RECURRENCE_OPTS.map(r => (
-            React.createElement('button', { key: r, onClick: () => set("recurrence", r),
+            React.createElement('button', { key: r, onClick: () => { set("recurrence", r); setErr(p=>({...p,recurrence:undefined})); },
               style: {padding:"8px 14px", borderRadius:20,
-                border:`2px solid ${f.recurrence === r ? C.blue : C.border}`,
-                background: f.recurrence === r ? C.blueBg : C.bg,
+                border:`2px solid ${f.recurrence === r ? C.blue : err.recurrence ? C.red : C.border}`,
+                background: f.recurrence === r ? C.blueBg : err.recurrence ? C.redBg : C.bg,
                 cursor:"pointer", fontSize:12,
-                color: f.recurrence === r ? C.blue : C.textMuted,
+                color: f.recurrence === r ? C.blue : err.recurrence ? C.red : C.textMuted,
                 fontFamily:"'Open Sans',sans-serif", fontWeight: f.recurrence === r ? 500 : 400,
                 transition:"all 0.12s", display:"flex", alignItems:"center", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4375}}
-              , r !== "Nessuna" && React.createElement(Ic, { n: "repeat", size: 12, stroke: f.recurrence === r ? C.blue : C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4383}})
+              , r !== "Nessuna" && React.createElement(Ic, { n: "repeat", size: 12, stroke: f.recurrence === r ? C.blue : err.recurrence ? C.red : C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4383}})
               , r
             )
           ))
@@ -6239,7 +6240,7 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
   const days      = Array.from({length:7}, (_, i) => addDays(weekStart, i));
   const HOUR_H    = 64;   // px per 1 ora
   const H_START   = 8;    // prima riga visibile
-  const H_END     = 23;   // ultima riga visibile (esclusa)
+  const H_END     = 22;   // ultima riga visibile (esclusa)
   const N_HOURS   = H_END - H_START; // 15 slot
 
   // "HH:MM:SS" | "HH:MM" → numero decimale di ore
@@ -7901,7 +7902,7 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
     const ws = spStartOfWeek(svCurDate);
     const days = Array.from({length:7},(_,i)=>spAddDays(ws,i));
     const HOUR_H = 36; // px per ora
-    const START_H = 8, END_H = 23;
+    const START_H = 8, END_H = 22;
     const totalHours = END_H - START_H; // 15 righe (8..22)
     const hours = Array.from({length:totalHours},(_,i)=>i+START_H);
     const fmtHHMM = (t) => t ? t.slice(0,5) : "";
