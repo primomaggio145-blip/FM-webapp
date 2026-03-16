@@ -3821,18 +3821,47 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
 
         , React.createElement(SectionDivider, { label: "Corsi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2958}})
 
-        /* Corso principale */
+        /* Corsi principali — strumenti multipli */
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2961}}
-          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2962}}, "Corso principale — strumento *"    )
-          , React.createElement('div', { style: {display:"flex",gap:10,alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2963}}
-            , React.createElement('select', { value: f.instrument, onChange: e=>set("instrument",e.target.value),
-              style: {flex:1,background:C.bg,border:`1px solid ${errors.instrument?C.red:C.border}`,borderRadius:8,color:f.instrument?C.text:C.textDim,fontSize:14,padding:"10px 14px",fontFamily:"'Open Sans',sans-serif",appearance:"none"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2964}}
-              , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2966}}, "— seleziona strumento —"   )
-              , INSTRUMENTS.map(i=>React.createElement('option', { key: i, value: i, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2967}}, i))
-            )
-            , React.createElement('div', { style: {width:38,height:38,borderRadius:8,background:"#e8edf5",border:`1px solid ${C.goldDim}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2969}}
-              , React.createElement(Ic, { n: "music", size: 16, color: f.instrument?(INS_COLORS[f.instrument]||C.gold):C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2970}})
-            )
+          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2962}}, "Corsi principali — strumenti *"    )
+          , React.createElement('div', { style: {display:"flex",flexWrap:"wrap",gap:8,marginBottom:8} }
+            , INSTRUMENTS.map(i => {
+              const isSelected = f.instrument === i || (f.extraInstruments||[]).includes(i);
+              return React.createElement('button', { key:i,
+                onClick: () => {
+                  if(i === f.instrument) {
+                    // Rimuovi strumento principale — promuovi il primo extra se esiste
+                    const extras = f.extraInstruments||[];
+                    if(extras.length > 0) {
+                      set("instrument", extras[0]);
+                      set("extraInstruments", extras.slice(1));
+                    } else {
+                      set("instrument", "");
+                    }
+                  } else if((f.extraInstruments||[]).includes(i)) {
+                    // Rimuovi da extra
+                    set("extraInstruments", (f.extraInstruments||[]).filter(x=>x!==i));
+                  } else if(!f.instrument) {
+                    // Imposta come principale
+                    set("instrument", i);
+                  } else {
+                    // Aggiungi agli extra
+                    set("extraInstruments", [...(f.extraInstruments||[]), i]);
+                  }
+                },
+                style:{padding:"6px 14px",borderRadius:20,cursor:"pointer",fontSize:12,
+                  fontFamily:"'Open Sans',sans-serif",transition:"all 0.12s",
+                  border:`2px solid ${i===f.instrument?C.gold:(f.extraInstruments||[]).includes(i)?C.teal:C.border}`,
+                  background:i===f.instrument?C.goldBg:(f.extraInstruments||[]).includes(i)?C.tealBg:C.bg,
+                  color:i===f.instrument?C.gold:(f.extraInstruments||[]).includes(i)?C.teal:C.textMuted,
+                  fontWeight:isSelected?600:400}}
+                , i
+                , i===f.instrument && React.createElement('span',{style:{marginLeft:4,fontSize:10,opacity:0.7}},"★")
+              );
+            })
+          )
+          , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:4}}
+            , "Il primo selezionato (★) è il corso principale. Puoi selezionare più corsi."
           )
           , errors.instrument && React.createElement('span', { style: {fontSize:11,color:C.red,marginTop:4,display:"block"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2973}}, errors.instrument)
         )
@@ -3930,7 +3959,7 @@ const LessonLog = ({ lessons:_lessonsRaw, studentId, onAddLesson }) => {
 // ════════════════════════════════════════════════════════════════════════════════
 // SCHEDA DETTAGLIO
 // ════════════════════════════════════════════════════════════════════════════════
-const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntrateRaw, setEntrate, annoInizioAttivo, onEdit, onDelete, onBack, onAddLesson, onUpdateStudent, config:propConfig, userRuolo:_sdRuolo }) => {
+const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntrateRaw, setEntrate, annoInizioAttivo, onEdit, onDelete, onBack, onAddLesson, onUpdateStudent, config:propConfig, setConfig:propSetConfig, userRuolo:_sdRuolo }) => {
   const isMobile = useIsMobile();
   const sdRuolo = _sdRuolo || "admin"; // admin | docente | allievo
   const lessons = _lessonsRaw || [];
@@ -4044,14 +4073,25 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   // ── handlers quote — scrivono su sharedEntrate ──
   const registraPagamento = (m, y) => {
     const MESI_ALL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+    const progressivo = (config && config.progressivoRicevute) || 1;
+    const numRicevuta = String(progressivo).padStart(3,"0") + "/" + y;
     const newE = {
       id: uid(), studentId:student.id, studentName:student.name,
       importo: student.monthlyFee, mese:m, anno:y,
       data: new Date().toISOString().split("T")[0],
-      metodo:"Bonifico bancario",
+      metodo:"Contanti",
       desc:`Quota mensile ${MESI_ALL[m-1]} ${y} — ${student.name}`,
+      stato:"pagato",
+      numRicevuta,
+      dataPagamento: new Date().toISOString().split("T")[0],
     };
     setEntrate(p=>[...p,newE]);
+    // Incrementa progressivo ricevute nella config
+    if (propSetConfig) {
+      propSetConfig(prev => ({...prev, progressivoRicevute: progressivo + 1}));
+    }
+    // Mostra anteprima ricevuta
+    setRicevutaEnt(newE);
   };
   const eliminaPagamento = (id) => setEntrate(p=>p.filter(e=>e.id!==id));
 
@@ -4731,7 +4771,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 // APP ROOT
 // ════════════════════════════════════════════════════════════════════════════════
 
-const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV }) => {
+const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV }) => {
   const _ruoloAV = propUserRuoloAV || "admin";
   const _nomeAV  = (_appUserAV && _appUserAV.nome) || "";
   const isMobile = useIsMobile();
@@ -4791,6 +4831,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             setEntrate: _ruoloAV==="docente" ? undefined : setEntrate,
             annoInizioAttivo: annoInizioAttivo,
             config: propConfig,
+            setConfig: propSetConfigAV,
             userRuolo: _ruoloAV,
             onEdit: _ruoloAV==="admin" ? ()=>setModal("edit") : undefined,
             onDelete: _ruoloAV==="admin" ? ()=>setModal("delete") : undefined,
@@ -10676,6 +10717,7 @@ const BranoDrawer = ({brano,lezioniCount,allieviList,onClose,onEdit,onDelete})=>
 // ─── VISTA ALLIEVO ───────────────────────────────────────────────────────────
 const AllievoBraniView = ({allievo,allievoId,brani,allStudents,lessons,onBack})=>{
   const isMobile = useIsMobile();
+  const [filterCorso, setFilterCorso] = useState("");
   const _stu = allievoId
     ? (allStudents||[]).find(s=>String(s.id)===String(allievoId))
     : (allStudents||[]).find(s=>(s.name||s.nome||"").toLowerCase().trim()===( allievo||"").toLowerCase().trim());
@@ -10694,6 +10736,113 @@ const AllievoBraniView = ({allievo,allievoId,brani,allStudents,lessons,onBack})=
     return ids;
   },[_stu,lessons,allievo,allievoId]);
   const suoiBrani = (brani||[]).filter(b=>_braniIds.has(b.id));
+
+  // Corsi disponibili per il filtro: strumenti/tipi unici nei brani dell'allievo
+  const corsiDisponibili = React.useMemo(()=>{
+    const tipi = new Set(suoiBrani.map(b=>b.tipo||b.type||"individuale"));
+    // Aggiungi i corsi dalle lezioni dell'allievo
+    (lessons||[]).forEach(l=>{
+      const match = allievoId
+        ? String(l.studentId||'')===String(allievoId)
+        : (l.student||'').toLowerCase().trim()===(allievo||'').toLowerCase().trim();
+      if(match && l.instrument) tipi.add(l.instrument);
+      if(match && isColl(l) && l.courseName) tipi.add(l.courseName);
+    });
+    return [...tipi].filter(Boolean).sort();
+  },[suoiBrani, lessons, allievo, allievoId]);
+
+  // Applica filtro corso
+  const braniFiltrati = filterCorso
+    ? suoiBrani.filter(b=>{
+        if((b.tipo||b.type||"individuale")===filterCorso) return true;
+        // controlla se il brano è associato a una lezione del corso
+        return (lessons||[]).some(l=>{
+          const match = allievoId
+            ? String(l.studentId||'')===String(allievoId)
+            : (l.student||'').toLowerCase().trim()===(allievo||'').toLowerCase().trim();
+          return match && (l.instrument===filterCorso||l.courseName===filterCorso) && (l.repertorioIds||[]).includes(b.id);
+        });
+      })
+    : suoiBrani;
+  
+  return(
+    React.createElement('div', { style: {flex:1,padding:isMobile?"12px":"20px 24px",overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7588}}
+      , onBack && React.createElement('button', { onClick: onBack, style: {display:"flex",alignItems:"center",gap:6,background:"none",
+        border:"none",cursor:"pointer",color:C.textMuted,fontSize:13,fontFamily:"'Open Sans',sans-serif",
+        marginBottom:20,padding:"4px 0"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7589}}
+        , React.createElement('svg', { width: 16, height: 16, viewBox: "0 0 24 24"   , fill: "none", stroke: C.textMuted, strokeWidth: "1.8", strokeLinecap: "round", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7592}}, React.createElement('path', { d: "m15 18-6-6 6-6"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 7592}})), "Tutti gli allievi"
+
+      )
+
+      , React.createElement('div', { style: {display:"flex",alignItems:"flex-start",gap:16,marginBottom:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7596}}
+        , React.createElement('div', { style: {width:56,height:56,borderRadius:"50%",background:`${C.gold}18`,
+          border:`2px solid ${C.goldDim}`,display:"flex",alignItems:"center",justifyContent:"center",
+          fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7597}}
+          , allievo.split(" ").map(p=>p[0]).join("").slice(0,2)
+        )
+        , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7602}}
+          , React.createElement('h2', { style: {fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7603}}, allievo)
+          , React.createElement('div', { style: {fontSize:13,color:C.textMuted,marginTop:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7604}}
+            , suoiBrani.length, " brani in repertorio"
+          )
+        )
+      )
+
+      /* Filtro per corso */
+      , corsiDisponibili.length > 1 && React.createElement('div', {style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}
+        , React.createElement('button', {
+            onClick:()=>setFilterCorso(""),
+            style:{padding:"5px 14px",borderRadius:20,border:`1px solid ${!filterCorso?C.gold:C.border}`,
+              background:!filterCorso?C.goldBg:"transparent",color:!filterCorso?C.gold:C.textMuted,
+              fontSize:12,cursor:"pointer",fontFamily:"'Open Sans',sans-serif",fontWeight:!filterCorso?600:400}}
+          , "Tutti")
+        , corsiDisponibili.map(c=>React.createElement('button', {key:c,
+            onClick:()=>setFilterCorso(c),
+            style:{padding:"5px 14px",borderRadius:20,border:`1px solid ${filterCorso===c?C.gold:C.border}`,
+              background:filterCorso===c?C.goldBg:"transparent",color:filterCorso===c?C.gold:C.textMuted,
+              fontSize:12,cursor:"pointer",fontFamily:"'Open Sans',sans-serif",fontWeight:filterCorso===c?600:400}}
+          , c))
+      )
+
+      , braniFiltrati.length===0&&(
+        React.createElement('div', { style: {textAlign:"center",padding:"48px 0",color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7611}}
+          , React.createElement(Ic, { n: "music", size: 32, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7612}})
+          , React.createElement('p', { style: {marginTop:12,fontSize:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7613}}, filterCorso ? `Nessun brano per il corso: ${filterCorso}` : "Nessun brano assegnato a questo allievo"     )
+        )
+      )
+
+      , braniFiltrati.length>0&&(
+        React.createElement('div', { style: {marginBottom:22}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7618}}
+          , React.createElement('div', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10,display:"flex",alignItems:"center",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7619}}
+            , React.createElement(Ic, { n: "music", size: 13, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7620}}), " Brani in repertorio ("   , braniFiltrati.length, ")"
+          )
+          , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7622}}
+            , braniFiltrati.map(b=>{
+              const d=diffById(b.difficulty);
+              const p=periodoById(b.periodo);
+              return(
+                React.createElement('div', { key: b.id, style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,
+                  padding:"14px 18px",display:"flex",gap:14,alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7627}}
+                  , React.createElement('div', { style: {flex:1,minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7629}}
+                    , React.createElement('div', { style: {fontSize:14,fontWeight:600,marginBottom:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7630}}, b.title)
+                    , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7631}}, b.composer, b.tonality?` · ${b.tonality}`:"")
+                  )
+                  , React.createElement('div', { style: {display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7633}}
+                    , React.createElement(DiffBadge, { diff: b.difficulty, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7634}})
+                    , b.periodo&&React.createElement('span', { style: {background:p.hex+"18",color:p.hex,border:`1px solid ${p.hex}30`,borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7635}}, b.periodo)
+                    , React.createElement('span', { style: {fontSize:11,color:C.textDim} }, (lessons||[]).filter(l=>(l.repertorioIds||[]).includes(b.id)).length, " lez." )
+                  )
+                )
+              );
+            })
+          )
+        )
+      )
+
+      
+    )
+  );
+};
   
   return(
     React.createElement('div', { style: {flex:1,padding:isMobile?"12px":"20px 24px",overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7588}}
@@ -11890,7 +12039,86 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
                      , evento.prenotazioni.length, ")"
                   )
                 )
-                , React.createElement(Btn, { small: true, onClick: ()=>setModalP("add"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8700}}, React.createElement(Ic, { n: "plus", size: 12, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 8700}}), "Nuova")
+                , React.createElement('div', {style:{display:"flex",gap:8}}
+                  , evento.prenotazioni.length > 0 && React.createElement('button', {
+                      onClick: () => {
+                        const w = window.open('','_blank','width=900,height=700');
+                        if(!w){alert('Abilita i popup per stampare');return;}
+                        const dataEvento = evento.data ? new Date(evento.data+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '';
+                        const righe = evento.prenotazioni.map((p,i) => {
+                          const imp = p.posti*(evento.prezzoBiglietto||0);
+                          const statoColor = p.stato==='confermata'?'#15803d':p.stato==='annullata'?'#8c1818':'#b45309';
+                          const check = p.stato==='confermata'?'☑':'☐';
+                          return `<tr style="border-bottom:1px solid #eee">
+                            <td style="padding:10px 12px;text-align:center;font-size:15px;color:#1a4fa0;font-weight:700">${check}</td>
+                            <td style="padding:10px 12px;font-weight:600">${p.nome||'—'}</td>
+                            <td style="padding:10px 12px;font-size:12px;color:#666">${p.email||''}<br>${p.telefono||''}</td>
+                            <td style="padding:10px 12px;text-align:center;font-weight:600">${p.posti||0}</td>
+                            <td style="padding:10px 12px;font-weight:600;color:${p.pagato?'#15803d':'#8c1818'}">${p.pagato?'✓ Pagato':'Da pagare'}<br><small style="font-weight:400">${imp>0?'€'+imp.toFixed(2):''}</small></td>
+                            <td style="padding:10px 12px"><span style="padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;background:${statoColor}20;color:${statoColor}">${p.stato||'—'}</span></td>
+                            <td style="padding:10px 12px;text-align:center;width:80px"><div style="width:70px;height:24px;border:1px solid #999;border-radius:4px;"></div></td>
+                          </tr>`;
+                        }).join('');
+                        const totPosti = evento.prenotazioni.reduce((t,p)=>t+p.posti,0);
+                        const totIncasso = evento.prenotazioni.filter(p=>p.pagato).reduce((t,p)=>t+p.posti*(evento.prezzoBiglietto||0),0);
+                        w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
+                          <title>Biglietteria – ${evento.titolo}</title>
+                          <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+                          <style>
+                            @page{margin:15mm 18mm;size:A4 landscape}
+                            *{margin:0;padding:0;box-sizing:border-box}
+                            body{font-family:'Open Sans',sans-serif;color:#1a1a2e;background:#fff;padding:24px}
+                            .hdr{border-bottom:3px solid #1a4fa0;padding-bottom:12px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end}
+                            .ttl{font-family:'Oswald',sans-serif;font-size:26px;font-weight:700;color:#1a4fa0}
+                            .sub{font-size:12px;color:#666;margin-top:4px}
+                            table{width:100%;border-collapse:collapse;font-size:13px}
+                            thead tr{background:#1a4fa0;color:#fff}
+                            thead th{padding:10px 12px;text-align:left;font-size:11px;letter-spacing:0.06em;text-transform:uppercase}
+                            tbody tr:nth-child(even){background:#f8f9fb}
+                            .footer{margin-top:20px;display:flex;justify-content:space-between;font-size:11px;color:#888;border-top:1px solid #eee;padding-top:10px}
+                            @media print{button{display:none}}
+                          </style>
+                        </head><body>
+                          <div class="hdr">
+                            <div>
+                              <div class="ttl">${evento.titolo}</div>
+                              <div class="sub">${dataEvento}${evento.ora?' · '+evento.ora:''}${evento.luogo?' · '+evento.luogo:''}</div>
+                            </div>
+                            <div style="text-align:right;font-size:12px;color:#666">
+                              <div><strong>${evento.prenotazioni.length}</strong> prenotazioni · <strong>${totPosti}</strong> posti</div>
+                              <div>Incassato: <strong style="color:#15803d">€${totIncasso.toFixed(2)}</strong></div>
+                            </div>
+                          </div>
+                          <table>
+                            <thead><tr>
+                              <th style="width:40px">✓</th>
+                              <th>Nome</th>
+                              <th>Contatto</th>
+                              <th style="width:60px;text-align:center">Posti</th>
+                              <th style="width:120px">Pagamento</th>
+                              <th style="width:110px">Stato</th>
+                              <th style="width:90px;text-align:center">Timbro</th>
+                            </tr></thead>
+                            <tbody>${righe}</tbody>
+                          </table>
+                          <div class="footer">
+                            <span>Controllo accessi — ${evento.titolo}</span>
+                            <span>Data stampa: ${new Date().toLocaleDateString('it-IT')}</span>
+                          </div>
+                          <script>window.onload=function(){window.print()}<\/script>
+                        </body></html>`);
+                        w.document.close();
+                      },
+                      style:{display:'flex',alignItems:'center',gap:6,padding:'7px 12px',borderRadius:8,
+                        border:`1px solid ${C.border}`,background:C.bg,cursor:'pointer',fontSize:12,
+                        fontFamily:"'Open Sans',sans-serif",color:C.text},
+                      onMouseEnter:e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;},
+                      onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.text;}}
+                    , React.createElement(Ic, {n:"report", size:13, stroke:"currentColor"})
+                    , " Esporta biglietteria"
+                  )
+                  , React.createElement(Btn, { small: true, onClick: ()=>setModalP("add"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8700}}, React.createElement(Ic, { n: "plus", size: 12, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 8700}}), "Nuova")
+                )
               )
               , evento.prenotazioni.length===0 ? (
                 React.createElement('div', { style: {padding:"40px 0",textAlign:"center",color:C.textDim,fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8703}}, "Nessuna prenotazione ancora"
@@ -14732,7 +14960,7 @@ function App() {
                    richieste: sharedRichieste,
                    panels: sharedPanels, setPanels: setSharedPanels,
                    onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
-    allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
+    allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
     docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user,
                    annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
