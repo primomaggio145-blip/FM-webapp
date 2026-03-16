@@ -3774,7 +3774,7 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
 // ════════════════════════════════════════════════════════════════════════════════
 // FORM ALLIEVO
 // ════════════════════════════════════════════════════════════════════════════════
-const emptyStudent = { name:"",email:"",phone:"",instrument:"",teacher:"",level:"",status:"attivo",monthlyFee:"",nomeRicevuta:"",feeType:"fisso",birthdate:"",enrollDate:"",complementaryCourse:"",notes:"" };
+const emptyStudent = { name:"",email:"",phone:"",instrument:"",teacher:"",level:"",status:"attivo",monthlyFee:"",nomeRicevuta:"",feeType:"fisso",birthdate:"",enrollDate:"",complementaryCourse:"",notes:"",extraInstruments:[],extraTeachers:{} };
 
 const validate = f => {
   const e = {};
@@ -3887,7 +3887,59 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
         )
 
         , React.createElement(SectionDivider, { label: "Didattica", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2996}})
-        , React.createElement(Sel, { label: "Insegnante *" , value: f.teacher, onChange: e=>set("teacher",e.target.value), options: _teacherOpts.length>0 ? _teacherOpts : TEACHERS, error: errors.teacher, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2997}})
+
+        /* Docente per ogni corso selezionato */
+        , (() => {
+            // Tutti i corsi selezionati: principale + extra
+            const tuttiCorsi = [
+              ...(f.instrument ? [{ strumento: f.instrument, isPrincipale: true }] : []),
+              ...((f.extraInstruments||[]).map(s => ({ strumento: s, isPrincipale: false }))),
+            ];
+            if (tuttiCorsi.length === 0) {
+              // Nessun corso selezionato — mostra un selettore generico
+              return React.createElement(Sel, { label: "Insegnante *", value: f.teacher,
+                onChange: e => set("teacher", e.target.value),
+                options: _teacherOpts.length > 0 ? _teacherOpts : TEACHERS,
+                error: errors.teacher });
+            }
+            return React.createElement(React.Fragment, null,
+              tuttiCorsi.map(({ strumento, isPrincipale }) => {
+                const val = isPrincipale ? (f.teacher||"") : ((f.extraTeachers||{})[strumento]||"");
+                const label = `Insegnante ${strumento}${isPrincipale ? " ★" : ""}${tuttiCorsi.length > 1 ? "" : " *"}`;
+                const baseOpts = _teacherOpts.length > 0 ? _teacherOpts : TEACHERS;
+                const opts = [{ value:"", label:"— seleziona docente —" }, ...baseOpts];
+                return React.createElement('div', { key: strumento, style: { gridColumn:"1/-1" } },
+                  React.createElement('label', { style: {
+                    fontSize:12, color: C.textMuted, letterSpacing:"0.06em",
+                    textTransform:"uppercase", display:"flex", alignItems:"center",
+                    gap:6, marginBottom:6 }}
+                    , React.createElement('div', { style: {
+                        width:10, height:10, borderRadius:"50%", flexShrink:0,
+                        background: isPrincipale ? C.gold : C.teal }})
+                    , label
+                  )
+                  , React.createElement('select', {
+                      value: val,
+                      onChange: e => {
+                        if (isPrincipale) {
+                          set("teacher", e.target.value);
+                        } else {
+                          set("extraTeachers", { ...(f.extraTeachers||{}), [strumento]: e.target.value });
+                        }
+                      },
+                      style: { width:"100%", background:C.bg, border:`1px solid ${isPrincipale&&errors.teacher?C.red:C.border}`,
+                        borderRadius:8, color:val?C.text:C.textMuted, fontSize:13, padding:"9px 12px",
+                        fontFamily:"'Open Sans',sans-serif", appearance:"none", cursor:"pointer",
+                        boxSizing:"border-box" }}
+                    , opts.map(o => React.createElement('option', { key: o.value, value: o.value }, o.label))
+                  )
+                  , isPrincipale && errors.teacher && React.createElement('span', {
+                      style: { fontSize:11, color:C.red, marginTop:4, display:"block" }}, errors.teacher)
+                );
+              })
+            );
+          })()
+
         , React.createElement(Sel, { label: "Livello", value: f.level, onChange: e=>set("level",e.target.value), options: LEVELS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2998}})
         , React.createElement(Sel, { label: "Stato", value: f.status, onChange: e=>set("status",e.target.value), options: ["attivo","inattivo","sospeso"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 2999}})
 
@@ -4654,11 +4706,27 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 
   const collettivi = courses.filter(c=>c.type==="collettivo");
 
+  // Opzioni dinamiche — derivate dagli allievi reali presenti
+  const strumentiPresenti = useMemo(() => {
+    const set = new Set();
+    students.forEach(s => {
+      if (s.instrument) set.add(s.instrument);
+      (s.extraInstruments||[]).forEach(i => set.add(i));
+    });
+    return [...set].sort();
+  }, [students]);
+
+  const corsiComplementariPresenti = useMemo(() => {
+    const ids = new Set(students.map(s => s.complementaryCourse).filter(Boolean));
+    return courses.filter(c => ids.has(c.id));
+  }, [students, courses]);
+
   const filtered = students.filter(s=>{
     const q    = search.toLowerCase();
     const comp = courses.find(c=>c.id===s.complementaryCourse);
+    const allInstruments = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean);
     return (!q || s.name.toLowerCase().includes(q) || s.instrument.toLowerCase().includes(q) || _optionalChain([s, 'access', _33 => _33.email, 'optionalAccess', _34 => _34.toLowerCase, 'call', _35 => _35(), 'access', _36 => _36.includes, 'call', _37 => _37(q)]) || _optionalChain([comp, 'optionalAccess', _38 => _38.name, 'access', _39 => _39.toLowerCase, 'call', _40 => _40(), 'access', _41 => _41.includes, 'call', _42 => _42(q)]))
-      && (!filterInstrument || s.instrument===filterInstrument)
+      && (!filterInstrument || allInstruments.includes(filterInstrument))
       && (!filterStatus     || s.status===filterStatus)
       && (!filterCourse     || s.complementaryCourse===filterCourse);
   });
@@ -4689,9 +4757,9 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 
       , showFilters && (
         React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,padding:"12px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,animation:"fadeIn 0.2s ease",alignItems:"end"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3772}}
-          , React.createElement(Sel, { label: "Strumento", value: filterInstrument, onChange: e=>setFI(e.target.value), options: INSTRUMENTS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3773}})
+          , React.createElement(Sel, { label: "Strumento", value: filterInstrument, onChange: e=>setFI(e.target.value), options: strumentiPresenti.map(i=>({value:i,label:i})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3773}})
           , React.createElement(Sel, { label: "Stato", value: filterStatus, onChange: e=>setFS(e.target.value), options: ["attivo","inattivo","sospeso"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3774}})
-          , React.createElement(Sel, { label: "Corso complementare" , value: filterCourse, onChange: e=>setFC(e.target.value), options: collettivi.map(c=>({value:c.id,label:c.name})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3775}})
+          , React.createElement(Sel, { label: "Corso complementare" , value: filterCourse, onChange: e=>setFC(e.target.value), options: corsiComplementariPresenti.map(c=>({value:c.id,label:c.name})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3775}})
           , React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setFI("");setFS("");setFC("");}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3776}}, "Reset")
         )
       )
