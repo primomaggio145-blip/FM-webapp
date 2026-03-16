@@ -2868,6 +2868,47 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       sub: "totale a.s.", hex: C.green})
                 )
               : ruolo==="allievo" ? React.createElement(React.Fragment, null
+                  , (() => {
+                    // Reminder quota mensile: mostra se siamo nei primi 10 giorni del mese
+                    // e la quota del mese corrente NON è ancora pagata
+                    const oggi2 = new Date();
+                    const meseC = oggi2.getMonth() + 1; // 1-12
+                    const annoC = oggi2.getFullYear();
+                    const giornoC = oggi2.getDate();
+                    // Solo mesi scolastici: set(9)→giu(6)
+                    const mesiScolastici = [9,10,11,12,1,2,3,4,5,6];
+                    if (!mesiScolastici.includes(meseC)) return null;
+                    // Cerca quota del mese corrente per questo allievo
+                    const quotaMese = _entrate.find(e =>
+                      (myStudentId ? e.studentId === myStudentId : (e.studentName||"").toLowerCase().includes(myNome.toLowerCase()))
+                      && e.mese === meseC
+                      && e.anno === annoC
+                    );
+                    const pagata = quotaMese && (quotaMese.stato === "pagato" || quotaMese.stato === "pagata");
+                    if (pagata) return null; // già pagata: nessun reminder
+                    // Mostra reminder tutto il mese se non pagata
+                    const MESI_N = ["","Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+                    return React.createElement('div', { style:{
+                      background:"#fffbeb", border:"1px solid #f59e0b",
+                      borderRadius:12, padding:"14px 18px",
+                      display:"flex", alignItems:"flex-start", gap:12,
+                      marginBottom:4, animation:"fadeUp 0.5s ease both"
+                    }}
+                      , React.createElement('div', { style:{
+                          width:36, height:36, borderRadius:10,
+                          background:"#fef3c7", border:"1px solid #fde68a",
+                          display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0
+                        }}
+                        , React.createElement(Ic, {n:"bell", size:18, stroke:"#f59e0b"})
+                      )
+                      , React.createElement('div', null
+                        , React.createElement('div', {style:{fontSize:14, fontWeight:600, color:"#92400e", marginBottom:2}},
+                            `⏰ Quota ${MESI_N[meseC]} ${annoC}`)
+                        , React.createElement('div', {style:{fontSize:12, color:"#b45309", lineHeight:1.5}},
+                            "La quota mensile non risulta ancora registrata. Contatta l'amministrazione per il pagamento.")
+                      )
+                    );
+                  })()
                   , React.createElement(KpiCard, { icon: "calendar", label: "Le mie lezioni",
                       value: _lessons.filter(l=>(l.student||l.allievo||"").toLowerCase().includes(myNome.toLowerCase())).length,
                       sub: "questa settimana", hex: C.teal})
@@ -4444,7 +4485,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                       , React.createElement('span', { style: {fontSize:13,color:C.textDim,fontStyle:"italic"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3607}}
                         , isFuture(selMese)?"Mese non ancora iniziato":"Quota non registrata"
                       )
-                      , !isFuture(selMese) && (
+                      , !isFuture(selMese) && sdRuolo !== "allievo" && (
                         React.createElement('button', { onClick: ()=>registraPagamento(selMese.m,selMese.y),
                           style: {padding:"8px 18px",borderRadius:8,cursor:"pointer",
                             background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`,
@@ -5628,7 +5669,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
         )
 
         /* Repertorio */
-        , (lesson.repertorioIds||[]).length > 0 && (
+        , (lesson.repertorioIds||[]).length > 0 ? (
           React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4612}}
             , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4613}}, "Brani studiati" )
             , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4614}}
@@ -5650,6 +5691,11 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                 );
               })
             )
+          )
+        ) : !canEdit && (
+          React.createElement('div', { style:{padding:"10px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.border}`}}
+            , React.createElement('div', {style:{fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}, "Brani studiati")
+            , React.createElement('div', {style:{fontSize:13,color:C.textDim,fontStyle:"italic"}}, "Nessun brano assegnato")
           )
         )
 
@@ -5678,7 +5724,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
         )
 
         /* ── Allegati — inline upload ── */
-        , (canEdit || (localAllegati||[]).length > 0) && (
+        , (canEdit || (localAllegati||[]).length > 0 || !canEdit) && (
           React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:6}}
             , React.createElement(InlineLabel, {label:"Allegati", icon:"paperclip"})
             , (localAllegati||[]).map((a,i) => (
@@ -8071,6 +8117,286 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
   );
 };
 
+
+// ════════════════════════════════════════════════════════════════════════════════
+// BIBLIOTECA — Manuali & Libri
+// Accessibile a tutti i profili; upload solo admin/docente
+// ════════════════════════════════════════════════════════════════════════════════
+const BibliotecaView = ({ userRuolo, appUser }) => {
+  const ruolo = userRuolo || "allievo";
+  const canUpload = ruolo === "admin" || ruolo === "docente";
+
+  const [libri,      setLibri]      = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [search,     setSearch]     = useState("");
+  const [filterCat,  setFilterCat]  = useState("");
+  const [uploading,  setUploading]  = useState(false);
+  const [modal,      setModal]      = useState(null); // "add"
+  const [delTarget,  setDelTarget]  = useState(null);
+
+  const CATEGORIE = ["Teoria","Solfeggio","Metodo","Spartito","Manuale","Altro"];
+
+  // ── Carica da Supabase Storage bucket "biblioteca" ──────────────────────────
+  const carica = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const sb = window.supabaseClient;
+      if (!sb) { setLoading(false); return; }
+      const { data, error } = await sb
+        .from("biblioteca")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (!error && data) setLibri(data);
+    } catch(e) { console.warn("[FM] biblioteca load:", e); }
+    finally { setLoading(false); }
+  }, []);
+
+  React.useEffect(() => { carica(); }, []);
+
+  const elimina = async (item) => {
+    if (!confirm(`Eliminare "${item.titolo}"?`)) return;
+    try {
+      const sb = window.supabaseClient;
+      // Rimuovi record DB
+      await sb.from("biblioteca").delete().eq("id", item.id);
+      // Rimuovi file dallo Storage
+      if (item.storage_path) {
+        await sb.storage.from("biblioteca").remove([item.storage_path]);
+      }
+      setLibri(p => p.filter(x => x.id !== item.id));
+    } catch(e) { alert("Errore eliminazione: " + e.message); }
+    setDelTarget(null);
+  };
+
+  // ── Form upload ─────────────────────────────────────────────────────────────
+  const AddModal = () => {
+    const [titolo,    setTitolo]    = useState("");
+    const [autore,    setAutore]    = useState("");
+    const [categoria, setCategoria] = useState("Manuale");
+    const [desc,      setDesc]      = useState("");
+    const [file,      setFile]      = useState(null);
+    const [err,       setErr]       = useState("");
+
+    const handleSubmit = async () => {
+      if (!titolo.trim()) { setErr("Titolo obbligatorio"); return; }
+      if (!file)          { setErr("Seleziona un file"); return; }
+      setUploading(true); setErr("");
+      try {
+        const sb = window.supabaseClient;
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const storagePath = `${Date.now()}_${safeName}`;
+        // Upload file
+        const { error: upErr } = await sb.storage.from("biblioteca").upload(storagePath, file, { upsert: true });
+        if (upErr) throw upErr;
+        const { data: urlData } = sb.storage.from("biblioteca").getPublicUrl(storagePath);
+        const fileUrl = urlData?.publicUrl || null;
+        // Salva record
+        const row = {
+          titolo: titolo.trim(),
+          autore: autore.trim() || null,
+          categoria,
+          descrizione: desc.trim() || null,
+          file_url: fileUrl,
+          file_name: file.name,
+          file_type: file.type || null,
+          file_size: file.size || null,
+          storage_path: storagePath,
+          caricato_da: (appUser && appUser.nome) || null,
+        };
+        const { data: inserted, error: dbErr } = await sb.from("biblioteca").insert(row).select().single();
+        if (dbErr) throw dbErr;
+        setLibri(p => [inserted, ...p]);
+        setModal(null);
+      } catch(e) { setErr(e.message || "Errore upload"); }
+      finally { setUploading(false); }
+    };
+
+    const inpS = { width:"100%", padding:"9px 12px", border:`1px solid ${C.border}`,
+      borderRadius:8, fontSize:13, color:C.text, background:C.bg,
+      fontFamily:"'Open Sans',sans-serif", boxSizing:"border-box" };
+    const lblS = { fontSize:11, color:C.textMuted, fontWeight:600,
+      letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:4, display:"block" };
+
+    return React.createElement(Modal, { title:"Aggiungi libro / manuale", onClose:()=>setModal(null), wide:true }
+      , React.createElement('div', { style:{padding:"16px 22px", display:"flex", flexDirection:"column", gap:14} }
+        , React.createElement('div', { className:"form-2col" }
+          , React.createElement('div', null
+            , React.createElement('label', {style:lblS}, "Titolo *")
+            , React.createElement('input', { value:titolo, onChange:e=>setTitolo(e.target.value),
+                placeholder:"Es. Metodo Beyer, Scale Hanon…", style:inpS })
+          )
+          , React.createElement('div', null
+            , React.createElement('label', {style:lblS}, "Autore")
+            , React.createElement('input', { value:autore, onChange:e=>setAutore(e.target.value),
+                placeholder:"Es. Czerny, Hanon…", style:inpS })
+          )
+        )
+        , React.createElement('div', { className:"form-2col" }
+          , React.createElement('div', null
+            , React.createElement('label', {style:lblS}, "Categoria")
+            , React.createElement('select', { value:categoria, onChange:e=>setCategoria(e.target.value),
+                style:{...inpS, appearance:"none", cursor:"pointer"} }
+              , CATEGORIE.map(c => React.createElement('option', {key:c, value:c}, c))
+            )
+          )
+          , React.createElement('div', null
+            , React.createElement('label', {style:lblS}, "Descrizione breve")
+            , React.createElement('input', { value:desc, onChange:e=>setDesc(e.target.value),
+                placeholder:"Note opzionali…", style:inpS })
+          )
+        )
+        , React.createElement('div', null
+          , React.createElement('label', {style:lblS}, "File (PDF, immagine, zip…) *")
+          , React.createElement('input', { type:"file",
+              accept:".pdf,.doc,.docx,.xls,.xlsx,.zip,.png,.jpg,.jpeg,.mp3,.mp4",
+              onChange:e=>setFile(e.target.files[0]||null),
+              style:{...inpS, padding:"7px 10px", cursor:"pointer"} })
+          , file && React.createElement('div', {style:{fontSize:11,color:C.green,marginTop:4}},
+              `✓ ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`)
+        )
+        , err && React.createElement('div', {style:{color:C.red,fontSize:12,background:C.redBg,
+            border:`1px solid ${C.redBorder}`,borderRadius:8,padding:"10px 14px"}}, err)
+        , React.createElement('div', {style:{display:"flex",gap:10,justifyContent:"flex-end"}}
+          , React.createElement(Btn, {variant:"secondary", onClick:()=>setModal(null)}, "Annulla")
+          , React.createElement(Btn, {onClick:handleSubmit, disabled:uploading}
+            , uploading ? "Caricamento…" : "Carica"
+          )
+        )
+      )
+    );
+  };
+
+  const catColor = {
+    Teoria:    {bg:C.blueBg,   bd:C.blueBorder,   tx:C.blue},
+    Solfeggio: {bg:C.tealBg,   bd:C.tealBorder,   tx:C.teal},
+    Metodo:    {bg:C.goldBg,   bd:C.goldDim,      tx:C.gold},
+    Spartito:  {bg:C.purpleBg, bd:C.purpleBorder, tx:C.purple},
+    Manuale:   {bg:C.greenBg,  bd:C.greenBorder,  tx:C.green},
+    Altro:     {bg:C.surface,  bd:C.border,       tx:C.textMuted},
+  };
+
+  const fmtSize = (b) => {
+    if (!b) return "";
+    if (b < 1024) return b + " B";
+    if (b < 1024*1024) return (b/1024).toFixed(0) + " KB";
+    return (b/1024/1024).toFixed(1) + " MB";
+  };
+
+  const filtered = libri.filter(l => {
+    const q = search.toLowerCase();
+    const matchQ = !q || (l.titolo||"").toLowerCase().includes(q) || (l.autore||"").toLowerCase().includes(q);
+    const matchC = !filterCat || l.categoria === filterCat;
+    return matchQ && matchC;
+  });
+
+  return (
+    React.createElement('div', { style:{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"} }
+      /* ── HEADER ── */
+      , React.createElement('div', { style:{padding:"0 24px",height:56,display:"flex",alignItems:"center",
+          justifyContent:"space-between",flexShrink:0,borderBottom:`1px solid ${C.border}`,background:C.surface} }
+        , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:10}}
+          , React.createElement(Ic, {n:"courses", size:18, stroke:C.gold})
+          , React.createElement('span', {style:{fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,
+              letterSpacing:"0.05em",textTransform:"uppercase"}}, "Manuali & Libri")
+        )
+        , canUpload && React.createElement(Btn, { onClick:()=>setModal("add") }
+          , React.createElement(Ic,{n:"plus",size:14,stroke:"#fff"}), " Aggiungi"
+        )
+      )
+      /* ── FILTRI ── */
+      , React.createElement('div', { style:{padding:"10px 24px",borderBottom:`1px solid ${C.border}`,
+          background:C.surface,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",flexShrink:0} }
+        , React.createElement('div', {style:{position:"relative",flex:"1 1 200px",maxWidth:300}}
+          , React.createElement(Ic, {n:"search",size:14,stroke:C.textDim,style:{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}})
+          , React.createElement('input', { value:search, onChange:e=>setSearch(e.target.value),
+              placeholder:"Cerca titolo, autore…",
+              style:{width:"100%",padding:"8px 12px 8px 32px",border:`1px solid ${C.border}`,
+                borderRadius:8,fontSize:12,color:C.text,background:C.bg,
+                fontFamily:"'Open Sans',sans-serif",boxSizing:"border-box"} })
+        )
+        , React.createElement('select', { value:filterCat, onChange:e=>setFilterCat(e.target.value),
+            style:{padding:"8px 12px",border:`1px solid ${filterCat?C.gold:C.border}`,borderRadius:8,
+              fontSize:12,color:filterCat?C.gold:C.textMuted,background:filterCat?C.goldBg:C.bg,
+              fontFamily:"'Open Sans',sans-serif",cursor:"pointer"} }
+          , React.createElement('option',{value:""},"Tutte le categorie")
+          , CATEGORIE.map(c=>React.createElement('option',{key:c,value:c},c))
+        )
+      )
+      /* ── LISTA ── */
+      , React.createElement('div', { style:{flex:1,overflow:"auto",padding:"16px 24px"} }
+        , loading && React.createElement('div', {style:{textAlign:"center",padding:40,color:C.textMuted,fontSize:13}},
+            "Caricamento…")
+        , !loading && filtered.length===0 && React.createElement('div', {style:{textAlign:"center",padding:60,color:C.textMuted}}
+          , React.createElement(Ic,{n:"courses",size:40,stroke:C.textDim})
+          , React.createElement('p',{style:{marginTop:12,fontSize:14}}, search||filterCat ? "Nessun risultato" : "Nessun file caricato")
+          , canUpload && !search && !filterCat && React.createElement('p',{style:{fontSize:12,color:C.textDim,marginTop:4}},
+              "Usa il pulsante \"Aggiungi\" per caricare il primo file.")
+        )
+        , !loading && filtered.length > 0 && React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:10}}
+          , filtered.map(item => {
+            const cc = catColor[item.categoria] || catColor.Altro;
+            const isImg = (item.file_type||"").startsWith("image/");
+            const isPdf = (item.file_type||"").includes("pdf");
+            const fileIcon = isPdf ? "report" : isImg ? "eye" : "paperclip";
+            return React.createElement('div', { key:item.id,
+              style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
+                padding:"14px 18px",display:"flex",alignItems:"flex-start",gap:14,
+                transition:"box-shadow 0.15s"},
+              onMouseEnter:e=>e.currentTarget.style.boxShadow=`0 2px 12px rgba(0,0,0,0.07)`,
+              onMouseLeave:e=>e.currentTarget.style.boxShadow="none"}
+              /* Icona tipo */
+              , React.createElement('div', {style:{width:44,height:44,borderRadius:10,
+                  background:cc.bg,border:`1px solid ${cc.bd}`,
+                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                , React.createElement(Ic,{n:fileIcon,size:20,stroke:cc.tx})
+              )
+              /* Info */
+              , React.createElement('div', {style:{flex:1,minWidth:0}}
+                , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}
+                  , React.createElement('span',{style:{fontSize:14,fontWeight:600,color:C.text}},item.titolo)
+                  , React.createElement('span',{style:{fontSize:10,background:cc.bg,color:cc.tx,
+                      border:`1px solid ${cc.bd}`,borderRadius:10,padding:"2px 8px",fontWeight:600}},
+                      item.categoria||"Altro")
+                )
+                , item.autore && React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:2}},
+                    item.autore)
+                , item.descrizione && React.createElement('div',{style:{fontSize:12,color:C.textMuted,fontStyle:"italic"}},
+                    item.descrizione)
+                , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:4,display:"flex",gap:12,flexWrap:"wrap"}}
+                  , item.file_name && React.createElement('span',null,item.file_name)
+                  , item.file_size && React.createElement('span',null,fmtSize(item.file_size))
+                  , item.caricato_da && React.createElement('span',null,"by ",item.caricato_da)
+                )
+              )
+              /* Azioni */
+              , React.createElement('div', {style:{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}
+                , item.file_url && React.createElement('a', {
+                    href:item.file_url, target:"_blank", rel:"noopener noreferrer",
+                    style:{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",
+                      background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:8,
+                      color:C.gold,fontSize:12,fontWeight:600,textDecoration:"none",
+                      fontFamily:"'Open Sans',sans-serif",cursor:"pointer"}}
+                  , React.createElement(Ic,{n:"download",size:13,stroke:C.gold}), " Scarica"
+                )
+                , canUpload && React.createElement('button', {
+                    onClick:()=>elimina(item),
+                    style:{display:"flex",alignItems:"center",padding:"7px 10px",
+                      background:"none",border:`1px solid ${C.border}`,borderRadius:8,
+                      color:C.textDim,cursor:"pointer"},
+                    onMouseEnter:e=>{e.currentTarget.style.borderColor=C.red;e.currentTarget.style.color=C.red;},
+                    onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textDim;}}
+                  , React.createElement(Ic,{n:"trash",size:13,stroke:"currentColor"})
+                )
+              )
+            );
+          })
+        )
+      )
+      /* ── MODALS ── */
+      , modal==="add" && React.createElement(AddModal)
+    )
+  );
+};
 
 const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV }) => {
   const isMobile = useIsMobile();
@@ -13969,9 +14295,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 // ═══════════════════════════════════════════════════════════════════════════════
 // Permessi navigazione per ruolo (sidebar): false = voce nascosta
 const ROLE_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, allegati:true, utenti:true, impostazioni:true, schedaScuola:true, modulistica:true},
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false,contabilita:true, repertorio:true, allegati:false,utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true, impostazioni:true, schedaScuola:true, modulistica:true},
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false,contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
 };
 
 const NAV_ITEMS = [
@@ -13991,6 +14317,7 @@ const NAV_ITEMS = [
   { id:"contabilita", label:"Contabilità",  icon:"euro"     },
   { id:"repertorio",  label:"Repertorio",   icon:"music"    },
   { id:"allegati",    label:"Allegati",     icon:"paperclip"},
+  { id:"biblioteca",  label:"Manuali & Libri", icon:"courses"},
   { id:"utenti",      label:"Utenti",       icon:"shield"   },
 ];
 
@@ -14413,6 +14740,7 @@ function App() {
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
     repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
     allegati:    React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
+    biblioteca:  React.createElement(BibliotecaView, { userRuolo: user?.ruolo||"admin", appUser: user }),
     concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
     utenti:      (user?.ruolo||"admin")==="admin" && React.createElement(UtentiView, { students: sharedStudents, docenti: sharedDocenti }),
     sitoWeb:       null,
