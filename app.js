@@ -5207,7 +5207,7 @@ const ATT_STYLES = {
   in_recupero: { bg:'rgba(255,160,0,0.10)', fg:'#f59e0b', bd:'rgba(245,158,11,0.4)', label:'In recupero' },
 };
 
-const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, role:_roleLF }) => {
+const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, courses:_coursesRaw, role:_roleLF }) => {
   const roleLF = _roleLF || "admin"; // admin = può modificare data; docente = data readOnly
   const _teacherOptsLes = (_docentiFLes||[]).map(d=>({value:d.nome||d.name||"",label:d.nome||d.name||""}));
   const repertorio = _repertorioRaw || [];
@@ -5217,6 +5217,30 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     .map(s => s.name || s.nome || '')
     .filter(Boolean)
     .sort();
+
+  // Strumenti dinamici: da studenti reali (instrument + extraInstruments) + nomi corsi individuali
+  const dynamicInstruments = useMemo(() => {
+    const set = new Set();
+    // Da studenti
+    (_studentsRaw||[]).forEach(s => {
+      if (s.instrument) set.add(s.instrument);
+      (s.extraInstruments||[]).forEach(i => { if(i) set.add(i); });
+    });
+    // Da corsi individuali
+    (_coursesRaw||[]).filter(c=>c.type!=="collettivo").forEach(c => { if(c.name) set.add(c.name); });
+    // Fallback a lista statica se non ci sono dati reali
+    if (set.size === 0) INSTRUMENTS.forEach(i => set.add(i));
+    return [...set].sort();
+  }, [_studentsRaw, _coursesRaw]);
+
+  // Sale dinamiche: da corsi (se hanno sala) + lista statica come fallback
+  const dynamicRooms = useMemo(() => {
+    const set = new Set();
+    (_studentsRaw||[]).forEach(s => { /* niente sale dagli studenti */ });
+    // Usa ROOMS come base + aggiungi eventuali sale dai corsi
+    ROOMS.forEach(r => set.add(r));
+    return [...set];
+  }, []);
 
   // Ref che mappa id → brano appena creato in questa sessione del form
   // Usato da handleSave per includere i brani nel payload senza dipendere da window.__repertorio__
@@ -5287,9 +5311,9 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
 
         , roleLF !== "docente" && React.createElement(SDiv, { label: "Chi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4229}})
         , roleLF !== "docente" && React.createElement(Sel, { label: "Allievo *" ,    value: f.student,    onChange: e => set("student", e.target.value),    options: dynamicStudents.length > 0 ? dynamicStudents : STUDENTS_LIST, error: err.student, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4230}})
-        , roleLF !== "docente" && React.createElement(Sel, { label: "Strumento *" ,  value: f.instrument, onChange: e => set("instrument", e.target.value), options: INSTRUMENTS,   error: err.instrument, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4231}})
+        , roleLF !== "docente" && React.createElement(Sel, { label: "Strumento *" ,  value: f.instrument, onChange: e => set("instrument", e.target.value), options: dynamicInstruments,   error: err.instrument, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4231}})
         , roleLF !== "docente" && React.createElement(Sel, { label: "Insegnante *" , value: f.teacher,    onChange: e => set("teacher", e.target.value),    options: _teacherOptsLes.length>0 ? _teacherOptsLes : TEACHERS, error: err.teacher, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4232}})
-        , roleLF !== "docente" && React.createElement(Sel, { label: "Sala",         value: f.room,       onChange: e => set("room", e.target.value),       options: ROOMS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4233}})
+        , roleLF !== "docente" && React.createElement(Sel, { label: "Sala",         value: f.room,       onChange: e => set("room", e.target.value),       options: dynamicRooms, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4233}})
 
         , React.createElement(SDiv, { label: "Contenuto", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4235}})
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4236}}, React.createElement(Input, { label: "Argomento", value: f.topic, onChange: e => set("topic", e.target.value), placeholder: "Es. Scale maggiori, Chopin Notturno..."    , __self: this, __source: {fileName: _jsxFileName, lineNumber: 4236}}))
@@ -8808,8 +8832,22 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         }
         const updated = prev.map(l => l.id === id ? {...l, attendance: val === 'in_recupero' ? '' : val, ...extraProps} : l);
 
-        // Se segno presenza (qualsiasi valore) su lezione ricorrente → crea la prossima
-        if (lesson && val && val !== "" && val !== 'in_recupero' && lesson.recurrence && lesson.recurrence !== "Nessuna") {
+        // ── Persisti l'aggiornamento presenza su Supabase ──────────────────
+        const sb = window.supabaseClient;
+        if (sb && lesson) {
+          const attVal = val === 'in_recupero' ? '' : val;
+          sb.from('lezioni').update({
+            attendance:        attVal || null,
+            in_recupero:       extraProps.inRecupero  ?? (lesson.inRecupero  || false),
+            recupero_scadenza: extraProps.recuperoScadenza ?? (lesson.recuperoScadenza || null),
+            updated_at:        new Date().toISOString(),
+          }).eq('id', id).then(({ error }) => {
+            if (error) console.warn('[FM] attendance update error:', error.message);
+          });
+        }
+
+        // Se segno presenza (qualsiasi valore, incluso in_recupero) su lezione ricorrente → crea la prossima
+        if (lesson && val && val !== "" && lesson.recurrence && lesson.recurrence !== "Nessuna") {
           const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
           const gap     = daysMap[lesson.recurrence] || 7;
           const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap));
@@ -8831,6 +8869,34 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               notes:      "",
               exercises:  "",
             };
+
+            // ── Persisti la nuova lezione ricorrente su Supabase ───────────
+            if (sb) {
+              const row = {
+                id:               nextLesson.id,
+                data:             nextLesson.date,
+                ora:              nextLesson.hour        || null,
+                student:          nextLesson.student     || null,
+                studente_id:      nextLesson.studentId   || null,
+                strumento:        nextLesson.instrument  || nextLesson.strumento || null,
+                teacher:          nextLesson.teacher     || null,
+                room:             nextLesson.room        || null,
+                topic:            nextLesson.topic       || null,
+                attendance:       null,
+                recurrence:       nextLesson.recurrence  || 'Nessuna',
+                notes:            null,
+                tipo:             nextLesson.type        || nextLesson.tipo || 'individuale',
+                link_url:         nextLesson.linkUrl     || null,
+                in_recupero:      false,
+                recupero_scadenza:null,
+                durata:           nextLesson.durata      || null,
+                updated_at:       new Date().toISOString(),
+              };
+              sb.from('lezioni').insert(row).then(({ error }) => {
+                if (error) console.warn('[FM] recurring lesson insert error:', error.message);
+              });
+            }
+
             setNextLessonCreated(nextDate); // feedback toast
             return [...updated, nextLesson];
           }
@@ -9157,12 +9223,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
         , modal === "add" && (
           React.createElement(Modal, { title: "Nuova lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6136}}
-            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
+            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
           )
         )
         , modal === "edit" && selLesson && (
           React.createElement(Modal, { title: "Modifica lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6141}}
-            , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
+            , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
           )
         )
         , modal === "detail" && selLesson && (
