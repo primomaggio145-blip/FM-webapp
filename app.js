@@ -8775,10 +8775,13 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           attendance:       data.attendance  || null,
           recurrence:       data.recurrence  || 'Nessuna',
           notes:            data.notes       || null,
+          exercises:        data.exercises   || null,
           tipo:             data.type        || 'individuale',
           link_url:         data.linkUrl     || null,
           in_recupero:      data.inRecupero  || false,
           recupero_scadenza:data.recuperoScadenza || null,
+          repertorio_ids:   data.repertorioIds && data.repertorioIds.length > 0
+                              ? JSON.stringify(data.repertorioIds) : null,
           updated_at:       new Date().toISOString(),
         };
         sb.from('lezioni').update(row).eq('id', data.id)
@@ -9276,7 +9279,24 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             onDelete: () => setModal("delete"),
             onAttendance: handleAttendance,
             onIscrizione: handleIscrizioneProva,
-            onUpdateLesson: (updated) => { setLessons(p => p.map(l => l.id === updated.id ? {...l,...updated} : l)); },
+            onUpdateLesson: (updated) => {
+              setLessons(p => p.map(l => l.id === updated.id ? {...l,...updated} : l));
+              // Persisti su Supabase
+              const sb = window.supabaseClient;
+              if (sb && updated.id) {
+                sb.from('lezioni').update({
+                  topic:          updated.topic        || null,
+                  exercises:      updated.exercises    || null,
+                  link_url:       updated.linkUrl      || null,
+                  notes:          updated.notes        || null,
+                  repertorio_ids: updated.repertorioIds && updated.repertorioIds.length > 0
+                                    ? JSON.stringify(updated.repertorioIds) : null,
+                  updated_at:     new Date().toISOString(),
+                }).eq('id', updated.id).then(({ error }) => {
+                  if (error) console.warn('[FM] onUpdateLesson error:', error.message);
+                });
+              }
+            },
             allegatiGlobali: propAllegati,
             students: propStudents,
             nextLessonDate: _optionalChain([selLesson, 'optionalAccess', _55 => _55.recurrence]) && selLesson.recurrence !== 'Nessuna' ? nextLessonCreated : null,
