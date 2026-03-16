@@ -81,6 +81,11 @@
       durata: r.durata
         ? parseInt(r.durata)
         : (r.tipo === 'collettivo' ? 60 : r.tipo === 'prova' ? 30 : 45),
+      // Brani collegati alla lezione
+      repertorioIds: (() => {
+        if (!r.repertorio_ids) return [];
+        try { return JSON.parse(r.repertorio_ids); } catch(e) { return []; }
+      })(),
       allegati,
     };
   }
@@ -217,6 +222,10 @@
         in_recupero: l.inRecupero || false,
         recupero_scadenza: l.recuperoScadenza || null,
         durata: l.durata ? parseInt(l.durata) : null,
+        exercises: l.exercises || null,
+        repertorio_ids: l.repertorioIds && l.repertorioIds.length > 0
+          ? JSON.stringify(l.repertorioIds)
+          : null,
       };
     },
     quote(q) {
