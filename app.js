@@ -3271,6 +3271,72 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 // ANAGRAFICA ALLIEVI
 
 // ════════════════════════════════════════════════════════════════════════════════
+// SORTING UTILITIES
+// ════════════════════════════════════════════════════════════════════════════════
+
+// Hook: useSortable(defaultKey, defaultDir)
+// Returns [sortKey, sortDir, handleSort, sortFn]
+const useSortable = (defaultKey = "", defaultDir = "asc") => {
+  const [sortKey, setSortKey] = useState(defaultKey);
+  const [sortDir, setSortDir] = useState(defaultDir);
+  const handleSort = (key) => {
+    if (key === sortKey) {
+      setSortDir(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  };
+  const sortFn = (arr, accessor) => {
+    if (!sortKey) return arr;
+    return [...arr].sort((a, b) => {
+      const va = accessor ? accessor(a, sortKey) : (a[sortKey] ?? "");
+      const vb = accessor ? accessor(b, sortKey) : (b[sortKey] ?? "");
+      const na = typeof va === "number", nb = typeof vb === "number";
+      let cmp;
+      if (na && nb) cmp = va - vb;
+      else cmp = String(va).toLowerCase().localeCompare(String(vb).toLowerCase(), "it");
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  };
+  return [sortKey, sortDir, handleSort, sortFn];
+};
+
+// SortTh: table header cell with sort indicator
+const SortTh = ({ label, sortKey: col, currentKey, dir, onSort, style, className }) => {
+  const active = currentKey === col;
+  return React.createElement('th', {
+    onClick: col ? () => onSort(col) : undefined,
+    className,
+    style: {
+      padding: "10px 16px",
+      textAlign: "left",
+      fontSize: 11,
+      letterSpacing: "0.08em",
+      textTransform: "uppercase",
+      color: active ? C.gold : C.textMuted,
+      fontWeight: active ? 700 : 500,
+      cursor: col ? "pointer" : "default",
+      userSelect: "none",
+      whiteSpace: "nowrap",
+      background: active ? `${C.gold}08` : undefined,
+      transition: "color 0.12s",
+      ...style,
+    }
+  },
+    label,
+    col && React.createElement('span', {
+      style: {
+        marginLeft: 4,
+        fontSize: 9,
+        opacity: active ? 1 : 0.3,
+        display: "inline-block",
+        transition: "transform 0.15s, opacity 0.15s",
+        transform: active && dir === "desc" ? "rotate(180deg)" : "rotate(0deg)",
+      }
+    }, "▲")
+  );
+};
 
 // ─── DATI ─────────────────────────────────────────────────────────────────────
 const INSTRUMENTS = ["Pianoforte","Chitarra","Violino","Flauto","Batteria","Saxofono","Tromba","Basso","Canto","Clarinetto"];
@@ -3793,7 +3859,17 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
   const [errors, setErrors] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
 
-  const collettivi = courses.filter(c=>c.type==="collettivo");
+  const collettivi = (courses||[]).filter(c=>c.type==="collettivo");
+
+  // Strumenti dinamici: nomi dei corsi individuali dal DB + fallback lista statica
+  const strumentiDisponibili = React.useMemo(() => {
+    const individuali = (courses||[])
+      .filter(c => c.type !== "collettivo")
+      .map(c => c.name)
+      .filter(Boolean);
+    // Se ci sono corsi reali usa quelli, altrimenti fallback alla lista statica
+    return individuali.length > 0 ? individuali.sort() : INSTRUMENTS;
+  }, [courses]);
 
   const handleSubmit = () => {
     const e = validate(f);
@@ -3825,7 +3901,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2961}}
           , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2962}}, "Corsi principali — strumenti *"    )
           , React.createElement('div', { style: {display:"flex",flexWrap:"wrap",gap:8,marginBottom:8} }
-            , INSTRUMENTS.map(i => {
+            , strumentiDisponibili.map(i => {
               const isSelected = f.instrument === i || (f.extraInstruments||[]).includes(i);
               return React.createElement('button', { key:i,
                 onClick: () => {
@@ -4038,7 +4114,9 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const [selMese,  setSelMese]  = useState(defaultSelMese);
   const [showLezForm, setShowLezForm] = useState(false);
   const [lezForm, setLezForm]   = useState({ date: new Date().toISOString().split("T")[0], topic:"", attendance:"presente", notes:"" });
-  const [ricevutaEnt, setRicevutaEnt] = useState(null); // entrata da stampare
+  const [ricevutaEnt, setRicevutaEnt] = useState(null);
+  const [sortKeyPres, sortDirPres, handleSortPres, sortFnPres] = useSortable("mese", "asc");
+  const [sortKeyQuote, sortDirQuote, handleSortQuote, sortFnQuote] = useSortable("mese", "asc");
   const config = _nullishCoalesce(propConfig, () => ( CONFIG_DEFAULT));
 
   // Lezioni globali per questo allievo
@@ -4334,23 +4412,40 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
             , React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3364}}
               , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3365}}
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3366}}
-                  , ["Mese","Lezioni","Presenti","Assenti","Giustificati","Da recuperare","Tasso pres."].map(h=>(
-                    React.createElement('th', { key: h, style: {padding:"10px 18px",textAlign:"left",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3368}}, h)
-                  ))
+                  , React.createElement(SortTh,{label:"Mese",         sortKey:"mese",    currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Lezioni",      sortKey:"tot",     currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Presenti",     sortKey:"pres",    currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Assenti",      sortKey:"ass",     currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Giustificati", sortKey:"giust",   currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Da recuperare",sortKey:"rec",     currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Tasso pres.",  sortKey:"tasso",   currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
                 )
               )
               , React.createElement('tbody', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3372}}
-                , MESI_AS.map((x,i) => {
+                , sortFnPres(MESI_AS.map((x,i) => {
                   const lm   = lezMese(x.m, x.y);
                   const pres = lm.filter(l=>l.attendance==="presente").length;
                   const ass  = lm.filter(l=>l.attendance==="assente").length;
+                  const giust= lm.filter(l=>l.attendance==="giustificato").length;
+                  const rec  = lm.filter(l=>l.inRecupero).length;
                   const att  = lm.filter(l=>l.attendance).length;
                   const tasso= att>0 ? Math.round((pres/att)*100) : null;
-                  const isS  = x.m===selMese.m && x.y===selMese.y;
+                  return { x, i, lm, pres, ass, giust, rec, att, tasso, mese: x.y*100+x.m, tot: lm.length };
+                }), (r,k) => {
+                  if(k==="mese")  return r.mese;
+                  if(k==="tot")   return r.tot;
+                  if(k==="pres")  return r.pres;
+                  if(k==="ass")   return r.ass;
+                  if(k==="giust") return r.giust;
+                  if(k==="rec")   return r.rec;
+                  if(k==="tasso") return r.tasso ?? -1;
+                  return 0;
+                }).map(({x,i,lm,pres,ass,giust,rec,att,tasso}) => {
                   const isF  = isFuture(x);
+                  const isS  = x.m===selMese.m && x.y===selMese.y;
                   return (
-                    React.createElement('tr', { key: i, onClick: ()=>!isF&&setSelMese(x),
-                      style: {borderBottom:i<MESI_AS.length-1?`1px solid ${C.border}`:"none",
+                    React.createElement('tr', { key: `${x.y}-${x.m}`, onClick: ()=>!isF&&setSelMese(x),
+                      style: {borderBottom:`1px solid ${C.border}`,
                         background:isS?`${accentHex}12`:"transparent",
                         cursor:isF?"default":"pointer",opacity:isF?0.45:1,transition:"background 0.12s"},
                       onMouseEnter: e=>{if(!isF&&!isS)e.currentTarget.style.background=C.surfaceHover;},
@@ -4361,17 +4456,19 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                       , React.createElement('td', { style: {padding:"11px 18px",fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:isF?C.textDim:lm.length>0?accentHex:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3391}}
                         , isF?"—":lm.length
                       )
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3394}}, isF?"—":pres||"—")
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:ass>0?C.red:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3395}}, isF?"—":ass||"—")
-                      , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3396}}
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}}, isF?"—":pres||"—")
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:ass>0?C.red:C.textDim}}, isF?"—":ass||"—")
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:giust>0?C.gold:C.textDim}}, isF?"—":giust||"—")
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:rec>0?C.orange:C.textDim}}, isF?"—":rec||"—")
+                      , React.createElement('td', { style: {padding:"11px 18px"}}
                         , !isF && tasso!==null ? (
-                          React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3398}}
-                            , React.createElement('div', { style: {flex:1,height:4,background:C.border,borderRadius:2,maxWidth:60}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3399}}
-                              , React.createElement('div', { style: {height:"100%",borderRadius:2,background:tasso>=80?C.green:tasso>=60?C.gold:C.red,width:`${tasso}%`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3400}})
+                          React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}}
+                            , React.createElement('div', { style: {flex:1,height:4,background:C.border,borderRadius:2,maxWidth:60}}
+                              , React.createElement('div', { style: {height:"100%",borderRadius:2,background:tasso>=80?C.green:tasso>=60?C.gold:C.red,width:`${tasso}%`}})
                             )
-                            , React.createElement('span', { style: {fontSize:12,color:tasso>=80?C.green:tasso>=60?C.gold:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3402}}, tasso, "%")
+                            , React.createElement('span', { style: {fontSize:12,color:tasso>=80?C.green:tasso>=60?C.gold:C.red}}, tasso, "%")
                           )
-                        ) : React.createElement('span', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3404}}, "—")
+                        ) : React.createElement('span', { style: {color:C.textDim}}, "—")
                       )
                     )
                   );
@@ -4602,63 +4699,74 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
             , React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3632}}
               , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3633}}
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3634}}
-                  , ["Mese","Importo","Stato","vs mese prec.",""].map(h=>(
-                    React.createElement('th', { key: h, style: {padding:"10px 18px",textAlign:"left",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3636}}, h)
-                  ))
+                  , React.createElement(SortTh,{label:"Mese",         sortKey:"mese",    currentKey:sortKeyQuote, dir:sortDirQuote, onSort:handleSortQuote, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Importo",      sortKey:"importo", currentKey:sortKeyQuote, dir:sortDirQuote, onSort:handleSortQuote, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Stato",        sortKey:"stato",   currentKey:sortKeyQuote, dir:sortDirQuote, onSort:handleSortQuote, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement('th', {style:{padding:"10px 18px",textAlign:"left",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}}, "vs mese prec.")
+                  , React.createElement('th', {style:{padding:"10px 18px"}})
                 )
               )
               , React.createElement('tbody', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3640}}
-                , MESI_AS.map((x,i)=>{
+                , sortFnQuote(MESI_AS.map((x,i)=>{
                   const pm = x.m===1?12:x.m-1, py = x.m===1?x.y-1:x.y;
                   const ent  = entrataPerMese(x.m,x.y);
                   const entP = entrataPerMese(pm,py);
-                  const isS  = x.m===selMese.m&&x.y===selMese.y;
                   const isF  = isFuture(x);
+                  const stato = ent?"pagata":isF?"futuro":"non pagata";
+                  return { x, i, ent, entP, isF, stato,
+                    mese: x.y*100+x.m,
+                    importo: ent ? Number(ent.importo)||0 : 0 };
+                }), (r,k) => {
+                  if(k==="mese")    return r.mese;
+                  if(k==="importo") return r.importo;
+                  if(k==="stato")   return r.stato;
+                  return 0;
+                }).map(({x,i,ent,entP,isF,stato})=>{
+                  const isS    = x.m===selMese.m && x.y===selMese.y;
                   const stColor = ent?C.green:isF?C.textDim:C.red;
                   const stBg    = ent?C.greenBg:isF?C.bg:C.redBg;
                   const stBd    = ent?C.greenBorder:isF?C.border:C.redBorder;
-                  const stato   = ent?"pagata":isF?"futuro":"non pagata";
                   return (
-                    React.createElement('tr', { key: i, onClick: ()=>!isF&&setSelMese(x),
-                      style: {borderBottom:i<MESI_AS.length-1?`1px solid ${C.border}`:"none",
+                    React.createElement('tr', { key: `${x.y}-${x.m}`, onClick: ()=>!isF&&setSelMese(x),
+                      style: {borderBottom:`1px solid ${C.border}`,
                         background:isS?`${accentHex}12`:"transparent",
                         cursor:isF?"default":"pointer",opacity:isF?0.45:1,transition:"background 0.12s"},
                       onMouseEnter: e=>{if(!isF&&!isS)e.currentTarget.style.background=C.surfaceHover;},
-                      onMouseLeave: e=>{e.currentTarget.style.background=isS?`${accentHex}12`:"transparent";}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3652}}
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:isS?600:400,color:isS?accentHex:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3658}}
+                      onMouseLeave: e=>{e.currentTarget.style.background=isS?`${accentHex}12`:"transparent";}}
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:isS?600:400,color:isS?accentHex:C.text}}
                         , ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"][x.m-1], " " , x.y
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,
-                        color:ent?C.green:isF?C.textDim:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3661}}
+                        color:ent?C.green:isF?C.textDim:C.red}}
                         , isF?"—":ent?`€${ent.importo}`:`€${student.monthlyFee}`
                       )
-                      , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3665}}
+                      , React.createElement('td', { style: {padding:"11px 18px"}}
                         , React.createElement('span', { style: {fontSize:11,background:stBg,color:stColor,border:`1px solid ${stBd}`,
-                          borderRadius:4,padding:"2px 8px",letterSpacing:"0.06em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3666}}, stato)
+                          borderRadius:4,padding:"2px 8px",letterSpacing:"0.06em"}}, stato)
                       )
-                      , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3669}}
+                      , React.createElement('td', { style: {padding:"11px 18px"}}
                         , !isF && (
                           ent && entP ? (
-                            React.createElement('span', { style: {fontSize:12,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3672}}, "= mese prec."  )
+                            React.createElement('span', { style: {fontSize:12,color:C.green}}, "= mese prec.")
                           ) : ent && !entP ? (
-                            React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3674}}, "primo pagamento" )
+                            React.createElement('span', { style: {fontSize:11,color:C.textDim}}, "primo pagamento")
                           ) : !ent && entP ? (
-                            React.createElement('span', { style: {fontSize:12,color:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3676}}, "mese prec. pagata"  )
+                            React.createElement('span', { style: {fontSize:12,color:C.red}}, "mese prec. pagata")
                           ) : (
-                            React.createElement('span', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3678}}, "—")
+                            React.createElement('span', { style: {color:C.textDim}}, "—")
                           )
                         )
-                        , isF && React.createElement('span', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3681}}, "—")
+                        , isF && React.createElement('span', { style: {color:C.textDim}}, "—")
                       )
-                      , React.createElement('td', { style: {padding:"11px 12px"}, onClick: e=>e.stopPropagation(), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3683}}
+                      , React.createElement('td', { style: {padding:"11px 12px"}, onClick: e=>e.stopPropagation()}
                         , ent && (
-                          React.createElement('button', { onClick: ()=>setRicevutaEnt(ent), title: "Stampa ricevuta" ,
+                          React.createElement('button', { onClick: ()=>setRicevutaEnt(ent), title: "Stampa ricevuta",
                             style: {background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:6,
                               cursor:"pointer",color:C.gold,padding:"3px 8px",display:"flex",alignItems:"center",gap:4,fontSize:11,
                               fontFamily:"'Open Sans',sans-serif"},
                             onMouseEnter: e=>{e.currentTarget.style.background=C.gold;e.currentTarget.style.color=C.bg;},
-                            onMouseLeave: e=>{e.currentTarget.style.background=C.goldBg;e.currentTarget.style.color=C.gold;}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3685}}
-                            , React.createElement(Ic, { n: "receipt", size: 11, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3691}})
+                            onMouseLeave: e=>{e.currentTarget.style.background=C.goldBg;e.currentTarget.style.color=C.gold;}}
+                            , React.createElement(Ic, { n: "receipt", size: 11, stroke: "currentColor"})
                           )
                         )
                       )
@@ -4703,10 +4811,10 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
   const [filterStatus, setFS]         = useState("");
   const [filterCourse, setFC]         = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [sortKey, sortDir, handleSort, sortFn] = useSortable("name");
 
   const collettivi = courses.filter(c=>c.type==="collettivo");
 
-  // Opzioni dinamiche — derivate dagli allievi reali presenti
   const strumentiPresenti = useMemo(() => {
     const set = new Set();
     students.forEach(s => {
@@ -4729,6 +4837,16 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
       && (!filterInstrument || allInstruments.includes(filterInstrument))
       && (!filterStatus     || s.status===filterStatus)
       && (!filterCourse     || s.complementaryCourse===filterCourse);
+  });
+
+  const sorted = sortFn(filtered, (s, k) => {
+    if (k === "name")       return s.name || "";
+    if (k === "instrument") return s.instrument || "";
+    if (k === "teacher")    return s.teacher || "";
+    if (k === "monthlyFee") return Number(s.monthlyFee) || 0;
+    if (k === "status")     return s.status || "";
+    if (k === "complem")    return (courses.find(c=>c.id===s.complementaryCourse)||{}).name || "";
+    return s[k] || "";
   });
 
   const hasFilters = filterInstrument||filterStatus||filterCourse;
@@ -4773,21 +4891,17 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
           : React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3786}}
               , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3787}}
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3788}}
-                  , [
-                    {l:"Allievo",cls:""},
-                    {l:"Corso principale",cls:""},
-                    {l:"Corso complementare",cls:"hide-mobile"},
-                    {l:"Insegnante",cls:"hide-mobile"},
-                    ...(slRuolo!=="docente" ? [{l:"Quota",cls:""}] : []),
-                    {l:"Stato",cls:"resp-hide"},
-                    {l:"",cls:""},
-                  ].map(({l:h,cls})=>(
-                    React.createElement('th', { key: h, className: cls, style: {padding:"11px 16px",textAlign:"left",fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3798}}, h)
-                  ))
+                  , React.createElement(SortTh, {label:"Allievo",        sortKey:"name",       currentKey:sortKey, dir:sortDir, onSort:handleSort})
+                  , React.createElement(SortTh, {label:"Corso principale",sortKey:"instrument", currentKey:sortKey, dir:sortDir, onSort:handleSort})
+                  , React.createElement(SortTh, {label:"Corso complem.", sortKey:"complem",    currentKey:sortKey, dir:sortDir, onSort:handleSort, className:"hide-mobile"})
+                  , React.createElement(SortTh, {label:"Insegnante",     sortKey:"teacher",    currentKey:sortKey, dir:sortDir, onSort:handleSort, className:"hide-mobile"})
+                  , ...(slRuolo!=="docente" ? [React.createElement(SortTh, {key:"quota",label:"Quota",sortKey:"monthlyFee",currentKey:sortKey,dir:sortDir,onSort:handleSort})] : [])
+                  , React.createElement(SortTh, {label:"Stato",          sortKey:"status",     currentKey:sortKey, dir:sortDir, onSort:handleSort, className:"resp-hide"})
+                  , React.createElement('th', {style:{padding:"10px 16px"}})
                 )
               )
               , React.createElement('tbody', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3802}}
-                , filtered.map((s,i)=>{
+                , sorted.map((s,i)=>{
                   const ic   = INS_COLORS[s.instrument]||C.gold;
                   const comp = courses.find(c=>c.id===s.complementaryCourse);
                   return (
@@ -5309,11 +5423,19 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
         , roleLF !== "docente" && React.createElement(Sel, { label: "Orario *" , value: f.hour, onChange: e => set("hour", e.target.value), options: hours, error: err.hour, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4227}})
         , roleLF !== "docente" && React.createElement(Sel, { label: "Durata" , value: String(f.durata||45), onChange: e => set("durata", parseInt(e.target.value)), options: [{value:"30",label:"30 min"},{value:"45",label:"45 min"},{value:"60",label:"60 min"},{value:"90",label:"1h 30min"},{value:"120",label:"2 ore"}] })
 
-        , roleLF !== "docente" && React.createElement(SDiv, { label: "Chi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4229}})
-        , roleLF !== "docente" && React.createElement(Sel, { label: "Allievo *" ,    value: f.student,    onChange: e => set("student", e.target.value),    options: dynamicStudents.length > 0 ? dynamicStudents : STUDENTS_LIST, error: err.student, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4230}})
-        , roleLF !== "docente" && React.createElement(Sel, { label: "Strumento *" ,  value: f.instrument, onChange: e => set("instrument", e.target.value), options: dynamicInstruments,   error: err.instrument, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4231}})
-        , roleLF !== "docente" && React.createElement(Sel, { label: "Insegnante *" , value: f.teacher,    onChange: e => set("teacher", e.target.value),    options: _teacherOptsLes.length>0 ? _teacherOptsLes : TEACHERS, error: err.teacher, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4232}})
-        , roleLF !== "docente" && React.createElement(Sel, { label: "Sala",         value: f.room,       onChange: e => set("room", e.target.value),       options: dynamicRooms, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4233}})
+        , React.createElement(SDiv, { label: "Chi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4229}})
+        , roleLF !== "docente"
+          ? React.createElement(Sel, { label: "Allievo *", value: f.student, onChange: e => set("student", e.target.value), options: dynamicStudents.length > 0 ? dynamicStudents : STUDENTS_LIST, error: err.student })
+          : React.createElement(Input, { label: "Allievo", value: f.student || "—", readOnly: true })
+        , roleLF !== "docente"
+          ? React.createElement(Sel, { label: "Strumento *", value: f.instrument, onChange: e => set("instrument", e.target.value), options: dynamicInstruments, error: err.instrument })
+          : React.createElement(Input, { label: "Strumento", value: f.instrument || "—", readOnly: true })
+        , roleLF !== "docente"
+          ? React.createElement(Sel, { label: "Insegnante *", value: f.teacher, onChange: e => set("teacher", e.target.value), options: _teacherOptsLes.length>0 ? _teacherOptsLes : TEACHERS, error: err.teacher })
+          : React.createElement(Input, { label: "Insegnante", value: f.teacher || "—", readOnly: true })
+        , roleLF !== "docente"
+          ? React.createElement(Sel, { label: "Sala", value: f.room, onChange: e => set("room", e.target.value), options: dynamicRooms })
+          : React.createElement(Input, { label: "Sala", value: f.room || "—", readOnly: true })
 
         , React.createElement(SDiv, { label: "Contenuto", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4235}})
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4236}}, React.createElement(Input, { label: "Argomento", value: f.topic, onChange: e => set("topic", e.target.value), placeholder: "Es. Scale maggiori, Chopin Notturno..."    , __self: this, __source: {fileName: _jsxFileName, lineNumber: 4236}}))
@@ -7611,6 +7733,7 @@ const RecuperoView = ({ lessons, onOpenLesson, role }) => {
   const [rfCorso,   setRfCorso]   = useState('');
   const [rfDocente, setRfDocente] = useState('');
   const [rfAllievo, setRfAllievo] = useState('');
+  const [sortKeyR, sortDirR, handleSortR, sortFnR] = useSortable("date", "asc");
   const oggi_r = new Date(); oggi_r.setHours(0,0,0,0);
   const lezioniRec = (lessons||[]).filter(l=>l.inRecupero);
   const docenteOptsR = [...new Set(lezioniRec.map(l=>l.teacher).filter(Boolean))].sort();
@@ -7621,6 +7744,14 @@ const RecuperoView = ({ lessons, onOpenLesson, role }) => {
     (!rfDocente || l.teacher===rfDocente) &&
     (!rfAllievo || l.student===rfAllievo)
   );
+  const sorted_r = sortFnR(filtered_r, (l,k) => {
+    if (k==="date")              return l.date||"";
+    if (k==="student")           return l.student||"";
+    if (k==="teacher")           return l.teacher||"";
+    if (k==="instrument")        return l.instrument||"";
+    if (k==="recuperoScadenza")  return l.recuperoScadenza||"";
+    return l[k]||"";
+  });
   return React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
     , React.createElement('div', {style:{marginBottom:16, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}
       , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif", fontSize:22, fontWeight:600, margin:0}}, 'Lezioni in Recupero')
@@ -7653,13 +7784,17 @@ const RecuperoView = ({ lessons, onOpenLesson, role }) => {
         , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
           , React.createElement('thead',null
             , React.createElement('tr',{style:{background:C.bg, borderBottom:`1px solid ${C.border}`}}
-              , ['Data','Allievo','Docente','Strumento','Scadenza','Stato','Azioni'].map(h=>
-                React.createElement('th',{key:h,style:{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},h)
-              )
+              , React.createElement(SortTh,{label:'Data',      sortKey:'date',            currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
+              , React.createElement(SortTh,{label:'Allievo',   sortKey:'student',         currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
+              , React.createElement(SortTh,{label:'Docente',   sortKey:'teacher',         currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
+              , React.createElement(SortTh,{label:'Strumento', sortKey:'instrument',      currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
+              , React.createElement(SortTh,{label:'Scadenza',  sortKey:'recuperoScadenza',currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
+              , React.createElement('th',{style:{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},'Stato')
+              , React.createElement('th',{style:{padding:'10px 14px'}})
             )
           )
           , React.createElement('tbody',null
-            , filtered_r.map(l => {
+            , sorted_r.map(l => {
               const scad = l.recuperoScadenza ? new Date(l.recuperoScadenza+'T00:00:00') : null;
               const scaduto = scad && scad < oggi_r;
               const urgente = scad && !scaduto && (scad - oggi_r)/86400000 <= 5;
@@ -7703,6 +7838,7 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
   const [laAllievo,  setLaAllievo]  = useState('');
   const [laPresenza, setLaPresenza] = useState('');
   const [confirmDel, setConfirmDel] = useState(null);
+  const [sortKeyLA, sortDirLA, handleSortLA, sortFnLA] = useSortable("date", "desc");
   const docenteOptsA = [...new Set((lessons||[]).map(l=>l.teacher).filter(Boolean))].sort();
   const allievoOptsA = [...new Set((lessons||[]).map(l=>l.student).filter(Boolean))].sort();
   const laFiltered = (lessons||[]).filter(l =>
@@ -7712,7 +7848,17 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
     (!laSearch   || (l.student||'').toLowerCase().includes(laSearch.toLowerCase()) ||
                     (l.teacher||'').toLowerCase().includes(laSearch.toLowerCase()) ||
                     (l.topic||'').toLowerCase().includes(laSearch.toLowerCase()))
-  ).sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  );
+  const laSorted = sortFnLA(laFiltered, (l,k) => {
+    if (k==='date')       return l.date||'';
+    if (k==='hour')       return l.hour||'';
+    if (k==='student')    return l.student||l.courseId||'';
+    if (k==='teacher')    return l.teacher||'';
+    if (k==='instrument') return l.instrument||'';
+    if (k==='topic')      return l.topic||'';
+    if (k==='attendance') return l.inRecupero?'in_recupero':(l.attendance||'');
+    return l[k]||'';
+  });
   const handleDelConfirm = (l) => {
     if (onDeleteLesson) onDeleteLesson(l);
     setConfirmDel(null);
@@ -7720,7 +7866,7 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
   return React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
     , React.createElement('div',{style:{marginBottom:16,display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}
       , React.createElement('h2',{style:{fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,margin:0}},'Elenco Lezioni')
-      , React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'3px 10px',fontSize:12}},laFiltered.length+' lezioni')
+      , React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'3px 10px',fontSize:12}},laSorted.length+' lezioni')
     )
     , React.createElement('div',{style:{display:'flex',gap:8,marginBottom:14,flexWrap:'wrap'}}
       , React.createElement('input',{type:'text',placeholder:'Cerca allievo, docente, argomento...',value:laSearch,onChange:e=>setLaSearch(e.target.value),
@@ -7747,13 +7893,18 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
       , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
         , React.createElement('thead',null
           , React.createElement('tr',{style:{background:C.bg,borderBottom:`1px solid ${C.border}`}}
-            , ['Data','Ora','Allievo','Docente','Strumento','Argomento','Presenza','Azioni'].map(h=>
-              React.createElement('th',{key:h,style:{padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},h)
-            )
+            , React.createElement(SortTh,{label:'Data',      sortKey:'date',       currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
+            , React.createElement(SortTh,{label:'Ora',       sortKey:'hour',       currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
+            , React.createElement(SortTh,{label:'Allievo',   sortKey:'student',    currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
+            , React.createElement(SortTh,{label:'Docente',   sortKey:'teacher',    currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
+            , React.createElement(SortTh,{label:'Strumento', sortKey:'instrument', currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
+            , React.createElement(SortTh,{label:'Argomento', sortKey:'topic',      currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
+            , React.createElement(SortTh,{label:'Presenza',  sortKey:'attendance', currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
+            , React.createElement('th',{style:{padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},'Azioni')
           )
         )
         , React.createElement('tbody',null
-          , laFiltered.slice(0,200).map(l => {
+          , laSorted.slice(0,200).map(l => {
             const att = l.inRecupero ? 'in_recupero' : (l.attendance||'');
             const s = ATT_STYLES[att] || {bg:'transparent',fg:C.textDim,bd:C.border,label:'—'};
             return React.createElement('tr',{key:l.id,style:{borderBottom:`1px solid ${C.border}`},
@@ -7789,8 +7940,8 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
         )
       )
     )
-    , laFiltered.length > 200 && React.createElement('p',{style:{textAlign:'center',padding:12,fontSize:12,color:C.textDim}},
-      'Mostrate 200 di '+laFiltered.length+' lezioni — usa i filtri per restringere')
+    , laSorted.length > 200 && React.createElement('p',{style:{textAlign:'center',padding:12,fontSize:12,color:C.textDim}},
+      'Mostrate 200 di '+laSorted.length+' lezioni — usa i filtri per restringere')
     , confirmDel && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:400,background:'rgba(0,0,0,0.7)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
       , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:400,width:'100%',border:`1px solid ${C.border}`}}
         , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:8,color:C.red}},'Elimina lezione')
@@ -9016,9 +9167,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         .filter(p => p.stato === "approvata" || p.stato === "in_attesa")
         .filter(p => {
           const myUserId = _appUserCV && _appUserCV.userId;
-          // Allievo e Docente vedono solo le proprie prenotazioni nel calendario lezioni
           // Admin vede tutto
           if (role === "admin") return true;
+          // Docente vede TUTTE le prenotazioni approvate (per sapere quando la sala è occupata)
+          // e le proprie in attesa
+          if (role === "docente") return p.stato === "approvata" || p.userId === myUserId;
+          // Allievo vede solo le proprie
           return p.userId === myUserId;
         })
         .map(p => ({
@@ -9369,46 +9523,60 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               })
           )
         )
-        , modal === "detailsala" && selLesson && selLesson._original && (
+        , modal === "detailsala" && selLesson && (() => {
+          // _original è il record prenotazione_sala; se manca, ricostruiamo dai campi del selLesson
+          const orig = selLesson._original || {
+            id:         selLesson.id?.replace("sala_",""),
+            data:       selLesson.date,
+            oraInizio:  selLesson.hour,
+            oraFine:    selLesson.oraFine,
+            richiedente:selLesson.richiedente || selLesson.student,
+            ruolo:      selLesson.ruolo || "",
+            telefono:   selLesson.telefono || "",
+            motivo:     selLesson.topic !== "Sala Prove" ? selLesson.topic : "",
+            stato:      selLesson.stato || "approvata",
+            noteAdmin:  selLesson.notes || "",
+          };
+          return (
           React.createElement(Modal, { title: "Sala Prove", onClose: closeModal }
             , React.createElement('div', { style:{padding:"8px 0",display:"flex",flexDirection:"column",gap:14} }
               , React.createElement('div', { style:{background:C.orange2Bg,border:`1px solid ${C.orange2Border}`,
                   borderRadius:10,padding:"14px 16px"} }
                 , React.createElement('div', { style:{fontSize:13,fontWeight:600,color:C.orange2,marginBottom:6} }, "🤘 Prenotazione Sala Prove")
                 , React.createElement('div', { style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:13} }
-                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Data"), React.createElement('div',{style:{fontWeight:600}}, fmtDate(selLesson._original.data)))
-                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Orario"), React.createElement('div',{style:{fontWeight:600}}, (selLesson._original.oraInizio||"").slice(0,5), " → ", (selLesson._original.oraFine||"").slice(0,5)))
-                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Richiedente"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.richiedente))
-                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Ruolo"), React.createElement('div',{style:{fontWeight:600}}, selLesson._original.ruolo))
-                  , selLesson._original.telefono && React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Telefono"), React.createElement('div',{style:{fontWeight:600,display:"flex",alignItems:"center",gap:5}},React.createElement(Ic,{n:"phone",size:12,stroke:C.orange2}),selLesson._original.telefono))
+                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Data"), React.createElement('div',{style:{fontWeight:600}}, fmtDate(orig.data)))
+                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Orario"), React.createElement('div',{style:{fontWeight:600}}, (orig.oraInizio||"").slice(0,5), " → ", (orig.oraFine||"").slice(0,5)))
+                  , React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Richiedente"), React.createElement('div',{style:{fontWeight:600}}, orig.richiedente))
+                  , orig.ruolo && React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Ruolo"), React.createElement('div',{style:{fontWeight:600}}, orig.ruolo))
+                  , orig.telefono && React.createElement('div', null, React.createElement('span',{style:{color:C.textMuted,fontSize:11}},"Telefono"), React.createElement('div',{style:{fontWeight:600,display:"flex",alignItems:"center",gap:5}},React.createElement(Ic,{n:"phone",size:12,stroke:C.orange2}),orig.telefono))
                 )
-                , selLesson._original.motivo && (
+                , orig.motivo && (
                   React.createElement('div', { style:{marginTop:10,fontSize:12,color:C.textMuted,fontStyle:"italic"} }
-                    , "\"", selLesson._original.motivo, "\""
+                    , "\"", orig.motivo, "\""
                   )
                 )
               )
               , React.createElement('div', { style:{display:"flex",alignItems:"center",gap:10} }
                 , React.createElement('div', { style:{
-                    background: selLesson._original.stato==="approvata" ? C.greenBg : selLesson._original.stato==="rifiutata" ? C.redBg : C.orange2Bg,
-                    border:`1px solid ${selLesson._original.stato==="approvata" ? C.greenBorder : selLesson._original.stato==="rifiutata" ? C.redBorder : C.orange2Border}`,
-                    color: selLesson._original.stato==="approvata" ? C.green : selLesson._original.stato==="rifiutata" ? C.red : C.orange2,
+                    background: orig.stato==="approvata" ? C.greenBg : orig.stato==="rifiutata" ? C.redBg : C.orange2Bg,
+                    border:`1px solid ${orig.stato==="approvata" ? C.greenBorder : orig.stato==="rifiutata" ? C.redBorder : C.orange2Border}`,
+                    color: orig.stato==="approvata" ? C.green : orig.stato==="rifiutata" ? C.red : C.orange2,
                     borderRadius:20,padding:"5px 14px",fontSize:12,fontWeight:700} }
-                  , selLesson._original.stato==="approvata" ? "✓ Approvata" : selLesson._original.stato==="rifiutata" ? "✕ Rifiutata" : "⏳ In attesa di approvazione"
+                  , orig.stato==="approvata" ? "✓ Approvata" : orig.stato==="rifiutata" ? "✕ Rifiutata" : "⏳ In attesa di approvazione"
                 )
               )
-              , selLesson._original.noteAdmin && (
+              , orig.noteAdmin && (
                 React.createElement('div', { style:{fontSize:12,color:C.textMuted,background:C.bg,
                     borderRadius:8,padding:"10px 12px"} }
-                  , React.createElement('b', null, "Nota admin: "), selLesson._original.noteAdmin
+                  , React.createElement('b', null, "Nota admin: "), orig.noteAdmin
                 )
               )
-              , role==="admin" && selLesson._original.stato==="in_attesa" && (
+              , role==="admin" && orig.stato==="in_attesa" && (
                 React.createElement('div', { style:{display:"flex",gap:8,justifyContent:"flex-end",marginTop:4} }
                   , React.createElement('button', { onClick: async () => {
                       const sb=window.supabaseClient;
-                      await sb.from("prenotazioni_sala").update({stato:"rifiutata",updated_at:new Date().toISOString()}).eq("id",selLesson._original.id);
-                      setPrenotazioniSala(p=>p.map(x=>x.id===selLesson._original.id?{...x,stato:"rifiutata"}:x));
+                      await sb.from("prenotazioni_sala").update({stato:"rifiutata",updated_at:new Date().toISOString()}).eq("id",orig.id);
+                      setPrenotazioniSala(p=>p.map(x=>x.id===orig.id?{...x,stato:"rifiutata"}:x));
                       closeModal();
                     }, style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${C.redBorder}`,
                       background:C.redBg,color:C.red,fontSize:12,cursor:"pointer",fontFamily:"'Open Sans',sans-serif"} }
@@ -9416,8 +9584,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   )
                   , React.createElement('button', { onClick: async () => {
                       const sb=window.supabaseClient;
-                      await sb.from("prenotazioni_sala").update({stato:"approvata",updated_at:new Date().toISOString()}).eq("id",selLesson._original.id);
-                      setPrenotazioniSala(p=>p.map(x=>x.id===selLesson._original.id?{...x,stato:"approvata"}:x));
+                      await sb.from("prenotazioni_sala").update({stato:"approvata",updated_at:new Date().toISOString()}).eq("id",orig.id);
+                      setPrenotazioniSala(p=>p.map(x=>x.id===orig.id?{...x,stato:"approvata"}:x));
                       closeModal();
                     }, style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${C.greenBorder}`,
                       background:C.greenBg,color:C.green,fontSize:12,cursor:"pointer",fontWeight:600,fontFamily:"'Open Sans',sans-serif"} }
@@ -9430,7 +9598,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               )
             )
           )
-        )
+          );
+        })()
       )
     );
 };
@@ -10209,7 +10378,8 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
     const totQuoteMese = entrate.filter(e=>e.mese===MESE_C&&e.anno===new Date().getFullYear()).reduce((t,e)=>t+e.importo,0);
   
     // Spese filtrate — docente vede solo le proprie, allievo non vede uscite
-    const filtered = spese.filter(s=>{
+    const [sortKeySp, sortDirSp, handleSortSp, sortFnSp] = useSortable("data", "desc");
+    const filteredRaw = spese.filter(s=>{
       const q=search.toLowerCase();
       if(ruoloCV==="allievo") return false;
       if(ruoloCV==="docente") return myDocIdCV ? String(s.docenteId)===String(myDocIdCV) : false;
@@ -10217,7 +10387,15 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         &&(!q||s.desc.toLowerCase().includes(q)||(s.note||"").toLowerCase().includes(q))
         &&(!filterCat||s.categoria===filterCat)
         &&(!filterMese||s.mese===Number(filterMese));
-    }).sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+    });
+    const filtered = sortFnSp(filteredRaw, (s,k) => {
+      if(k==="data")        return s.data||"";
+      if(k==="desc")        return s.desc||"";
+      if(k==="categoria")   return s.categoria||"";
+      if(k==="importo")     return Number(s.importo)||0;
+      if(k==="mese")        return Number(s.mese)||0;
+      return s[k]||"";
+    });
   
     // Aggregato docenti
     const docenteStats = useMemo(()=>DOCENTI.map(d=>({
@@ -10319,9 +10497,12 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                   , React.createElement('div', { style: {overflowX:"auto",WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6977}}
                   , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"auto 2fr 1fr 1fr 1fr auto",minWidth:520,
                     padding:"9px 18px",borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6978}}
-                    , ["Cat.","Descrizione","Mese","Metodo","Importo",""].map(h=>(
-                      React.createElement('div', { key: h, style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6981}}, h)
-                    ))
+                    , React.createElement('div', {style:{fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}}, "Cat.")
+                    , React.createElement('div', {onClick:()=>handleSortSp("desc"), style:{fontSize:10,color:sortKeySp==="desc"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Descrizione", React.createElement('span',{style:{opacity:sortKeySp==="desc"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="desc"?"▲":"▼"))
+                    , React.createElement('div', {onClick:()=>handleSortSp("mese"),  style:{fontSize:10,color:sortKeySp==="mese"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Mese",   React.createElement('span',{style:{opacity:sortKeySp==="mese"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="mese"?"▲":"▼"))
+                    , React.createElement('div', {style:{fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}}, "Metodo")
+                    , React.createElement('div', {onClick:()=>handleSortSp("importo"),style:{fontSize:10,color:sortKeySp==="importo"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Importo", React.createElement('span',{style:{opacity:sortKeySp==="importo"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="importo"?"▲":"▼"))
+                    , React.createElement('div', {style:{fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}}, "")
                   )
                   , filtered.length===0?(
                     React.createElement('div', { style: {padding:"40px 0",textAlign:"center",color:C.textDim,fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6985}}, "Nessuna spesa trovata"  )
@@ -10379,7 +10560,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                         , tab==="entrate" && (() => {
               const MESI_ALL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
               const curY = new Date().getFullYear(), curM = new Date().getMonth()+1;
-              const qFiltrate = entrate
+              const qFiltrate = sortFnSp(entrate
                 .filter(e=>{
                   const q = searchQ.toLowerCase();
                   // docente non vede le entrate (quote degli allievi — dati contabili riservati)
@@ -10393,8 +10574,15 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                   }
                   return (!q||((e.studentName||"").toLowerCase().includes(q)||(e.desc||"").toLowerCase().includes(q)))
                     && (!filterQMese||Number(filterQMese)===e.mese);
-                })
-                .sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+                }), (e,k) => {
+                  if(k==="data")        return e.data||"";
+                  if(k==="desc")        return e.desc||e.studentName||"";
+                  if(k==="importo")     return Number(e.importo)||0;
+                  if(k==="mese")        return Number(e.mese)||0;
+                  if(k==="metodo")      return e.metodo||"";
+                  if(k==="categoria")   return e.categoria||"";
+                  return e[k]||"";
+                });
               const totQFiltrate = qFiltrate.reduce((t,e)=>t+e.importo,0);
 
               // Riepilogo per allievo (usato in tabella studenti)
@@ -10438,9 +10626,12 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                   , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7166}}
                     , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 100px auto",minWidth:480,
                       padding:"9px 18px",borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7167}}
-                      , ["Descrizione","Categoria","Data","Metodo","Importo",""].map(h=>(
-                        React.createElement('div', { key: h, style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7170}}, h)
-                      ))
+                      , React.createElement('div',{onClick:()=>handleSortSp("desc"),     style:{fontSize:10,color:sortKeySp==="desc"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Descrizione", React.createElement('span',{style:{opacity:sortKeySp==="desc"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="desc"?"▲":"▼"))
+                      , React.createElement('div',{onClick:()=>handleSortSp("categoria"), style:{fontSize:10,color:sortKeySp==="categoria"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Categoria", React.createElement('span',{style:{opacity:sortKeySp==="categoria"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="categoria"?"▲":"▼"))
+                      , React.createElement('div',{onClick:()=>handleSortSp("data"),      style:{fontSize:10,color:sortKeySp==="data"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Data", React.createElement('span',{style:{opacity:sortKeySp==="data"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="data"?"▲":"▼"))
+                      , React.createElement('div',{onClick:()=>handleSortSp("metodo"),    style:{fontSize:10,color:sortKeySp==="metodo"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Metodo", React.createElement('span',{style:{opacity:sortKeySp==="metodo"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="metodo"?"▲":"▼"))
+                      , React.createElement('div',{onClick:()=>handleSortSp("importo"),   style:{fontSize:10,color:sortKeySp==="importo"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Importo", React.createElement('span',{style:{opacity:sortKeySp==="importo"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="importo"?"▲":"▼"))
+                      , React.createElement('div',{style:{fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}}, "")
                     )
                     , qFiltrate.length===0?(
                       React.createElement('div', { style: {padding:"40px 0",textAlign:"center",color:C.textDim,fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7174}}, "Nessun pagamento trovato"  )
@@ -13323,6 +13514,8 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     ...allegatiBrani,
   ];
 
+  const [sortKeyAl, sortDirAl, handleSortAl, sortFnAl] = useSortable("createdAt", "desc");
+
   const corsiList   = [...new Set(allegati.map(a=>a.corso).filter(Boolean))].sort();
   const allieviList = [...new Set(allegatiLezioni.map(a=>a.allievoNome||a.allievoId).filter(Boolean))].sort();
 
@@ -13333,7 +13526,16 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     const matchA = !fAllievo || (a.allievoNome||a.allievoId) === fAllievo;
     const matchT = !fTipo    || a._categoria === fTipo;
     return matchQ && matchC && matchA && matchT;
-  }).sort((a,b)=>(b.createdAt||b.id||"").localeCompare(a.createdAt||a.id||""));
+  });
+
+  const sortedAl = sortFnAl(filtered, (a, k) => {
+    if (k === "fileName")    return a.fileName || "";
+    if (k === "descrizione") return a.descrizione || "";
+    if (k === "corso")       return a.corso || "";
+    if (k === "allievoNome") return a.allievoNome || a.allievoId || "";
+    if (k === "createdAt")   return a.createdAt || "";
+    return a[k] || "";
+  });
 
   const getLessonLabel = (lessonId) => {
     const l = lessons.find(x=>x.id===lessonId);
@@ -13387,13 +13589,16 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
           , React.createElement('table', { style: {width:"100%", borderCollapse:"collapse"}}
             , React.createElement('thead', null
               , React.createElement('tr', { style: {background:C.bg, borderBottom:`1px solid ${C.border}`}}
-                , ["Allegato","Descrizione","Strumento","Lezione","Allievo",""].map(h =>
-                  React.createElement('th', {key:h, style:{padding:"10px 16px", textAlign:"left", fontSize:11, fontWeight:600, color:C.textMuted, textTransform:"uppercase", letterSpacing:"0.08em"}}, h)
-                )
+                , React.createElement(SortTh, {label:"Allegato",    sortKey:"fileName",    currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})
+                , React.createElement(SortTh, {label:"Descrizione", sortKey:"descrizione", currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})
+                , React.createElement(SortTh, {label:"Strumento",   sortKey:"corso",       currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})
+                , React.createElement(SortTh, {label:"Lezione",     sortKey:null,          currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})
+                , React.createElement(SortTh, {label:"Allievo",     sortKey:"allievoNome", currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})
+                , React.createElement('th', {style:{padding:"10px 16px"}})
               )
             )
             , React.createElement('tbody', null
-              , filtered.map((a,i)=>(
+              , sortedAl.map((a,i)=>(
                 React.createElement('tr', { key: a.id||i, style: {borderBottom:`1px solid ${C.border}`, transition:"background 0.1s"},
                   onMouseEnter: e=>e.currentTarget.style.background=C.bg,
                   onMouseLeave: e=>e.currentTarget.style.background="transparent"}
@@ -14065,6 +14270,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const defaultSelMese = MESI_AS.find(x=>x.m===curMonth && x.y===curYear) || MESI_AS[MESI_AS.length-1];
   // ← useState QUI, prima di qualsiasi return condizionale
   const [selMese, setSelMese] = useState(defaultSelMese);
+  const [sortKeyDP, sortDirDP, handleSortDP, sortFnDP] = useSortable("mese", "asc");
+  const [sortKeyDC, sortDirDC, handleSortDC, sortFnDC] = useSortable("mese", "asc");
 
   // FormModal inline JSX (evita re-mount su ogni keystroke)
   const formModalJSX = (modal && modal !== "del") ? (
@@ -14467,13 +14674,17 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             , React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10357}}
               , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10358}}
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10359}}
-                  , ["Mese","Lezioni","Presenti","Assenti","Giustificati","Da recuperare","Tasso pres."].map(h=>(
-                    React.createElement('th', { key: h, style: {padding:"10px 18px",textAlign:"left",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10361}}, h)
-                  ))
+                  , React.createElement(SortTh,{label:"Mese",         sortKey:"mese",  currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Lezioni",      sortKey:"tot",   currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Presenti",     sortKey:"pres",  currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Assenti",      sortKey:"ass",   currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Giustificati", sortKey:"giust", currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Da recuperare",sortKey:"rec",   currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Tasso pres.",  sortKey:"tasso", currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                 )
               )
               , React.createElement('tbody', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10365}}
-                , MESI_AS.map((x,i)=>{
+                , sortFnDP(MESI_AS.map((x,i)=>{
                   const lm = tutteLezioniMese(selected,x.m,x.y);
                   const pres  = lm.filter(l=>l.attendance==="presente").length;
                   const ass   = lm.filter(l=>l.attendance==="assente").length;
@@ -14481,36 +14692,47 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   const rec   = lm.filter(l=>l.attendance==="in_recupero"||l.inRecupero).length;
                   const attended = lm.filter(l=>l.attendance).length;
                   const tasso = attended>0 ? Math.round((pres/attended)*100) : null;
-                  const isS  = x.m===selMese.m&&x.y===selMese.y;
-                  const isF  = isFuture(x);
+                  return { x, i, lm, pres, ass, giust, rec, tasso, mese: x.y*100+x.m, tot: lm.length };
+                }), (r,k) => {
+                  if(k==="mese")  return r.mese;
+                  if(k==="tot")   return r.tot;
+                  if(k==="pres")  return r.pres;
+                  if(k==="ass")   return r.ass;
+                  if(k==="giust") return r.giust;
+                  if(k==="rec")   return r.rec;
+                  if(k==="tasso") return r.tasso ?? -1;
+                  return 0;
+                }).map(({x,i,lm,pres,ass,giust,rec,tasso})=>{
+                  const isF = isFuture(x);
+                  const isS = x.m===selMese.m && x.y===selMese.y;
                   return (
-                    React.createElement('tr', { key: i, onClick: ()=>!isF&&setSelMese(x),
-                      style: {borderBottom:i<MESI_AS.length-1?`1px solid ${C.border}`:"none",
+                    React.createElement('tr', { key: `${x.y}-${x.m}`, onClick: ()=>!isF&&setSelMese(x),
+                      style: {borderBottom:`1px solid ${C.border}`,
                         background:isS?`${selected.colore}12`:"transparent",
                         cursor:isF?"default":"pointer",opacity:isF?0.45:1,transition:"background 0.12s"},
                       onMouseEnter: e=>{if(!isF&&!isS)e.currentTarget.style.background=C.surfaceHover;},
-                      onMouseLeave: e=>{e.currentTarget.style.background=isS?`${selected.colore}12`:"transparent";}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10374}}
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:isS?600:400,color:isS?selected.colore:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10380}}
+                      onMouseLeave: e=>{e.currentTarget.style.background=isS?`${selected.colore}12`:"transparent";}}
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:isS?600:400,color:isS?selected.colore:C.text}}
                         , MESI_LABEL_L[x.m-1], " " , x.y
                       )
-                      , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10383}}
-                        , React.createElement('span', { style: {fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:isF?C.textDim:lm.length>0?selected.colore:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10384}}
+                      , React.createElement('td', { style: {padding:"11px 18px"}}
+                        , React.createElement('span', { style: {fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:isF?C.textDim:lm.length>0?selected.colore:C.textDim}}
                           , isF?"—":lm.length
                         )
                       )
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10388}}, isF?"—":pres||"—")
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:ass>0?C.red:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10389}}, isF?"—":ass||"—")
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}}, isF?"—":pres||"—")
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:ass>0?C.red:C.textDim}}, isF?"—":ass||"—")
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:giust>0?C.gold:C.textDim}}, isF?"—":giust||"—")
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:rec>0?C.purple:C.textDim}}, isF?"—":rec||"—")
-                      , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10390}}
+                      , React.createElement('td', { style: {padding:"11px 18px"}}
                         , !isF && tasso!==null && !isNaN(tasso) ? (
-                          React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10392}}
-                            , React.createElement('div', { style: {flex:1,height:4,background:C.border,borderRadius:2,maxWidth:60}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10393}}
-                              , React.createElement('div', { style: {height:"100%",borderRadius:2,background:tasso>=80?C.green:tasso>=60?C.gold:C.red,width:`${tasso}%`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10394}})
+                          React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}}
+                            , React.createElement('div', { style: {flex:1,height:4,background:C.border,borderRadius:2,maxWidth:60}}
+                              , React.createElement('div', { style: {height:"100%",borderRadius:2,background:tasso>=80?C.green:tasso>=60?C.gold:C.red,width:`${tasso}%`}})
                             )
-                            , React.createElement('span', { style: {fontSize:12,color:tasso>=80?C.green:tasso>=60?C.gold:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10396}}, tasso, "%")
+                            , React.createElement('span', { style: {fontSize:12,color:tasso>=80?C.green:tasso>=60?C.gold:C.red}}, tasso, "%")
                           )
-                        ) : React.createElement('span', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10398}}, "—")
+                        ) : React.createElement('span', { style: {color:C.textDim}}, "—")
                       )
                     )
                   );
@@ -14600,44 +14822,52 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             , React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10483}}
               , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10484}}
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10485}}
-                  , ["Mese","Lezioni","Compenso","vs mese prec."].map(h=>(
-                    React.createElement('th', { key: h, style: {padding:"10px 18px",textAlign:"left",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10487}}, h)
-                  ))
+                  , React.createElement(SortTh,{label:"Mese",    sortKey:"mese",    currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Lezioni", sortKey:"n",       currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Compenso",sortKey:"c",       currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement('th',{style:{padding:"10px 18px",textAlign:"left",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}}, "vs mese prec.")
                 )
               )
               , React.createElement('tbody', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10491}}
-                , MESI_AS.map((x,i)=>{
+                , sortFnDC(MESI_AS.map((x,i)=>{
                   const pm = x.m===1?12:x.m-1, py = x.m===1?x.y-1:x.y;
                   const n  = lezioniMese(selected,x.m,x.y).length;
                   const np = lezioniMese(selected,pm,py).length;
                   const c  = n * selected.tariffaOra;
                   const delta = n - np;
-                  const isS  = x.m===selMese.m&&x.y===selMese.y;
-                  const isF  = isFuture(x);
+                  return { x, i, n, np, c, delta, mese: x.y*100+x.m };
+                }), (r,k) => {
+                  if(k==="mese") return r.mese;
+                  if(k==="n")    return r.n;
+                  if(k==="c")    return r.c;
+                  return 0;
+                }).map(({x,i,n,np,c,delta})=>{
+                  const isS = x.m===selMese.m&&x.y===selMese.y;
+                  const isF = isFuture(x);
                   return (
-                    React.createElement('tr', { key: i, onClick: ()=>!isF&&setSelMese(x),
-                      style: {borderBottom:i<MESI_AS.length-1?`1px solid ${C.border}`:"none",
+                    React.createElement('tr', { key: `${x.y}-${x.m}`, onClick: ()=>!isF&&setSelMese(x),
+                      style: {borderBottom:`1px solid ${C.border}`,
                         background:isS?`${selected.colore}12`:"transparent",
                         cursor:isF?"default":"pointer",opacity:isF?0.45:1,transition:"background 0.12s"},
                       onMouseEnter: e=>{if(!isF&&!isS)e.currentTarget.style.background=C.surfaceHover;},
-                      onMouseLeave: e=>{e.currentTarget.style.background=isS?`${selected.colore}12`:"transparent";}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10501}}
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:isS?600:400,color:isS?selected.colore:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10507}}
+                      onMouseLeave: e=>{e.currentTarget.style.background=isS?`${selected.colore}12`:"transparent";}}
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:isS?600:400,color:isS?selected.colore:C.text}}
                         , MESI_LABEL_L[x.m-1], " " , x.y
                       )
-                      , React.createElement('td', { style: {padding:"11px 18px",fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:isF?C.textDim:n>0?selected.colore:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10510}}
+                      , React.createElement('td', { style: {padding:"11px 18px",fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:isF?C.textDim:n>0?selected.colore:C.textDim}}
                         , isF?"—":n
                       )
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:14,fontWeight:600,color:isF?C.textDim:n>0?C.green:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10513}}
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:14,fontWeight:600,color:isF?C.textDim:n>0?C.green:C.textDim}}
                         , isF?"—":n>0?`€${c.toLocaleString("it-IT")}`:"—"
                       )
-                      , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10516}}
+                      , React.createElement('td', { style: {padding:"11px 18px"}}
                         , !isF && np>0 && (
-                          React.createElement('span', { style: {fontSize:12,color:delta>0?C.green:delta<0?C.red:C.textDim,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10518}}
+                          React.createElement('span', { style: {fontSize:12,color:delta>0?C.green:delta<0?C.red:C.textDim,fontWeight:500}}
                             , delta>0?`+${delta}`:delta<0?delta:"="
                           )
                         )
-                        , !isF && np===0 && n>0 && React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10522}}, "primo mese" )
-                        , isF && React.createElement('span', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10523}}, "—")
+                        , !isF && np===0 && n>0 && React.createElement('span', { style: {fontSize:11,color:C.textDim}}, "primo mese")
+                        , isF && React.createElement('span', { style: {color:C.textDim}}, "—")
                       )
                     )
                   );
