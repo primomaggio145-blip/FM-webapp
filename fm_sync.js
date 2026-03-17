@@ -34,9 +34,10 @@
   function adaptStudente(r) {
     const FA = window.FMAdapter;
     const base = FA ? FA.studente(r) : r;
-    // Aggiunge 'repertorio' che FMAdapter.studente non mappa
-    const parseJson = (v, fallback=[]) => { if (!v) return fallback; if (Array.isArray(v)) return v; try { return JSON.parse(v); } catch(e) { return fallback; } };
-    base.repertorio = parseJson(r.repertorio, []);
+    const parseJson = (v, fallback=[]) => { if (!v) return fallback; if (Array.isArray(v)) return v; if (typeof v === 'object') return v; try { return JSON.parse(v); } catch(e) { return fallback; } };
+    base.repertorio      = parseJson(r.repertorio, []);
+    base.extraInstruments = parseJson(r.extra_instruments, []);
+    base.extraTeachers    = parseJson(r.extra_teachers, {});
     return base;
   }
   function adaptDocente(r) {
@@ -175,6 +176,10 @@
         enroll_date: s.enrollDate || null,
         complementary_course: s.complementaryCourse || null,
         notes: s.notes || null,
+        extra_instruments: s.extraInstruments && s.extraInstruments.length > 0
+          ? JSON.stringify(s.extraInstruments) : null,
+        extra_teachers: s.extraTeachers && Object.keys(s.extraTeachers).length > 0
+          ? JSON.stringify(s.extraTeachers) : null,
         updated_at: new Date().toISOString(),
       };
     },
