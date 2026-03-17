@@ -2832,7 +2832,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             , React.createElement('div', { style: {animation:"fadeUp 0.4s ease both"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2165}}
               , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:30,fontWeight:300,letterSpacing:"0.02em",lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2166}}, "Buongiorno, "
                  , React.createElement('span', { style: {fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2167}}
-                  , ruolo==="admin"?"Amministratore":ruolo==="docente"?"Docente":ruolo==="allievo"?"Allievo":"Utente"
+                  , myNome || (ruolo==="admin"?"Amministratore":ruolo==="docente"?"Docente":ruolo==="allievo"?"Allievo":"Utente")
                 )
               )
               , React.createElement('p', { style: {fontSize:13,color:C.textMuted,marginTop:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2171}}
@@ -2923,7 +2923,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       sub: "pagamenti registrati", hex: C.green})
                 )
               : React.createElement(React.Fragment, null
-                  , React.createElement(KpiCard, { icon: "users",    label: "Allievi attivi" ,  value: allieviAttivi, sub: `${ALLIEVI.length} totali`, hex: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2189}})
+                  , React.createElement(KpiCard, { icon: "users",    label: "Allievi attivi" ,  value: allieviAttivi, sub: `${_students.length} totali`, hex: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2189}})
                   , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni oggi" ,    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2190}})
                   , React.createElement(KpiCard, { icon: "up",       label: "Entrate mese" ,    value: fmt(entrMeseLiveLive), hex: C.green, trend: +8, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2191}})
                   , React.createElement(KpiCard, { icon: "down",     label: "Uscite mese" ,     value: fmt(uscMeseLiveLive),  hex: C.red,   trend: +12, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2192}})
@@ -3039,7 +3039,14 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                 /* ── Card Recuperi ── */
                 , isVisible("recuperi") && (() => {
                   const oggi_r = new Date(); oggi_r.setHours(0,0,0,0);
-                  const _lessonsFiltered = ruolo==="docente" ? (_lessons||[]).filter(l=>matchDocLezione(l)) : (_lessons||[]);
+                  const _lessonsFiltered = ruolo==="docente"
+                    ? (_lessons||[]).filter(l=>matchDocLezione(l))
+                    : ruolo==="allievo"
+                    ? (_lessons||[]).filter(l=>{
+                        if (myAllievoId && l.studentId != null) return String(l.studentId)===String(myAllievoId);
+                        return (l.student||"").toLowerCase().trim() === myNome.toLowerCase().trim();
+                      })
+                    : (_lessons||[]);
                   const lezioniRec = _lessonsFiltered.filter(l=>l.inRecupero);
                   const scaduti = lezioniRec.filter(l=>l.recuperoScadenza && new Date(l.recuperoScadenza+'T00:00:00') < oggi_r);
                   const urgenti = lezioniRec.filter(l=>{
@@ -3749,8 +3756,8 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
     const bg  = badgeColor==="purple" ? C.purpleBg : "#e8edf5";
     const bd  = badgeColor==="purple" ? C.purpleBorder : C.goldDim;
     return (
-      React.createElement('div', { onClick: _ruoloCorsi==="allievo" ? undefined : ()=>setSelectedCourse(c),
-        style: {display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,cursor:_ruoloCorsi==="allievo"?"default":"pointer",transition:"all 0.15s"},
+      React.createElement('div', { onClick: (_ruoloCorsi==="allievo"||_ruoloCorsi==="docente") ? undefined : ()=>setSelectedCourse(c),
+        style: {display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,cursor:(_ruoloCorsi==="allievo"||_ruoloCorsi==="docente")?"default":"pointer",transition:"all 0.15s"},
         onMouseEnter: e=>{ e.currentTarget.style.borderColor=col; e.currentTarget.style.background=bg+"55"; },
         onMouseLeave: e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.background=C.bg; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2824}}
         , React.createElement('div', { style: {width:38,height:38,borderRadius:8,background:bg,border:`1px solid ${bd}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2828}}
@@ -3780,7 +3787,7 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
               )
             )
           )
-          , React.createElement('span', { style: {background:bg,border:`1px solid ${bd}`,borderRadius:20,padding:"3px 10px",fontSize:12,color:col,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2855}}
+          , _ruoloCorsi !== "allievo" && React.createElement('span', { style: {background:bg,border:`1px solid ${bd}`,borderRadius:20,padding:"3px 10px",fontSize:12,color:col,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2855}}
             , n, " alliev" , n===1?"o":"i"
           )
           /* azioni — stopPropagation per non aprire la scheda */
@@ -3788,7 +3795,7 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
             onMouseEnter: e=>e.currentTarget.style.color=C.gold, onMouseLeave: e=>e.currentTarget.style.color=C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2859}}, React.createElement(Ic, { n: "edit", size: 14, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2860}}))
           , onDelete && React.createElement('button', { onClick: e=>{e.stopPropagation();setTarget(c);setModal("delete");}, style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,padding:4,display:"flex",borderRadius:6},
             onMouseEnter: e=>e.currentTarget.style.color=C.red, onMouseLeave: e=>e.currentTarget.style.color=C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2861}}, React.createElement(Ic, { n: "trash", size: 14, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2862}}))
-          , React.createElement(Ic, { n: "arrow", size: 16, color: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2863}})
+          , _ruoloCorsi !== "allievo" && _ruoloCorsi !== "docente" && React.createElement(Ic, { n: "arrow", size: 16, color: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2863}})
         )
       )
     );
@@ -5115,6 +5122,16 @@ const INS_HEX = {
 };
 const insHex = (instrument) => INS_HEX[instrument] || C.gold;
 
+// Palette colori per corsi collettivi (ciclica, deterministica per nome/id)
+const COLL_COLORS = ["#6d28d9","#0891b2","#059669","#d97706","#dc2626","#7c3aed","#0284c7","#16a34a","#ea580c","#9333ea"];
+const collHex = (l) => {
+  const key = l.courseId || l.courseName || "";
+  if (!key) return C.purple;
+  let h = 0;
+  for (let i = 0; i < key.length; i++) { h = ((h << 5) - h) + key.charCodeAt(i); h |= 0; }
+  return COLL_COLORS[Math.abs(h) % COLL_COLORS.length];
+};
+
 // Presenza → colore
 const attHex = (att) =>
   att === "presente"    ? C.green :
@@ -5133,7 +5150,7 @@ const addDays  = (d, n) => { const dt = new Date(d); dt.setDate(dt.getDate()+n);
 const isColl      = l => _optionalChain([l, 'optionalAccess', _46 => _46.tipo]) === "collettivo";
 const isProva     = l => _optionalChain([l, 'optionalAccess', _47 => _47.tipo]) === "prova";
 const isSalaProve = l => _optionalChain([l, 'optionalAccess', _47b => _47b.tipo]) === "sala_prove";
-const lessonHex   = l => isColl(l) ? C.purple : isProva(l) ? C.teal : isSalaProve(l) ? C.orange2 : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
+const lessonHex   = l => isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaProve(l) ? C.orange2 : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
 const studentInLesson = (l, name, studentId) => {
   if (isColl(l)) return (l.students||[]).some(s=>s.name===name);
   if (studentId && l.studentId && String(l.studentId)===String(studentId)) return true;
@@ -5710,7 +5727,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
               , label
             )
             , lesson.tipo==="collettivo" && (
-              React.createElement('div', { style: {fontSize:9, color:C.purple, fontWeight:700, flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4449}}
+              React.createElement('div', { style: {fontSize:9, color:hex, fontWeight:700, flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4449}}
                 , "\u25CF", (lesson.students||[]).length
               )
             )
@@ -5749,7 +5766,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
 const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali }) => {
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
-  const hex = insHex(lesson.instrument);
+  const hex = lessonHex(lesson);
   // ATT_STYLES: vedi definizione globale
 
   const [showIscrizionePanel, setShowIscrizionePanel] = useState(false);
@@ -5833,7 +5850,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
             )
           )
           , lesson.recurrence !== "Nessuna" && React.createElement(Badge, { label: lesson.recurrence, variant: "blue", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4542}})
-          , lesson.tipo==="collettivo" && React.createElement(Badge, { label: "Collettiva", variant: "purple", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4543}})
+          , lesson.tipo==="collettivo" && React.createElement('span', { style:{background:`${hex}15`,color:hex,border:`1px solid ${hex}40`,borderRadius:4,padding:"2px 8px",fontSize:11,fontWeight:500,letterSpacing:"0.04em",textTransform:"uppercase",whiteSpace:"nowrap",display:"inline-block"}}, "Collettiva")
           , lesson.tipo==="prova" && React.createElement(Badge, { label: "Prova", variant: "teal", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4544}})
         )
 
@@ -6293,17 +6310,18 @@ const DayView = ({ date, lessons, onSelect }) => {
             onMouseEnter: e => { e.currentTarget.style.background = C.surfaceHover; },
             onMouseLeave: e => { e.currentTarget.style.background = C.surface; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4787}}
             , React.createElement('div', { style: {width:52, flexShrink:0, textAlign:"center", paddingTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4793}}
-              , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif", fontSize:22,
-                fontWeight:600, color:hex, lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4794}}, l.hour)
-              , React.createElement('div', { style: {fontSize:10, color:C.textDim, marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4796}}, "ora")
+              , React.createElement('div', { style: {width:36, height:36, borderRadius:8, background:`${hex}18`, border:`1px solid ${hex}30`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 4px"}},
+                React.createElement(Ic, { n: isColl(l) ? "group" : isProva(l) ? "user" : "music", size:18, stroke:hex })
+              )
+              , React.createElement('div', { style: {fontSize:10, color:hex, fontWeight:600, lineHeight:1}}, (l.hour||"").slice(0,5))
             )
             , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4798}}
               , l.tipo==="collettivo" ? (
                 React.createElement(React.Fragment, null
                   , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4801}}
-                    , React.createElement('span', { style: {fontSize:15, fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4802}}, l.courseName)
-                    , React.createElement('span', { style: {fontSize:11, background:C.purpleBg, color:C.purple,
-                      border:`1px solid ${C.purpleBorder}`, borderRadius:4, padding:"1px 7px",
+                    , React.createElement('span', { style: {fontSize:15, fontWeight:600, color:hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4802}}, l.courseName)
+                    , React.createElement('span', { style: {fontSize:11, background:`${hex}15`, color:hex,
+                      border:`1px solid ${hex}40`, borderRadius:4, padding:"1px 7px",
                       letterSpacing:"0.05em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4803}}, "Collettiva")
                     , l.recurrence !== "Nessuna" && React.createElement(Ic, { n: "repeat", size: 12, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4806}})
                   )
@@ -6578,6 +6596,7 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
                   }}
                   , React.createElement('div',{style:{fontSize:9,fontWeight:700,color:accent,
                       lineHeight:1.3,display:"flex",alignItems:"center",gap:3,overflow:"hidden"}}
+                    , !isSala && React.createElement(Ic, {n: isColl(l)?"group": isProva(l)?"user":"music", size:8, stroke:accent})
                     , React.createElement('span',{style:{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",flex:1,minWidth:0}}
                       , isSala
                         ? `🤘 ${normHour}–${normFine}`
@@ -14291,25 +14310,21 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           , React.createElement(Input, { label: "Email", type: "email", value: draft.email||"", onChange: e=>setDraft(p=>({...p,email:e.target.value})), placeholder: "nome@accademia.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 9939}})
           , React.createElement(Input, { label: "Telefono", value: draft.phone||"", onChange: e=>setDraft(p=>({...p,phone:e.target.value})), placeholder: "333 0000000" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 9940}})
           , React.createElement('div', { style:{gridColumn:"1/-1"} }
-            , React.createElement('label', { style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8} }, "Corsi insegnati")
-            , ["individuale","collettivo"].map(tipo => {
-              const gruppo = (_coursesDocView||[]).filter(crs=>crs.type===tipo);
-              if(gruppo.length===0) return null;
-              return React.createElement('div', { key:tipo, style:{marginBottom:10} }
-                , React.createElement('div', { style:{fontSize:10,color:tipo==="individuale"?C.gold:C.purple,fontWeight:600,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:6} }
-                  , tipo==="individuale" ? "── Individuali ──" : "── Collettivi ──"
-                )
-                , React.createElement('div', { style:{display:"flex",flexWrap:"wrap",gap:6} }
-                  , gruppo.map(corso=>{ const sel=(draft.corsi||[]).includes(corso.id); const hex=tipo==="individuale"?C.gold:C.purple; return(
-                    React.createElement('button', { key:corso.id, type:"button",
-                      onClick:()=>setDraft(p=>({...p,corsi:sel?(p.corsi||[]).filter(x=>x!==corso.id):[...(p.corsi||[]),corso.id]})),
-                      style:{padding:"4px 12px",borderRadius:6,border:`1.5px solid ${sel?hex:C.border}`,
-                        background:sel?(hex+"18"):C.bg,color:sel?hex:C.textMuted,cursor:"pointer",fontSize:12,transition:"all .12s"} }
-                    , corso.name)
-                  );})
-                )
-              );
-            })
+            , React.createElement('label', { style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8} }, "Corsi assegnati")
+            , (() => {
+                const corsiAssegnati = (_coursesDocView||[]).filter(c =>
+                  (c.docenti||[]).map(String).includes(String(draft.id)) ||
+                  (draft.corsi||[]).includes(c.id)
+                );
+                if (corsiAssegnati.length === 0) return React.createElement('div', {style:{fontSize:12,color:C.textDim,fontStyle:"italic",padding:"8px 0"}}, "Nessun corso assegnato — i corsi si assegnano dalla sezione Corsi");
+                return React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
+                  , corsiAssegnati.map(c => {
+                    const isInd = c.type==="individuale";
+                    const hex = isInd ? C.gold : C.purple;
+                    return React.createElement('span', {key:c.id, style:{padding:"4px 12px",borderRadius:6,border:`1.5px solid ${hex}`,background:hex+"18",color:hex,fontSize:12}}, c.name);
+                  })
+                );
+              })()
           )
           , React.createElement(Input, { label: "Tariffa oraria (€)"  , type: "number", value: draft.tariffaOra!=null ? draft.tariffaOra : 35, onChange: e=>setDraft(p=>({...p,tariffaOra:e.target.value===""?0:+e.target.value})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9942}})
           , React.createElement(Sel, { label: "Tipo contratto" , value: draft.contratto||"", onChange: e=>setDraft(p=>({...p,contratto:e.target.value})),
