@@ -6577,14 +6577,23 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
                     display:"flex", flexDirection:"column", gap:1,
                   }}
                   , React.createElement('div',{style:{fontSize:9,fontWeight:700,color:accent,
-                      whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:1.3}}
-                    , isSala
-                      ? `🤘 ${normHour}–${normFine}`
-                      : `${normHour} · ${
-                          isColl(l)  ? (l.courseName||"Coll.")
-                        : isProva(l) ? (l.contactName||"Prova")
-                        : (l.student||"").split(" ")[0]
-                        }`
+                      lineHeight:1.3,display:"flex",alignItems:"center",gap:3,overflow:"hidden"}}
+                    , React.createElement('span',{style:{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",flex:1,minWidth:0}}
+                      , isSala
+                        ? `🤘 ${normHour}–${normFine}`
+                        : `${normHour} · ${
+                            isColl(l)  ? (l.courseName||"Coll.")
+                          : isProva(l) ? (l.contactName||"Prova")
+                          : (l.student||"").split(" ")[0]
+                          }`
+                    )
+                    , !isSala && !isColl(l) && !isProva(l) && l.attendance && (
+                      React.createElement('div',{style:{
+                        width:6, height:6, borderRadius:"50%",
+                        background: attHex(l.attendance),
+                        flexShrink:0,
+                      }})
+                    )
                   )
                   , l._h > 26 && React.createElement('div',{style:{fontSize:9,color:accent,
                       opacity:0.85,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:1.3}}
