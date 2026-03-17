@@ -7937,6 +7937,7 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
   const [svNoteAdmin,  setSvNoteAdmin]  = useState({});
   const [svLoading,    setSvLoading]    = useState({});
   const [svModal,      setSvModal]      = useState(null);
+  const [svSelPren,    setSvSelPren]    = useState(null); // prenotazione selezionata per modifica
 
   // ── helpers date IT ─────────────────────────────────────────────
   const DAYS_IT   = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
@@ -8274,8 +8275,11 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
             )
             , p.noteAdmin && React.createElement('div',{style:{marginTop:8,fontSize:12,color:C.textMuted,background:C.bg,borderRadius:8,padding:"8px 10px"}}
               ,React.createElement('b',null,"Nota: "),p.noteAdmin)
-            , React.createElement('div',{style:{marginTop:8,display:"flex",justifyContent:"flex-end"}}
-              ,React.createElement('button',{onClick:()=>elimina(p),disabled:!!svLoading["del_"+p.id],style:{padding:"3px 10px",borderRadius:6,border:"none",background:"none",color:C.red,fontSize:11,cursor:"pointer",opacity:svLoading["del_"+p.id]?0.5:1}},svLoading["del_"+p.id]?"…":"🗑 Elimina"))
+            , React.createElement('div',{style:{marginTop:8,display:"flex",justifyContent:"flex-end",gap:8}}
+              , role==="admin" && React.createElement('button',{onClick:()=>{setSvSelPren(p);setSvModal("edit");},style:{padding:"3px 10px",borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.gold,fontSize:11,cursor:"pointer",fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",gap:4}}
+                , React.createElement(Ic,{n:"edit",size:11,stroke:C.gold}), " Modifica")
+              ,React.createElement('button',{onClick:()=>elimina(p),disabled:!!svLoading["del_"+p.id],style:{padding:"3px 10px",borderRadius:6,border:"none",background:"none",color:C.red,fontSize:11,cursor:"pointer",opacity:svLoading["del_"+p.id]?0.5:1}},svLoading["del_"+p.id]?"…":"🗑 Elimina")
+            )
           );
         })
       )
@@ -8285,6 +8289,17 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
         ,React.createElement(SalaProveForm,{
             onSave:(p)=>{if(onUpdate)onUpdate(p);setSvModal(null);},
             onClose:()=>setSvModal(null),
+            appUser:appUser,
+            role:role,
+          })
+      )
+
+      /* ── MODAL MODIFICA PRENOTAZIONE (admin only) ─────────────────── */
+      , svModal==="edit" && svSelPren && React.createElement(Modal,{title:"Modifica prenotazione",onClose:()=>{setSvModal(null);setSvSelPren(null);},wide:true}
+        ,React.createElement(SalaProveForm,{
+            initial: svSelPren,
+            onSave:(p)=>{if(onUpdate)onUpdate(p);setSvModal(null);setSvSelPren(null);},
+            onClose:()=>{setSvModal(null);setSvSelPren(null);},
             appUser:appUser,
             role:role,
           })
@@ -9095,7 +9110,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           , appView==='recupero' && React.createElement(RecuperoView, {
               lessons: visibleLessons,
               role: role,
-              onOpenLesson: (l) => { setSelLesson(l); setModal(role==='docente'?'edit':'detail'); },
+              onOpenLesson: (l) => { setSelLesson(l); setModal(isSalaProve(l) ? 'detailsala' : (role==='docente'?'edit':'detail')); },
             })
 
           /* ── ELENCO LEZIONI ADMIN ───────────────────────── */
