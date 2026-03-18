@@ -34,6 +34,7 @@ Problemi da risolvere
 
 * quando il docente (profilo DOCENTE) segna la presenza in una lezione ricorrente non viene creata la nuova lezione;
 
+* crea un pulsante nella kpi della dashboard che rende visibile/nascosto gli importi, tipo gli home banking che hanno la possibilita di nascondere il saldo;
 
 Role-based access control per tutte le sezioni 
 
