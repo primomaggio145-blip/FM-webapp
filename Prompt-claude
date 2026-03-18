@@ -32,6 +32,7 @@ Problemi da risolvere
 
 * se inserisco una lezione di un corso secondario la lezione non viene conteggiata nel conteggio dell-allievo;
 
+* quando il docente (profilo DOCENTE) segna la presenza in una lezione ricorrente non viene creata la nuova lezione;
 
 
 Role-based access control per tutte le sezioni 
