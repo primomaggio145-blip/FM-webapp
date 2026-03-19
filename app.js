@@ -14441,7 +14441,7 @@ const INIT_DOCENTI_EXT = [
   { id:"d4", corsi:["c9","c10"], nome:"Prof.ssa Lia Marino", teacherKey:"Prof. Marino",  email:"l.marino@accademia.it",   phone:"366 3344556", strumenti:"Canto · Solfeggio",      bio:"Soprano lirico, docente di tecnica vocale e teoria musicale.",  tariffaOra:35, contratto:"Tempo indeterminato", dataInizio:"2017-09-01", colore:C.purple  },
 ];
 
-const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView }) => {
+const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView }) => {
   const ruoloDocView = _ruoloDocView || "admin";
   const isMobile = useIsMobile();
   const students = _studentsRaw || [];
@@ -14467,6 +14467,14 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     if (ruoloDocView !== "docente") return;
     if (_myDocRecord) setSelected(_myDocRecord);
   }, [_myDocRecord, ruoloDocView]);
+
+  // Gestisce quickAction "showImpostazioni" — apre il tab impostazioni
+  React.useEffect(() => {
+    if (_qaDocView === "showImpostazioni") {
+      setTab("impostazioni");
+      if (_clearQaDocView) _clearQaDocView();
+    }
+  }, [_qaDocView]);
 
   const initDoc = { nome:"", email:"", phone:"", bio:"", tariffaOra:35, contratto:"Collaborazione", dataInizio:"", colore:C.gold, corsi:[] };
 
@@ -15794,6 +15802,34 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
             );
           })()
 
+        /* ── Sezione strumenti — docente ── */
+        , (function(){
+            const sideRuolo = _optionalChain([user, 'optionalAccess', _sdoc => _sdoc.ruolo]) || "admin";
+            if(sideRuolo !== "docente") return null;
+            const isImpostActive = current === "docenti";
+            return React.createElement('div', { style: {padding:"6px 8px",borderTop:"1px solid rgba(255,255,255,0.12)",flexShrink:0} }
+              , React.createElement('div', {style:{fontSize:9,color:"rgba(255,255,255,0.45)",letterSpacing:".15em",textTransform:"uppercase",padding:"6px 4px 4px"}}, "Il mio profilo")
+              , React.createElement('button', {
+                  onClick: function(){
+                    setView("docenti");
+                    if(onQuickAction) setTimeout(()=>onQuickAction("showImpostazioni"), 120);
+                  },
+                  style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
+                    borderRadius:0,border:"none",cursor:"pointer",
+                    background:isImpostActive?"rgba(255,255,255,0.15)":"transparent",
+                    color:isImpostActive?"#ffffff":C.sidebarText,
+                    fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:isImpostActive?600:400,
+                    textAlign:"left",transition:"all .15s",marginBottom:1,
+                    borderLeft:isImpostActive?"3px solid #8c1818":"3px solid transparent"},
+                  onMouseEnter:e=>{e.currentTarget.style.background="rgba(255,255,255,0.1)";e.currentTarget.style.color="#fff";},
+                  onMouseLeave:e=>{e.currentTarget.style.background=isImpostActive?"rgba(255,255,255,0.15)":"transparent";e.currentTarget.style.color=isImpostActive?"#fff":C.sidebarText;}
+                }
+                , React.createElement(Ic,{n:"settings",size:14,stroke:isImpostActive?"#ffffff":C.sidebarText})
+                , "Impostazioni"
+              )
+            );
+          })()
+
         /* User profile */
         , React.createElement('div', { style: {padding:"12px 14px",borderTop:"1px solid rgba(255,255,255,0.15)",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10621}}
           , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10,marginBottom:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10622}}
@@ -16079,7 +16115,7 @@ function App() {
                    onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
     allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
     docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user,
-                   annoInizioAttivo: sharedConfig.annoInizioAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
+                   annoInizioAttivo: sharedConfig.annoInizioAttivo, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
     corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
     calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
     contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
