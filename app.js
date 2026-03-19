@@ -2865,7 +2865,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             /* ── RIGA 1: KPI ── */
             , React.createElement('div', null
               /* Pulsante mostra/nascondi importi */
-              , (ruolo === "admin" || ruolo === "allievo") && React.createElement('div', {
+              , (ruolo === "admin" || ruolo === "allievo" || ruolo === "docente") && React.createElement('div', {
                   style:{display:"flex",justifyContent:"flex-end",marginBottom:8}
                 }
                 , React.createElement('button', {
@@ -4161,8 +4161,8 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const lezMese     = (m, y) => lezStudente.filter(l => { const [ly,lm] = l.date.split("-").map(Number); return ly===y && lm===m; });
   const lezSel      = lezMese(selMese.m, selMese.y);
 
-  // Lezioni da recuperare (inRecupero=true e non ancora recuperate)
-  const lezioniDaRecuperare = lezStudente.filter(l => l.inRecupero === true);
+  // Lezioni da recuperare (inRecupero=true oppure attendance='in_recupero')
+  const lezioniDaRecuperare = lezStudente.filter(l => l.inRecupero === true || l.attendance === 'in_recupero');
 
   // Andamento anno per grafici
   const andamento = MESI_AS.map(x => {
@@ -5103,6 +5103,16 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const [view,     setView]     = useState(_ruoloAV==="allievo" ? "detail" : "list");
   const [selected, setSelected] = useState(_ruoloAV==="allievo" ? (students[0]||null) : null);
   const [modal,    setModal]    = useState(null);
+
+  // ── Auto-seleziona l'allievo loggato appena i dati Supabase arrivano ──────────
+  React.useEffect(() => {
+    if (_ruoloAV !== "allievo") return;
+    if (selected) return; // già selezionato
+    const me = _avAllievoId
+      ? _allStudents.find(s => String(s.id) === String(_avAllievoId))
+      : _allStudents.find(s => (s.name||s.nome||"").toLowerCase() === _nomeAV.toLowerCase());
+    if (me) { setSelected(me); setView("detail"); }
+  }, [_allStudents, _avAllievoId, _nomeAV, _ruoloAV]);
 
   const closeModal = () => setModal(null);
   React.useEffect(()=>{ if(qaAV==="addAllievo"){ setModal("add"); if(clearQaAV)clearQaAV(); } },[qaAV]);
@@ -14358,10 +14368,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 
   // Aggiorna selected se il record docente cambia (es. dopo il caricamento dati da Supabase)
   React.useEffect(() => {
-    if (ruoloDocView === "docente" && !selected && _myDocRecord) {
-      setSelected(_myDocRecord);
-    }
-  }, [_myDocRecord]);
+    if (ruoloDocView !== "docente") return;
+    if (_myDocRecord) setSelected(_myDocRecord);
+  }, [_myDocRecord, ruoloDocView]);
 
   const initDoc = { nome:"", email:"", phone:"", bio:"", tariffaOra:35, contratto:"Collaborazione", dataInizio:"", colore:C.gold, corsi:[] };
 
@@ -14544,7 +14553,15 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   ) : null;
 
   // ── VISTA LISTA ──────────────────────────────────────────────────────────────
-  if (!selected) return (
+  if (!selected) {
+    // Il docente non deve mai vedere la lista: mostra spinner mentre arrivano i dati
+    if (ruoloDocView === "docente") return (
+      React.createElement('div', {style:{display:"flex",alignItems:"center",justifyContent:"center",padding:"80px 20px",gap:12,color:C.textMuted,fontSize:14,fontFamily:"'Open Sans',sans-serif"}}
+        , React.createElement('div', {style:{width:20,height:20,border:`2px solid ${C.border}`,borderTopColor:C.gold,borderRadius:"50%",animation:"spin 0.8s linear infinite"}})
+        , "Caricamento profilo..."
+      )
+    );
+    return (
     React.createElement('div', { style: {maxWidth:1100,margin:"0 auto",padding:"clamp(12px, 3vw, 32px)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9958}}
       , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9959}}
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 9960}}
@@ -14607,6 +14624,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
       , formModalJSX
     )
   );
+  } // end if (!selected)
 
   // ── VISTA DETTAGLIO ──────────────────────────────────────────────────────────
   const MESI_LABEL_L = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
@@ -14711,7 +14729,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 
   return (
     React.createElement('div', { style: {maxWidth:1100,margin:"0 auto",padding:"clamp(12px, 3vw, 32px)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10114}}
-      , React.createElement('button', { onClick: ()=>setSelected(null),
+      , ruoloDocView !== "docente" && React.createElement('button', { onClick: ()=>setSelected(null),
         style: {display:"flex",alignItems:"center",gap:6,background:"none",border:"none",
           cursor:"pointer",color:C.textMuted,fontSize:13,fontFamily:"'Open Sans',sans-serif",marginBottom:20,padding:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10115}}
         , React.createElement(Ic, { n: "left", size: 14, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10118}}), "Tutti i docenti"
