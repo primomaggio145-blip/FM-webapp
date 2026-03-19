@@ -2697,6 +2697,28 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
           : (_students.find(s=>(s.name||s.nome||"").toLowerCase()===myNome.toLowerCase())||null))
       : null;
     const myStudentId = myStudentRecord ? myStudentRecord.id : null;
+    // Nome reale dello studente (da record Supabase), fallback a nome profilo
+    const myStudentName = myStudentRecord ? (myStudentRecord.name || myStudentRecord.nome || myNome) : myNome;
+    // Helper: matcha una lezione all'allievo loggato (prima per ID, poi per nome studente, poi per nome profilo)
+    const matchLezioneAllievo = (l) => {
+      if (ruolo !== "allievo") return true;
+      // Per collettive: controlla nella lista students della lezione
+      const tipoL = l.tipo || l.type || "individuale";
+      if (tipoL === "collettivo") {
+        return (l.students||[]).some(s =>
+          (myAllievoId && s.id != null && String(s.id) === String(myAllievoId)) ||
+          (s.name||"").toLowerCase() === myStudentName.toLowerCase()
+        );
+      }
+      // Per individuali: prima studentId, poi nome studente, poi nome profilo
+      if (myAllievoId && (l.studentId ?? null) != null) return String(l.studentId) === String(myAllievoId);
+      const sn = (l.student || l.allievo || "").toLowerCase().trim();
+      if (myStudentName && sn && sn === myStudentName.toLowerCase().trim()) return true;
+      if (myNome && sn && sn === myNome.toLowerCase().trim()) return true;
+      // Fallback parziale: solo se nome studente contiene il nome profilo
+      if (myStudentName && sn && sn.includes(myStudentName.toLowerCase().split(" ")[0])) return true;
+      return false;
+    };
     // teacherKey = il valore salvato nel campo "teacher" delle lezioni
     const myDocTeacherKey = myDocRecord
       ? (myDocRecord.teacherKey || myDocRecord.nome || myDocNome)
@@ -2746,13 +2768,15 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
       .sort((a, b) => (a.hour || a.ora || '').localeCompare(b.hour || b.ora || ''))
       .map(l => ({
         id: l.id,
+        studentId: l.studentId || null,
+        students: l.students || [],
+        tipo: l.tipo || l.type || 'individuale',
         ora: l.hour || l.ora || '',
         durata: l.duration || l.durata || 60,
         allievo: l.student || l.allievo || '',
         strumento: l.instrument || l.strumento || '',
         docente: l.teacher || l.docente || '',
         aula: l.room || l.aula || '',
-        tipo: l.type || 'individuale',
         confermata: (l.attendance || '') !== '',
       }));
 
@@ -2893,7 +2917,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               , React.createElement('p', { style: {fontSize:13,color:C.textMuted,marginTop:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2171}}
                 , config.annoScolastico
                 , ruolo==="docente" ? " · " + _lessons.filter(matchDocLezione).length + " mie lezioni"
-                : ruolo==="allievo" ? " · " + _lessons.filter(l=>(l.student||l.allievo||"").toLowerCase().includes(myNome.toLowerCase())).length + " lezioni assegnate"
+                : ruolo==="allievo" ? " · " + (_lessons||[]).filter(matchLezioneAllievo).length + " lezioni assegnate"
                 : " · " + lezioniOggi + " lezioni oggi · " + lezComplete + " completate · " + (lezioniOggi-lezComplete) + " rimanenti"
               )
               , React.createElement('div', { style: {marginTop:10,width:220}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2174}}
@@ -2984,11 +3008,11 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     );
                   })()
                   , React.createElement(KpiCard, { icon: "calendar", label: "Le mie lezioni",
-                      value: _lessons.filter(l=>(l.student||l.allievo||"").toLowerCase().includes(myNome.toLowerCase())).length,
+                      value: (_lessons||[]).filter(matchLezioneAllievo).length,
                       sub: "questa settimana", hex: C.teal})
                   , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
                       value: (()=>{
-                        const p=_lessons.filter(l=>(l.student||l.allievo||"").toLowerCase().includes(myNome.toLowerCase())&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0];
+                        const p=(_lessons||[]).filter(l=>matchLezioneAllievo(l)&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0];
                         return p ? new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}) : "—";
                       })(),
                       sub: "data più vicina", hex: C.gold})
@@ -3098,7 +3122,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     )
                     , React.createElement('div', { style: {padding:14,maxHeight:380,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2252}}
                       , React.createElement(LessonTimeline, { lezioni: ruolo==="allievo"
-                        ? LEZIONI_OGGI_LIVE.filter(l=>(l.allievo||l.student||"").toLowerCase().includes(myNome.toLowerCase()))
+                        ? LEZIONI_OGGI_LIVE.filter(l=>matchLezioneAllievo(l))
                         : ruolo==="docente" ? LEZIONI_OGGI_LIVE.filter(matchDocLezione)
                         : LEZIONI_OGGI_LIVE,
                         onLessonClick: (lessonId) => {
@@ -3122,12 +3146,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   const _lessonsFiltered = ruolo==="docente"
                     ? (_lessons||[]).filter(l=>matchDocLezione(l))
                     : ruolo==="allievo"
-                    ? (_lessons||[]).filter(l=>{
-                        if (myAllievoId && l.studentId != null) return String(l.studentId)===String(myAllievoId);
-                        return (l.student||"").toLowerCase().trim() === myNome.toLowerCase().trim();
-                      })
+                    ? (_lessons||[]).filter(l=>matchLezioneAllievo(l))
                     : (_lessons||[]);
-                  const lezioniRec = _lessonsFiltered.filter(l=>l.inRecupero);
+                  const lezioniRec = _lessonsFiltered.filter(l=>l.inRecupero || l.attendance==='in_recupero');
                   const scaduti = lezioniRec.filter(l=>l.recuperoScadenza && new Date(l.recuperoScadenza+'T00:00:00') < oggi_r);
                   const urgenti = lezioniRec.filter(l=>{
                     const s=l.recuperoScadenza?new Date(l.recuperoScadenza+'T00:00:00'):null;
@@ -3390,7 +3411,10 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     )
                     , React.createElement('div', { style: {padding:"6px 4px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2374}}
                       , React.createElement(AttivitaFeed, { items: ruolo==="allievo"
-                        ? ATTIVITA_RECENTE_LIVE.filter(a=>(a.sogg||"").toLowerCase().includes(myNome.toLowerCase()))
+                        ? ATTIVITA_RECENTE_LIVE.filter(a=>{
+                            const s=(a.sogg||"").toLowerCase();
+                            return s.includes(myStudentName.toLowerCase()) || s.includes(myNome.toLowerCase());
+                          })
                         : ruolo==="docente" ? ATTIVITA_RECENTE_LIVE.filter(a=>matchDocLezione({teacher:a.sogg}))
                         : ATTIVITA_RECENTE_LIVE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2375}})
                     )
@@ -5046,31 +5070,39 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
           )
           /* Disponibilità docente */
           , recuperoForm.lezInfo && (()=>{
-              // Cerca il docente della lezione selezionata
-              const docName = recuperoForm.lezInfo.teacher || student.teacher || "";
-              // Cerca nella lista docenti passata come prop (se disponibile)
-              const docRecord = (courses||[]).length >= 0 && window.__docenti__
-                ? (window.__docenti__||[]).find(d=>
-                    (d.teacherKey||d.nome||"").toLowerCase().includes(docName.toLowerCase()))
+              const docName = (recuperoForm.lezInfo.teacher || student.teacher || "").toLowerCase().trim();
+              const allDocenti = window.__docenti__ || [];
+              const docRecord = docName
+                ? allDocenti.find(d => {
+                    const tk = (d.teacherKey||"").toLowerCase().trim();
+                    const nm = (d.nome||"").toLowerCase().trim();
+                    return tk === docName || nm === docName ||
+                           tk.includes(docName) || docName.includes(tk) ||
+                           nm.includes(docName) || docName.includes(nm);
+                  })
                 : null;
-              const disp = docRecord && docRecord.disponibilitaRecuperi
-                ? (typeof docRecord.disponibilitaRecuperi === "string"
-                    ? JSON.parse(docRecord.disponibilitaRecuperi)
-                    : docRecord.disponibilitaRecuperi)
-                : [];
+              const rawDisp = docRecord ? (docRecord.disponibilitaRecuperi || []) : [];
+              const disp = typeof rawDisp === "string"
+                ? (()=>{ try{return JSON.parse(rawDisp);}catch(e){return [];} })()
+                : (Array.isArray(rawDisp) ? rawDisp : []);
               return React.createElement('div', {style:{marginBottom:14}}
-                , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}}, "Disponibilità del docente")
+                , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}}
+                  , docRecord ? `Disponibilità di ${docRecord.nome||docName}` : "Disponibilità del docente"
+                )
                 , disp.length > 0 ? (
                   React.createElement('div', {style:{background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:8,padding:"10px 14px"}}
                     , disp.map((s,i)=>(
-                        React.createElement('div', {key:i, style:{fontSize:13,color:C.purple,marginBottom:i<disp.length-1?4:0}}
-                          , `📅 ${s.giorno} dalle ${s.oraInizio} alle ${s.oraFine}`
+                        React.createElement('div', {key:i, style:{fontSize:13,color:C.purple,marginBottom:i<disp.length-1?4:0,display:"flex",alignItems:"center",gap:6}}
+                          , React.createElement(Ic,{n:"clock",size:12,stroke:C.purple})
+                          , `${s.giorno}  ${s.oraInizio} — ${s.oraFine}`
                         )
                       ))
                   )
                 ) : (
                   React.createElement('div', {style:{fontSize:12,color:C.textDim,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px"}}
-                    , "Il docente non ha ancora configurato le fasce di disponibilità. Indica comunque la tua preferenza."
+                    , docRecord
+                      ? "Il docente non ha ancora configurato le fasce di disponibilità per i recuperi."
+                      : "Docente non trovato. Indica comunque la tua preferenza."
                   )
                 )
               );
@@ -16200,6 +16232,8 @@ function App() {
         concerti: sharedConcerti, allegati: sharedAllegati,
       });
     }
+    // Espone docenti globalmente per recupero modal e altri componenti profondi
+    window.__docenti__ = sharedDocenti;
   }, [sharedStudents, sharedCourses, sharedDocenti, sharedLessons, sharedRepertorio, sharedSpese, sharedEntrate, sharedConcerti, sharedAllegati]);
 
   useEffect(() => {
