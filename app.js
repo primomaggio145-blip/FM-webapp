@@ -4321,6 +4321,64 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   // Lezioni da recuperare (inRecupero=true oppure attendance='in_recupero')
   const lezioniDaRecuperare = lezStudente.filter(l => l.inRecupero === true || l.attendance === 'in_recupero');
 
+  // ── Calcola slot disponibili per recupero (aggiorna quando cambia la lezione selezionata) ──
+  const slotsRecuperoDisp = React.useMemo(() => {
+    if (!recuperoForm.lezId) return [];
+    const lezInfo = lezioniDaRecuperare.find(l => l.id === recuperoForm.lezId);
+    if (!lezInfo) return [];
+    const docName = ((lezInfo.teacher || student.teacher) || "").toLowerCase().trim();
+    const allDocenti = window.__docenti__ || [];
+    const docRecord = docName
+      ? allDocenti.find(function(d) {
+          var tk = (d.teacherKey||"").toLowerCase().trim();
+          var nm = (d.nome||"").toLowerCase().trim();
+          return tk === docName || nm === docName ||
+                 tk.indexOf(docName) >= 0 || docName.indexOf(tk) >= 0 ||
+                 nm.indexOf(docName) >= 0 || docName.indexOf(nm) >= 0;
+        })
+      : null;
+    var rawDisp = docRecord ? (docRecord.disponibilitaRecuperi || []) : [];
+    var disp = typeof rawDisp === "string"
+      ? (function(){ try{ return JSON.parse(rawDisp); } catch(e){ return []; } })()
+      : (Array.isArray(rawDisp) ? rawDisp : []);
+    if (!disp.length) return [];
+    var durataMin = lezInfo.durata || 45;
+    var oggi_s = new Date(); oggi_s.setHours(0,0,0,0);
+    var risultato = [];
+    var toMin = function(t) { var parts = (t||"0:0").split(":"); return parseInt(parts[0])*60 + (parseInt(parts[1])||0); };
+    var toStr = function(m) { return String(Math.floor(m/60)).padStart(2,"0") + ":" + String(m%60).padStart(2,"0"); };
+    var giorni = ["domenica","lunedi","martedi","mercoledi","giovedi","venerdi","sabato"];
+    for (var w = 0; w <= 7; w++) {
+      for (var si = 0; si < disp.length; si++) {
+        var slot = disp[si];
+        var giornoNorm = (slot.giorno||"").toLowerCase().replace(/[ìí]/g,"i").replace(/[àá]/g,"a").replace(/[èé]/g,"e").replace(/[ùú]/g,"u");
+        var dayIdx = giorni.indexOf(giornoNorm);
+        if (dayIdx < 0) continue;
+        var d = new Date(oggi_s);
+        var diff = (dayIdx - d.getDay() + 7) % 7;
+        if (diff === 0) diff = 7;
+        d.setDate(d.getDate() + diff + w * 7);
+        if (d <= oggi_s) continue;
+        var dataStr = d.toISOString().split("T")[0];
+        var cur = toMin(slot.oraInizio);
+        var end = toMin(slot.oraFine);
+        while (cur + durataMin <= end) {
+          risultato.push({
+            data: dataStr,
+            giorno: slot.giorno,
+            oraInizio: toStr(cur),
+            oraFine: toStr(cur + durataMin),
+            key: dataStr + "_" + toStr(cur),
+            docRecord: docRecord,
+          });
+          cur += durataMin;
+        }
+      }
+    }
+    risultato.sort(function(a,b){ return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
+    return risultato;
+  }, [recuperoForm.lezId, student.teacher]);
+
   // Andamento anno per grafici
   const andamento = MESI_AS.map(x => {
     const n = lezMese(x.m, x.y).length;
@@ -5071,120 +5129,55 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
           )
 
           /* ── Step 2: Selezione slot dalla disponibilità docente ── */
-          , recuperoForm.lezId && (()=>{
-              const docName = (recuperoForm.lezInfo?.teacher || student.teacher || "").toLowerCase().trim();
-              const allDocenti = window.__docenti__ || [];
-              const docRecord = docName
-                ? allDocenti.find(d => {
-                    const tk = (d.teacherKey||"").toLowerCase().trim();
-                    const nm = (d.nome||"").toLowerCase().trim();
-                    return tk === docName || nm === docName ||
-                           tk.includes(docName) || docName.includes(tk) ||
-                           nm.includes(docName) || docName.includes(nm);
-                  })
-                : null;
-              const rawDisp = docRecord ? (docRecord.disponibilitaRecuperi || []) : [];
-              const disp = typeof rawDisp === "string"
-                ? (()=>{ try{return JSON.parse(rawDisp);}catch(e){return [];} })()
-                : (Array.isArray(rawDisp) ? rawDisp : []);
-
-              // Durata lezione in minuti (dal record lezione o default 45)
-              const durataMin = recuperoForm.lezInfo?.durata || 45;
-
-              // Genera tutte le date disponibili nelle prossime 8 settimane
-              const GIORNI_IT = ["domenica","lunedì","martedì","mercoledì","giovedì","venerdì","sabato"];
-              const oggi_slot = new Date(); oggi_slot.setHours(0,0,0,0);
-              const slotsDisp = []; // [{data, giorno, oraInizio, oraFine, label, key}]
-
-              if (disp.length > 0) {
-                for (let w=0; w<=7; w++) {
-                  for (const slot of disp) {
-                    const giornoTarget = slot.giorno.toLowerCase().replace("ì","i").replace("à","a");
-                    const dayIdx = ["domenica","lunedi","martedi","mercoledi","giovedi","venerdi","sabato"].indexOf(giornoTarget);
-                    if (dayIdx < 0) continue;
-                    // Trova la prossima data con quel giorno
-                    const d = new Date(oggi_slot);
-                    const diff = (dayIdx - d.getDay() + 7) % 7;
-                    d.setDate(d.getDate() + diff + w * 7);
-                    if (d <= oggi_slot) continue; // no date passate/oggi
-                    const dataStr = d.toISOString().split("T")[0];
-                    // Genera orari dalla fascia con step = durataMin
-                    const toMin = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+(m||0); };
-                    const toStr = m => `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`;
-                    let cur = toMin(slot.oraInizio);
-                    const end = toMin(slot.oraFine);
-                    while (cur + durataMin <= end) {
-                      slotsDisp.push({
-                        data: dataStr,
-                        giorno: slot.giorno,
-                        oraInizio: toStr(cur),
-                        oraFine: toStr(cur + durataMin),
-                        label: `${d.toLocaleDateString("it-IT",{weekday:"short",day:"2-digit",month:"short"})} ${toStr(cur)}`,
-                        key: `${dataStr}_${toStr(cur)}`,
+          , recuperoForm.lezId && (
+            React.createElement('div', {style:{marginBottom:16}}
+              , React.createElement('div', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:8,fontWeight:600}}
+                , "2 — Scegli giorno e orario *"
+              )
+              , slotsRecuperoDisp.length === 0 ? (
+                React.createElement('div', {style:{padding:"12px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,color:C.textDim}}
+                  , "⚠️ Il docente non ha ancora configurato le fasce di disponibilità. Contatta direttamente il docente."
+                )
+              ) : (
+                React.createElement('div', null
+                  , (function() {
+                      var byDate = {};
+                      slotsRecuperoDisp.forEach(function(s) {
+                        if (!byDate[s.data]) byDate[s.data] = [];
+                        byDate[s.data].push(s);
                       });
-                      cur += durataMin;
-                    }
-                  }
-                }
-                // Ordina per data poi ora
-                slotsDisp.sort((a,b) => a.key.localeCompare(b.key));
-              }
-
-              const slotSel = recuperoForm.slotSel || null;
-
-              return React.createElement('div', {style:{marginBottom:16}}
-                , React.createElement('div', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:8,fontWeight:600}}
-                  , `2 — Scegli giorno e orario (disponibilità ${(docRecord&&docRecord.nome)||"docente"}) *`
-                )
-                , disp.length === 0 ? (
-                  React.createElement('div', {style:{padding:"12px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,color:C.textDim}}
-                    , "⚠️ Il docente non ha ancora configurato le fasce di disponibilità. Contatta direttamente il docente per concordare la data."
-                  )
-                ) : slotsDisp.length === 0 ? (
-                  React.createElement('div', {style:{padding:"12px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,color:C.textDim}}
-                    , "Nessuno slot disponibile nelle prossime 8 settimane."
-                  )
-                ) : (
-                  React.createElement('div', null
-                    /* Raggruppa per settimana/giorno */
-                    , (()=>{
-                        const byDate = {};
-                        slotsDisp.forEach(s => {
-                          if (!byDate[s.data]) byDate[s.data] = [];
-                          byDate[s.data].push(s);
-                        });
-                        return Object.entries(byDate).slice(0,14).map(([data, slots]) => (
-                          React.createElement('div', {key:data, style:{marginBottom:10}}
-                            , React.createElement('div', {style:{fontSize:12,color:C.textMuted,fontWeight:600,marginBottom:5,textTransform:"capitalize"}}
-                              , new Date(data+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long",year:"numeric"})
-                            )
-                            , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
-                              , slots.map(s => {
-                                  const isSel = slotSel === s.key;
-                                  return React.createElement('button', {
-                                      key:s.key,
-                                      onClick:()=>setRecuperoForm(p=>({...p, slotSel:s.key, date:s.data, ora:s.oraInizio})),
-                                      style:{
-                                        padding:"6px 12px",borderRadius:20,fontSize:12,fontFamily:"'Open Sans',sans-serif",
-                                        border:`2px solid ${isSel ? C.purple : C.border}`,
-                                        background: isSel ? C.purple : C.bg,
-                                        color: isSel ? "#fff" : C.textMuted,
-                                        cursor:"pointer",fontWeight: isSel ? 600 : 400,
-                                        transition:"all 0.12s"
-                                      }
-                                    }
-                                    , `${s.oraInizio} — ${s.oraFine}`
-                                  );
-                                })
-                            )
+                      return Object.keys(byDate).slice(0,14).map(function(data) {
+                        var slots = byDate[data];
+                        var slotSel = recuperoForm.slotSel || null;
+                        return React.createElement('div', {key:data, style:{marginBottom:10}}
+                          , React.createElement('div', {style:{fontSize:12,color:C.textMuted,fontWeight:600,marginBottom:5,textTransform:"capitalize"}}
+                            , new Date(data+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long",year:"numeric"})
                           )
-                        ));
-                      })()
-                    )
-                  )
+                          , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
+                            , slots.map(function(s) {
+                                var isSel = slotSel === s.key;
+                                return React.createElement('button', {
+                                    key: s.key,
+                                    onClick: function(){ setRecuperoForm(function(p){ return Object.assign({},p,{slotSel:s.key,date:s.data,ora:s.oraInizio}); }); },
+                                    style:{
+                                      padding:"6px 12px",borderRadius:20,fontSize:12,fontFamily:"'Open Sans',sans-serif",
+                                      border:"2px solid "+(isSel ? C.purple : C.border),
+                                      background: isSel ? C.purple : C.bg,
+                                      color: isSel ? "#fff" : C.textMuted,
+                                      cursor:"pointer",fontWeight: isSel ? 600 : 400,
+                                      transition:"all 0.12s"
+                                    }
+                                  }
+                                  , s.oraInizio + " — " + s.oraFine
+                                );
+                              })
+                          )
+                        );
+                      });
+                    })()
                 )
-              );
-            })()
+              )
+            )
           )
           , recuperoForm.lezId && (
             React.createElement('div', {style:{marginBottom:14}}
@@ -5226,7 +5219,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                       await sb.from('richieste_recupero').insert({
                         allievo_id:    student.id,
                         allievo_nome:  student.name,
-                        docente:       recuperoForm.lezInfo?.teacher || student.teacher || "",
+                        docente:       (_optionalChain([recuperoForm.lezInfo, "optionalAccess", function(_x){return _x.teacher}])) || student.teacher || "",
                         data_preferita:recuperoForm.date,
                         ora_recupero:  recuperoForm.ora || null,
                         note:          recuperoForm.note || null,
