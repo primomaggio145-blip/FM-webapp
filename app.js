@@ -3108,7 +3108,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                         __self: this, __source: {fileName: _jsxFileName, lineNumber: 2253}})
                     )
                     , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2255}}
-                      , React.createElement('button', { onClick: ()=>onNavigate("calendario"),
+                      , React.createElement('button', { onClick: ()=>{ onNavigate("calendario"); if(onQuickAction) setTimeout(()=>onQuickAction("showCalendario"), 80); },
                         style: {background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.gold,fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2256}}
                         , React.createElement(Ic, { n: "calendar", size: 12, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2258}}), "Apri calendario →"
                       )
@@ -3237,7 +3237,10 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                           , ruolo==="docente" ? "Compensi ricevuti" : ruolo==="allievo" ? "I miei pagamenti" : "Stato pagamenti"
                         )
                       )
-                      , ruolo==="docente" && React.createElement('button', { onClick: ()=>onNavigate("docenti"),
+                      , ruolo==="docente" && React.createElement('button', { onClick: ()=>{
+                          onNavigate("docenti");
+                          if(onQuickAction) setTimeout(()=>onQuickAction("showCompenso"), 120);
+                        },
                           style: {background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.gold,fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",gap:4}}, "Dettaglio →"
                       )
                       , ruolo!=="allievo" && ruolo!=="docente" && React.createElement('button', { onClick: ()=>onNavigate("allievi"),
@@ -14562,10 +14565,21 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     if (_myDocRecord) setSelected(_myDocRecord);
   }, [_myDocRecord, ruoloDocView]);
 
-  // Gestisce quickAction "showImpostazioni" — apre il tab impostazioni
+  // Carica disponibilità recuperi dal record selezionato quando cambia
+  React.useEffect(() => {
+    if (!selected) return;
+    const disp = selected.disponibilitaRecuperi || [];
+    const parsed = typeof disp === "string" ? (()=>{ try{return JSON.parse(disp);}catch(e){return [];} })() : disp;
+    setDocSettings(p => ({ ...p, disponibilita: Array.isArray(parsed) ? parsed : [] }));
+  }, [selected?.id]);
+
+  // Gestisce quickAction — apre tab specifico
   React.useEffect(() => {
     if (_qaDocView === "showImpostazioni") {
       setTab("impostazioni");
+      if (_clearQaDocView) _clearQaDocView();
+    } else if (_qaDocView === "showCompenso") {
+      setTab("compenso");
       if (_clearQaDocView) _clearQaDocView();
     }
   }, [_qaDocView]);
@@ -15479,7 +15493,19 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       , React.createElement('span', {style:{fontSize:13,color:C.textMuted}}, `${slot.oraInizio} — ${slot.oraFine}`)
                     )
                     , React.createElement('button', {
-                        onClick:()=>setDocSettings(p=>({...p,disponibilita:p.disponibilita.filter((_,i)=>i!==idx)})),
+                        onClick:()=>{
+                          const updatedDisp = docSettings.disponibilita.filter((_,i)=>i!==idx);
+                          setDocSettings(p=>({...p,disponibilita:updatedDisp}));
+                          const updatedDoc = { ...selected, disponibilitaRecuperi: updatedDisp };
+                          setSelected(updatedDoc);
+                          setDocenti(prev => prev.map(d => d.id === selected.id ? updatedDoc : d));
+                          const sb = window.supabaseClient;
+                          if (sb && selected) {
+                            sb.from('docenti').update({disponibilita_recuperi: JSON.stringify(updatedDisp)})
+                              .eq('id', selected.id)
+                              .then(({error})=>{ if(error) console.warn('[FM] disponibilita delete error:', error.message); });
+                          }
+                        },
                         style:{background:"none",border:"none",cursor:"pointer",color:C.red,padding:4,borderRadius:4,display:"flex"}
                       }
                       , React.createElement(Ic,{n:"trash",size:14,stroke:C.red})
@@ -15531,6 +15557,10 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                         if (!slot.giorno || !slot.oraInizio || !slot.oraFine) return;
                         const updated = [...docSettings.disponibilita, {...slot}];
                         setDocSettings(p=>({...p,disponibilita:updated,showDisp:false,newSlot:{giorno:"lunedì",oraInizio:"15:00",oraFine:"18:00"}}));
+                        // Aggiorna il record in memoria (React state)
+                        const updatedDoc = { ...selected, disponibilitaRecuperi: updated };
+                        setSelected(updatedDoc);
+                        setDocenti(prev => prev.map(d => d.id === selected.id ? updatedDoc : d));
                         // Persisti su Supabase
                         const sb = window.supabaseClient;
                         if (sb && selected) {
