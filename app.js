@@ -3175,10 +3175,22 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                             )
                           )
                     )
-                    , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`}}
+                    , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}
                       , React.createElement('button', { onClick: ()=>{ onNavigate("calendario"); if(onQuickAction) setTimeout(()=>onQuickAction("showRecuperi"),80); },
                         style: {background:"none",border:"none",cursor:"pointer",fontSize:12,color:'#f59e0b',fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",gap:5}}
                         , React.createElement(Ic, { n: "clock", size: 12, stroke: '#f59e0b'}), "Vai ai recuperi →"
+                      )
+                      , ruolo==="allievo" && lezioniRec.length > 0 && React.createElement('button', {
+                          onClick: ()=>{ onNavigate("allievi"); if(onQuickAction) setTimeout(()=>onQuickAction("openRecuperoModal"),120); },
+                          style:{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",
+                            background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:7,
+                            cursor:"pointer",fontSize:12,color:C.purple,fontWeight:600,
+                            fontFamily:"'Open Sans',sans-serif",transition:"all 0.12s"},
+                          onMouseEnter:e=>{e.currentTarget.style.background=C.purple;e.currentTarget.style.color="#fff";},
+                          onMouseLeave:e=>{e.currentTarget.style.background=C.purpleBg;e.currentTarget.style.color=C.purple;}
+                        }
+                        , React.createElement(Ic,{n:"calendar",size:12,stroke:"inherit"})
+                        , ` Prenota recupero (${lezioniRec.length})`
                       )
                     )
                   );
@@ -4264,6 +4276,15 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const [ricevutaEnt, setRicevutaEnt] = useState(null);
   const [showRecuperoModal, setShowRecuperoModal] = useState(false);
   const [recuperoForm, setRecuperoForm] = useState({ date:"", note:"", lezId:null, lezInfo:null });
+
+  // Espone hook per aprire il modal dall'esterno (dashboard → AllieviView → StudentDetail)
+  React.useEffect(() => {
+    window.__FM_OPEN_RECUPERO_MODAL__ = () => {
+      setRecuperoForm({ date:"", note:"", lezId:null, lezInfo:null });
+      setShowRecuperoModal(true);
+    };
+    return () => { window.__FM_OPEN_RECUPERO_MODAL__ = null; };
+  }, []);
   const [sortKeyPres, sortDirPres, handleSortPres, sortFnPres] = useSortable("mese", "asc");
   const [sortKeyQuote, sortDirQuote, handleSortQuote, sortFnQuote] = useSortable("mese", "asc");
   const config = _nullishCoalesce(propConfig, () => ( CONFIG_DEFAULT));
@@ -4401,8 +4422,19 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3212}}
               , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600,marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3213}}, student.name)
               , React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3214}}
-                , React.createElement(Badge, { label: student.instrument, accentHex: "gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3215}})
-                , comp && React.createElement(Badge, { label: comp.name, accentHex: "purple", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3216}})
+                /* Strumento principale (stella) */
+                , React.createElement('span', {style:{display:"inline-flex",alignItems:"center",gap:4}}
+                  , React.createElement('span',{style:{color:C.gold,fontSize:11}}, "★")
+                  , React.createElement(Badge, { label: student.instrument, accentHex: "gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3215}})
+                )
+                /* Strumenti extra */
+                , (student.extraInstruments||[]).map(ins =>
+                    React.createElement(Badge, {key:ins, label:ins, accentHex:"teal"})
+                  )
+                /* Corso complementare */
+                , comp && React.createElement('span', {style:{display:"inline-flex",alignItems:"center",gap:4}}
+                    , React.createElement(Badge, { label: comp.name, accentHex: "purple", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3216}})
+                  )
                 , React.createElement('span', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3217}}, "·")
                 , React.createElement('span', { style: {fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3218}}, student.teacher)
                 , React.createElement('span', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3219}}, "·")
@@ -4559,14 +4591,18 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                   )
                   , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3339}}
                     , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3340}}
-                      , React.createElement('span', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3341}}, isColl(l)?l.courseName:l.topic||"—")
+                      , React.createElement('span', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3341}}
+                        , isColl(l)
+                          ? (l.courseName || l.courseId || "Lezione collettiva")
+                          : (l.topic || l.instrument || "—")
+                      )
                       , isColl(l) && React.createElement('span', { style: {fontSize:10,background:C.purpleBg,color:C.purple,
                         border:`1px solid ${C.purpleBorder}`,borderRadius:4,padding:"1px 6px",letterSpacing:"0.05em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3342}}, "collettiva")
                     )
                     , React.createElement('div', { style: {fontSize:11,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3345}}
                       , isColl(l)
-                        ? `${(l.students||[]).length} allievi · ${l.room||"—"} · ${l.teacher}`
-                        : `${l.instrument} · ${l.room||"—"} · ${l.teacher}`
+                        ? `${(l.students||[]).length} allievi · ${l.room||"—"} · ${l.teacher||"—"}`
+                        : `${l.instrument||"—"} · ${l.room||"—"} · ${l.teacher||"—"}`
                     )
                   )
                   , l.attendance
@@ -5293,7 +5329,16 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   }, [_allStudents, _avAllievoId, _nomeAV, _ruoloAV]);
 
   const closeModal = () => setModal(null);
-  React.useEffect(()=>{ if(qaAV==="addAllievo"){ setModal("add"); if(clearQaAV)clearQaAV(); } },[qaAV]);
+  React.useEffect(()=>{
+    if(qaAV==="addAllievo"){ setModal("add"); if(clearQaAV)clearQaAV(); }
+    else if(qaAV==="openRecuperoModal"){
+      // Apre il modal prenota recupero nel profilo allievo
+      // Il selectedStudent è già impostato dall'auto-selezione
+      // Usiamo un evento custom per aprire il modal nello StudentDetail
+      if(window.__FM_OPEN_RECUPERO_MODAL__) { window.__FM_OPEN_RECUPERO_MODAL__(); }
+      if(clearQaAV)clearQaAV();
+    }
+  },[qaAV]);
 
   const handleAddStudent    = d  => { setStudents(p=>[...p,{...d,id:uid(),lessons:[]}]); closeModal(); };
   const handleEditStudent   = d  => { setStudents(p=>p.map(s=>s.id===d.id?{...s,...d}:s)); if(_optionalChain([selected, 'optionalAccess', _43 => _43.id])===d.id) setSelected(p=>({...p,...d})); closeModal(); };
@@ -5959,21 +6004,30 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
         )
 
         , React.createElement(SDiv, { label: err.recurrence ? `Ricorrenza * — ${err.recurrence}` : "Ricorrenza *", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4372}})
-        , React.createElement('div', { style: {gridColumn:"1/-1", display:"flex", gap:8, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4373}}
-          , RECURRENCE_OPTS.map(r => (
-            React.createElement('button', { key: r, onClick: () => { set("recurrence", r); setErr(p=>({...p,recurrence:undefined})); },
-              style: {padding:"8px 14px", borderRadius:20,
-                border:`2px solid ${f.recurrence === r ? C.blue : err.recurrence ? C.red : C.border}`,
-                background: f.recurrence === r ? C.blueBg : err.recurrence ? C.redBg : C.bg,
-                cursor:"pointer", fontSize:12,
-                color: f.recurrence === r ? C.blue : err.recurrence ? C.red : C.textMuted,
-                fontFamily:"'Open Sans',sans-serif", fontWeight: f.recurrence === r ? 500 : 400,
-                transition:"all 0.12s", display:"flex", alignItems:"center", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4375}}
-              , r !== "Nessuna" && React.createElement(Ic, { n: "repeat", size: 12, stroke: f.recurrence === r ? C.blue : err.recurrence ? C.red : C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4383}})
-              , r
+        , roleLF === "docente"
+          ? React.createElement('div', { style: {gridColumn:"1/-1"} }
+              , React.createElement('div', {style:{display:"inline-flex",alignItems:"center",gap:8,padding:"8px 14px",borderRadius:20,
+                  background:C.surface,border:`1px solid ${C.border}`,fontSize:12,color:C.textMuted}}
+                , React.createElement(Ic,{n:"repeat",size:12,stroke:C.textMuted})
+                , f.recurrence || "Nessuna"
+                , React.createElement('span',{style:{fontSize:10,color:C.textDim,marginLeft:4}},"(non modificabile)")
+              )
             )
-          ))
-        )
+          : React.createElement('div', { style: {gridColumn:"1/-1", display:"flex", gap:8, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4373}}
+              , RECURRENCE_OPTS.map(r => (
+                React.createElement('button', { key: r, onClick: () => { set("recurrence", r); setErr(p=>({...p,recurrence:undefined})); },
+                  style: {padding:"8px 14px", borderRadius:20,
+                    border:`2px solid ${f.recurrence === r ? C.blue : err.recurrence ? C.red : C.border}`,
+                    background: f.recurrence === r ? C.blueBg : err.recurrence ? C.redBg : C.bg,
+                    cursor:"pointer", fontSize:12,
+                    color: f.recurrence === r ? C.blue : err.recurrence ? C.red : C.textMuted,
+                    fontFamily:"'Open Sans',sans-serif", fontWeight: f.recurrence === r ? 500 : 400,
+                    transition:"all 0.12s", display:"flex", alignItems:"center", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4375}}
+                  , r !== "Nessuna" && React.createElement(Ic, { n: "repeat", size: 12, stroke: f.recurrence === r ? C.blue : err.recurrence ? C.red : C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4383}})
+                  , r
+                )
+              ))
+            )
       )
 
       , React.createElement('div', { style: {padding:"14px 22px", borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:"env(safe-area-inset-bottom,12px)", display:"flex", justifyContent:"flex-end", gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4390}}
