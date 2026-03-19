@@ -294,6 +294,7 @@ const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
     left:     React.createElement('path', { d: "m15 18-6-6 6-6"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 287}}),
     eye:      React.createElement(React.Fragment, null, React.createElement('path',{d:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"}), React.createElement('circle',{cx:"12",cy:"12",r:"3"})),
     "eye-off":React.createElement(React.Fragment, null, React.createElement('path',{d:"M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"}), React.createElement('line',{x1:"1",y1:"1",x2:"23",y2:"23"})),
+    refresh:  React.createElement(React.Fragment, null, React.createElement('polyline',{points:"23 4 23 10 17 10"}), React.createElement('polyline',{points:"1 20 1 14 7 14"}), React.createElement('path',{d:"M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"})),
     mail:     React.createElement(React.Fragment, null, React.createElement('path', { d: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"           , __self: this, __source: {fileName: _jsxFileName, lineNumber: 288}}), React.createElement('polyline', { points: "22,6 12,13 2,6"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 288}})),
     lock:     React.createElement(React.Fragment, null, React.createElement('rect', { x: "3", y: "11", width: "18", height: "11", rx: "2", __self: this, __source: {fileName: _jsxFileName, lineNumber: 289}}), React.createElement('path', { d: "M7 11V7a5 5 0 0 1 10 0v4"       , __self: this, __source: {fileName: _jsxFileName, lineNumber: 289}})),
     eye:      React.createElement(React.Fragment, null, React.createElement('path', { d: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"        , __self: this, __source: {fileName: _jsxFileName, lineNumber: 290}}), React.createElement('circle', { cx: "12", cy: "12", r: "3", __self: this, __source: {fileName: _jsxFileName, lineNumber: 290}})),
@@ -2735,6 +2736,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const todayStr = yyyymmdd(oggi);
     const LEZIONI_OGGI_LIVE = _lessons
       .filter(l => (l.date || l.data || '') === todayStr)
+      .sort((a, b) => (a.hour || a.ora || '').localeCompare(b.hour || b.ora || ''))
       .map(l => ({
         id: l.id,
         ora: l.hour || l.ora || '',
@@ -2838,6 +2840,17 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               )
             )
             , React.createElement('div', { style: {marginLeft:"auto",display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2135}}
+              /* Pulsante refresh */
+              , React.createElement('button', {
+                  onClick: ()=>{ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(false); },
+                  title:"Aggiorna dati",
+                  style:{background:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 8px",
+                    cursor:"pointer",display:"flex",alignItems:"center",color:C.textMuted,transition:"all .15s"},
+                  onMouseEnter:e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;},
+                  onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}
+                }
+                , React.createElement(Ic,{n:"refresh",size:15,stroke:"currentColor"})
+              )
               , React.createElement(NotificationBell, {
                   students: _students,
                   lessons: _lessons,
@@ -3207,21 +3220,78 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2309}}
                     , React.createElement('div', { style: {padding:"14px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2310}}
                       , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2311}}
-                        , React.createElement(Ic, { n: "users", size: 14, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2312}})
-                        , React.createElement('span', { style: {fontSize:12,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2313}}, "Stato pagamenti" )
+                        , React.createElement(Ic, { n: ruolo==="docente"?"euro":"users", size: 14, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2312}})
+                        , React.createElement('span', { style: {fontSize:12,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2313}}
+                          , ruolo==="docente" ? "Compensi ricevuti" : ruolo==="allievo" ? "I miei pagamenti" : "Stato pagamenti"
+                        )
                       )
-                      , ruolo!=="allievo" && React.createElement('button', { onClick: ()=>onNavigate("allievi"),
+                      , ruolo==="docente" && React.createElement('button', { onClick: ()=>onNavigate("docenti"),
+                          style: {background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.gold,fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",gap:4}}, "Dettaglio →"
+                      )
+                      , ruolo!=="allievo" && ruolo!=="docente" && React.createElement('button', { onClick: ()=>onNavigate("allievi"),
                         style: {background:"none",border:"none",cursor:"pointer",fontSize:12,color:C.gold,fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",gap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2315}}, "Vedi allievi →"
-
                       )
                     )
                     , React.createElement('div', { style: {padding:"16px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2320}}
                       , ruolo==="docente"
                         ? React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:8}},
                             (()=>{
-                              const ms=(_spese||[]).filter(s=>myDocRecord?s.docenteId===myDocRecord.id:false).sort((a,b)=>(b.data||"").localeCompare(a.data||"")).slice(0,5);
-                              if(!ms.length) return React.createElement('p',{style:{fontSize:13,color:C.textDim,textAlign:"center",padding:"12px 0"}},"Nessun compenso");
-                              return ms.map((s,i)=>React.createElement('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.border}`}},React.createElement('div',null,React.createElement('div',{style:{fontSize:13,color:C.text}},s.desc||"Compenso"),React.createElement('div',{style:{fontSize:11,color:C.textDim}},new Date((s.data||"")+"T00:00:00").toLocaleDateString("it-IT"))),React.createElement('span',{style:{fontFamily:"'Oswald',sans-serif",fontSize:16,fontWeight:600,color:C.gold}},fmt(s.importo||0))));
+                              const meseC = oggi.getMonth()+1;
+                              const annoC = oggi.getFullYear();
+                              // KPI strip compensi
+                              const lezMeseDoc = (_lessons||[]).filter(l=>
+                                myDocRecord && matchDocLezione(l) &&
+                                (l.attendance==="presente"||l.attendance==="assente") &&
+                                l.date && new Date(l.date+"T00:00:00").getMonth()+1===meseC &&
+                                new Date(l.date+"T00:00:00").getFullYear()===annoC
+                              );
+                              const lezAnnoDoc = (_lessons||[]).filter(l=>
+                                myDocRecord && matchDocLezione(l) &&
+                                (l.attendance==="presente"||l.attendance==="assente") &&
+                                l.date && new Date(l.date+"T00:00:00").getFullYear()===annoC
+                              );
+                              const compMese = lezMeseDoc.length * (myDocRecord ? myDocRecord.tariffaOra||0 : 0);
+                              const compAnno = lezAnnoDoc.length * (myDocRecord ? myDocRecord.tariffaOra||0 : 0);
+                              const MESI_N = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+                              return React.createElement(React.Fragment, null
+                                /* KPI strip */
+                                , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}
+                                  , [
+                                      {label:"Lezioni mese",  value:lezMeseDoc.length, hex:C.teal},
+                                      {label:`Compenso ${MESI_N[meseC-1]}`, value:fmt(compMese), hex:C.green},
+                                      {label:`Totale ${annoC}`, value:fmt(compAnno), hex:C.gold},
+                                    ].map(k=>
+                                      React.createElement('div', {key:k.label, style:{background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",textAlign:"center"}}
+                                        , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,color:k.hex,lineHeight:1}}, k.value)
+                                        , React.createElement('div', {style:{fontSize:9,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.08em",marginTop:3}}, k.label)
+                                      )
+                                    )
+                                )
+                                /* Ultime lezioni fatturate */
+                                , React.createElement('div', {style:{fontSize:10,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}, "Ultime lezioni")
+                                , (()=>{
+                                    const ultime = (_lessons||[]).filter(l=>
+                                      myDocRecord && matchDocLezione(l) &&
+                                      (l.attendance==="presente"||l.attendance==="assente")
+                                    ).sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,4);
+                                    if(!ultime.length) return React.createElement('p',{style:{fontSize:13,color:C.textDim,textAlign:"center",padding:"8px 0"}},"Nessuna lezione registrata");
+                                    return ultime.map((l,i)=>
+                                      React.createElement('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 10px",background:C.bg,borderRadius:7,border:`1px solid ${C.border}`,marginBottom:5}}
+                                        , React.createElement('div',null
+                                          , React.createElement('div',{style:{fontSize:12,fontWeight:500,color:C.text}},l.student||"—")
+                                          , React.createElement('div',{style:{fontSize:10,color:C.textDim}},
+                                              new Date((l.date||"")+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"})
+                                              +" ore "+(l.hour||"—")
+                                            )
+                                        )
+                                        , React.createElement('div',{style:{textAlign:"right"}}
+                                          , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",fontSize:15,fontWeight:600,color:C.green}},fmt(myDocRecord?myDocRecord.tariffaOra||0:0))
+                                          , React.createElement('div',{style:{fontSize:9,color:C.textDim}},l.attendance)
+                                        )
+                                      )
+                                    );
+                                  })()
+                              );
                             })()
                           )
                         : ruolo==="allievo"
@@ -16039,16 +16109,115 @@ function App() {
       if (data.allegati)  setSharedAllegati(data.allegati);
       if (data.richieste) setSharedRichieste(data.richieste);
     };
-    // Overlay globale: renderizzato FUORI da main-scroll che ha animation opacity
-    // → crea compositing layer che intrappola position:fixed dei figli.
-    // Componenti come AllegatiView chiamano window.__FM_SHOW_MODAL__(element)
-    // per mostrare modali che risiedono direttamente nel Fragment root di App.
+
+    // ── Refresh completo da Supabase ─────────────────────────────────────────
+    // Espone window.__FM_FORCE_REFRESH__ per trigger manuale da qualsiasi punto
+    let _refreshing = false;
+    window.__FM_FORCE_REFRESH__ = async function(silent) {
+      if (_refreshing) return;
+      _refreshing = true;
+      if (!silent) {
+        // Mostra toast "Aggiornamento…"
+        const t = document.getElementById('sync-toast');
+        if (t) { t.textContent = '⟳ Aggiornamento…'; t.style.opacity = '1'; }
+      }
+      try {
+        const sb = window.supabaseClient;
+        if (!sb) return;
+        const [
+          { data: sS }, { data: sD }, { data: sC }, { data: sL },
+          { data: sB }, { data: sP }, { data: sQ }, { data: sEV },
+          { data: sAL }, { data: sSALA },
+        ] = await Promise.all([
+          sb.from('studenti').select('*').order('nome'),
+          sb.from('docenti').select('*').order('nome'),
+          sb.from('corsi').select('*, corsi_docenti(docente_id)').order('nome'),
+          sb.from('lezioni').select('*').order('data', { ascending: false }),
+          sb.from('brani').select('*').order('titolo'),
+          sb.from('spese').select('*').order('data', { ascending: false }),
+          sb.from('quote').select('*').order('anno').order('mese'),
+          sb.from('concerti').select('*').order('data', { ascending: false }),
+          sb.from('allegati').select('*').order('created_at', { ascending: false }),
+          sb.from('prenotazioni_sala').select('*').order('data').order('ora_inizio'),
+        ]);
+        const FA = window.FMAdapter;
+        const adaptL = (r) => {
+          const allegatiAll = sAL || [];
+          const allegati = allegatiAll.filter(a => a.lezione_id === r.id).map(a => ({
+            id: a.id, fileName: a.file_name||'', fileUrl: a.file_url||null,
+            fileType: a.file_type||'', descrizione: a.descrizione||'',
+            corso: a.corso||'', lezioneId: a.lezione_id||null,
+            allievoNome: a.allievo_nome||'', createdAt: a.created_at||null,
+          }));
+          return {
+            id: r.id, date: r.data,
+            hour: r.ora ? r.ora.slice(0,5) : '',
+            student: r.student||'', tipo: r.tipo||'individuale',
+            studentId: r.studente_id||null,
+            instrument: r.strumento||r.instrument||'', teacher: r.teacher||'',
+            room: r.room||'', topic: r.topic||'', attendance: r.attendance||'',
+            recurrence: r.recurrence||'Nessuna', notes: r.notes||'',
+            exercises: r.exercises||'', type: r.tipo||'individuale',
+            linkUrl: r.link_url||'', inRecupero: r.in_recupero||false,
+            recuperoScadenza: r.recupero_scadenza||null,
+            durata: r.durata ? parseInt(r.durata) : (r.tipo==='collettivo'?60:r.tipo==='prova'?30:45),
+            repertorioIds: (() => { try { return r.repertorio_ids ? JSON.parse(r.repertorio_ids) : []; } catch(e) { return []; } })(),
+            allegati,
+            courseId: r.corso_id||null, courseName: r.corso_nome||null,
+            students: (() => { try { return r.students ? JSON.parse(r.students) : []; } catch(e) { return []; } })(),
+          };
+        };
+        const adaptA = r => ({
+          id:r.id, lezioneId:r.lezione_id||null, allievoId:r.allievo_id||null,
+          allievoNome:r.allievo_nome||null, corso:r.corso||null,
+          descrizione:r.descrizione||null, fileUrl:r.file_url||null,
+          fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null,
+        });
+        if (window.__FM_RELOAD__) {
+          window.__FM_RELOAD__({
+            students: (sS||[]).map(r => {
+              const base = FA ? FA.studente(r) : r;
+              const pj = (v,f=[]) => { if(!v) return f; if(Array.isArray(v)) return v; try { return JSON.parse(v); } catch(e) { return f; } };
+              base.repertorio = pj(r.repertorio, []);
+              base.extraInstruments = pj(r.extra_instruments, []);
+              base.extraTeachers = pj(r.extra_teachers, {});
+              return base;
+            }),
+            docenti:  (sD||[]).map(r => FA ? FA.docente(r) : r),
+            courses:  (sC||[]).map(r => FA ? FA.corso(r) : r),
+            lessons:  (sL||[]).map(adaptL),
+            brani:    (sB||[]).map(r => ({ id:r.id, title:r.titolo||'', composer:r.compositore||'', periodo:r.periodo||'', tonality:r.tonalita||'', difficulty:r.difficolta||'Intermedio', tipo:r.tipo||'individuale', note:r.note||'', lezioni:r.lezioni||0 })),
+            spese:    (sP||[]).map(r => ({ id:String(r.id), docenteId:r.docente_id||null, data:r.data||'', mese:r.mese!=null?r.mese:new Date((r.data||'')+'T00:00:00').getMonth(), anno:r.anno||new Date().getFullYear(), importo:parseFloat(r.importo)||0, desc:r.desc||r.descrizione||'', nota:r.nota||'', metodo:r.metodo||'Bonifico', categoria:r.categoria||'altro' })),
+            entrate:  (sQ||[]).map(r => ({ id:String(r.id), studentId:r.studente_id||null, studentName:r.studente_nome||'', importo:parseFloat(r.importo)||0, mese:r.mese, anno:r.anno, data:r.data_pagamento||'', metodo:r.metodo||'Contanti', categoria:'quota', desc:r.note||'', stato:r.stato||'attesa' })),
+            concerti: (sEV||[]).map(r => ({ id:r.id, nome:r.nome||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:[], partecipanti:[], prenotazioni:[], biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0 })),
+            allegati: (sAL||[]).map(adaptA),
+          });
+        }
+        if (!silent) {
+          const t = document.getElementById('sync-toast');
+          if (t) { t.textContent = '✓ Dati aggiornati'; t.style.opacity = '1'; setTimeout(() => { t.style.opacity = '0'; }, 2000); }
+        }
+      } catch(e) {
+        console.warn('[FM] Force refresh error:', e);
+      } finally {
+        _refreshing = false;
+      }
+    };
+
+    // ── Polling automatico ogni 45 secondi (safety net oltre al realtime) ────
+    const _pollInterval = setInterval(() => {
+      window.__FM_FORCE_REFRESH__ && window.__FM_FORCE_REFRESH__(true);
+    }, 45000);
+
+    // Overlay globale
     window.__FM_SHOW_MODAL__ = (element) => setGlobalModal(element);
     window.__FM_HIDE_MODAL__ = ()        => setGlobalModal(null);
     return () => {
       window.__FM_RELOAD__ = null;
+      window.__FM_FORCE_REFRESH__ = null;
       window.__FM_SHOW_MODAL__ = null;
       window.__FM_HIDE_MODAL__ = null;
+      clearInterval(_pollInterval);
     };
   }, []);
   // ─────────────────────────────────────────────────────────────
