@@ -2423,7 +2423,7 @@ const CONFIG_DEFAULT = {
 
 
 // ─── NOTIFICATION BELL ────────────────────────────────────────────────────────
-const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB }) => {
+const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB, notifiche:_notificheNB }) => {
   const ruoloNB = _ruoloNB || "admin";
   const [open, setOpen] = useState(false);
   const ref = React.useRef(null);
@@ -2570,6 +2570,37 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     }
   }
 
+  // 7. Notifiche da tabella `notifiche` Supabase (recuperi e altro)
+  var notificheArr = Array.isArray(_notificheNB) ? _notificheNB : [];
+  // Filtra per il ruolo/utente corrente
+  var myNotifiche = notificheArr.filter(function(n) {
+    if (n.letto) return false; // già lette
+    if (n.destinatario_ruolo === ruoloNB) {
+      if (ruoloNB === 'docente') {
+        return !n.destinatario_nome || (myDocenteNome && (n.destinatario_nome||"").toLowerCase().indexOf(myDocenteNome.toLowerCase()) >= 0);
+      }
+      if (ruoloNB === 'allievo') {
+        return n.destinatario_id === String(myAllievoId) ||
+               (n.destinatario_nome||"").toLowerCase() === myAllievoNome.toLowerCase();
+      }
+      return true; // admin vede tutto
+    }
+    return false;
+  });
+
+  myNotifiche.forEach(function(n) {
+    notifs.push({
+      id: 'notifica_' + n.id,
+      tipo: n.tipo === 'recupero_richiesto' ? 'warning' : 'info',
+      icon: 'calendar',
+      color: n.tipo === 'recupero_richiesto' ? C.purple : C.teal,
+      titolo: n.titolo || 'Notifica',
+      desc: n.messaggio || '',
+      action: function() { onNavigate(ruoloNB === 'docente' ? 'allievi' : 'allievi'); setOpen(false); },
+      actionLabel: ruoloNB === 'docente' ? 'Vedi allievi' : 'Vedi dettagli',
+    });
+  });
+
   const count = notifs.length;
 
   const TIPO_COLORS = {
@@ -2656,7 +2687,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
 };
 
 
-const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, panels:propPanels, setPanels:propSetPanels, onQuickAction }) => {
+const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, notifiche:propNotifiche, panels:propPanels, setPanels:propSetPanels, onQuickAction }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
     const [showAmounts,  setShowAmounts]  = useState(false);
     const [_localPanels, _setLocalPanels]  = useState({});
@@ -2886,6 +2917,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   students: _students,
                   lessons: _lessons,
                   richieste: propRichieste||[],
+                  notifiche: propNotifiche||[],
                   onNavigate: onNavigate,
                   ruolo: ruolo,
                   appUser: appUser,
@@ -5236,30 +5268,77 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                 onClick: async () => {
                   try {
                     const sb = window.supabaseClient;
+                    const lezData = recuperoForm.lezInfo;
+                    const docenteName = (_optionalChain([recuperoForm.lezInfo, "optionalAccess", function(_x){return _x.teacher}])) || student.teacher || "";
+                    const dataRecupero = new Date(recuperoForm.date+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long"});
+                    const lezLabel = lezData
+                      ? new Date(lezData.date+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"long"})+" ore "+lezData.hour
+                      : "";
+
                     if (sb) {
-                      await sb.from('richieste_recupero').insert({
+                      // 1. Salva la richiesta recupero
+                      const { data: richData, error: richErr } = await sb.from('richieste_recupero').insert({
                         allievo_id:    student.id,
                         allievo_nome:  student.name,
-                        docente:       (_optionalChain([recuperoForm.lezInfo, "optionalAccess", function(_x){return _x.teacher}])) || student.teacher || "",
+                        docente:       docenteName,
                         data_preferita:recuperoForm.date,
                         ora_recupero:  recuperoForm.ora || null,
                         note:          recuperoForm.note || null,
                         stato:         "in_attesa",
                         lezioni_ids:   JSON.stringify([recuperoForm.lezId]),
                         created_at:    new Date().toISOString(),
-                      }).then(({ error }) => {
-                        if (error) console.warn("[FM] richiesta recupero:", error.message);
-                      });
+                      }).select().single();
+                      if (richErr) console.warn("[FM] richiesta recupero:", richErr.message);
+
+                      // 2. Scrivi notifica per il DOCENTE nella tabella notifiche
+                      const msgDocente = student.name + " ha prenotato un recupero per " + dataRecupero + " ore " + recuperoForm.ora;
+                      await sb.from('notifiche').insert({
+                        destinatario_ruolo: 'docente',
+                        destinatario_nome:  docenteName,
+                        tipo:               'recupero_richiesto',
+                        titolo:             'Nuova prenotazione recupero',
+                        messaggio:          msgDocente,
+                        letto:              false,
+                        created_at:         new Date().toISOString(),
+                        meta:               JSON.stringify({ allievo: student.name, data: recuperoForm.date, ora: recuperoForm.ora }),
+                      }).then(function(r){ if(r.error) console.warn("[FM] notifica docente:", r.error.message); });
+
+                      // 3. Scrivi notifica di conferma per l'ALLIEVO
+                      const msgAllievo = "Recupero richiesto per " + dataRecupero + " ore " + recuperoForm.ora + ". In attesa di conferma dal docente " + docenteName + ".";
+                      await sb.from('notifiche').insert({
+                        destinatario_ruolo: 'allievo',
+                        destinatario_id:    String(student.id),
+                        destinatario_nome:  student.name,
+                        tipo:               'recupero_confermato',
+                        titolo:             'Recupero prenotato',
+                        messaggio:          msgAllievo,
+                        letto:              false,
+                        created_at:         new Date().toISOString(),
+                        meta:               JSON.stringify({ docente: docenteName, data: recuperoForm.date, ora: recuperoForm.ora }),
+                      }).then(function(r){ if(r.error) console.warn("[FM] notifica allievo:", r.error.message); });
                     }
-                    const lezData = recuperoForm.lezInfo;
-                    const lezLabel = lezData
-                      ? new Date(lezData.date+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"long"})+" ore "+lezData.hour
-                      : "";
-                    alert(`✓ Richiesta inviata!\n\nLezione: ${lezLabel}\nData recupero: ${new Date(recuperoForm.date+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long"})} ore ${recuperoForm.ora}\n\nIl tuo docente confermerà la prenotazione.`);
+
+                    // 4. Toast visivo immediato all'allievo
+                    var t = document.getElementById('sync-toast');
+                    if (t) {
+                      t.textContent = '📅 Recupero prenotato — in attesa di conferma';
+                      t.style.background = '#f0e6ff';
+                      t.style.borderColor = '#c084fc';
+                      t.style.color = '#7c3aed';
+                      t.style.opacity = '1';
+                      setTimeout(function(){ t.style.opacity='0'; t.style.background=''; t.style.borderColor=''; t.style.color=''; }, 4000);
+                    }
+
                     setShowRecuperoModal(false);
                     setRecuperoForm({ date:"", note:"", lezId:null, lezInfo:null, slotSel:null, ora:"" });
+
+                    // 5. Forza refresh per aggiornare NotificationBell
+                    setTimeout(function(){ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true); }, 1500);
+
                   } catch(e) {
-                    alert("Richiesta inviata! Il tuo docente ti contatterà per confermare.");
+                    console.warn("[FM] recupero submit error:", e);
+                    var t2 = document.getElementById('sync-toast');
+                    if (t2) { t2.textContent = '📅 Recupero prenotato'; t2.style.opacity='1'; setTimeout(function(){ t2.style.opacity='0'; },3000); }
                     setShowRecuperoModal(false);
                   }
                 }
@@ -16261,6 +16340,7 @@ function App() {
   const [sharedConcerti,       setSharedConcerti]       = useState(_d.concerti   || INIT_CONCERTI);
   const [sharedAllegati,       setSharedAllegati]       = useState(_d.allegati   || []);
   const [sharedRichieste,      setSharedRichieste]      = useState([]);
+  const [sharedNotifiche,      setSharedNotifiche]      = useState([]);
   const [sharedConfig,         setSharedConfig]         = useState(_d.config ? {...CONFIG_DEFAULT, ..._d.config} : CONFIG_DEFAULT);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
   const [sharedSpese,          setSharedSpese]          = useState(_d.spese      || INIT_SPESE);
@@ -16295,9 +16375,17 @@ function App() {
             setSharedRuolo(profilo.ruolo||"admin");
             try{ window.__currentUserName__=profilo.nome||""; }catch(e){}
             setSchermata("app");
-            // Carica richieste in attesa per le notifiche
+            // Carica richieste in attesa per le notifiche (admin)
             if ((profilo.ruolo||'admin')==='admin' && window.FM_AUTH.getRichieste) {
               try { const r = await window.FM_AUTH.getRichieste(); setSharedRichieste(r||[]); } catch(e){}
+            }
+            // Carica notifiche non lette per tutti i ruoli
+            const sb0 = window.supabaseClient;
+            if (sb0) {
+              try {
+                const { data: nn } = await sb0.from('notifiche').select('*').eq('letto', false).order('created_at', {ascending:false}).limit(50);
+                if (nn) setSharedNotifiche(nn);
+              } catch(e){}
             }
           }
         }
@@ -16436,6 +16524,11 @@ function App() {
             allegati: (sAL||[]).map(adaptA),
           });
         }
+        // Ricarica notifiche non lette
+        try {
+          const { data: nn } = await sb.from('notifiche').select('*').eq('letto', false).order('created_at', {ascending:false}).limit(50);
+          if (nn) setSharedNotifiche(nn);
+        } catch(e) {}
         if (!silent) {
           const t = document.getElementById('sync-toast');
           if (t) { t.textContent = '✓ Dati aggiornati'; t.style.opacity = '1'; setTimeout(() => { t.style.opacity = '0'; }, 2000); }
@@ -16479,7 +16572,14 @@ function App() {
             , React.createElement('div', { key: panKey, style: {width:"100%",maxWidth:400,padding:"0 4px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10750}}
               , schermata==="login" && (
                 React.createElement(FormLogin, {
-                  onSuccess: u=>{setUser(u);setSharedRuolo(u.ruolo||"admin");setView("dashboard"); try{window.__currentUserName__=u.nome||"";}catch(e){}; if(u.ruolo==="admin"&&window.FM_AUTH?.getRichieste){window.FM_AUTH.getRichieste().then(r=>setSharedRichieste(r||[])).catch(()=>{});}},  
+                  onSuccess: u=>{
+                    setUser(u);setSharedRuolo(u.ruolo||"admin");setView("dashboard");
+                    try{window.__currentUserName__=u.nome||"";}catch(e){};
+                    if(u.ruolo==="admin"&&window.FM_AUTH&&window.FM_AUTH.getRichieste){window.FM_AUTH.getRichieste().then(r=>setSharedRichieste(r||[])).catch(()=>{});}
+                    // Carica notifiche non lette al login
+                    const sbLogin = window.supabaseClient;
+                    if(sbLogin){sbLogin.from('notifiche').select('*').eq('letto',false).order('created_at',{ascending:false}).limit(50).then(function(r){if(r.data)setSharedNotifiche(r.data);});}
+                  },
                   onRegistrazione: ()=>cambiaSchermata("register"),
                   onRecupero: ()=>cambiaSchermata("recover"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10752}}
                 )
@@ -16523,6 +16623,7 @@ function App() {
                    docenti: sharedDocenti, lessons: sharedLessons,
                    concerti: sharedConcerti,
                    richieste: sharedRichieste,
+                   notifiche: sharedNotifiche,
                    panels: sharedPanels, setPanels: setSharedPanels,
                    onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
     allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
