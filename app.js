@@ -4342,39 +4342,60 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
       ? (function(){ try{ return JSON.parse(rawDisp); } catch(e){ return []; } })()
       : (Array.isArray(rawDisp) ? rawDisp : []);
     if (!disp.length) return [];
+
     var durataMin = lezInfo.durata || 45;
-    var oggi_s = new Date(); oggi_s.setHours(0,0,0,0);
-    var risultato = [];
     var toMin = function(t) { var parts = (t||"0:0").split(":"); return parseInt(parts[0])*60 + (parseInt(parts[1])||0); };
     var toStr = function(m) { return String(Math.floor(m/60)).padStart(2,"0") + ":" + String(m%60).padStart(2,"0"); };
-    var giorni = ["domenica","lunedi","martedi","mercoledi","giovedi","venerdi","sabato"];
-    for (var w = 0; w <= 7; w++) {
-      for (var si = 0; si < disp.length; si++) {
-        var slot = disp[si];
-        var giornoNorm = (slot.giorno||"").toLowerCase().replace(/[ìí]/g,"i").replace(/[àá]/g,"a").replace(/[èé]/g,"e").replace(/[ùú]/g,"u");
-        var dayIdx = giorni.indexOf(giornoNorm);
-        if (dayIdx < 0) continue;
-        var d = new Date(oggi_s);
-        var diff = (dayIdx - d.getDay() + 7) % 7;
-        if (diff === 0) diff = 7;
-        d.setDate(d.getDate() + diff + w * 7);
-        if (d <= oggi_s) continue;
-        var dataStr = d.toISOString().split("T")[0];
-        var cur = toMin(slot.oraInizio);
-        var end = toMin(slot.oraFine);
-        while (cur + durataMin <= end) {
-          risultato.push({
-            data: dataStr,
-            giorno: slot.giorno,
-            oraInizio: toStr(cur),
-            oraFine: toStr(cur + durataMin),
-            key: dataStr + "_" + toStr(cur),
-            docRecord: docRecord,
-          });
-          cur += durataMin;
+
+    // Limiti temporali: domani → fine mese corrente (i recuperi decadono a fine mese)
+    var oggi_s = new Date(); oggi_s.setHours(0,0,0,0);
+    var domani = new Date(oggi_s); domani.setDate(domani.getDate() + 1);
+    var fineMese = new Date(oggi_s.getFullYear(), oggi_s.getMonth() + 1, 0); // ultimo giorno del mese
+    fineMese.setHours(23,59,59,0);
+
+    // Mappa nomi giorno IT → indice JS (0=dom, 1=lun, ...)
+    // getDay(): 0=dom,1=lun,2=mar,3=mer,4=gio,5=ven,6=sab
+    var giornoToIdx = {
+      "domenica":0, "lunedi":1, "lunedì":1,
+      "martedi":2,  "martedì":2,
+      "mercoledi":3,"mercoledì":3,
+      "giovedi":4,  "giovedì":4,
+      "venerdi":5,  "venerdì":5,
+      "sabato":6
+    };
+
+    var risultato = [];
+
+    for (var si = 0; si < disp.length; si++) {
+      var slot = disp[si];
+      var giornoNorm = (slot.giorno||"").toLowerCase().trim();
+      var targetDow = giornoToIdx[giornoNorm]; // indice giorno della settimana
+      if (targetDow === undefined) continue;
+
+      // Itera ogni giorno da domani fino alla fine del mese
+      var cursor = new Date(domani);
+      while (cursor <= fineMese) {
+        if (cursor.getDay() === targetDow) {
+          var dataStr = cursor.getFullYear() + "-" +
+            String(cursor.getMonth()+1).padStart(2,"0") + "-" +
+            String(cursor.getDate()).padStart(2,"0");
+          var cur = toMin(slot.oraInizio);
+          var end = toMin(slot.oraFine);
+          while (cur + durataMin <= end) {
+            risultato.push({
+              data: dataStr,
+              giorno: slot.giorno,
+              oraInizio: toStr(cur),
+              oraFine: toStr(cur + durataMin),
+              key: dataStr + "_" + toStr(cur),
+            });
+            cur += durataMin;
+          }
         }
+        cursor.setDate(cursor.getDate() + 1);
       }
     }
+
     risultato.sort(function(a,b){ return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
     return risultato;
   }, [recuperoForm.lezId, student.teacher]);
@@ -5132,11 +5153,11 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
           , recuperoForm.lezId && (
             React.createElement('div', {style:{marginBottom:16}}
               , React.createElement('div', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:8,fontWeight:600}}
-                , "2 — Scegli giorno e orario *"
+                , "2 — Scegli giorno e orario (solo mese corrente) *"
               )
               , slotsRecuperoDisp.length === 0 ? (
                 React.createElement('div', {style:{padding:"12px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,color:C.textDim}}
-                  , "⚠️ Il docente non ha ancora configurato le fasce di disponibilità. Contatta direttamente il docente."
+                  , "⚠️ Nessuno slot disponibile entro fine mese. Il docente potrebbe non avere disponibilità questo mese oppure non ha ancora configurato le fasce."
                 )
               ) : (
                 React.createElement('div', null
