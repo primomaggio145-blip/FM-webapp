@@ -1467,8 +1467,8 @@ const MiniChart = ({ dati }) => {
 };
 
 // ─── LESSON TIMELINE ──────────────────────────────────────────────────────────
-const LessonTimeline = ({ lezioni }) => {
-  const oraNum = t => { const [h,m]=t.split(":").map(Number); return h*60+m; };
+const LessonTimeline = ({ lezioni, onLessonClick }) => {
+  const oraNum = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
   const nowMins = oggi.getHours()*60+oggi.getMinutes();
 
   return (
@@ -1479,6 +1479,7 @@ const LessonTimeline = ({ lezioni }) => {
         const inCorso= nowMins>=startM && nowMins<endM;
         const passata = nowMins>=endM;
         const prossima= !passata && !inCorso && i===lezioni.findIndex(x=>oraNum(x.ora)>nowMins);
+        const clickable = !!onLessonClick;
 
         const docenteColor = {
           "Prof. Rossi":C.gold,"Prof. Bianchi":C.teal,"Prof. Verde":C.blue,"Prof. Marino":C.purple
@@ -1486,11 +1487,17 @@ const LessonTimeline = ({ lezioni }) => {
 
         return (
           React.createElement('div', { key: l.id, className: "lesson-row",
+            onClick: clickable ? ()=>onLessonClick(l.id) : undefined,
             style: {display:"grid",gridTemplateColumns:"52px 4px 1fr auto",
               gap:10,alignItems:"center",padding:"9px 12px",borderRadius:10,
               background:inCorso?`${C.goldBg}cc`:passata?C.bg:C.surface,
               border:`1px solid ${inCorso?C.goldDim:passata?C.border+"60":C.border}`,
-              opacity:passata?0.5:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1340}}
+              opacity:passata?0.5:1,
+              cursor: clickable ? "pointer" : "default",
+              transition:"all 0.12s"},
+            onMouseEnter: clickable ? e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.background=inCorso?`${C.goldBg}cc`:`${C.gold}0a`;} : undefined,
+            onMouseLeave: clickable ? e=>{e.currentTarget.style.borderColor=inCorso?C.goldDim:passata?C.border+"60":C.border;e.currentTarget.style.background=inCorso?`${C.goldBg}cc`:passata?C.bg:C.surface;} : undefined,
+            __self: this, __source: {fileName: _jsxFileName, lineNumber: 1340}}
             /* Ora */
             , React.createElement('div', { style: {textAlign:"right"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1347}}
               , React.createElement('div', { style: {fontSize:13,fontWeight:500,color:inCorso?C.gold:passata?C.textDim:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1348}}, l.ora)
@@ -3093,7 +3100,12 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       , React.createElement(LessonTimeline, { lezioni: ruolo==="allievo"
                         ? LEZIONI_OGGI_LIVE.filter(l=>(l.allievo||l.student||"").toLowerCase().includes(myNome.toLowerCase()))
                         : ruolo==="docente" ? LEZIONI_OGGI_LIVE.filter(matchDocLezione)
-                        : LEZIONI_OGGI_LIVE, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2253}})
+                        : LEZIONI_OGGI_LIVE,
+                        onLessonClick: (lessonId) => {
+                          onNavigate("calendario");
+                          if (onQuickAction) setTimeout(()=>onQuickAction("openLesson:"+lessonId), 120);
+                        },
+                        __self: this, __source: {fileName: _jsxFileName, lineNumber: 2253}})
                     )
                     , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2255}}
                       , React.createElement('button', { onClick: ()=>onNavigate("calendario"),
@@ -9106,6 +9118,18 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     else if(qaCV==="showElenco"){ setAppView("lezioni_admin"); if(clearQaCV)clearQaCV(); }
     else if(qaCV==="showSalaProve"){ setAppView("sala_prove"); if(clearQaCV)clearQaCV(); }
     else if(qaCV==="showCalendario"){ setAppView("calendario"); if(clearQaCV)clearQaCV(); }
+    else if(typeof qaCV==="string" && qaCV.startsWith("openLesson:")) {
+      const lid = qaCV.slice("openLesson:".length);
+      const found = (propLessons||[]).find(l=>String(l.id)===lid);
+      if (found) {
+        setSelLesson(found);
+        setAppView("calendario");
+        // Naviga alla data della lezione
+        setCurDate(new Date((found.date||found.data||yyyymmdd(oggi))+"T00:00:00"));
+        setModal(role==="docente" ? "edit" : "detail");
+      }
+      if(clearQaCV)clearQaCV();
+    }
   },[qaCV]);
 
     const navigate = (dir) => {
