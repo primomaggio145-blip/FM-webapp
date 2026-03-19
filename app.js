@@ -14465,6 +14465,18 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const [selMese, setSelMese] = useState(defaultSelMese);
   const [sortKeyDP, sortDirDP, handleSortDP, sortFnDP] = useSortable("mese", "asc");
   const [sortKeyDC, sortDirDC, handleSortDC, sortFnDC] = useSortable("mese", "asc");
+  // Mostra/nascondi importi (per il docente loggato)
+  const [showAmountsDoc, setShowAmountsDoc] = useState(false);
+  // Impostazioni docente (dashboard panels + profilo personale)
+  const [docSettings, setDocSettings] = useState({
+    panels: { lezioni:true, allievi:true, compenso:true, repertorio:true, allegati:true },
+    profiloForm: null,   // null = sola lettura, oggetto = in modifica
+    pwForm: null,        // null = nascosto, {old:"",new1:"",new2:""} = aperto
+    savingProfilo: false,
+    savingPw: false,
+    msgProfilo: null,
+    msgPw: null,
+  });
 
   // FormModal inline JSX (evita re-mount su ogni keystroke)
   const formModalJSX = (modal && modal !== "del") ? (
@@ -14582,6 +14594,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     {id:"lezioni",  label:"Lezioni",  icon:"calendar"},
     // Tab Compenso visibile sempre (docente vede solo sé stesso)
     {id:"compenso", label:"Compenso", icon:"euro"},
+    // Tab Impostazioni solo per il docente loggato
+    ...(ruoloDocView==="docente" ? [{id:"impostazioni", label:"Impostazioni", icon:"settings"}] : []),
   ];
   const stip = stipendioMese(selected);
 
@@ -14693,6 +14707,19 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             )
           )
           , React.createElement('div', { style: {display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10136}}
+            , ruoloDocView==="docente" && React.createElement('button', {
+                onClick: ()=>setShowAmountsDoc(p=>!p),
+                title: showAmountsDoc ? "Nascondi importi" : "Mostra importi",
+                style:{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",
+                  background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,
+                  cursor:"pointer",fontFamily:"'Open Sans',sans-serif",fontSize:11,
+                  color:C.textMuted,transition:"all 0.15s"},
+                onMouseEnter:e=>{e.currentTarget.style.borderColor=selected.colore;e.currentTarget.style.color=selected.colore;},
+                onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}
+              }
+              , React.createElement(Ic, {n: showAmountsDoc?"eye":"eye-off", size:13, stroke:showAmountsDoc?selected.colore:C.textMuted})
+              , showAmountsDoc ? "Nascondi" : "Mostra importi"
+            )
             , ruoloDocView==="admin" && React.createElement(Btn, { small: true, variant: "secondary", onClick: ()=>openEdit(selected), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10137}}, React.createElement(Ic, { n: "edit", size: 13, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10137}}), "Modifica")
             , ruoloDocView==="admin" && React.createElement(Btn, { small: true, danger: true, onClick: ()=>setModal("del"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10138}}, React.createElement(Ic, { n: "trash", size: 13, stroke: C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10138}}))
           )
@@ -14700,14 +14727,18 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
         /* KPI strip — dati mese selezionato */
         , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginTop:20,paddingTop:20,borderTop:`1px solid ${C.border}`}, className: "stat-strip", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10142}}
           , [
-            {label:"Allievi totali",  value:all.length,                          hex:selected.colore},
-            {label:`Lez. ${MESI_LABEL_S[selMese.m-1]}`, value:lezSelAll.length, hex:C.textMuted},
+            {label:"Allievi totali",  value:all.length,                          hex:selected.colore, money:false},
+            {label:`Lez. ${MESI_LABEL_S[selMese.m-1]}`, value:lezSelAll.length, hex:C.textMuted, money:false},
             // Tariffa e Compenso sempre visibili (docente vede solo sé stesso)
-            {label:"Tariffa/ora",     value:`€${selected.tariffaOra}`,           hex:C.gold},
-            {label:`Compenso ${MESI_LABEL_S[selMese.m-1]}`, value:`€${stipSel.toLocaleString("it-IT")}`, hex:C.green},
+            {label:"Tariffa/ora",     value:`€${selected.tariffaOra}`,           hex:C.gold, money:true},
+            {label:`Compenso ${MESI_LABEL_S[selMese.m-1]}`, value:`€${stipSel.toLocaleString("it-IT")}`, hex:C.green, money:true},
           ].map(k=>(
             React.createElement('div', { key: k.label, style: {background:C.bg,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10149}}
-              , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600,color:k.hex,lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10150}}, k.value)
+              , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600,color:k.hex,lineHeight:1,
+                  filter: k.money && !showAmountsDoc ? "blur(7px)" : "none",
+                  transition:"filter 0.2s", userSelect: k.money && !showAmountsDoc ? "none" : "auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10150}}
+                , k.money && !showAmountsDoc ? "••••" : k.value
+              )
               , React.createElement('div', { style: {fontSize:10,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.08em",marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10151}}, k.label)
             )
           ))
@@ -15087,6 +15118,269 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           testo: `Rimuovere ${selected.nome} dall\'organico? Questa azione è irreversibile.`,
           onConfirm: ()=>delDoc(selected.id),
           onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10549}}
+        )
+      )
+
+      /* ── IMPOSTAZIONI (solo docente) ── */
+      , tab==="impostazioni" && ruoloDocView==="docente" && (
+        React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:20}}
+
+          /* ── Mostra/nascondi importi ── */
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
+              , React.createElement(Ic, {n:"eye",size:14,stroke:C.gold})
+              , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Privacy importi")
+            )
+            , React.createElement('div', {style:{padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:16}}
+              , React.createElement('div', null
+                , React.createElement('div', {style:{fontSize:13,fontWeight:500,marginBottom:3}}, "Mostra importi e compensi")
+                , React.createElement('div', {style:{fontSize:12,color:C.textDim}}, "Quando disattivo, tariffa e compensi sono oscurati con blur")
+              )
+              , React.createElement('button', {
+                  onClick: ()=>setShowAmountsDoc(p=>!p),
+                  style:{
+                    width:48, height:26, borderRadius:13,
+                    background: showAmountsDoc ? selected.colore : C.border,
+                    border:"none", cursor:"pointer", position:"relative",
+                    transition:"background 0.2s", flexShrink:0,
+                  }
+                }
+                , React.createElement('div', {style:{
+                    position:"absolute", top:3,
+                    left: showAmountsDoc ? 24 : 4,
+                    width:20, height:20, borderRadius:"50%",
+                    background:"#fff", transition:"left 0.2s",
+                    boxShadow:"0 1px 3px rgba(0,0,0,0.2)"
+                  }})
+              )
+            )
+          )
+
+          /* ── Sezioni dashboard visibili ── */
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
+              , React.createElement(Ic, {n:"grid",size:14,stroke:C.gold})
+              , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Sezioni dashboard")
+            )
+            , [
+                {key:"lezioni",   label:"Calendario lezioni",    desc:"Vista calendario e gestione lezioni"},
+                {key:"allievi",   label:"Allievi",               desc:"Schede allievi assegnati"},
+                {key:"compenso",  label:"Compensi",              desc:"Storico pagamenti e tariffa"},
+                {key:"repertorio",label:"Repertorio",            desc:"Brani e programma musicale"},
+                {key:"allegati",  label:"Allegati",              desc:"Documenti e file caricati"},
+              ].map((item,i,arr)=>(
+              React.createElement('div', {key:item.key, style:{
+                  padding:"14px 20px",
+                  borderBottom: i<arr.length-1 ? `1px solid ${C.border}` : "none",
+                  display:"flex", alignItems:"center", justifyContent:"space-between", gap:16,
+                }}
+                , React.createElement('div', null
+                  , React.createElement('div', {style:{fontSize:13,fontWeight:500,marginBottom:2}}, item.label)
+                  , React.createElement('div', {style:{fontSize:12,color:C.textDim}}, item.desc)
+                )
+                , React.createElement('button', {
+                    onClick: ()=>setDocSettings(p=>({...p, panels:{...p.panels, [item.key]:!p.panels[item.key]}})),
+                    style:{
+                      width:48, height:26, borderRadius:13,
+                      background: docSettings.panels[item.key] ? selected.colore : C.border,
+                      border:"none", cursor:"pointer", position:"relative",
+                      transition:"background 0.2s", flexShrink:0,
+                    }
+                  }
+                  , React.createElement('div', {style:{
+                      position:"absolute", top:3,
+                      left: docSettings.panels[item.key] ? 24 : 4,
+                      width:20, height:20, borderRadius:"50%",
+                      background:"#fff", transition:"left 0.2s",
+                      boxShadow:"0 1px 3px rgba(0,0,0,0.2)"
+                    }})
+                )
+              )
+            ))
+          )
+
+          /* ── Informazioni personali ── */
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}
+              , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+                , React.createElement(Ic, {n:"user",size:14,stroke:C.gold})
+                , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Informazioni personali")
+              )
+              , !docSettings.profiloForm && React.createElement('button', {
+                  onClick: ()=>setDocSettings(p=>({...p, profiloForm:{nome:selected.nome||"", email:selected.email||"", phone:selected.phone||"", bio:selected.bio||""}, msgProfilo:null})),
+                  style:{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",
+                    background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
+                    cursor:"pointer",fontSize:12,color:C.textMuted,fontFamily:"'Open Sans',sans-serif"}
+                }
+                , React.createElement(Ic,{n:"edit",size:12,stroke:C.textMuted}), " Modifica"
+              )
+            )
+            , docSettings.profiloForm ? (
+              React.createElement('div', {style:{padding:"20px"}}
+                , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}, [
+                    {key:"nome",  label:"Nome completo *", type:"text",  placeholder:"Prof. Mario Rossi"},
+                    {key:"email", label:"Email",           type:"email", placeholder:"email@esempio.it"},
+                    {key:"phone", label:"Telefono",        type:"tel",   placeholder:"+39 333 1234567"},
+                  ].map(f=>(
+                    React.createElement('div', {key:f.key}
+                      , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:5}}, f.label)
+                      , React.createElement('input', {
+                          type:f.type, value:docSettings.profiloForm[f.key],
+                          onChange:e=>setDocSettings(p=>({...p,profiloForm:{...p.profiloForm,[f.key]:e.target.value}})),
+                          placeholder:f.placeholder,
+                          style:{width:"100%",padding:"9px 12px",border:`1px solid ${C.border}`,borderRadius:8,
+                            fontSize:13,fontFamily:"'Open Sans',sans-serif",background:C.bg,color:C.text,outline:"none"}
+                        })
+                    )
+                  )))
+                , React.createElement('div', {style:{marginBottom:14}}
+                  , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Biografia")
+                  , React.createElement('textarea', {
+                      value: docSettings.profiloForm.bio,
+                      onChange:e=>setDocSettings(p=>({...p,profiloForm:{...p.profiloForm,bio:e.target.value}})),
+                      placeholder:"Formazione, esperienze, specializzazioni...",
+                      rows:4,
+                      style:{width:"100%",padding:"9px 12px",border:`1px solid ${C.border}`,borderRadius:8,
+                        fontSize:13,fontFamily:"'Open Sans',sans-serif",background:C.bg,color:C.text,
+                        outline:"none",resize:"vertical"}
+                    })
+                )
+                , docSettings.msgProfilo && React.createElement('div', {style:{padding:"10px 14px",marginBottom:12,
+                    borderRadius:8,fontSize:12,
+                    background: docSettings.msgProfilo.ok ? C.greenBg : C.redBg,
+                    color:       docSettings.msgProfilo.ok ? C.green   : C.red,
+                    border:`1px solid ${docSettings.msgProfilo.ok?C.greenBorder:C.redBorder}`}}
+                  , docSettings.msgProfilo.text
+                )
+                , React.createElement('div', {style:{display:"flex",gap:8,justifyContent:"flex-end"}}
+                  , React.createElement(Btn, {variant:"secondary", onClick:()=>setDocSettings(p=>({...p,profiloForm:null,msgProfilo:null}))}, "Annulla")
+                  , React.createElement(Btn, {
+                      disabled: docSettings.savingProfilo || !(docSettings.profiloForm.nome||"").trim(),
+                      onClick: async ()=>{
+                        setDocSettings(p=>({...p,savingProfilo:true,msgProfilo:null}));
+                        try {
+                          const f = docSettings.profiloForm;
+                          const updated = {...selected, nome:f.nome, email:f.email, phone:f.phone, bio:f.bio};
+                          setDocenti(prev=>prev.map(d=>d.id===selected.id?updated:d));
+                          setSelected(updated);
+                          const sb=window.supabaseClient;
+                          if(sb){
+                            await sb.from('docenti').update({nome:f.nome,email:f.email||null,phone:f.phone||null,bio:f.bio||null,updated_at:new Date().toISOString()}).eq('id',selected.id);
+                            // Aggiorna anche il profilo auth
+                            await sb.from('profili').update({nome:f.nome,updated_at:new Date().toISOString()}).eq('id',auth.uid?.()??_appUserDocView?.userId??'');
+                          }
+                          setDocSettings(p=>({...p,savingProfilo:false,profiloForm:null,msgProfilo:{ok:true,text:"✓ Profilo aggiornato con successo"}}));
+                          setTimeout(()=>setDocSettings(p=>({...p,msgProfilo:null})),3000);
+                        } catch(e){
+                          setDocSettings(p=>({...p,savingProfilo:false,msgProfilo:{ok:false,text:"Errore: "+e.message}}));
+                        }
+                      }
+                    }
+                    , React.createElement(Ic,{n:"check",size:13,stroke:"#fff"}), docSettings.savingProfilo?" Salvataggio...":" Salva modifiche"
+                  )
+                )
+              )
+            ) : (
+              React.createElement('div', {style:{padding:"16px 20px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}
+                , [{label:"Nome",      value:selected.nome||"—", icon:"user"},
+                   {label:"Email",     value:selected.email||"—", icon:"mail"},
+                   {label:"Telefono",  value:selected.phone||"—", icon:"phone"},
+                  ].map(f=>(
+                  React.createElement('div', {key:f.label, style:{display:"flex",alignItems:"flex-start",gap:10}}
+                    , React.createElement(Ic,{n:f.icon,size:14,stroke:C.textDim})
+                    , React.createElement('div', null
+                      , React.createElement('div', {style:{fontSize:10,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:2}}, f.label)
+                      , React.createElement('div', {style:{fontSize:13,color:C.text}}, f.value)
+                    )
+                  )
+                ))
+                , selected.bio && React.createElement('div', {style:{gridColumn:"1/-1",marginTop:8,paddingTop:12,borderTop:`1px solid ${C.border}`}}
+                  , React.createElement('div', {style:{fontSize:10,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:6}}, "Biografia")
+                  , React.createElement('p', {style:{fontSize:13,color:C.textMuted,lineHeight:1.6,margin:0}}, selected.bio)
+                )
+              )
+            )
+          )
+
+          /* ── Cambio password ── */
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}
+              , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+                , React.createElement(Ic, {n:"lock",size:14,stroke:C.gold})
+                , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Sicurezza account")
+              )
+              , !docSettings.pwForm && React.createElement('button', {
+                  onClick: ()=>setDocSettings(p=>({...p,pwForm:{old:"",new1:"",new2:""},msgPw:null})),
+                  style:{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",
+                    background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
+                    cursor:"pointer",fontSize:12,color:C.textMuted,fontFamily:"'Open Sans',sans-serif"}
+                }
+                , React.createElement(Ic,{n:"edit",size:12,stroke:C.textMuted}), " Cambia password"
+              )
+            )
+            , docSettings.pwForm ? (
+              React.createElement('div', {style:{padding:"20px"}}
+                , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:12,marginBottom:16}}
+                  , [{key:"old",  label:"Password attuale *"},
+                     {key:"new1", label:"Nuova password *"},
+                     {key:"new2", label:"Conferma nuova password *"},
+                    ].map(f=>(
+                    React.createElement('div', {key:f.key}
+                      , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:5}}, f.label)
+                      , React.createElement('input', {
+                          type:"password", value:docSettings.pwForm[f.key],
+                          onChange:e=>setDocSettings(p=>({...p,pwForm:{...p.pwForm,[f.key]:e.target.value}})),
+                          style:{width:"100%",padding:"9px 12px",border:`1px solid ${C.border}`,borderRadius:8,
+                            fontSize:13,fontFamily:"'Open Sans',sans-serif",background:C.bg,color:C.text,outline:"none"}
+                        })
+                    )
+                  ))
+                )
+                , docSettings.msgPw && React.createElement('div', {style:{padding:"10px 14px",marginBottom:12,borderRadius:8,fontSize:12,
+                    background: docSettings.msgPw.ok ? C.greenBg : C.redBg,
+                    color:       docSettings.msgPw.ok ? C.green   : C.red,
+                    border:`1px solid ${docSettings.msgPw.ok?C.greenBorder:C.redBorder}`}}
+                  , docSettings.msgPw.text
+                )
+                , React.createElement('div', {style:{display:"flex",gap:8,justifyContent:"flex-end"}}
+                  , React.createElement(Btn, {variant:"secondary", onClick:()=>setDocSettings(p=>({...p,pwForm:null,msgPw:null}))}, "Annulla")
+                  , React.createElement(Btn, {
+                      disabled: docSettings.savingPw,
+                      onClick: async ()=>{
+                        const {old,new1,new2} = docSettings.pwForm;
+                        if(!old||!new1||!new2){setDocSettings(p=>({...p,msgPw:{ok:false,text:"Compila tutti i campi"}}));return;}
+                        if(new1.length<8){setDocSettings(p=>({...p,msgPw:{ok:false,text:"La nuova password deve essere di almeno 8 caratteri"}}));return;}
+                        if(new1!==new2){setDocSettings(p=>({...p,msgPw:{ok:false,text:"Le password non coincidono"}}));return;}
+                        setDocSettings(p=>({...p,savingPw:true,msgPw:null}));
+                        try {
+                          const sb=window.supabaseClient;
+                          if(sb){
+                            // Verifica password attuale con re-auth
+                            const email = selected.email || _appUserDocView?.email || "";
+                            const {error:signErr} = await sb.auth.signInWithPassword({email, password:old});
+                            if(signErr) throw new Error("Password attuale errata");
+                            const {error:updErr} = await sb.auth.updateUser({password:new1});
+                            if(updErr) throw new Error(updErr.message);
+                          }
+                          setDocSettings(p=>({...p,savingPw:false,pwForm:null,msgPw:{ok:true,text:"✓ Password aggiornata con successo"}}));
+                          setTimeout(()=>setDocSettings(p=>({...p,msgPw:null})),3000);
+                        } catch(e){
+                          setDocSettings(p=>({...p,savingPw:false,msgPw:{ok:false,text:"Errore: "+e.message}}));
+                        }
+                      }
+                    }
+                    , React.createElement(Ic,{n:"check",size:13,stroke:"#fff"}), docSettings.savingPw?" Aggiornamento...":" Aggiorna password"
+                  )
+                )
+              )
+            ) : (
+              React.createElement('div', {style:{padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}
+                , React.createElement(Ic,{n:"lock",size:16,stroke:C.textDim})
+                , React.createElement('span', {style:{fontSize:13,color:C.textMuted}}, "Password protetta — clicca \"Cambia password\" per modificarla")
+              )
+            )
+          )
+
         )
       )
     )
