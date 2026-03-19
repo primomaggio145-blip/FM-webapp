@@ -418,7 +418,8 @@
     if (!_ready) { warn('Sync non ancora attivo — salto'); return; }
 
     const MAP = [
-      ['studenti', 'students', toDB.studenti],
+      // ATTENZIONE: studenti è ESCLUSO dall'auto-sync per evitare loop di duplicazione.
+      // Gli studenti vengono gestiti con scritture dirette su Supabase in app.js.
       ['docenti',  'docenti',  toDB.docenti ],
       ['corsi',    'courses',  toDB.corsi   ],
       ['lezioni',  'lessons',  toDB.lezioni ],
