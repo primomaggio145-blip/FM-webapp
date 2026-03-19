@@ -1516,7 +1516,11 @@ const LessonTimeline = ({ lezioni, onLessonClick }) => {
               , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:6,marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1361}}
                 , React.createElement('span', { style: {fontSize:13,fontWeight:500,color:inCorso?C.gold:C.text,
                   overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1362}}
-                  , l.allievo
+                  , l.tipo==="collettivo"
+                      ? (l.students&&l.students.length>0
+                          ? l.students.slice(0,2).map(function(s){return s.name||s.nome||s;}).join(", ")+(l.students.length>2?" +"+( l.students.length-2):"")
+                          : l.strumento||"Lezione collettiva")
+                      : (l.allievo||l.strumento||"—")
                 )
                 , inCorso && (
                   React.createElement('span', { style: {fontSize:9,background:C.gold,color:"#ffffff",borderRadius:4,
@@ -3206,6 +3210,18 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     const s=l.recuperoScadenza?new Date(l.recuperoScadenza+'T00:00:00'):null;
                     return !s || (s >= oggi_r && (s - oggi_r)/86400000 > 5);
                   });
+
+                  // Richieste recupero in attesa (da Supabase, via window per semplicità)
+                  const richRec = (window.__richiesteRecupero__ || []);
+                  const richDocente = ruolo==="docente"
+                    ? richRec.filter(function(r){
+                        var myKey = (myDocRecord && (myDocRecord.teacherKey||myDocRecord.nome)) || myDocNome;
+                        return myKey && ((r.docente||"").toLowerCase().indexOf(myKey.toLowerCase())>=0 || myKey.toLowerCase().indexOf((r.docente||"").toLowerCase())>=0);
+                      })
+                    : ruolo==="admin" ? richRec : [];
+                  const richInAttesa   = richDocente.filter(function(r){ return r.stato==='in_attesa'; });
+                  const richConfermata = ruolo==='admin' ? richRec.filter(function(r){ return r.stato==='confermata'; }) : [];
+
                   return React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
                     , React.createElement('div', { style: {padding:"14px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}
                       , React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8}}
@@ -3215,6 +3231,25 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       , React.createElement('span', { style: {fontSize:22,fontWeight:700,fontFamily:"'Oswald',sans-serif",color:lezioniRec.length>0?'#f59e0b':C.green}}, lezioniRec.length)
                     )
                     , React.createElement('div', { style: {padding:"14px 18px"}}
+                      /* Richieste da gestire (docente/admin) */
+                      , (richInAttesa.length > 0 || richConfermata.length > 0) && React.createElement('div', {style:{marginBottom:10}}
+                        , richInAttesa.length > 0 && React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderRadius:9,background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,marginBottom:5,cursor:'pointer'},
+                            onClick:()=>{ onNavigate("calendario"); if(onQuickAction) setTimeout(()=>onQuickAction("showRecuperi"),80); }}
+                          , React.createElement(Ic,{n:"calendar",size:13,stroke:C.purple})
+                          , React.createElement('div',{style:{flex:1}}
+                            , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.purple}}, richInAttesa.length+' richiesta'+(richInAttesa.length===1?'':'e')+' da approvare')
+                            , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, richInAttesa.slice(0,2).map(function(r){return r.allievo_nome||'?';}).join(', ')+(richInAttesa.length>2?' +altri':''))
+                          )
+                        )
+                        , richConfermata.length > 0 && React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'10px 12px',borderRadius:9,background:C.blueBg,border:`1px solid ${C.blueBorder}`,marginBottom:5,cursor:'pointer'},
+                            onClick:()=>{ onNavigate("calendario"); if(onQuickAction) setTimeout(()=>onQuickAction("showRecuperi"),80); }}
+                          , React.createElement(Ic,{n:"check",size:13,stroke:C.blue})
+                          , React.createElement('div',{style:{flex:1}}
+                            , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.blue}}, richConfermata.length+' da confermare ufficialmente')
+                            , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, richConfermata.slice(0,2).map(function(r){return r.allievo_nome||'?';}).join(', ')+(richConfermata.length>2?' +altri':''))
+                          )
+                        )
+                      )
                       , lezioniRec.length === 0
                         ? React.createElement('div',{style:{textAlign:'center',padding:'20px 0',color:C.textDim}}
                             , React.createElement('div',{style:{fontSize:24,marginBottom:6}},'✓')
@@ -9739,32 +9774,44 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       closeModal();
     };
     const handleEdit = (data) => {
-      setLessons(p => p.map(l => l.id === data.id ? { ...l, ...data } : l));
+      // Normalizza: 'recupero' = lezione recupero completata → presente + azzera in_recupero
+      var attNorm = data.attendance || null;
+      var inRecNorm = data.inRecupero || false;
+      var scadNorm = data.recuperoScadenza || null;
+      if (attNorm === 'recupero') {
+        attNorm = 'presente';
+        inRecNorm = false;
+        scadNorm = null;
+      } else if (attNorm === 'presente' || attNorm === 'assente' || attNorm === 'giustificato') {
+        inRecNorm = false;
+        scadNorm = null;
+      }
+      const dataNorm = { ...data, attendance: attNorm, inRecupero: inRecNorm, recuperoScadenza: scadNorm };
+      setLessons(p => p.map(l => l.id === data.id ? { ...l, ...dataNorm } : l));
 
       // Write diretto su Supabase — non aspetta il debounce di fm_sync
       // Evita che il realtime listener sovrascriva la modifica prima che syncState giri
       const sb = window.supabaseClient;
       if (sb && data.id) {
         const row = {
-          data:             data.date        || null,
-          ora:              data.hour        || null,
-          student:          data.student     || null,
-          studente_id:      data.studentId   || null,
-          strumento:        data.instrument  || data.strumento || null,
-          teacher:          data.teacher     || null,
-          room:             data.room        || null,
-          topic:            data.topic       || null,
-          attendance:       data.attendance  || null,
-          recurrence:       data.recurrence  || 'Nessuna',
-          notes:            data.notes       || null,
-          exercises:        data.exercises   || null,
-          tipo:             data.type        || 'individuale',
-          link_url:         data.linkUrl     || null,
-          in_recupero:      data.inRecupero  || false,
-          recupero_scadenza:data.recuperoScadenza || null,
-          repertorio_ids:   data.repertorioIds && data.repertorioIds.length > 0
-                              ? JSON.stringify(data.repertorioIds) : null,
-          updated_at:       new Date().toISOString(),
+          data:             dataNorm.date        || null,
+          ora:              dataNorm.hour        || null,
+          student:          dataNorm.student     || null,
+          studente_id:      dataNorm.studentId   || null,
+          strumento:        dataNorm.instrument  || dataNorm.strumento || null,
+          teacher:          dataNorm.teacher     || null,
+          room:             dataNorm.room        || null,
+          topic:            dataNorm.topic       || null,
+          attendance:       attNorm,
+          recurrence:       dataNorm.recurrence  || 'Nessuna',
+          notes:            dataNorm.notes       || null,
+          exercises:        dataNorm.exercises   || null,
+          tipo:             dataNorm.type        || 'individuale',
+          link_url:         dataNorm.linkUrl     || null,
+          in_recupero:      inRecNorm,
+          recupero_scadenza:scadNorm,
+          repertorio_ids:   dataNorm.repertorioIds && dataNorm.repertorioIds.length > 0
+                              ? JSON.stringify(dataNorm.repertorioIds) : null,
         };
         sb.from('lezioni').update(row).eq('id', data.id)
           .then(({ error }) => {
@@ -9904,15 +9951,25 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         }
         const updated = prev.map(l => l.id === id ? {...l, attendance: val === 'in_recupero' ? '' : val, ...extraProps} : l);
 
-        // ── Persisti l'aggiornamento presenza su Supabase ──────────────────
+        // Persisti l'aggiornamento presenza su Supabase
         const sb = window.supabaseClient;
         if (sb && lesson) {
-          const attVal = val === 'in_recupero' ? '' : val;
+          // 'in_recupero' → attendance vuoto nel DB (non è un valore attendance)
+          // 'recupero' → lezione completata come recupero: salva 'presente' e azzera in_recupero
+          var attDb = val;
+          var inRecDb = extraProps.inRecupero  ?? (lesson.inRecupero  || false);
+          var scadDb  = extraProps.recuperoScadenza ?? (lesson.recuperoScadenza || null);
+          if (attDb === 'in_recupero') {
+            attDb = null;
+          } else if (attDb === 'recupero') {
+            attDb = 'presente';
+            inRecDb = false;
+            scadDb = null;
+          }
           sb.from('lezioni').update({
-            attendance:        attVal || null,
-            in_recupero:       extraProps.inRecupero  ?? (lesson.inRecupero  || false),
-            recupero_scadenza: extraProps.recuperoScadenza ?? (lesson.recuperoScadenza || null),
-            updated_at:        new Date().toISOString(),
+            attendance:        attDb,
+            in_recupero:       inRecDb,
+            recupero_scadenza: scadDb,
           }).eq('id', id).then(({ error }) => {
             if (error) console.warn('[FM] attendance update error:', error.message);
           });
@@ -16577,6 +16634,10 @@ function App() {
                 const { data: nn } = await sb0.from('notifiche').select('*').eq('letto', false).order('created_at', {ascending:false}).limit(50);
                 if (nn) setSharedNotifiche(nn);
               } catch(e){}
+              try {
+                const { data: rr } = await sb0.from('richieste_recupero').select('*').order('created_at', {ascending:false}).limit(200);
+                if (rr) window.__richiesteRecupero__ = rr;
+              } catch(e){}
             }
           }
         }
@@ -16720,6 +16781,11 @@ function App() {
           const { data: nn } = await sb.from('notifiche').select('*').eq('letto', false).order('created_at', {ascending:false}).limit(50);
           if (nn) setSharedNotifiche(nn);
         } catch(e) {}
+        // Ricarica richieste recupero (per dashboard card)
+        try {
+          const { data: rr } = await sb.from('richieste_recupero').select('*').order('created_at', {ascending:false}).limit(200);
+          if (rr) window.__richiesteRecupero__ = rr;
+        } catch(e) {}
         if (!silent) {
           const t = document.getElementById('sync-toast');
           if (t) { t.textContent = '✓ Dati aggiornati'; t.style.opacity = '1'; setTimeout(() => { t.style.opacity = '0'; }, 2000); }
@@ -16731,9 +16797,66 @@ function App() {
       }
     };
 
-    // ── Polling automatico ogni 45 secondi (safety net oltre al realtime) ────
-    const _pollInterval = setInterval(() => {
-      window.__FM_FORCE_REFRESH__ && window.__FM_FORCE_REFRESH__(true);
+    // ── Polling leggero ogni 45s: solo dati del giorno + notifiche ────────────
+    // Il refresh COMPLETO (tutti i record) rimane solo sul pulsante manuale ⟳
+    let _polling = false;
+    window.__FM_POLL_TODAY__ = async function() {
+      if (_polling) return;
+      _polling = true;
+      try {
+        const sb = window.supabaseClient;
+        if (!sb) return;
+        const FA = window.FMAdapter;
+        const todayISO = new Date().toISOString().split('T')[0];
+
+        // 1. Solo lezioni di OGGI (1 query leggera invece di tutte le lezioni)
+        const { data: sL } = await sb.from('lezioni').select('*')
+          .eq('data', todayISO);
+        if (sL && window.__FM_RELOAD__) {
+          // Merge con le lezioni esistenti: sostituisci quelle di oggi, mantieni il resto
+          const existingLessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
+          const todayIds = new Set(sL.map(function(r){ return r.id; }));
+          const otherDays = existingLessons.filter(function(l){ return (l.date||l.data) !== todayISO && !todayIds.has(l.id); });
+          const adaptL = function(r) {
+            return {
+              id: r.id, date: r.data, hour: r.ora ? r.ora.slice(0,5) : '',
+              student: r.student||'', tipo: r.tipo||'individuale',
+              studentId: r.studente_id||null, instrument: r.strumento||r.instrument||'',
+              teacher: r.teacher||'', room: r.room||'', topic: r.topic||'',
+              attendance: r.attendance||'', recurrence: r.recurrence||'Nessuna',
+              notes: r.notes||'', type: r.tipo||'individuale',
+              linkUrl: r.link_url||'', inRecupero: r.in_recupero||false,
+              recuperoScadenza: r.recupero_scadenza||null,
+              durata: r.durata ? parseInt(r.durata) : (r.tipo==='collettivo'?60:45),
+              repertorioIds: (function(){ try{return r.repertorio_ids?JSON.parse(r.repertorio_ids):[];}catch(e){return [];} })(),
+              allegati: [],
+              students: (function(){ try{return r.students?JSON.parse(r.students):[];}catch(e){return [];} })(),
+              courseId: r.corso_id||null,
+            };
+          };
+          const todayAdapted = sL.map(adaptL);
+          window.__FM_RELOAD__({ lessons: [...otherDays, ...todayAdapted] });
+        }
+
+        // 2. Notifiche non lette
+        const { data: nn } = await sb.from('notifiche').select('*')
+          .eq('letto', false).order('created_at', {ascending:false}).limit(50);
+        if (nn) setSharedNotifiche(nn);
+
+        // 3. Richieste recupero recenti
+        const { data: rr } = await sb.from('richieste_recupero').select('*')
+          .order('created_at', {ascending:false}).limit(100);
+        if (rr) window.__richiesteRecupero__ = rr;
+
+      } catch(e) {
+        console.warn('[FM] Poll today error:', e);
+      } finally {
+        _polling = false;
+      }
+    };
+
+    const _pollInterval = setInterval(function() {
+      window.__FM_POLL_TODAY__ && window.__FM_POLL_TODAY__();
     }, 45000);
 
     // Overlay globale
@@ -16742,6 +16865,7 @@ function App() {
     return () => {
       window.__FM_RELOAD__ = null;
       window.__FM_FORCE_REFRESH__ = null;
+      window.__FM_POLL_TODAY__ = null;
       window.__FM_SHOW_MODAL__ = null;
       window.__FM_HIDE_MODAL__ = null;
       clearInterval(_pollInterval);
