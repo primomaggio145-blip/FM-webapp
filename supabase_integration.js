@@ -63,6 +63,12 @@
         contratto:   r.contratto      || '',
         dataInizio:  r.data_inizio    || '',
         corsi:       r.corsi          || [],
+        disponibilitaRecuperi: (() => {
+          const v = r.disponibilita_recuperi;
+          if (!v) return [];
+          if (Array.isArray(v)) return v;
+          try { return JSON.parse(v); } catch(e) { return []; }
+        })(),
       };
     },
     corso(r) {
