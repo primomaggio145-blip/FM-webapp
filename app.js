@@ -15512,7 +15512,6 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                         if (sb && selected) {
                           sb.from('docenti').update({
                             disponibilita_recuperi: JSON.stringify(updated),
-                            updated_at: new Date().toISOString()
                           }).eq('id', selected.id).then(({error})=>{
                             if(error) console.warn('[FM] disponibilita save error:', error.message);
                           });
@@ -15592,7 +15591,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                           setSelected(updated);
                           const sb=window.supabaseClient;
                           if(sb){
-                            await sb.from('docenti').update({nome:f.nome,email:f.email||null,phone:f.phone||null,bio:f.bio||null,updated_at:new Date().toISOString()}).eq('id',selected.id);
+                            await sb.from('docenti').update({nome:f.nome,email:f.email||null,phone:f.phone||null,bio:f.bio||null}).eq('id',selected.id);
                             // Aggiorna anche il profilo auth
                             await sb.from('profili').update({nome:f.nome,updated_at:new Date().toISOString()}).eq('id',auth.uid?.()??_appUserDocView?.userId??'');
                           }
