@@ -2415,7 +2415,8 @@ const CONFIG_DEFAULT = {
 
 
 // ─── NOTIFICATION BELL ────────────────────────────────────────────────────────
-const NotificationBell = ({ students, lessons, richieste, onNavigate }) => {
+const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB }) => {
+  const ruoloNB = _ruoloNB || "admin";
   const [open, setOpen] = useState(false);
   const ref = React.useRef(null);
 
@@ -2432,84 +2433,106 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate }) => {
   const ieri = new Date(oggi); ieri.setDate(oggi.getDate()-1);
   const ieriStr = yyyymmdd(ieri);
 
+  // Helper: filtra lezioni in base al ruolo
+  const myDocenteNome = ruoloNB === "docente" ? ((_appUserNB && _appUserNB.nome) || "") : "";
+  const myAllievoId   = ruoloNB === "allievo" ? ((_appUserNB && _appUserNB.allievoId) || null) : null;
+  const myAllievoNome = ruoloNB === "allievo" ? ((_appUserNB && _appUserNB.nome) || "") : "";
+
+  const myLessons = ruoloNB === "docente"
+    ? (lessons||[]).filter(l => myDocenteNome && (l.teacher||"").toLowerCase().includes(myDocenteNome.toLowerCase()))
+    : ruoloNB === "allievo"
+    ? (lessons||[]).filter(l => myAllievoId
+        ? String(l.studentId) === String(myAllievoId)
+        : (l.student||"").toLowerCase().includes(myAllievoNome.toLowerCase()))
+    : (lessons||[]); // admin vede tutto
+
   const notifs = [];
 
-  // 1. Nuove richieste accesso in attesa
-  const richiesteAttesa = (richieste||[]).filter(r=>r.stato==='in_attesa'||!r.stato);
-  if (richiesteAttesa.length > 0) {
-    notifs.push({
-      id:'richieste', tipo:'info',
-      icon:'users', color: C.blue,
-      titolo: `${richiesteAttesa.length} ${richiesteAttesa.length===1?'richiesta':'richieste'} di accesso in attesa`,
-      desc: richiesteAttesa.map(r=>r.nome).join(', '),
-      action: () => { onNavigate('utenti'); setOpen(false); },
-      actionLabel: 'Gestisci utenti',
-    });
-  }
-
-  // 2. Allievi con rate scadute
-  const morosi = (students||[]).filter(s=>s.status==='scaduto'||s.stato==='scaduto');
-  if (morosi.length > 0) {
-    notifs.push({
-      id:'morosi', tipo:'warning',
-      icon:'euro', color: C.orange,
-      titolo: `${morosi.length} ${morosi.length===1?'allievo ha':'allievi hanno'} rate scadute`,
-      desc: morosi.slice(0,3).map(s=>s.name||s.nome||'').join(', ') + (morosi.length>3?' e altri...':''),
-      action: () => { onNavigate('allievi'); setOpen(false); },
-      actionLabel: 'Vedi contabilità',
-    });
-  }
-
-  // 3. Lezioni di oggi senza presenza segnata
-  const lezioniOggiSenzaPresenza = (lessons||[]).filter(l => {
-    const d = l.date||l.data||'';
-    return d===todayStr && (!l.attendance||l.attendance==='');
-  });
-  if (lezioniOggiSenzaPresenza.length > 0) {
-    notifs.push({
-      id:'presenze', tipo:'warning',
-      icon:'check', color: C.gold,
-      titolo: `${lezioniOggiSenzaPresenza.length} ${lezioniOggiSenzaPresenza.length===1?'lezione oggi senza':'lezioni oggi senza'} presenza`,
-      desc: lezioniOggiSenzaPresenza.slice(0,3).map(l=>l.student||l.allievo||'Lezione collettiva').join(', '),
-      action: () => { onNavigate('calendario'); setOpen(false); },
-      actionLabel: 'Apri calendario',
-    });
-  }
-
-  // 4. Variazioni presenza ieri (lezioni con presenza registrata ieri)
-  const presenzeIeri = (lessons||[]).filter(l => {
-    const d = l.date||l.data||'';
-    return d===ieriStr && l.attendance && l.attendance!=='';
-  });
-  if (presenzeIeri.length > 0) {
-    const assenze = presenzeIeri.filter(l=>l.attendance==='assente'||l.attendance==='giustificato');
-    if (assenze.length > 0) {
+  // 1. Nuove richieste accesso (solo ADMIN)
+  if (ruoloNB === "admin") {
+    const richiesteAttesa = (richieste||[]).filter(r=>r.stato==='in_attesa'||!r.stato);
+    if (richiesteAttesa.length > 0) {
       notifs.push({
-        id:'assenze_ieri', tipo:'info',
-        icon:'alert', color: C.red,
-        titolo: `${assenze.length} ${assenze.length===1?'assenza':'assenze'} registrate ieri`,
-        desc: assenze.slice(0,3).map(l=>l.student||l.allievo||'—').join(', '),
-        action: () => { onNavigate('calendario'); setOpen(false); },
-        actionLabel: 'Vedi calendario',
+        id:'richieste', tipo:'info',
+        icon:'users', color: C.blue,
+        titolo: `${richiesteAttesa.length} ${richiesteAttesa.length===1?'richiesta':'richieste'} di accesso in attesa`,
+        desc: richiesteAttesa.map(r=>r.nome).join(', '),
+        action: () => { onNavigate('utenti'); setOpen(false); },
+        actionLabel: 'Gestisci utenti',
       });
     }
   }
 
-  // 5. Lezioni in recupero scadute (fine mese superata senza recupero)
+  // 2. Allievi con rate scadute (solo ADMIN)
+  if (ruoloNB === "admin") {
+    const morosi = (students||[]).filter(s=>s.status==='scaduto'||s.stato==='scaduto');
+    if (morosi.length > 0) {
+      notifs.push({
+        id:'morosi', tipo:'warning',
+        icon:'euro', color: C.orange,
+        titolo: `${morosi.length} ${morosi.length===1?'allievo ha':'allievi hanno'} rate scadute`,
+        desc: morosi.slice(0,3).map(s=>s.name||s.nome||'').join(', ') + (morosi.length>3?' e altri...':''),
+        action: () => { onNavigate('allievi'); setOpen(false); },
+        actionLabel: 'Vedi contabilità',
+      });
+    }
+  }
+
+  // 3. Lezioni di oggi senza presenza (ADMIN e DOCENTE, filtrate per ruolo)
+  if (ruoloNB === "admin" || ruoloNB === "docente") {
+    const lezioniOggiSenzaPresenza = myLessons.filter(l => {
+      const d = l.date||l.data||'';
+      return d===todayStr && (!l.attendance||l.attendance==='');
+    });
+    if (lezioniOggiSenzaPresenza.length > 0) {
+      notifs.push({
+        id:'presenze', tipo:'warning',
+        icon:'check', color: C.gold,
+        titolo: `${lezioniOggiSenzaPresenza.length} ${lezioniOggiSenzaPresenza.length===1?'lezione oggi senza':'lezioni oggi senza'} presenza`,
+        desc: lezioniOggiSenzaPresenza.slice(0,3).map(l=>l.student||l.allievo||'Lezione collettiva').join(', '),
+        action: () => { onNavigate('calendario'); setOpen(false); },
+        actionLabel: 'Apri calendario',
+      });
+    }
+  }
+
+  // 4. Assenze ieri (ADMIN e DOCENTE, filtrate per ruolo)
+  if (ruoloNB === "admin" || ruoloNB === "docente") {
+    const presenzeIeri = myLessons.filter(l => {
+      const d = l.date||l.data||'';
+      return d===ieriStr && l.attendance && l.attendance!=='';
+    });
+    if (presenzeIeri.length > 0) {
+      const assenze = presenzeIeri.filter(l=>l.attendance==='assente'||l.attendance==='giustificato');
+      if (assenze.length > 0) {
+        notifs.push({
+          id:'assenze_ieri', tipo:'info',
+          icon:'alert', color: C.red,
+          titolo: `${assenze.length} ${assenze.length===1?'assenza':'assenze'} registrate ieri`,
+          desc: assenze.slice(0,3).map(l=>l.student||l.allievo||'—').join(', '),
+          action: () => { onNavigate('calendario'); setOpen(false); },
+          actionLabel: 'Vedi calendario',
+        });
+      }
+    }
+  }
+
+  // 5. Recuperi scaduti/in scadenza (ADMIN e DOCENTE, filtrate; ALLIEVO vede i propri)
   const oggi_d = new Date(); oggi_d.setHours(0,0,0,0);
-  const recuperiScaduti = (lessons||[]).filter(l => l.inRecupero && l.recuperoScadenza && new Date(l.recuperoScadenza+'T00:00:00') < oggi_d);
-  const recuperiInScadenza = (lessons||[]).filter(l => {
+  const lessonsForRecupero = ruoloNB === "allievo" ? myLessons : myLessons;
+  const recuperiScaduti = lessonsForRecupero.filter(l => l.inRecupero && l.recuperoScadenza && new Date(l.recuperoScadenza+'T00:00:00') < oggi_d);
+  const recuperiInScadenza = lessonsForRecupero.filter(l => {
     if (!l.inRecupero || !l.recuperoScadenza) return false;
     const scad = new Date(l.recuperoScadenza+'T00:00:00');
     const diff = (scad - oggi_d) / 86400000;
-    return diff >= 0 && diff <= 5; // scade entro 5 giorni
+    return diff >= 0 && diff <= 5;
   });
   if (recuperiScaduti.length > 0) {
     notifs.push({
       id:'recuperi_scaduti', tipo:'warning',
-      icon:'alert-triangle', color: C.red,
+      icon:'alert', color: C.red,
       titolo: `${recuperiScaduti.length} ${recuperiScaduti.length===1?'lezione in recupero scaduta':'lezioni in recupero scadute'}`,
-      desc: 'Verranno segnate come ASSENTE e pagate al docente',
+      desc: ruoloNB === "allievo" ? 'Contatta il tuo docente' : 'Verranno segnate come ASSENTE e pagate al docente',
       action: () => { onNavigate('calendario'); setOpen(false); },
       actionLabel: 'Gestisci recuperi',
     });
@@ -2524,17 +2547,19 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate }) => {
     });
   }
 
-  // 6. Allievi sospesi
-  const sospesi = (students||[]).filter(s=>s.status==='sospeso'||s.stato==='sospeso');
-  if (sospesi.length > 0) {
-    notifs.push({
-      id:'sospesi', tipo:'info',
-      icon:'user', color: C.textMuted,
-      titolo: `${sospesi.length} ${sospesi.length===1?'abbonamento sospeso':'abbonamenti sospesi'}`,
-      desc: sospesi.slice(0,3).map(s=>s.name||s.nome||'').join(', '),
-      action: () => { onNavigate('allievi'); setOpen(false); },
-      actionLabel: 'Vedi allievi',
-    });
+  // 6. Allievi sospesi (solo ADMIN)
+  if (ruoloNB === "admin") {
+    const sospesi = (students||[]).filter(s=>s.status==='sospeso'||s.stato==='sospeso');
+    if (sospesi.length > 0) {
+      notifs.push({
+        id:'sospesi', tipo:'info',
+        icon:'user', color: C.textMuted,
+        titolo: `${sospesi.length} ${sospesi.length===1?'abbonamento sospeso':'abbonamenti sospesi'}`,
+        desc: sospesi.slice(0,3).map(s=>s.name||s.nome||'').join(', '),
+        action: () => { onNavigate('allievi'); setOpen(false); },
+        actionLabel: 'Vedi allievi',
+      });
+    }
   }
 
   const count = notifs.length;
@@ -2818,6 +2843,8 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   lessons: _lessons,
                   richieste: propRichieste||[],
                   onNavigate: onNavigate,
+                  ruolo: ruolo,
+                  appUser: appUser,
                 })
               /* Settings button rimosso dall'header — vedi Strumenti > Impostazioni */
               /* Ruolo badge */
@@ -4151,7 +4178,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const [lezForm, setLezForm]   = useState({ date: new Date().toISOString().split("T")[0], topic:"", attendance:"presente", notes:"" });
   const [ricevutaEnt, setRicevutaEnt] = useState(null);
   const [showRecuperoModal, setShowRecuperoModal] = useState(false);
-  const [recuperoForm, setRecuperoForm] = useState({ date:"", note:"" });
+  const [recuperoForm, setRecuperoForm] = useState({ date:"", note:"", lezId:null, lezInfo:null });
   const [sortKeyPres, sortDirPres, handleSortPres, sortFnPres] = useSortable("mese", "asc");
   const [sortKeyQuote, sortDirQuote, handleSortQuote, sortFnQuote] = useSortable("mese", "asc");
   const config = _nullishCoalesce(propConfig, () => ( CONFIG_DEFAULT));
@@ -4300,7 +4327,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
           )
           , sdRuolo !== "docente" && React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3224}}
             , sdRuolo === "allievo" && React.createElement('button', {
-                onClick: lezioniDaRecuperare.length > 0 ? () => { setRecuperoForm({ date: "", note: "" }); setShowRecuperoModal(true); } : undefined,
+                onClick: lezioniDaRecuperare.length > 0 ? () => { setRecuperoForm({ date: "", note: "", lezId: null, lezInfo: null }); setShowRecuperoModal(true); } : undefined,
                 disabled: lezioniDaRecuperare.length === 0,
                 title: lezioniDaRecuperare.length === 0 ? "Nessuna lezione da recuperare al momento" : `${lezioniDaRecuperare.length} lezione/i da recuperare`,
                 style: {display:"flex",alignItems:"center",gap:6,padding:"8px 14px",
@@ -4862,54 +4889,120 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
       /* ── MODAL PRENOTA RECUPERO (solo allievo) ── */
       , showRecuperoModal && React.createElement(Modal, { title: "Prenota recupero", onClose: ()=>setShowRecuperoModal(false) }
         , React.createElement('div', {style:{padding:"4px 0 16px"}}
-          , React.createElement('div', {style:{background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:10,padding:"12px 16px",marginBottom:16}}
-            , React.createElement('div', {style:{fontSize:12,color:C.purple,fontWeight:600,marginBottom:4}}
-              , `📋 Hai ${lezioniDaRecuperare.length} lezione/i da recuperare`
-            )
-            , lezioniDaRecuperare.slice(0,3).map(l => (
-              React.createElement('div', {key:l.id, style:{fontSize:12,color:C.textMuted,marginTop:2}}
-                , `• ${new Date(l.date+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"})} ore ${l.hour} — ${l.topic||l.instrument||"—"}`
-              )
-            ))
-            , lezioniDaRecuperare.length > 3 && React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:4}}, `... e altre ${lezioniDaRecuperare.length-3}`)
+          /* Selezione lezione da recuperare */
+          , React.createElement('div', {style:{marginBottom:14}}
+            , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}}, "Quale lezione vuoi recuperare? *")
+            , lezioniDaRecuperare.map((l, idx) => {
+                const isSelected = recuperoForm.lezId === l.id;
+                return React.createElement('div', {
+                    key:l.id,
+                    onClick:()=>setRecuperoForm(p=>({...p, lezId:l.id, lezInfo:l})),
+                    style:{
+                      display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
+                      marginBottom:6, borderRadius:8, cursor:"pointer",
+                      border:`2px solid ${isSelected ? C.purple : C.border}`,
+                      background: isSelected ? C.purpleBg : C.surface,
+                      transition:"all 0.12s"
+                    }
+                  }
+                  , React.createElement('div', {style:{
+                      width:16,height:16,borderRadius:"50%",flexShrink:0,
+                      border:`2px solid ${isSelected ? C.purple : C.border}`,
+                      background: isSelected ? C.purple : "transparent",
+                      display:"flex",alignItems:"center",justifyContent:"center"
+                    }}
+                    , isSelected && React.createElement('div', {style:{width:6,height:6,borderRadius:"50%",background:"#fff"}})
+                  )
+                  , React.createElement('div', null
+                    , React.createElement('div', {style:{fontSize:13,fontWeight:500,color:isSelected?C.purple:C.text}}
+                      , new Date(l.date+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long"})
+                      , " ore ", l.hour
+                    )
+                    , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:1}}, l.topic||l.instrument||"—")
+                  )
+                );
+              })
           )
-          , React.createElement(Input, { label:"Data preferita per il recupero *", type:"date",
-              value: recuperoForm.date,
-              onChange: e=>setRecuperoForm(p=>({...p, date:e.target.value}))
-          })
-          , React.createElement('div', {style:{marginTop:12}})
-          , React.createElement(Textarea, { label:"Note o preferenze di orario (opzionale)",
-              value: recuperoForm.note,
-              onChange: e=>setRecuperoForm(p=>({...p, note:e.target.value})),
-              placeholder:"Es. preferibilmente il pomeriggio, disponibile dalle 15:00..."
-          })
-          , React.createElement('div', {style:{marginTop:16,padding:"10px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,color:C.textMuted,lineHeight:1.5}}
+          /* Disponibilità docente */
+          , recuperoForm.lezInfo && (()=>{
+              // Cerca il docente della lezione selezionata
+              const docName = recuperoForm.lezInfo.teacher || student.teacher || "";
+              // Cerca nella lista docenti passata come prop (se disponibile)
+              const docRecord = (courses||[]).length >= 0 && window.__docenti__
+                ? (window.__docenti__||[]).find(d=>
+                    (d.teacherKey||d.nome||"").toLowerCase().includes(docName.toLowerCase()))
+                : null;
+              const disp = docRecord && docRecord.disponibilitaRecuperi
+                ? (typeof docRecord.disponibilitaRecuperi === "string"
+                    ? JSON.parse(docRecord.disponibilitaRecuperi)
+                    : docRecord.disponibilitaRecuperi)
+                : [];
+              return React.createElement('div', {style:{marginBottom:14}}
+                , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}}, "Disponibilità del docente")
+                , disp.length > 0 ? (
+                  React.createElement('div', {style:{background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:8,padding:"10px 14px"}}
+                    , disp.map((s,i)=>(
+                        React.createElement('div', {key:i, style:{fontSize:13,color:C.purple,marginBottom:i<disp.length-1?4:0}}
+                          , `📅 ${s.giorno} dalle ${s.oraInizio} alle ${s.oraFine}`
+                        )
+                      ))
+                  )
+                ) : (
+                  React.createElement('div', {style:{fontSize:12,color:C.textDim,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px"}}
+                    , "Il docente non ha ancora configurato le fasce di disponibilità. Indica comunque la tua preferenza."
+                  )
+                )
+              );
+            })()
+          /* Data preferita */
+          , recuperoForm.lezId && (
+            React.createElement('div', {style:{marginBottom:14}}
+              , React.createElement(Input, { label:"Data preferita *", type:"date",
+                  value: recuperoForm.date,
+                  onChange: e=>setRecuperoForm(p=>({...p, date:e.target.value}))
+              })
+            )
+          )
+          , recuperoForm.lezId && (
+            React.createElement('div', {style:{marginBottom:14}}
+              , React.createElement(Textarea, { label:"Note o preferenze di orario (opzionale)",
+                  value: recuperoForm.note,
+                  onChange: e=>setRecuperoForm(p=>({...p, note:e.target.value})),
+                  placeholder:"Es. preferibilmente il pomeriggio, disponibile dalle 15:00..."
+              })
+            )
+          )
+          , React.createElement('div', {style:{marginTop:4,padding:"10px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,color:C.textMuted,lineHeight:1.5}}
             , "La richiesta verrà inviata al tuo docente. Attendi la conferma prima di presentarti."
           )
           , React.createElement('div', {style:{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}}
             , React.createElement(Btn, {variant:"secondary", onClick:()=>setShowRecuperoModal(false)}, "Annulla")
             , React.createElement(Btn, {
+                disabled: !recuperoForm.lezId || !recuperoForm.date,
                 onClick: async () => {
-                  if (!recuperoForm.date) { alert("Seleziona una data preferita."); return; }
                   try {
                     const sb = window.supabaseClient;
                     if (sb) {
-                      // Salva richiesta recupero su Supabase se disponibile
                       await sb.from('richieste_recupero').insert({
                         allievo_id:    student.id,
                         allievo_nome:  student.name,
-                        docente:       student.teacher || "",
+                        docente:       recuperoForm.lezInfo?.teacher || student.teacher || "",
                         data_preferita:recuperoForm.date,
                         note:          recuperoForm.note || null,
                         stato:         "in_attesa",
-                        lezioni_ids:   JSON.stringify(lezioniDaRecuperare.map(l=>l.id)),
+                        lezioni_ids:   JSON.stringify([recuperoForm.lezId]),
                         created_at:    new Date().toISOString(),
                       }).then(({ error }) => {
                         if (error) console.warn("[FM] richiesta recupero:", error.message);
                       });
                     }
-                    alert(`Richiesta inviata! Data preferita: ${new Date(recuperoForm.date+"T00:00:00").toLocaleDateString("it-IT")}. Il tuo docente ti contatterà per confermare.`);
+                    const lezData = recuperoForm.lezInfo;
+                    const lezLabel = lezData
+                      ? new Date(lezData.date+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"long"})+" ore "+lezData.hour
+                      : "";
+                    alert(`Richiesta inviata per la lezione del ${lezLabel}!\nData preferita: ${new Date(recuperoForm.date+"T00:00:00").toLocaleDateString("it-IT")}.\nIl tuo docente ti contatterà per confermare.`);
                     setShowRecuperoModal(false);
+                    setRecuperoForm({ date:"", note:"", lezId:null, lezInfo:null });
                   } catch(e) {
                     alert("Richiesta inviata! Il tuo docente ti contatterà per confermare.");
                     setShowRecuperoModal(false);
@@ -5589,20 +5682,22 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4238}}, React.createElement(Textarea, { label: "Esercizi da svolgere"  , value: f.exercises, onChange: e => set("exercises", e.target.value), placeholder: "Es. Studiare scale in Do maggiore, ripetere battute 12-24..."        , __self: this, __source: {fileName: _jsxFileName, lineNumber: 4238}}))
 
         , React.createElement(SDiv, { label: "Presenza", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4240}})
-        , React.createElement('div', { style: {gridColumn:"1/-1", display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4241}}
-          , ["presente","assente","giustificato","recupero"].map(a => {
-            const s = ATT_STYLES[a];
-            const active = f.attendance === a;
+        , React.createElement('div', { style: {gridColumn:"1/-1", display:"flex", gap:8, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4241}}
+          , ["presente","assente","giustificato","recupero","in_recupero"].map(a => {
+            const s = ATT_STYLES[a] || ATT_STYLES.presente;
+            const active = a === 'in_recupero'
+              ? (f.attendance === 'in_recupero' || f.inRecupero === true)
+              : f.attendance === a;
             return (
               React.createElement('button', { key: a, onClick: () => set("attendance", active ? "" : a),
-                style: {flex:1, padding:"9px 12px", borderRadius:8,
+                style: {flex:1, minWidth:90, padding:"9px 12px", borderRadius:8,
                   border:`2px solid ${active ? s.bd : C.border}`,
                   background: active ? s.bg : C.bg,
-                  cursor:"pointer", fontSize:13,
+                  cursor:"pointer", fontSize:12,
                   color: active ? s.fg : C.textMuted,
                   fontFamily:"'Open Sans',sans-serif", fontWeight: active ? 500 : 400,
                   textTransform:"capitalize", transition:"all 0.12s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4246}}
-                , a
+                , s.label || a
               )
             );
           })
@@ -14358,15 +14453,16 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     const did = (_appUserDocView && _appUserDocView.docenteId) || null;
     if (did) return (docenti||[]).find(d => String(d.id) === String(did)) || null;
     const ln  = (_appUserDocView && _appUserDocView.nome) || "";
+    if (!ln) return null;
     return (docenti||[]).find(d => d.teacherKey===ln || (d.nome||"").toLowerCase().includes(ln.toLowerCase())) || null;
   }, [ruoloDocView, docenti, _appUserDocView]);
 
-  const [selected,  setSelected]  = useState(() => ruoloDocView === "docente" ? (_myDocRecord || null) : null);
+  const [selected,  setSelected]  = useState(null);
   const [tab,       setTab]       = useState("profilo");
-  const [modal,     setModal]     = useState(null); // null | "new" | "edit" | "del"
+  const [modal,     setModal]     = useState(null);
   const [draft,     setDraft]     = useState({});
 
-  // Aggiorna selected se il record docente cambia (es. dopo il caricamento dati da Supabase)
+  // Quando arrivano i dati da Supabase, aggiorna selected per il docente loggato
   React.useEffect(() => {
     if (ruoloDocView !== "docente") return;
     if (_myDocRecord) setSelected(_myDocRecord);
@@ -14505,12 +14601,15 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   // Impostazioni docente (dashboard panels + profilo personale)
   const [docSettings, setDocSettings] = useState({
     panels: { lezioni:true, allievi:true, compenso:true, repertorio:true, allegati:true },
-    profiloForm: null,   // null = sola lettura, oggetto = in modifica
-    pwForm: null,        // null = nascosto, {old:"",new1:"",new2:""} = aperto
+    profiloForm: null,
+    pwForm: null,
     savingProfilo: false,
     savingPw: false,
     msgProfilo: null,
     msgPw: null,
+    disponibilita: [], // [{giorno:"lunedi", oraInizio:"15:00", oraFine:"18:00"}]
+    showDisp: false,
+    newSlot: { giorno:"lunedi", oraInizio:"15:00", oraFine:"18:00" },
   });
 
   // FormModal inline JSX (evita re-mount su ogni keystroke)
@@ -15241,6 +15340,112 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                 )
               )
             ))
+          )
+
+          /* ── Disponibilità per recuperi ── */
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}
+              , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+                , React.createElement(Ic, {n:"clock",size:14,stroke:C.gold})
+                , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Disponibilità per recuperi")
+              )
+              , React.createElement('button', {
+                  onClick: ()=>setDocSettings(p=>({...p,showDisp:!p.showDisp})),
+                  style:{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",
+                    background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
+                    cursor:"pointer",fontSize:12,color:C.textMuted,fontFamily:"'Open Sans',sans-serif"}
+                }
+                , React.createElement(Ic,{n:docSettings.showDisp?"x":"plus",size:12,stroke:C.textMuted})
+                , docSettings.showDisp ? " Chiudi" : " Aggiungi slot"
+              )
+            )
+            /* Lista slot esistenti */
+            , docSettings.disponibilita.length === 0 && !docSettings.showDisp && (
+              React.createElement('div', {style:{padding:"16px 20px",fontSize:13,color:C.textDim,textAlign:"center"}}
+                , "Nessuna disponibilità configurata. Gli allievi non potranno prenotare recuperi."
+              )
+            )
+            , docSettings.disponibilita.length > 0 && (
+              React.createElement('div', {style:{borderBottom:docSettings.showDisp?`1px solid ${C.border}`:"none"}}
+                , docSettings.disponibilita.map((slot, idx) => (
+                  React.createElement('div', {key:idx, style:{
+                      display:"flex",alignItems:"center",justifyContent:"space-between",
+                      padding:"12px 20px",borderBottom:`1px solid ${C.border}20`
+                    }}
+                    , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:12}}
+                      , React.createElement('span', {style:{fontSize:13,fontWeight:500,textTransform:"capitalize",color:C.text,minWidth:90}}, slot.giorno)
+                      , React.createElement('span', {style:{fontSize:13,color:C.textMuted}}, `${slot.oraInizio} — ${slot.oraFine}`)
+                    )
+                    , React.createElement('button', {
+                        onClick:()=>setDocSettings(p=>({...p,disponibilita:p.disponibilita.filter((_,i)=>i!==idx)})),
+                        style:{background:"none",border:"none",cursor:"pointer",color:C.red,padding:4,borderRadius:4,display:"flex"}
+                      }
+                      , React.createElement(Ic,{n:"trash",size:14,stroke:C.red})
+                    )
+                  )
+                ))
+              )
+            )
+            /* Form aggiunta slot */
+            , docSettings.showDisp && (
+              React.createElement('div', {style:{padding:"16px 20px"}}
+                , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}
+                  , React.createElement('div', null
+                    , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:4}}, "Giorno")
+                    , React.createElement('select', {
+                        value:docSettings.newSlot.giorno,
+                        onChange:e=>setDocSettings(p=>({...p,newSlot:{...p.newSlot,giorno:e.target.value}})),
+                        style:{width:"100%",padding:"8px 10px",border:`1px solid ${C.border}`,borderRadius:8,
+                          fontSize:13,fontFamily:"'Open Sans',sans-serif",background:C.bg,color:C.text}
+                      }
+                      , ["lunedì","martedì","mercoledì","giovedì","venerdì","sabato"].map(g=>
+                          React.createElement('option',{key:g,value:g},g)
+                        )
+                    )
+                  )
+                  , React.createElement('div', null
+                    , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:4}}, "Dalle")
+                    , React.createElement('input', {
+                        type:"time", value:docSettings.newSlot.oraInizio,
+                        onChange:e=>setDocSettings(p=>({...p,newSlot:{...p.newSlot,oraInizio:e.target.value}})),
+                        style:{width:"100%",padding:"8px 10px",border:`1px solid ${C.border}`,borderRadius:8,
+                          fontSize:13,fontFamily:"'Open Sans',sans-serif",background:C.bg,color:C.text}
+                      })
+                  )
+                  , React.createElement('div', null
+                    , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:4}}, "Alle")
+                    , React.createElement('input', {
+                        type:"time", value:docSettings.newSlot.oraFine,
+                        onChange:e=>setDocSettings(p=>({...p,newSlot:{...p.newSlot,oraFine:e.target.value}})),
+                        style:{width:"100%",padding:"8px 10px",border:`1px solid ${C.border}`,borderRadius:8,
+                          fontSize:13,fontFamily:"'Open Sans',sans-serif",background:C.bg,color:C.text}
+                      })
+                  )
+                )
+                , React.createElement('div', {style:{display:"flex",justifyContent:"flex-end"}}
+                  , React.createElement(Btn, {
+                      onClick: async () => {
+                        const slot = docSettings.newSlot;
+                        if (!slot.giorno || !slot.oraInizio || !slot.oraFine) return;
+                        const updated = [...docSettings.disponibilita, {...slot}];
+                        setDocSettings(p=>({...p,disponibilita:updated,showDisp:false,newSlot:{giorno:"lunedì",oraInizio:"15:00",oraFine:"18:00"}}));
+                        // Persisti su Supabase
+                        const sb = window.supabaseClient;
+                        if (sb && selected) {
+                          sb.from('docenti').update({
+                            disponibilita_recuperi: JSON.stringify(updated),
+                            updated_at: new Date().toISOString()
+                          }).eq('id', selected.id).then(({error})=>{
+                            if(error) console.warn('[FM] disponibilita save error:', error.message);
+                          });
+                        }
+                      }
+                    }
+                    , React.createElement(Ic,{n:"plus",size:13,stroke:"#fff"}), " Aggiungi"
+                  )
+                )
+              )
+            )
           )
 
           /* ── Informazioni personali ── */
