@@ -2443,6 +2443,16 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
 
   // Helper: filtra lezioni in base al ruolo
   const myDocenteNome = ruoloNB === "docente" ? ((_appUserNB && _appUserNB.nome) || "") : "";
+  const myDocenteId   = ruoloNB === "docente" ? ((_appUserNB && _appUserNB.docenteId) || null) : null;
+  // Ricava il teacherKey dal record docente reale
+  const myDocenteTeacherKey = (function() {
+    if (ruoloNB !== "docente") return "";
+    var allDoc = window.__docenti__ || [];
+    var rec = myDocenteId
+      ? allDoc.find(function(d){ return String(d.id) === String(myDocenteId); })
+      : allDoc.find(function(d){ return (d.nome||"").toLowerCase() === myDocenteNome.toLowerCase(); });
+    return rec ? (rec.teacherKey || rec.nome || myDocenteNome) : myDocenteNome;
+  })();
   const myAllievoId   = ruoloNB === "allievo" ? ((_appUserNB && _appUserNB.allievoId) || null) : null;
   const myAllievoNome = ruoloNB === "allievo" ? ((_appUserNB && _appUserNB.nome) || "") : "";
 
@@ -2574,10 +2584,16 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
   var notificheArr = Array.isArray(_notificheNB) ? _notificheNB : [];
   // Filtra per il ruolo/utente corrente
   var myNotifiche = notificheArr.filter(function(n) {
-    if (n.letto) return false; // già lette
+    if (n.letto) return false;
     if (n.destinatario_ruolo === ruoloNB) {
       if (ruoloNB === 'docente') {
-        return !n.destinatario_nome || (myDocenteNome && (n.destinatario_nome||"").toLowerCase().indexOf(myDocenteNome.toLowerCase()) >= 0);
+        if (!n.destinatario_nome) return true; // notifica generica per tutti i docenti
+        var dest = (n.destinatario_nome||"").toLowerCase().trim();
+        var tk   = myDocenteTeacherKey.toLowerCase().trim();
+        var nm   = myDocenteNome.toLowerCase().trim();
+        return dest === tk || dest === nm ||
+               (tk && dest.indexOf(tk) >= 0) || (tk && tk.indexOf(dest) >= 0) ||
+               (nm && dest.indexOf(nm) >= 0) || (nm && nm.indexOf(dest) >= 0);
       }
       if (ruoloNB === 'allievo') {
         return n.destinatario_id === String(myAllievoId) ||
@@ -5276,6 +5292,14 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                       : "";
 
                     if (sb) {
+                      // Ricava tutti i nomi/key del docente per la notifica
+                      var allDocNow = window.__docenti__ || [];
+                      var docRec = allDocNow.find(function(d){
+                        return (d.teacherKey||d.nome||"").toLowerCase().indexOf(docenteName.toLowerCase()) >= 0 ||
+                               docenteName.toLowerCase().indexOf((d.teacherKey||d.nome||"").toLowerCase()) >= 0;
+                      });
+                      var docNotifNome = docRec ? (docRec.teacherKey || docRec.nome || docenteName) : docenteName;
+
                       // 1. Salva la richiesta recupero
                       const { data: richData, error: richErr } = await sb.from('richieste_recupero').insert({
                         allievo_id:    student.id,
@@ -5290,27 +5314,27 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                       }).select().single();
                       if (richErr) console.warn("[FM] richiesta recupero:", richErr.message);
 
-                      // 2. Scrivi notifica per il DOCENTE nella tabella notifiche
+                      // 2. Notifica per il DOCENTE — salva sia teacherKey che nome lezione
                       const msgDocente = student.name + " ha prenotato un recupero per " + dataRecupero + " ore " + recuperoForm.ora;
                       await sb.from('notifiche').insert({
                         destinatario_ruolo: 'docente',
-                        destinatario_nome:  docenteName,
+                        destinatario_nome:  docNotifNome,
                         tipo:               'recupero_richiesto',
-                        titolo:             'Nuova prenotazione recupero',
+                        titolo:             '📅 Nuova prenotazione recupero',
                         messaggio:          msgDocente,
                         letto:              false,
                         created_at:         new Date().toISOString(),
-                        meta:               JSON.stringify({ allievo: student.name, data: recuperoForm.date, ora: recuperoForm.ora }),
+                        meta:               JSON.stringify({ allievo: student.name, allievo_id: student.id, data: recuperoForm.date, ora: recuperoForm.ora, docente_key: docNotifNome }),
                       }).then(function(r){ if(r.error) console.warn("[FM] notifica docente:", r.error.message); });
 
-                      // 3. Scrivi notifica di conferma per l'ALLIEVO
+                      // 3. Notifica di conferma per l'ALLIEVO
                       const msgAllievo = "Recupero richiesto per " + dataRecupero + " ore " + recuperoForm.ora + ". In attesa di conferma dal docente " + docenteName + ".";
                       await sb.from('notifiche').insert({
                         destinatario_ruolo: 'allievo',
                         destinatario_id:    String(student.id),
                         destinatario_nome:  student.name,
-                        tipo:               'recupero_confermato',
-                        titolo:             'Recupero prenotato',
+                        tipo:               'recupero_in_attesa',
+                        titolo:             '📅 Recupero prenotato',
                         messaggio:          msgAllievo,
                         letto:              false,
                         created_at:         new Date().toISOString(),
@@ -8333,13 +8357,119 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
 // ─── APP ──────────────────────────────────────────────────────────────────────
 
 // ─── RECUPERO VIEW (sub-tab di CalendarioView) ───────────────────────────────
-const RecuperoView = ({ lessons, onOpenLesson, role }) => {
+const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
   const [rfCorso,   setRfCorso]   = useState('');
   const [rfDocente, setRfDocente] = useState('');
   const [rfAllievo, setRfAllievo] = useState('');
+  const [richiesteRec, setRichiesteRec] = useState([]);
+  const [loadingR, setLoadingR] = useState(false);
   const [sortKeyR, sortDirR, handleSortR, sortFnR] = useSortable("date", "asc");
   const oggi_r = new Date(); oggi_r.setHours(0,0,0,0);
-  const lezioniRec = (lessons||[]).filter(l=>l.inRecupero);
+
+  // Carica richieste recupero da Supabase
+  React.useEffect(function() {
+    var sb = window.supabaseClient;
+    if (!sb) return;
+    setLoadingR(true);
+    sb.from('richieste_recupero').select('*').order('created_at', {ascending:false}).limit(100)
+      .then(function(r) {
+        setLoadingR(false);
+        if (r.data) setRichiesteRec(r.data);
+      });
+  }, []);
+
+  // Approva/rifiuta richiesta — notifica admin
+  var handleApprova = async function(rich) {
+    var sb = window.supabaseClient;
+    if (!sb) return;
+    await sb.from('richieste_recupero').update({ stato: 'confermata', updated_at: new Date().toISOString() }).eq('id', rich.id);
+    setRichiesteRec(function(p){ return p.map(function(r){ return r.id===rich.id ? Object.assign({},r,{stato:'confermata'}) : r; }); });
+    // Notifica ADMIN
+    var msgAdmin = (rich.docente||"Docente") + " ha approvato il recupero di " + (rich.allievo_nome||"allievo") + " per il " + new Date((rich.data_preferita||"")+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long"}) + " ore " + (rich.ora_recupero||"—");
+    await sb.from('notifiche').insert({
+      destinatario_ruolo: 'admin',
+      tipo:               'recupero_approvato_docente',
+      titolo:             '✅ Recupero approvato dal docente — conferma ufficiale richiesta',
+      messaggio:          msgAdmin,
+      letto:              false,
+      created_at:         new Date().toISOString(),
+      meta:               JSON.stringify({ allievo: rich.allievo_nome, allievo_id: rich.allievo_id, docente: rich.docente, data: rich.data_preferita, ora: rich.ora_recupero }),
+    }).then(function(r){ if(r.error) console.warn("[FM] notifica admin:", r.error.message); });
+    // Notifica ALLIEVO — recupero confermato dal docente
+    var msgAllievo = "Il docente " + (rich.docente||"") + " ha confermato il tuo recupero per " + new Date((rich.data_preferita||"")+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long"}) + " ore " + (rich.ora_recupero||"—") + ". In attesa di conferma ufficiale dell'amministrazione.";
+    await sb.from('notifiche').insert({
+      destinatario_ruolo: 'allievo',
+      destinatario_id:    String(rich.allievo_id||""),
+      destinatario_nome:  rich.allievo_nome||"",
+      tipo:               'recupero_confermato_docente',
+      titolo:             '✅ Recupero confermato dal docente',
+      messaggio:          msgAllievo,
+      letto:              false,
+      created_at:         new Date().toISOString(),
+    }).then(function(r){ if(r.error) console.warn("[FM] notifica allievo:", r.error.message); });
+    // Ricarica notifiche
+    setTimeout(function(){ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true); }, 1000);
+  };
+
+  var handleRifiuta = async function(rich) {
+    var sb = window.supabaseClient;
+    if (!sb) return;
+    await sb.from('richieste_recupero').update({ stato: 'rifiutata', updated_at: new Date().toISOString() }).eq('id', rich.id);
+    setRichiesteRec(function(p){ return p.map(function(r){ return r.id===rich.id ? Object.assign({},r,{stato:'rifiutata'}) : r; }); });
+    // Notifica ALLIEVO — recupero rifiutato
+    var sb2 = window.supabaseClient;
+    if (sb2) {
+      await sb2.from('notifiche').insert({
+        destinatario_ruolo: 'allievo',
+        destinatario_id:    String(rich.allievo_id||""),
+        destinatario_nome:  rich.allievo_nome||"",
+        tipo:               'recupero_rifiutato',
+        titolo:             '❌ Recupero non disponibile',
+        messaggio:          "Il docente " + (rich.docente||"") + " non può confermare il recupero per il " + (rich.data_preferita||"") + ". Contattalo per concordare una nuova data.",
+        letto:              false,
+        created_at:         new Date().toISOString(),
+      }).then(function(r){ if(r.error) console.warn("[FM] notifica rifiuto:", r.error.message); });
+    }
+  };
+
+  // Admin: conferma ufficiale
+  var handleConfermaUfficiale = async function(rich) {
+    var sb = window.supabaseClient;
+    if (!sb) return;
+    await sb.from('richieste_recupero').update({ stato: 'completata', updated_at: new Date().toISOString() }).eq('id', rich.id);
+    setRichiesteRec(function(p){ return p.map(function(r){ return r.id===rich.id ? Object.assign({},r,{stato:'completata'}) : r; }); });
+    // Notifica finale all'ALLIEVO
+    await sb.from('notifiche').insert({
+      destinatario_ruolo: 'allievo',
+      destinatario_id:    String(rich.allievo_id||""),
+      destinatario_nome:  rich.allievo_nome||"",
+      tipo:               'recupero_ufficiale',
+      titolo:             '✅ Recupero confermato ufficialmente',
+      messaggio:          "Il recupero per il " + new Date((rich.data_preferita||"")+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long"}) + " ore " + (rich.ora_recupero||"—") + " è stato confermato dall'amministrazione.",
+      letto:              false,
+      created_at:         new Date().toISOString(),
+    }).then(function(r){ if(r.error) console.warn("[FM] notifica ufficiale:", r.error.message); });
+    setTimeout(function(){ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true); }, 1000);
+  };
+
+  // Filtra richieste per ruolo
+  var richFiltered = richiesteRec.filter(function(r) {
+    if (role === 'docente') {
+      var allDoc = window.__docenti__ || [];
+      var myDocId = appUser && appUser.docenteId;
+      var myDocRec = myDocId ? allDoc.find(function(d){ return String(d.id)===String(myDocId); }) : null;
+      var myKey = myDocRec ? (myDocRec.teacherKey||myDocRec.nome||"") : (appUser&&appUser.nome)||"";
+      return (r.docente||"").toLowerCase().indexOf(myKey.toLowerCase()) >= 0 ||
+             myKey.toLowerCase().indexOf((r.docente||"").toLowerCase()) >= 0;
+    }
+    return true; // admin vede tutto
+  });
+
+  var richInAttesa   = richFiltered.filter(function(r){ return r.stato==='in_attesa'; });
+  var richConfermata = richFiltered.filter(function(r){ return r.stato==='confermata'; });
+  var richAltro      = richFiltered.filter(function(r){ return r.stato!=='in_attesa' && r.stato!=='confermata'; });
+
+  const lezioniRec = (lessons||[]).filter(l=>l.inRecupero || l.attendance==='in_recupero');
   const docenteOptsR = [...new Set(lezioniRec.map(l=>l.teacher).filter(Boolean))].sort();
   const allievoOptsR = [...new Set(lezioniRec.map(l=>l.student).filter(Boolean))].sort();
   const corsoOptsR   = [...new Set(lezioniRec.map(l=>l.instrument||l.courseId).filter(Boolean))].sort();
@@ -8356,7 +8486,67 @@ const RecuperoView = ({ lessons, onOpenLesson, role }) => {
     if (k==="recuperoScadenza")  return l.recuperoScadenza||"";
     return l[k]||"";
   });
+
+  var StatoBadge = function(props) {
+    var s = props.stato;
+    var cfg = {
+      in_attesa:  {bg:'rgba(245,158,11,0.1)', color:'#b45309', border:'rgba(245,158,11,0.3)', label:'In attesa'},
+      confermata: {bg:C.blueBg, color:C.blue, border:C.blueBorder, label:'Confermata dal docente'},
+      completata: {bg:C.greenBg, color:C.green, border:C.greenBorder, label:'Confermata ufficialmente'},
+      rifiutata:  {bg:C.redBg, color:C.red, border:C.redBorder, label:'Rifiutata'},
+    };
+    var c = cfg[s] || {bg:C.surface, color:C.textMuted, border:C.border, label:s||'—'};
+    return React.createElement('span',{style:{background:c.bg,color:c.color,border:'1px solid '+c.border,borderRadius:20,padding:'2px 8px',fontSize:11}}, c.label);
+  };
+
   return React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
+
+    /* ── SEZIONE RICHIESTE RECUPERO (docente e admin) ── */
+    , (role === 'docente' || role === 'admin') && React.createElement('div', {style:{marginBottom:28}}
+      , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,marginBottom:12}}
+        , React.createElement('h3', {style:{fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,margin:0}}, 'Richieste di recupero')
+        , richInAttesa.length > 0 && React.createElement('span',{style:{background:'rgba(245,158,11,0.12)',color:'#b45309',border:'1px solid rgba(245,158,11,0.3)',borderRadius:20,padding:'2px 10px',fontSize:12,fontWeight:600}}, richInAttesa.length+' da gestire')
+        , role === 'admin' && richConfermata.length > 0 && React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:'1px solid '+C.blueBorder,borderRadius:20,padding:'2px 10px',fontSize:12,fontWeight:600}}, richConfermata.length+' da confermare')
+      )
+      , loadingR && React.createElement('div',{style:{fontSize:13,color:C.textDim,padding:'12px 0'}},'Caricamento richieste...')
+      , !loadingR && richFiltered.length === 0 && React.createElement('div',{style:{textAlign:'center',padding:'24px 0',color:C.textDim,fontSize:13,background:C.surface,borderRadius:10,border:'1px solid '+C.border}}, 'Nessuna richiesta di recupero')
+      , !loadingR && richFiltered.length > 0 && React.createElement('div',{style:{background:C.surface,borderRadius:12,border:'1px solid '+C.border,overflow:'hidden'}}
+        , richFiltered.map(function(rich, idx) {
+            var isLast = idx === richFiltered.length - 1;
+            var dataLabel = rich.data_preferita
+              ? new Date(rich.data_preferita+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long"})
+              : "—";
+            return React.createElement('div',{key:rich.id,style:{
+                display:'flex',alignItems:'center',gap:14,padding:'14px 18px',flexWrap:'wrap',
+                borderBottom: isLast ? 'none' : '1px solid '+C.border,
+                background: rich.stato==='in_attesa' ? 'rgba(245,158,11,0.04)' : 'transparent'
+              }}
+              , React.createElement('div',{style:{flex:1,minWidth:200}}
+                , React.createElement('div',{style:{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}, rich.allievo_nome||"—")
+                , React.createElement('div',{style:{fontSize:12,color:C.textMuted}}, dataLabel + (rich.ora_recupero ? ' ore '+rich.ora_recupero : '') + (rich.docente ? ' · '+rich.docente : ''))
+                , rich.note && React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:2,fontStyle:'italic'}}, '"'+rich.note+'"')
+              )
+              , React.createElement(StatoBadge,{stato:rich.stato})
+              , rich.stato==='in_attesa' && role==='docente' && React.createElement('div',{style:{display:'flex',gap:6}}
+                , React.createElement('button',{
+                    onClick:function(){ handleApprova(rich); },
+                    style:{padding:'5px 14px',borderRadius:7,border:'none',background:C.green,color:'#fff',fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}
+                  },'✓ Approva')
+                , React.createElement('button',{
+                    onClick:function(){ handleRifiuta(rich); },
+                    style:{padding:'5px 14px',borderRadius:7,border:'1px solid '+C.redBorder,background:C.redBg,color:C.red,fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}
+                  },'✗ Rifiuta')
+              )
+              , rich.stato==='confermata' && role==='admin' && React.createElement('button',{
+                  onClick:function(){ handleConfermaUfficiale(rich); },
+                  style:{padding:'5px 14px',borderRadius:7,border:'none',background:C.purple,color:'#fff',fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}
+                },'✅ Conferma ufficiale')
+            );
+          })
+        )
+      )
+    )
+    /* ── SEZIONE LEZIONI IN RECUPERO (tabella classica) ── */
     , React.createElement('div', {style:{marginBottom:16, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}
       , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif", fontSize:22, fontWeight:600, margin:0}}, 'Lezioni in Recupero')
       , React.createElement('span', {style:{background:'rgba(245,158,11,0.1)', color:'#f59e0b', border:'1px solid rgba(245,158,11,0.3)', borderRadius:20, padding:'3px 10px', fontSize:12}}, lezioniRec.length+' lezioni')
@@ -8432,7 +8622,7 @@ const RecuperoView = ({ lessons, onOpenLesson, role }) => {
           )
         )
       )
-  );
+  ;
 };
 
 // ─── LEZIONI ADMIN VIEW (sub-tab di CalendarioView) ──────────────────────────
@@ -9935,6 +10125,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           , appView==='recupero' && React.createElement(RecuperoView, {
               lessons: visibleLessons,
               role: role,
+              appUser: _appUserCV,
               onOpenLesson: (l) => { setSelLesson(l); setModal(isSalaProve(l) ? 'detailsala' : (role==='docente'?'edit':'detail')); },
             })
 
