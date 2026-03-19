@@ -292,6 +292,8 @@ const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
     arrow:    React.createElement('path', { d: "m9 18 6-6-6-6"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 285}}),
     right:    React.createElement('path', { d: "m9 18 6-6-6-6"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 286}}),
     left:     React.createElement('path', { d: "m15 18-6-6 6-6"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 287}}),
+    eye:      React.createElement(React.Fragment, null, React.createElement('path',{d:"M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"}), React.createElement('circle',{cx:"12",cy:"12",r:"3"})),
+    "eye-off":React.createElement(React.Fragment, null, React.createElement('path',{d:"M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"}), React.createElement('line',{x1:"1",y1:"1",x2:"23",y2:"23"})),
     mail:     React.createElement(React.Fragment, null, React.createElement('path', { d: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"           , __self: this, __source: {fileName: _jsxFileName, lineNumber: 288}}), React.createElement('polyline', { points: "22,6 12,13 2,6"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 288}})),
     lock:     React.createElement(React.Fragment, null, React.createElement('rect', { x: "3", y: "11", width: "18", height: "11", rx: "2", __self: this, __source: {fileName: _jsxFileName, lineNumber: 289}}), React.createElement('path', { d: "M7 11V7a5 5 0 0 1 10 0v4"       , __self: this, __source: {fileName: _jsxFileName, lineNumber: 289}})),
     eye:      React.createElement(React.Fragment, null, React.createElement('path', { d: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"        , __self: this, __source: {fileName: _jsxFileName, lineNumber: 290}}), React.createElement('circle', { cx: "12", cy: "12", r: "3", __self: this, __source: {fileName: _jsxFileName, lineNumber: 290}})),
@@ -1367,9 +1369,10 @@ const LiveClock = () => {
 };
 
 // ─── KPI CARD ─────────────────────────────────────────────────────────────────
-const KpiCard = ({ icon, label, value, sub, hex=C.gold, bg, trend, onClick }) => {
+const KpiCard = ({ icon, label, value, sub, hex=C.gold, bg, trend, onClick, hideAmounts }) => {
   const [displayed, setDisplayed] = useState(0);
   const isNum = typeof value === "number";
+  const isMonetary = typeof value === "string" && value.startsWith("€");
 
   useEffect(()=>{
     if(!isNum){ setDisplayed(value); return; }
@@ -1377,6 +1380,8 @@ const KpiCard = ({ icon, label, value, sub, hex=C.gold, bg, trend, onClick }) =>
     const step=()=>{ start+=Math.ceil((end-start)/8)+1; if(start>=end)start=end; setDisplayed(start); if(start<end)requestAnimationFrame(step); };
     setTimeout(()=>requestAnimationFrame(step),200);
   },[value]);
+
+  const displayValue = hideAmounts && isMonetary ? "••••" : (isNum ? displayed : value);
 
   return (
     React.createElement('div', { className: "kpi-card", onClick: onClick,
@@ -1403,8 +1408,10 @@ const KpiCard = ({ icon, label, value, sub, hex=C.gold, bg, trend, onClick }) =>
         )
       )
       , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:34,fontWeight:600,
-        color:hex,lineHeight:1,letterSpacing:"-0.01em",animation:"countUp 0.4s ease both"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1265}}
-        , isNum ? displayed : value
+        color:hex,lineHeight:1,letterSpacing:"-0.01em",animation:"countUp 0.4s ease both",
+        filter: hideAmounts && isMonetary ? "blur(6px)" : "none",
+        transition:"filter 0.2s",userSelect: hideAmounts && isMonetary ? "none" : "auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1265}}
+        , displayValue
       )
       , React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:6,letterSpacing:"0.07em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1269}}, label)
       , sub && React.createElement('div', { style: {fontSize:12,color:C.textDim,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1270}}, sub)
@@ -2618,6 +2625,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate }) => {
 
 const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, panels:propPanels, setPanels:propSetPanels, onQuickAction }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
+    const [showAmounts,  setShowAmounts]  = useState(false);
     const [_localPanels, _setLocalPanels]  = useState({});
     const panels    = propPanels    !== undefined ? propPanels    : _localPanels;
     const setPanels = propSetPanels !== undefined ? propSetPanels : _setLocalPanels;
@@ -2855,7 +2863,26 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
           , React.createElement('div', { style: {flex:1,padding:"16px 20px",display:"flex",flexDirection:"column",gap:16,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2185}}
 
             /* ── RIGA 1: KPI ── */
-            , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2188}}
+            , React.createElement('div', null
+              /* Pulsante mostra/nascondi importi */
+              , (ruolo === "admin" || ruolo === "allievo") && React.createElement('div', {
+                  style:{display:"flex",justifyContent:"flex-end",marginBottom:8}
+                }
+                , React.createElement('button', {
+                    onClick: ()=>setShowAmounts(p=>!p),
+                    title: showAmounts ? "Nascondi importi" : "Mostra importi",
+                    style:{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",
+                      background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,
+                      cursor:"pointer",fontFamily:"'Open Sans',sans-serif",fontSize:11,
+                      color:C.textMuted,transition:"all 0.15s"},
+                    onMouseEnter:e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;},
+                    onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}
+                  }
+                  , React.createElement(Ic, {n: showAmounts ? "eye" : "eye-off", size:13, stroke:showAmounts?C.gold:C.textMuted})
+                  , showAmounts ? "Nascondi importi" : "Mostra importi"
+                )
+              )
+              , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2188}}
               , ruolo==="docente" ? React.createElement(React.Fragment, null
                   , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni settimana",
                       value: _lessons.filter(matchDocLezione).length,
@@ -2863,9 +2890,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
                       value: (()=>{ const p=_lessons.filter(l=>matchDocLezione(l)&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0]; return p?new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}):"—"; })(),
                       sub: "data più vicina", hex: C.gold})
-                  , React.createElement(KpiCard, { icon: "euro", label: "Compensi anno",
-                      value: fmt((_spese||[]).filter(s=>myDocRecord?s.docenteId===myDocRecord.id:false).reduce((t,s)=>t+(s.importo||0),0)),
-                      sub: "totale a.s.", hex: C.green})
+                  , React.createElement(KpiCard, { icon: "euro", label: "Compenso mese",
+                      value: fmt((()=>{ const m=oggi.getMonth()+1, y=oggi.getFullYear(); return _lessons.filter(l=>matchDocLezione(l)&&(l.attendance==="presente"||l.attendance==="assente")&&l.date&&new Date(l.date+"T00:00:00").getMonth()+1===m&&new Date(l.date+"T00:00:00").getFullYear()===y).length * (myDocRecord?myDocRecord.tariffaOra||0:0); })()),
+                      sub: "mese corrente", hex: C.green, hideAmounts: !showAmounts})
                 )
               : ruolo==="allievo" ? React.createElement(React.Fragment, null
                   , (() => {
@@ -2920,15 +2947,16 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       sub: "data più vicina", hex: C.gold})
                   , React.createElement(KpiCard, { icon: "receipt", label: "Tot. versato",
                       value: fmt(_entrate.filter(e=>myStudentId?e.studentId===myStudentId:(e.studentName||"").toLowerCase().includes(myNome.toLowerCase())).reduce((t,e)=>t+(e.importo||0),0)),
-                      sub: "pagamenti registrati", hex: C.green})
+                      sub: "pagamenti registrati", hex: C.green, hideAmounts: !showAmounts})
                 )
               : React.createElement(React.Fragment, null
                   , React.createElement(KpiCard, { icon: "users",    label: "Allievi attivi" ,  value: allieviAttivi, sub: `${_students.length} totali`, hex: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2189}})
                   , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni oggi" ,    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2190}})
-                  , React.createElement(KpiCard, { icon: "up",       label: "Entrate mese" ,    value: fmt(entrMeseLiveLive), hex: C.green, trend: +8, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2191}})
-                  , React.createElement(KpiCard, { icon: "down",     label: "Uscite mese" ,     value: fmt(uscMeseLiveLive),  hex: C.red,   trend: +12, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2192}})
-                  , React.createElement(KpiCard, { icon: "chart",    label: `Saldo ${ANNO}`, value: fmt(saldoAnnoLiveLive), hex: saldoAnnoLiveLive>=0?C.green:C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2193}})
+                  , React.createElement(KpiCard, { icon: "up",       label: "Entrate mese" ,    value: fmt(entrMeseLiveLive), hex: C.green, trend: +8, hideAmounts: !showAmounts, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2191}})
+                  , React.createElement(KpiCard, { icon: "down",     label: "Uscite mese" ,     value: fmt(uscMeseLiveLive),  hex: C.red,   trend: +12, hideAmounts: !showAmounts, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2192}})
+                  , React.createElement(KpiCard, { icon: "chart",    label: `Saldo ${ANNO}`, value: fmt(saldoAnnoLiveLive), hex: saldoAnnoLiveLive>=0?C.green:C.red, hideAmounts: !showAmounts, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2193}})
                 )
+            )
             )
 
             /* ── RIGA 2: AZIONI RAPIDE (full width) ── */
@@ -4122,6 +4150,8 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const [showLezForm, setShowLezForm] = useState(false);
   const [lezForm, setLezForm]   = useState({ date: new Date().toISOString().split("T")[0], topic:"", attendance:"presente", notes:"" });
   const [ricevutaEnt, setRicevutaEnt] = useState(null);
+  const [showRecuperoModal, setShowRecuperoModal] = useState(false);
+  const [recuperoForm, setRecuperoForm] = useState({ date:"", note:"" });
   const [sortKeyPres, sortDirPres, handleSortPres, sortFnPres] = useSortable("mese", "asc");
   const [sortKeyQuote, sortDirQuote, handleSortQuote, sortFnQuote] = useSortable("mese", "asc");
   const config = _nullishCoalesce(propConfig, () => ( CONFIG_DEFAULT));
@@ -4130,6 +4160,9 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const lezStudente = lessons.filter(l => studentInLesson(l, student.name, student.id));
   const lezMese     = (m, y) => lezStudente.filter(l => { const [ly,lm] = l.date.split("-").map(Number); return ly===y && lm===m; });
   const lezSel      = lezMese(selMese.m, selMese.y);
+
+  // Lezioni da recuperare (inRecupero=true e non ancora recuperate)
+  const lezioniDaRecuperare = lezStudente.filter(l => l.inRecupero === true);
 
   // Andamento anno per grafici
   const andamento = MESI_AS.map(x => {
@@ -4265,7 +4298,19 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
               )
             )
           )
-          , sdRuolo !== "docente" && React.createElement('div', { style: {display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3224}}
+          , sdRuolo !== "docente" && React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3224}}
+            , sdRuolo === "allievo" && lezioniDaRecuperare.length > 0 && React.createElement('button', {
+                onClick: () => { setRecuperoForm({ date: "", note: "" }); setShowRecuperoModal(true); },
+                style: {display:"flex",alignItems:"center",gap:6,padding:"8px 14px",
+                  background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:8,
+                  cursor:"pointer",fontFamily:"'Open Sans',sans-serif",fontSize:13,
+                  color:C.purple,fontWeight:600,transition:"all 0.15s"},
+                onMouseEnter:e=>{e.currentTarget.style.background=C.purple;e.currentTarget.style.color="#fff";},
+                onMouseLeave:e=>{e.currentTarget.style.background=C.purpleBg;e.currentTarget.style.color=C.purple;}
+              }
+              , React.createElement(Ic, {n:"calendar", size:14, stroke:C.purple})
+              , `Prenota recupero (${lezioniDaRecuperare.length})`
+            )
             , React.createElement(Btn, { variant: "secondary", onClick: onEdit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3225}}, React.createElement(Ic, { n: "edit", size: 14, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3225}}), "Modifica")
             , React.createElement(Btn, { danger: true, onClick: onDelete, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3226}}, React.createElement(Ic, { n: "trash", size: 14, accentHex: C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3226}}))
           )
@@ -4805,6 +4850,69 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
           onClose: ()=>setRicevutaEnt(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3716}}
         )
       )
+      /* ── MODAL PRENOTA RECUPERO (solo allievo) ── */
+      , showRecuperoModal && React.createElement(Modal, { title: "Prenota recupero", onClose: ()=>setShowRecuperoModal(false) }
+        , React.createElement('div', {style:{padding:"4px 0 16px"}}
+          , React.createElement('div', {style:{background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:10,padding:"12px 16px",marginBottom:16}}
+            , React.createElement('div', {style:{fontSize:12,color:C.purple,fontWeight:600,marginBottom:4}}
+              , `📋 Hai ${lezioniDaRecuperare.length} lezione/i da recuperare`
+            )
+            , lezioniDaRecuperare.slice(0,3).map(l => (
+              React.createElement('div', {key:l.id, style:{fontSize:12,color:C.textMuted,marginTop:2}}
+                , `• ${new Date(l.date+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"})} ore ${l.hour} — ${l.topic||l.instrument||"—"}`
+              )
+            ))
+            , lezioniDaRecuperare.length > 3 && React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:4}}, `... e altre ${lezioniDaRecuperare.length-3}`)
+          )
+          , React.createElement(Input, { label:"Data preferita per il recupero *", type:"date",
+              value: recuperoForm.date,
+              onChange: e=>setRecuperoForm(p=>({...p, date:e.target.value}))
+          })
+          , React.createElement('div', {style:{marginTop:12}})
+          , React.createElement(Textarea, { label:"Note o preferenze di orario (opzionale)",
+              value: recuperoForm.note,
+              onChange: e=>setRecuperoForm(p=>({...p, note:e.target.value})),
+              placeholder:"Es. preferibilmente il pomeriggio, disponibile dalle 15:00..."
+          })
+          , React.createElement('div', {style:{marginTop:16,padding:"10px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,color:C.textMuted,lineHeight:1.5}}
+            , "La richiesta verrà inviata al tuo docente. Attendi la conferma prima di presentarti."
+          )
+          , React.createElement('div', {style:{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}}
+            , React.createElement(Btn, {variant:"secondary", onClick:()=>setShowRecuperoModal(false)}, "Annulla")
+            , React.createElement(Btn, {
+                onClick: async () => {
+                  if (!recuperoForm.date) { alert("Seleziona una data preferita."); return; }
+                  try {
+                    const sb = window.supabaseClient;
+                    if (sb) {
+                      // Salva richiesta recupero su Supabase se disponibile
+                      await sb.from('richieste_recupero').insert({
+                        allievo_id:    student.id,
+                        allievo_nome:  student.name,
+                        docente:       student.teacher || "",
+                        data_preferita:recuperoForm.date,
+                        note:          recuperoForm.note || null,
+                        stato:         "in_attesa",
+                        lezioni_ids:   JSON.stringify(lezioniDaRecuperare.map(l=>l.id)),
+                        created_at:    new Date().toISOString(),
+                      }).then(({ error }) => {
+                        if (error) console.warn("[FM] richiesta recupero:", error.message);
+                      });
+                    }
+                    alert(`Richiesta inviata! Data preferita: ${new Date(recuperoForm.date+"T00:00:00").toLocaleDateString("it-IT")}. Il tuo docente ti contatterà per confermare.`);
+                    setShowRecuperoModal(false);
+                  } catch(e) {
+                    alert("Richiesta inviata! Il tuo docente ti contatterà per confermare.");
+                    setShowRecuperoModal(false);
+                  }
+                }
+              }
+              , React.createElement(Ic, {n:"calendar", size:14, stroke:"#fff"})
+              , " Invia richiesta"
+            )
+          )
+        )
+      )
     )
   );
 };
@@ -5061,7 +5169,7 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
         courses: _ruoloCorsi==="docente" && _nomeCorsi
           ? (()=>{ const myD=(propDocenti||[]).find(d=>d.teacherKey===_nomeCorsi||(d.nome||"").toLowerCase().includes(_nomeCorsi.toLowerCase())); return myD?courses.filter(c=>(c.docenti||[]).includes(myD.id)):courses; })()
           : _ruoloCorsi==="allievo"
-          ? (()=>{ const _avId=(_aC&&_aC.allievoId)||null; const me=_avId?students.find(s=>String(s.id)===String(_avId)):students.find(s=>(s.name||s.nome||"").toLowerCase()===_nomeCorsi.toLowerCase()); if(!me) return []; const ids=new Set([...(me.instrument?courses.filter(c=>c.name===me.instrument).map(c=>c.id):[]),...(me.complementaryCourse?[me.complementaryCourse]:[])]); return courses.filter(c=>ids.has(c.id)); })()
+          ? (()=>{ const _avId=(_aC&&_aC.allievoId)||null; const me=_avId?students.find(s=>String(s.id)===String(_avId)):students.find(s=>(s.name||s.nome||"").toLowerCase()===_nomeCorsi.toLowerCase()); if(!me) return []; const ids=new Set([...(me.instrument?courses.filter(c=>c.name===me.instrument).map(c=>c.id):[]),...(me.complementaryCourse?[me.complementaryCourse]:[]),...((me.extraInstruments||[]).flatMap(i=>courses.filter(c=>c.name===i).map(c=>c.id)))]); return courses.filter(c=>ids.has(c.id)); })()
           : courses,
         students: students,
         docenti: docenti,
@@ -5152,8 +5260,10 @@ const isProva     = l => _optionalChain([l, 'optionalAccess', _47 => _47.tipo]) 
 const isSalaProve = l => _optionalChain([l, 'optionalAccess', _47b => _47b.tipo]) === "sala_prove";
 const lessonHex   = l => isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaProve(l) ? C.orange2 : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
 const studentInLesson = (l, name, studentId) => {
-  if (isColl(l)) return (l.students||[]).some(s=>s.name===name);
-  if (studentId && l.studentId && String(l.studentId)===String(studentId)) return true;
+  if (isColl(l)) return (l.students||[]).some(s =>
+    (studentId && s.id != null && String(s.id)===String(studentId)) || s.name===name
+  );
+  if (studentId && l.studentId != null && String(l.studentId)===String(studentId)) return true;
   const ln = (l.student||'').toLowerCase().trim();
   const nn = (name||'').toLowerCase().trim();
   return ln===nn || ln.includes(nn) || nn.includes(ln);
@@ -9043,6 +9153,61 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             return { ...stu, repertorio: [...(stu.repertorio || []), ...toAdd] };
           })
         );
+      }
+
+      // ── Crea lezione successiva se ricorrente e docente ha segnato presenza ──
+      if (data.attendance && data.attendance !== "" && data.recurrence && data.recurrence !== "Nessuna") {
+        const isLezioneRecupero = data.tipo === 'recupero' || data.inRecupero === true;
+        if (!isLezioneRecupero) {
+          const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
+          const gap      = daysMap[data.recurrence] || 7;
+          const nextDate = yyyymmdd(addDays(new Date((data.date||"")+"T00:00:00"), gap));
+          setLessons(prev => {
+            const exists = prev.some(l =>
+              l.date === nextDate && l.hour === data.hour &&
+              (isColl(data) ? l.courseId === data.courseId : l.student === data.student)
+            );
+            if (exists) return prev;
+            const nextLesson = {
+              ...data,
+              id:               uid(),
+              date:             nextDate,
+              attendance:       "",
+              notes:            "",
+              exercises:        "",
+              inRecupero:       false,
+              recuperoScadenza: null,
+              tipo:             data.tipo === 'recupero' ? 'individuale' : (data.tipo || 'individuale'),
+            };
+            const sbR = window.supabaseClient;
+            if (sbR) {
+              sbR.from('lezioni').insert({
+                id:               nextLesson.id,
+                data:             nextLesson.date,
+                ora:              nextLesson.hour       || null,
+                student:          nextLesson.student    || null,
+                studente_id:      nextLesson.studentId  || null,
+                strumento:        nextLesson.instrument || nextLesson.strumento || null,
+                teacher:          nextLesson.teacher    || null,
+                room:             nextLesson.room       || null,
+                topic:            nextLesson.topic      || null,
+                attendance:       null,
+                recurrence:       nextLesson.recurrence || 'Nessuna',
+                notes:            null,
+                tipo:             nextLesson.tipo || 'individuale',
+                link_url:         nextLesson.linkUrl    || null,
+                in_recupero:      false,
+                recupero_scadenza:null,
+                durata:           nextLesson.durata     || null,
+                updated_at:       new Date().toISOString(),
+              }).then(({ error }) => {
+                if (error) console.warn('[FM] handleEdit recurring insert error:', error.message);
+              });
+            }
+            setNextLessonCreated(nextDate);
+            return [...prev, nextLesson];
+          });
+        }
       }
 
       closeModal();
@@ -14384,7 +14549,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   {label:"Allievi",  value:all.length,                                      hex:d.colore},
                   {label:"Lez/mese", value:tutteLezioniMese(d,curMonth,curYear).length,        hex:_optionalChain([selected, 'optionalAccess', _88 => _88.id])===d.id?d.colore:C.textMuted},
                   // Compenso visibile sempre (docente vede solo sé stesso nella lista)
-                  {label:"Compenso", value:`€${stipendioMese(d).toLocaleString("it-IT")}`, hex:C.green},
+                  {label:"Compenso mese", value:`€${stipendioMese(d).toLocaleString("it-IT")}`, hex:C.green},
                 ].map(s=>(
                   React.createElement('div', { key: s.label, style: {textAlign:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9999}}
                     , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,color:s.hex,lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10000}}, s.value)
