@@ -4299,20 +4299,29 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
             )
           )
           , sdRuolo !== "docente" && React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap",justifyContent:"flex-end"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3224}}
-            , sdRuolo === "allievo" && lezioniDaRecuperare.length > 0 && React.createElement('button', {
-                onClick: () => { setRecuperoForm({ date: "", note: "" }); setShowRecuperoModal(true); },
+            , sdRuolo === "allievo" && React.createElement('button', {
+                onClick: lezioniDaRecuperare.length > 0 ? () => { setRecuperoForm({ date: "", note: "" }); setShowRecuperoModal(true); } : undefined,
+                disabled: lezioniDaRecuperare.length === 0,
+                title: lezioniDaRecuperare.length === 0 ? "Nessuna lezione da recuperare al momento" : `${lezioniDaRecuperare.length} lezione/i da recuperare`,
                 style: {display:"flex",alignItems:"center",gap:6,padding:"8px 14px",
-                  background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:8,
-                  cursor:"pointer",fontFamily:"'Open Sans',sans-serif",fontSize:13,
-                  color:C.purple,fontWeight:600,transition:"all 0.15s"},
-                onMouseEnter:e=>{e.currentTarget.style.background=C.purple;e.currentTarget.style.color="#fff";},
-                onMouseLeave:e=>{e.currentTarget.style.background=C.purpleBg;e.currentTarget.style.color=C.purple;}
+                  background: lezioniDaRecuperare.length > 0 ? C.purpleBg : C.surface,
+                  border:`1px solid ${lezioniDaRecuperare.length > 0 ? C.purpleBorder : C.border}`,
+                  borderRadius:8, cursor: lezioniDaRecuperare.length > 0 ? "pointer" : "default",
+                  fontFamily:"'Open Sans',sans-serif", fontSize:13,
+                  color: lezioniDaRecuperare.length > 0 ? C.purple : C.textDim,
+                  fontWeight: lezioniDaRecuperare.length > 0 ? 600 : 400,
+                  opacity: lezioniDaRecuperare.length === 0 ? 0.6 : 1,
+                  transition:"all 0.15s"},
+                onMouseEnter: lezioniDaRecuperare.length > 0 ? e=>{e.currentTarget.style.background=C.purple;e.currentTarget.style.color="#fff";} : undefined,
+                onMouseLeave: lezioniDaRecuperare.length > 0 ? e=>{e.currentTarget.style.background=C.purpleBg;e.currentTarget.style.color=C.purple;} : undefined
               }
-              , React.createElement(Ic, {n:"calendar", size:14, stroke:C.purple})
-              , `Prenota recupero (${lezioniDaRecuperare.length})`
+              , React.createElement(Ic, {n:"calendar", size:14, stroke: lezioniDaRecuperare.length > 0 ? C.purple : C.textDim})
+              , lezioniDaRecuperare.length > 0
+                  ? `Prenota recupero (${lezioniDaRecuperare.length})`
+                  : "Nessun recupero"
             )
-            , React.createElement(Btn, { variant: "secondary", onClick: onEdit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3225}}, React.createElement(Ic, { n: "edit", size: 14, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3225}}), "Modifica")
-            , React.createElement(Btn, { danger: true, onClick: onDelete, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3226}}, React.createElement(Ic, { n: "trash", size: 14, accentHex: C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3226}}))
+            , sdRuolo !== "allievo" && React.createElement(Btn, { variant: "secondary", onClick: onEdit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3225}}, React.createElement(Ic, { n: "edit", size: 14, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3225}}), "Modifica")
+            , sdRuolo !== "allievo" && React.createElement(Btn, { danger: true, onClick: onDelete, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3226}}, React.createElement(Ic, { n: "trash", size: 14, accentHex: C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3226}}))
           )
         )
         /* KPI strip — aggiornano col mese selezionato */
@@ -14332,10 +14341,27 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const isMobile = useIsMobile();
   const students = _studentsRaw || [];
   const lessons = _lessonsRaw || [];
-  const [selected,  setSelected]  = useState(null);
+
+  // Auto-seleziona il proprio record se loggato come docente
+  const _myDocRecord = React.useMemo(() => {
+    if (ruoloDocView !== "docente") return null;
+    const did = (_appUserDocView && _appUserDocView.docenteId) || null;
+    if (did) return (docenti||[]).find(d => String(d.id) === String(did)) || null;
+    const ln  = (_appUserDocView && _appUserDocView.nome) || "";
+    return (docenti||[]).find(d => d.teacherKey===ln || (d.nome||"").toLowerCase().includes(ln.toLowerCase())) || null;
+  }, [ruoloDocView, docenti, _appUserDocView]);
+
+  const [selected,  setSelected]  = useState(() => ruoloDocView === "docente" ? (_myDocRecord || null) : null);
   const [tab,       setTab]       = useState("profilo");
   const [modal,     setModal]     = useState(null); // null | "new" | "edit" | "del"
   const [draft,     setDraft]     = useState({});
+
+  // Aggiorna selected se il record docente cambia (es. dopo il caricamento dati da Supabase)
+  React.useEffect(() => {
+    if (ruoloDocView === "docente" && !selected && _myDocRecord) {
+      setSelected(_myDocRecord);
+    }
+  }, [_myDocRecord]);
 
   const initDoc = { nome:"", email:"", phone:"", bio:"", tariffaOra:35, contratto:"Collaborazione", dataInizio:"", colore:C.gold, corsi:[] };
 
