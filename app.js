@@ -4299,12 +4299,12 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const [lezForm, setLezForm]   = useState({ date: new Date().toISOString().split("T")[0], topic:"", attendance:"presente", notes:"" });
   const [ricevutaEnt, setRicevutaEnt] = useState(null);
   const [showRecuperoModal, setShowRecuperoModal] = useState(false);
-  const [recuperoForm, setRecuperoForm] = useState({ date:"", note:"", lezId:null, lezInfo:null });
+  const [recuperoForm, setRecuperoForm] = useState({ date:"", note:"", lezId:null, lezInfo:null, slotSel:null, ora:"" });
 
   // Espone hook per aprire il modal dall'esterno (dashboard → AllieviView → StudentDetail)
   React.useEffect(() => {
     window.__FM_OPEN_RECUPERO_MODAL__ = () => {
-      setRecuperoForm({ date:"", note:"", lezId:null, lezInfo:null });
+      setRecuperoForm({ date:"", note:"", lezId:null, lezInfo:null, slotSel:null, ora:"" });
       setShowRecuperoModal(true);
     };
     return () => { window.__FM_OPEN_RECUPERO_MODAL__ = null; };
@@ -5032,19 +5032,20 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
         )
       )
       /* ── MODAL PRENOTA RECUPERO (solo allievo) ── */
-      , showRecuperoModal && React.createElement(Modal, { title: "Prenota recupero", onClose: ()=>setShowRecuperoModal(false) }
+      , showRecuperoModal && React.createElement(Modal, { title: "Prenota recupero", onClose: ()=>setShowRecuperoModal(false), wide: true }
         , React.createElement('div', {style:{padding:"4px 0 16px"}}
-          /* Selezione lezione da recuperare */
-          , React.createElement('div', {style:{marginBottom:14}}
-            , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}}, "Quale lezione vuoi recuperare? *")
+
+          /* ── Step 1: Selezione lezione da recuperare ── */
+          , React.createElement('div', {style:{marginBottom:16}}
+            , React.createElement('div', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:8,fontWeight:600}}, "1 — Quale lezione vuoi recuperare? *")
             , lezioniDaRecuperare.map((l, idx) => {
                 const isSelected = recuperoForm.lezId === l.id;
                 return React.createElement('div', {
                     key:l.id,
-                    onClick:()=>setRecuperoForm(p=>({...p, lezId:l.id, lezInfo:l})),
+                    onClick:()=>setRecuperoForm(p=>({...p, lezId:l.id, lezInfo:l, slotSel:null, date:"", ora:""})),
                     style:{
                       display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
-                      marginBottom:6, borderRadius:8, cursor:"pointer",
+                      marginBottom:5, borderRadius:8, cursor:"pointer",
                       border:`2px solid ${isSelected ? C.purple : C.border}`,
                       background: isSelected ? C.purpleBg : C.surface,
                       transition:"all 0.12s"
@@ -5068,9 +5069,10 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                 );
               })
           )
-          /* Disponibilità docente */
-          , recuperoForm.lezInfo && (()=>{
-              const docName = (recuperoForm.lezInfo.teacher || student.teacher || "").toLowerCase().trim();
+
+          /* ── Step 2: Selezione slot dalla disponibilità docente ── */
+          , recuperoForm.lezId && (()=>{
+              const docName = (recuperoForm.lezInfo?.teacher || student.teacher || "").toLowerCase().trim();
               const allDocenti = window.__docenti__ || [];
               const docRecord = docName
                 ? allDocenti.find(d => {
@@ -5085,53 +5087,138 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
               const disp = typeof rawDisp === "string"
                 ? (()=>{ try{return JSON.parse(rawDisp);}catch(e){return [];} })()
                 : (Array.isArray(rawDisp) ? rawDisp : []);
-              return React.createElement('div', {style:{marginBottom:14}}
-                , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}}
-                  , docRecord ? `Disponibilità di ${docRecord.nome||docName}` : "Disponibilità del docente"
+
+              // Durata lezione in minuti (dal record lezione o default 45)
+              const durataMin = recuperoForm.lezInfo?.durata || 45;
+
+              // Genera tutte le date disponibili nelle prossime 8 settimane
+              const GIORNI_IT = ["domenica","lunedì","martedì","mercoledì","giovedì","venerdì","sabato"];
+              const oggi_slot = new Date(); oggi_slot.setHours(0,0,0,0);
+              const slotsDisp = []; // [{data, giorno, oraInizio, oraFine, label, key}]
+
+              if (disp.length > 0) {
+                for (let w=0; w<=7; w++) {
+                  for (const slot of disp) {
+                    const giornoTarget = slot.giorno.toLowerCase().replace("ì","i").replace("à","a");
+                    const dayIdx = ["domenica","lunedi","martedi","mercoledi","giovedi","venerdi","sabato"].indexOf(giornoTarget);
+                    if (dayIdx < 0) continue;
+                    // Trova la prossima data con quel giorno
+                    const d = new Date(oggi_slot);
+                    const diff = (dayIdx - d.getDay() + 7) % 7;
+                    d.setDate(d.getDate() + diff + w * 7);
+                    if (d <= oggi_slot) continue; // no date passate/oggi
+                    const dataStr = d.toISOString().split("T")[0];
+                    // Genera orari dalla fascia con step = durataMin
+                    const toMin = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+(m||0); };
+                    const toStr = m => `${String(Math.floor(m/60)).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`;
+                    let cur = toMin(slot.oraInizio);
+                    const end = toMin(slot.oraFine);
+                    while (cur + durataMin <= end) {
+                      slotsDisp.push({
+                        data: dataStr,
+                        giorno: slot.giorno,
+                        oraInizio: toStr(cur),
+                        oraFine: toStr(cur + durataMin),
+                        label: `${d.toLocaleDateString("it-IT",{weekday:"short",day:"2-digit",month:"short"})} ${toStr(cur)}`,
+                        key: `${dataStr}_${toStr(cur)}`,
+                      });
+                      cur += durataMin;
+                    }
+                  }
+                }
+                // Ordina per data poi ora
+                slotsDisp.sort((a,b) => a.key.localeCompare(b.key));
+              }
+
+              const slotSel = recuperoForm.slotSel || null;
+
+              return React.createElement('div', {style:{marginBottom:16}}
+                , React.createElement('div', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:8,fontWeight:600}}
+                  , `2 — Scegli giorno e orario (disponibilità ${(docRecord&&docRecord.nome)||"docente"}) *`
                 )
-                , disp.length > 0 ? (
-                  React.createElement('div', {style:{background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:8,padding:"10px 14px"}}
-                    , disp.map((s,i)=>(
-                        React.createElement('div', {key:i, style:{fontSize:13,color:C.purple,marginBottom:i<disp.length-1?4:0,display:"flex",alignItems:"center",gap:6}}
-                          , React.createElement(Ic,{n:"clock",size:12,stroke:C.purple})
-                          , `${s.giorno}  ${s.oraInizio} — ${s.oraFine}`
-                        )
-                      ))
+                , disp.length === 0 ? (
+                  React.createElement('div', {style:{padding:"12px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,color:C.textDim}}
+                    , "⚠️ Il docente non ha ancora configurato le fasce di disponibilità. Contatta direttamente il docente per concordare la data."
+                  )
+                ) : slotsDisp.length === 0 ? (
+                  React.createElement('div', {style:{padding:"12px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,color:C.textDim}}
+                    , "Nessuno slot disponibile nelle prossime 8 settimane."
                   )
                 ) : (
-                  React.createElement('div', {style:{fontSize:12,color:C.textDim,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px"}}
-                    , docRecord
-                      ? "Il docente non ha ancora configurato le fasce di disponibilità per i recuperi."
-                      : "Docente non trovato. Indica comunque la tua preferenza."
+                  React.createElement('div', null
+                    /* Raggruppa per settimana/giorno */
+                    , (()=>{
+                        const byDate = {};
+                        slotsDisp.forEach(s => {
+                          if (!byDate[s.data]) byDate[s.data] = [];
+                          byDate[s.data].push(s);
+                        });
+                        return Object.entries(byDate).slice(0,14).map(([data, slots]) => (
+                          React.createElement('div', {key:data, style:{marginBottom:10}}
+                            , React.createElement('div', {style:{fontSize:12,color:C.textMuted,fontWeight:600,marginBottom:5,textTransform:"capitalize"}}
+                              , new Date(data+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long",year:"numeric"})
+                            )
+                            , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
+                              , slots.map(s => {
+                                  const isSel = slotSel === s.key;
+                                  return React.createElement('button', {
+                                      key:s.key,
+                                      onClick:()=>setRecuperoForm(p=>({...p, slotSel:s.key, date:s.data, ora:s.oraInizio})),
+                                      style:{
+                                        padding:"6px 12px",borderRadius:20,fontSize:12,fontFamily:"'Open Sans',sans-serif",
+                                        border:`2px solid ${isSel ? C.purple : C.border}`,
+                                        background: isSel ? C.purple : C.bg,
+                                        color: isSel ? "#fff" : C.textMuted,
+                                        cursor:"pointer",fontWeight: isSel ? 600 : 400,
+                                        transition:"all 0.12s"
+                                      }
+                                    }
+                                    , `${s.oraInizio} — ${s.oraFine}`
+                                  );
+                                })
+                            )
+                          )
+                        ));
+                      })()
+                    )
                   )
                 )
               );
             })()
-          /* Data preferita */
-          , recuperoForm.lezId && (
-            React.createElement('div', {style:{marginBottom:14}}
-              , React.createElement(Input, { label:"Data preferita *", type:"date",
-                  value: recuperoForm.date,
-                  onChange: e=>setRecuperoForm(p=>({...p, date:e.target.value}))
-              })
-            )
           )
           , recuperoForm.lezId && (
             React.createElement('div', {style:{marginBottom:14}}
-              , React.createElement(Textarea, { label:"Note o preferenze di orario (opzionale)",
-                  value: recuperoForm.note,
+              , React.createElement('div', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",marginBottom:8,fontWeight:600}}, "3 — Note aggiuntive (opzionale)")
+              , React.createElement(Textarea, {
+                  value: recuperoForm.note || "",
                   onChange: e=>setRecuperoForm(p=>({...p, note:e.target.value})),
-                  placeholder:"Es. preferibilmente il pomeriggio, disponibile dalle 15:00..."
+                  placeholder:"Es. arrivo puntuale, porto lo spartito...",
+                  rows:2
               })
             )
           )
-          , React.createElement('div', {style:{marginTop:4,padding:"10px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,color:C.textMuted,lineHeight:1.5}}
+
+          /* Riepilogo slot selezionato */
+          , recuperoForm.slotSel && (
+            React.createElement('div', {style:{padding:"10px 14px",background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:8,fontSize:12,color:C.purple,marginBottom:12}}
+              , React.createElement(Ic,{n:"check",size:13,stroke:C.purple})
+              , " Hai selezionato: "
+              , React.createElement('strong',null
+                , new Date((recuperoForm.date||"")+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long"})
+                , " alle ", recuperoForm.ora
+              )
+            )
+          )
+
+          , React.createElement('div', {style:{padding:"10px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,fontSize:12,color:C.textMuted,lineHeight:1.5,marginBottom:14}}
             , "La richiesta verrà inviata al tuo docente. Attendi la conferma prima di presentarti."
           )
-          , React.createElement('div', {style:{display:"flex",gap:8,justifyContent:"flex-end",marginTop:16}}
+
+          , React.createElement('div', {style:{display:"flex",gap:8,justifyContent:"flex-end"}}
             , React.createElement(Btn, {variant:"secondary", onClick:()=>setShowRecuperoModal(false)}, "Annulla")
             , React.createElement(Btn, {
-                disabled: !recuperoForm.lezId || !recuperoForm.date,
+                disabled: !recuperoForm.lezId || !recuperoForm.slotSel,
+                title: !recuperoForm.slotSel ? "Seleziona uno slot dalla disponibilità del docente" : "",
                 onClick: async () => {
                   try {
                     const sb = window.supabaseClient;
@@ -5141,6 +5228,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                         allievo_nome:  student.name,
                         docente:       recuperoForm.lezInfo?.teacher || student.teacher || "",
                         data_preferita:recuperoForm.date,
+                        ora_recupero:  recuperoForm.ora || null,
                         note:          recuperoForm.note || null,
                         stato:         "in_attesa",
                         lezioni_ids:   JSON.stringify([recuperoForm.lezId]),
@@ -5153,9 +5241,9 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                     const lezLabel = lezData
                       ? new Date(lezData.date+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"long"})+" ore "+lezData.hour
                       : "";
-                    alert(`Richiesta inviata per la lezione del ${lezLabel}!\nData preferita: ${new Date(recuperoForm.date+"T00:00:00").toLocaleDateString("it-IT")}.\nIl tuo docente ti contatterà per confermare.`);
+                    alert(`✓ Richiesta inviata!\n\nLezione: ${lezLabel}\nData recupero: ${new Date(recuperoForm.date+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long"})} ore ${recuperoForm.ora}\n\nIl tuo docente confermerà la prenotazione.`);
                     setShowRecuperoModal(false);
-                    setRecuperoForm({ date:"", note:"", lezId:null, lezInfo:null });
+                    setRecuperoForm({ date:"", note:"", lezId:null, lezInfo:null, slotSel:null, ora:"" });
                   } catch(e) {
                     alert("Richiesta inviata! Il tuo docente ti contatterà per confermare.");
                     setShowRecuperoModal(false);
