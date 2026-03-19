@@ -2427,7 +2427,7 @@ const CONFIG_DEFAULT = {
 
 
 // ─── NOTIFICATION BELL ────────────────────────────────────────────────────────
-const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB, notifiche:_notificheNB }) => {
+const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB, notifiche:_notificheNB, onQuickAction:_onQANB }) => {
   const ruoloNB = _ruoloNB || "admin";
   const [open, setOpen] = useState(false);
   const ref = React.useRef(null);
@@ -2609,15 +2609,45 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
   });
 
   myNotifiche.forEach(function(n) {
+    // Routing per tipo notifica
+    var actionFn = function() {
+      // Segna come letta su Supabase (fire-and-forget)
+      var sb = window.supabaseClient;
+      if (sb && n.id) {
+        sb.from('notifiche').update({letto: true}).eq('id', n.id)
+          .then(function(){});
+      }
+      // Naviga alla schermata corretta
+      var tipo = n.tipo || '';
+      if (tipo === 'recupero_richiesto' || tipo === 'recupero_approvato_docente') {
+        // Docente/Admin: vai al tab recuperi
+        onNavigate('calendario');
+        if (_onQANB) setTimeout(function(){ _onQANB('showRecuperi'); }, 100);
+      } else if (tipo === 'recupero_confermato' || tipo === 'recupero_in_attesa' ||
+                 tipo === 'recupero_confermato_docente' || tipo === 'recupero_ufficiale' ||
+                 tipo === 'recupero_rifiutato') {
+        // Allievo: vai al profilo (schermata allievi)
+        onNavigate('allievi');
+      } else {
+        // Default per altri tipi
+        onNavigate('dashboard');
+      }
+      setOpen(false);
+    };
+    var actionLabel = 'Vedi dettagli';
+    if (n.tipo === 'recupero_richiesto')          actionLabel = 'Gestisci recupero';
+    else if (n.tipo === 'recupero_approvato_docente') actionLabel = 'Conferma ufficialmente';
+    else if (n.tipo === 'recupero_confermato_docente' || n.tipo === 'recupero_ufficiale') actionLabel = 'Vedi dettagli';
+    else if (n.tipo === 'recupero_rifiutato')     actionLabel = 'Vedi dettagli';
     notifs.push({
       id: 'notifica_' + n.id,
-      tipo: n.tipo === 'recupero_richiesto' ? 'warning' : 'info',
+      tipo: (n.tipo === 'recupero_richiesto' || n.tipo === 'recupero_approvato_docente') ? 'warning' : 'info',
       icon: 'calendar',
-      color: n.tipo === 'recupero_richiesto' ? C.purple : C.teal,
+      color: (n.tipo === 'recupero_richiesto' || n.tipo === 'recupero_approvato_docente') ? C.orange : C.purple,
       titolo: n.titolo || 'Notifica',
       desc: n.messaggio || '',
-      action: function() { onNavigate(ruoloNB === 'docente' ? 'allievi' : 'allievi'); setOpen(false); },
-      actionLabel: ruoloNB === 'docente' ? 'Vedi allievi' : 'Vedi dettagli',
+      action: actionFn,
+      actionLabel: actionLabel,
     });
   });
 
@@ -2939,6 +2969,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   richieste: propRichieste||[],
                   notifiche: propNotifiche||[],
                   onNavigate: onNavigate,
+                  onQuickAction: onQuickAction,
                   ruolo: ruolo,
                   appUser: appUser,
                 })
@@ -5612,9 +5643,71 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
     }
   },[qaAV]);
 
-  const handleAddStudent    = d  => { setStudents(p=>[...p,{...d,id:uid(),lessons:[]}]); closeModal(); };
-  const handleEditStudent   = d  => { setStudents(p=>p.map(s=>s.id===d.id?{...s,...d}:s)); if(_optionalChain([selected, 'optionalAccess', _43 => _43.id])===d.id) setSelected(p=>({...p,...d})); closeModal(); };
-  const handleDeleteStudent = () => { setStudents(p=>p.filter(s=>s.id!==_optionalChain([selected, 'optionalAccess', _44 => _44.id]))); setView("list"); setSelected(null); closeModal(); };
+  const handleAddStudent = async (d) => {
+    const sb = window.supabaseClient;
+    if (sb) {
+      const row = {
+        nome: d.name||'', email: d.email||null, phone: d.phone||null,
+        strumento: d.instrument||null, docente: d.teacher||null,
+        livello: d.level||'Principiante', status: d.status||'attivo',
+        monthly_fee: parseFloat(d.monthlyFee)||0, fee_type: d.feeType||'fisso',
+        birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
+        complementary_course: d.complementaryCourse||null, notes: d.notes||null,
+        extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
+        extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
+      };
+      const { data: inserted, error } = await sb.from('studenti').insert(row).select().single();
+      if (!error && inserted) {
+        // Usa l'ID intero reale restituito da Supabase
+        const FA = window.FMAdapter;
+        const newStudent = FA ? FA.studente(inserted) : inserted;
+        newStudent.repertorio = [];
+        newStudent.extraInstruments = d.extraInstruments||[];
+        newStudent.extraTeachers = d.extraTeachers||{};
+        newStudent.lessons = [];
+        setStudents(p => [...p, newStudent]);
+      } else if (error) {
+        console.warn('[FM] handleAddStudent error:', error.message);
+        // Fallback offline
+        setStudents(p => [...p, {...d, id: uid(), lessons:[]}]);
+      }
+    } else {
+      setStudents(p => [...p, {...d, id: uid(), lessons:[]}]);
+    }
+    closeModal();
+  };
+
+  const handleEditStudent = async (d) => {
+    const sb = window.supabaseClient;
+    if (sb && d.id) {
+      const row = {
+        nome: d.name||'', email: d.email||null, phone: d.phone||null,
+        strumento: d.instrument||null, docente: d.teacher||null,
+        livello: d.level||'Principiante', status: d.status||'attivo',
+        monthly_fee: parseFloat(d.monthlyFee)||0, fee_type: d.feeType||'fisso',
+        birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
+        complementary_course: d.complementaryCourse||null, notes: d.notes||null,
+        extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
+        extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
+      };
+      const { error } = await sb.from('studenti').update(row).eq('id', d.id);
+      if (error) console.warn('[FM] handleEditStudent error:', error.message);
+    }
+    setStudents(p => p.map(s => s.id===d.id ? {...s,...d} : s));
+    if (_optionalChain([selected, 'optionalAccess', _43 => _43.id])===d.id) setSelected(p=>({...p,...d}));
+    closeModal();
+  };
+
+  const handleDeleteStudent = async () => {
+    const sid = _optionalChain([selected, 'optionalAccess', _44 => _44.id]);
+    const sb = window.supabaseClient;
+    if (sb && sid) {
+      const { error } = await sb.from('studenti').delete().eq('id', sid);
+      if (error) console.warn('[FM] handleDeleteStudent error:', error.message);
+    }
+    setStudents(p => p.filter(s => s.id !== sid));
+    setView("list"); setSelected(null); closeModal();
+  };
   const handleAddLesson     = (sid,lesson) => {
     setStudents(p=>p.map(s=>s.id===sid?{...s,lessons:[...(s.lessons||[]),lesson]}:s));
     setSelected(p=>_optionalChain([p, 'optionalAccess', _45 => _45.id])===sid?{...p,lessons:[...(p.lessons||[]),lesson]}:p);
