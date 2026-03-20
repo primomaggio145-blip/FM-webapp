@@ -8573,7 +8573,7 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
       var lezioniIds = [];
       try { lezioniIds = JSON.parse(selRich.lezioni_ids||'[]'); } catch(e){}
       var dataLezOriginale = '';
-      var corsoId = null, corsoNome = null, roomOrig = null;
+      var corsoId = null, corsoNome = null, roomOrig = null, strumentoOrig = selRich.strumento || null;
       if (lezioniIds.length > 0) {
         var { data: lezOrig } = await sb.from('lezioni').select('data,strumento,corso_id,corso_nome,room').eq('id', lezioniIds[0]).single();
         if (lezOrig) {
@@ -8582,7 +8582,7 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
           corsoNome = lezOrig.corso_nome  || null;
           roomOrig  = lezOrig.room        || null;
           // Usa strumento dalla lezione originale se non già in selRich
-          if (!selRich.strumento && lezOrig.strumento) selRich = Object.assign({}, selRich, {strumento: lezOrig.strumento});
+          if (!selRich.strumento && lezOrig.strumento) strumentoOrig = lezOrig.strumento;
         }
       }
       var dLOrigine = dataLezOriginale
@@ -8598,7 +8598,7 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
         student:    selRich.allievo_nome || '',
         studente_id:selRich.allievo_id   || null,
         teacher:    selRich.docente      || '',
-        strumento:  selRich.strumento    || null,
+        strumento:  strumentoOrig,
         corso_id:   corsoId,
         corso_nome: corsoNome,
         room:       roomOrig,
