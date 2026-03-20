@@ -5784,11 +5784,33 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
   const setStudents = _nullishCoalesce(propSetStudents, () => ( _setStudents));
   const docenti     = _nullishCoalesce(propDocenti, () => ( []));
 
-  const handleAddCourse  = d  => setCourses(p=>[...p,{...d,id:uid()}]);
-  const handleEditCourse = d  => setCourses(p=>p.map(c=>c.id===d.id?{...c,...d}:c));
-  const handleDelCourse  = id => {
-    setCourses(p=>p.filter(c=>c.id!==id));
-    setStudents(p=>p.map(s=>s.complementaryCourse===id?{...s,complementaryCourse:""}:s));
+  const handleAddCourse = async (d) => {
+    const sb = window.supabaseClient;
+    const newId = uid();
+    if (sb) {
+      const row = { id:newId, nome:d.name||d.nome||'', tipo:d.type||d.tipo||'individuale', descrizione:d.description||d.descrizione||null, visible:true };
+      const { error } = await sb.from('corsi').insert(row);
+      if (error) console.warn('[FM] handleAddCourse error:', error.message);
+    }
+    setCourses(p => [...p, {...d, id:newId}]);
+  };
+  const handleEditCourse = async (d) => {
+    const sb = window.supabaseClient;
+    if (sb && d.id) {
+      const row = { nome:d.name||d.nome||'', tipo:d.type||d.tipo||'individuale', descrizione:d.description||d.descrizione||null };
+      const { error } = await sb.from('corsi').update(row).eq('id', d.id);
+      if (error) console.warn('[FM] handleEditCourse error:', error.message);
+    }
+    setCourses(p => p.map(c => c.id===d.id ? {...c,...d} : c));
+  };
+  const handleDelCourse = async (id) => {
+    const sb = window.supabaseClient;
+    if (sb && id) {
+      const { error } = await sb.from('corsi').delete().eq('id', id);
+      if (error) console.warn('[FM] handleDelCourse error:', error.message);
+    }
+    setCourses(p => p.filter(c => c.id !== id));
+    setStudents(p => p.map(s => s.complementaryCourse===id ? {...s,complementaryCourse:""} : s));
   };
 
   return (
