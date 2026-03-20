@@ -428,6 +428,21 @@ const Textarea = ({ label, ...props }) => (
   )
 );
 
+// ─── REFRESH BUTTON — usato negli header di tutte le viste ────────────────────
+const RefreshBtn = function() {
+  return React.createElement('button', {
+    onClick: function(){ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(false); },
+    title: "Aggiorna dati",
+    style: {
+      background:"none", border:"1px solid "+C.border, borderRadius:8,
+      padding:"6px 8px", cursor:"pointer", display:"flex", alignItems:"center",
+      color:C.textMuted, transition:"all .15s", flexShrink:0
+    },
+    onMouseEnter: function(e){ e.currentTarget.style.borderColor=C.gold; e.currentTarget.style.color=C.gold; },
+    onMouseLeave: function(e){ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.textMuted; }
+  }, React.createElement(Ic, {n:"refresh", size:15, stroke:"currentColor"}));
+};
+
 const Modal = ({ title, onClose, children, footer, wide=false }) => (
   React.createElement('div', { className: "modal-resp-outer", style: {position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"flex-end",
     justifyContent:"center",padding:"0"}, onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 407}}
@@ -4106,7 +4121,10 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
           , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:32,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2881}}, "Gestione Corsi" )
           , React.createElement('p', { style: {color:C.textMuted,fontSize:14,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2882}}, individuali.length, " corsi individuali · "    , collettivi.length, " corsi collettivi"  )
         )
-        , onAdd && React.createElement(Btn, { onClick: ()=>setModal("add"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 2884}}, React.createElement(Ic, { n: "plus", size: 14, color: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2884}}), "Nuovo corso" )
+        , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+          , React.createElement(RefreshBtn)
+          , onAdd && React.createElement(Btn, { onClick: ()=>setModal("add"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 2884}}, React.createElement(Ic, { n: "plus", size: 14, color: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2884}}), "Nuovo corso" )
+        )
       )
 
       , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:24,display:"flex",flexDirection:"column",gap:24}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2887}}
@@ -5499,7 +5517,10 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
           , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:"clamp(22px,4vw,32px)",fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3753}}, "Anagrafica Allievi" )
           , React.createElement('p', { style: {color:C.textMuted,fontSize:14,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3754}}, students.filter(s=>s.status==="attivo").length, " attivi · "   , students.length, " totali" )
         )
-        , onAdd && React.createElement(Btn, { onClick: onAdd, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}, React.createElement(Ic, { n: "plus", size: 14, color: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}), "Nuovo allievo" )
+        , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+          , React.createElement(RefreshBtn)
+          , onAdd && React.createElement(Btn, { onClick: onAdd, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}, React.createElement(Ic, { n: "plus", size: 14, color: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3756}}), "Nuovo allievo" )
+        )
       )
 
       , React.createElement('div', { style: {display:"flex",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3759}}
@@ -7811,7 +7832,10 @@ const CalRepertorioTab = ({ repertorio, lessons, onAdd, onEdit, onDelete, canEdi
               , repertorio.length, " brani totali · "    , repertorio.filter(b=>b.type==="individuale").length, " individuali · "   , repertorio.filter(b=>b.type==="collettivo").length, " collettivi"
             )
           )
-          , canEdit && React.createElement(Btn, { onClick: ()=>setModal("add"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 5247}}, React.createElement(Ic, { n: "plus", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 5247}}), "Nuovo brano" )
+          , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+            , React.createElement(RefreshBtn)
+            , canEdit && React.createElement(Btn, { onClick: ()=>setModal("add"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 5247}}, React.createElement(Ic, { n: "plus", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 5247}}), "Nuovo brano" )
+          )
         )
 
         /* Barra ricerca + filtri a tendina */
@@ -10446,6 +10470,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             )
 
             , React.createElement('div', { className: "cal-toolbar-right", style: {display:"flex", gap:8, alignItems:"center", flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6006}}
+              , React.createElement(RefreshBtn)
               , React.createElement('div', { style: {display:"flex", background:C.surface, border:`1px solid ${C.border}`,
                 borderRadius:8, overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6007}}
                 , [["day","Giorno","day"],["week","Settimana","week"],["month","Mese","cal"]].map(([v, lbl, icon]) => (
@@ -11441,7 +11466,8 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota, ruoloCV })
         , React.createElement(Ic, { n: t.icon, size: 13, stroke: tab===t.id?C.gold:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6820}}), t.label
       )
     ))
-    , React.createElement('div', { style: {marginLeft:"auto",display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6823}}
+    , React.createElement('div', { style: {marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6823}}
+      , React.createElement(RefreshBtn)
       , tab==="entrate"  && onSetModalQuota && (
         React.createElement(Btn, { small: true, onClick: onSetModalQuota, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6825}}, React.createElement(Ic, { n: "plus", size: 13, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6825}}), "Nuova entrata" )
       )
@@ -13854,7 +13880,10 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
             , prossimi, " programmati · "   , completati, " completati · "   , concerti.length, " totali"
           )
         )
-        , ruoloConc==="admin" && React.createElement(Btn, { onClick: ()=>setModal("new"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8928}}, React.createElement(Ic, { n: "plus", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 8928}}), "Nuovo evento" )
+        , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+          , React.createElement(RefreshBtn)
+          , ruoloConc==="admin" && React.createElement(Btn, { onClick: ()=>setModal("new"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8928}}, React.createElement(Ic, { n: "plus", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 8928}}), "Nuovo evento" )
+        )
       )
 
       /* KPI strip */
@@ -14683,6 +14712,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
           , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif", fontWeight:600, fontSize:26, letterSpacing:"0.02em", color:C.text}}, "Allegati")
           , React.createElement('p', { style: {fontSize:13, color:C.textMuted, marginTop:4}}, allegati.length, " allegati totali (", allegatiLezioni.length, " lezioni · ", allegatiBrani.length, " brani)")
         )
+        , React.createElement(RefreshBtn)
       )
       , React.createElement('div', { style: {display:"flex", gap:12, marginBottom:20, flexWrap:"wrap"}}
         , React.createElement('input', { value: search, onChange: e=>setSearch(e.target.value),
@@ -14981,7 +15011,8 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
             height:52,flexShrink:0,gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9588}}
             , React.createElement(Ic, { n: "shield", size: 16, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9591}})
             , React.createElement('span', { style: {fontFamily:"'Oswald',sans-serif",fontSize:15,fontWeight:600,color:C.gold,letterSpacing:"0.04em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9592}}, "Utenti")
-            , React.createElement('div', { style: {marginLeft:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9593}}
+            , React.createElement('div', { style: {marginLeft:"auto",display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9593}}
+              , React.createElement(RefreshBtn)
               , React.createElement(Btn, { onClick: ()=>setModal("invita"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9594}}
                 , React.createElement(Ic, { n: "plus", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 9595}}), "Invita utente"
               )
@@ -15516,7 +15547,10 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             , docenti.length, " docenti"
           )
         )
-        , ruoloDocView==="admin" && React.createElement(Btn, { onClick: openNew, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9966}}, React.createElement(Ic, { n: "plus", size: 15, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 9966}}), "Nuovo docente" )
+        , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+          , React.createElement(RefreshBtn)
+          , ruoloDocView==="admin" && React.createElement(Btn, { onClick: openNew, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9966}}, React.createElement(Ic, { n: "plus", size: 15, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 9966}}), "Nuovo docente" )
+        )
       )
 
       , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9969}}
