@@ -1485,9 +1485,25 @@ const MiniChart = ({ dati }) => {
 const LessonTimeline = ({ lezioni, onLessonClick }) => {
   const oraNum = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
   const nowMins = oggi.getHours()*60+oggi.getMinutes();
+  const scrollRef = React.useRef(null);
+
+  // Auto-scroll: porta la prima lezione in corso / prossima in cima al contenitore
+  React.useEffect(function() {
+    if (!scrollRef.current) return;
+    const container = scrollRef.current.closest('[data-timeline-scroll]');
+    if (!container) return;
+    // Trova il primo elemento non-passato (in corso o futuro)
+    const firstActive = scrollRef.current.querySelector('[data-timeline-active]');
+    if (firstActive) {
+      const containerTop = container.getBoundingClientRect().top;
+      const elTop = firstActive.getBoundingClientRect().top;
+      const offset = elTop - containerTop + container.scrollTop - 8; // 8px di margine
+      container.scrollTo({ top: offset, behavior: 'smooth' });
+    }
+  }, [lezioni.length]);
 
   return (
-    React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1327}}
+    React.createElement('div', { ref: scrollRef, style: {display:"flex",flexDirection:"column",gap:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1327}}
       , lezioni.map((l,i)=>{
         const startM = oraNum(l.ora);
         const endM   = startM + l.durata;
@@ -1495,6 +1511,7 @@ const LessonTimeline = ({ lezioni, onLessonClick }) => {
         const passata = nowMins>=endM;
         const prossima= !passata && !inCorso && i===lezioni.findIndex(x=>oraNum(x.ora)>nowMins);
         const clickable = !!onLessonClick;
+        const isActive = inCorso || prossima; // primo elemento da mostrare in cima
 
         const docenteColor = {
           "Prof. Rossi":C.gold,"Prof. Bianchi":C.teal,"Prof. Verde":C.blue,"Prof. Marino":C.purple
@@ -1502,6 +1519,7 @@ const LessonTimeline = ({ lezioni, onLessonClick }) => {
 
         return (
           React.createElement('div', { key: l.id, className: "lesson-row",
+            'data-timeline-active': isActive ? "1" : undefined,
             onClick: clickable ? ()=>onLessonClick(l.id) : undefined,
             style: {display:"grid",gridTemplateColumns:"52px 4px 1fr auto",
               gap:10,alignItems:"center",padding:"9px 12px",borderRadius:10,
@@ -3218,7 +3236,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                         )
                       )
                     )
-                    , React.createElement('div', { style: {padding:14,maxHeight:380,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2252}}
+                    , React.createElement('div', { 'data-timeline-scroll': '1', style: {padding:14,maxHeight:340,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2252}}
                       , React.createElement(LessonTimeline, { lezioni: ruolo==="allievo"
                         ? LEZIONI_OGGI_LIVE.filter(l=>matchLezioneAllievo(l))
                         : ruolo==="docente" ? LEZIONI_OGGI_LIVE.filter(matchDocLezione)
