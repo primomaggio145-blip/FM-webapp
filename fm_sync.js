@@ -72,21 +72,12 @@
       studentId: r.studente_id || null,
       instrument: r.strumento || r.instrument || '', teacher: r.teacher || '', room: r.room || '',
       topic: r.topic || '', attendance: r.attendance || '',
-      notesRecupero: r.notes_recupero || '',
       recurrence: r.recurrence || 'Nessuna', notes: r.notes || '',
       exercises: r.exercises || '', repertorio: r.repertorio || '',
       type: r.tipo || 'individuale',
       linkUrl: r.link_url || '',
       inRecupero: r.in_recupero || false,
       recuperoScadenza: r.recupero_scadenza || null,
-      courseId:   r.corso_id   || null,
-      courseName: r.corso_nome || null,
-      // Array allievi per lezioni collettive (stored as JSON in DB)
-      students: (() => {
-        if (!r.students) return [];
-        if (Array.isArray(r.students)) return r.students;
-        try { return JSON.parse(r.students); } catch(e) { return []; }
-      })(),
       // Durata in minuti (default per tipo se non salvata)
       durata: r.durata
         ? parseInt(r.durata)
@@ -227,12 +218,11 @@
         id: l.id || null,
         data: l.date, ora: l.hour || null,
         student: l.student || null,
-        studente_id: l.studentId ? parseInt(l.studentId, 10) : null,
         strumento: l.instrument || l.strumento || null,
         teacher: l.teacher || null, room: l.room || null,
         topic: l.topic || null, attendance: l.attendance || null,
         recurrence: l.recurrence || 'Nessuna', notes: l.notes || null,
-        tipo: l.type || l.tipo || 'individuale',
+        tipo: l.type || 'individuale', updated_at: new Date().toISOString(),
         link_url: l.linkUrl || null,
         in_recupero: l.inRecupero || false,
         recupero_scadenza: l.recuperoScadenza || null,
@@ -240,12 +230,6 @@
         exercises: l.exercises || null,
         repertorio_ids: l.repertorioIds && l.repertorioIds.length > 0
           ? JSON.stringify(l.repertorioIds)
-          : null,
-        corso_id:   l.courseId   || null,
-        corso_nome: l.courseName || null,
-        // Array allievi per collettive: serializzato come JSON
-        students: l.students && l.students.length > 0
-          ? JSON.stringify(l.students)
           : null,
       };
     },
@@ -434,12 +418,9 @@
     if (!_ready) { warn('Sync non ancora attivo — salto'); return; }
 
     const MAP = [
-      // ATTENZIONE: studenti e corsi sono ESCLUSI dall'auto-sync per evitare loop di duplicazione.
-      // - studenti: ID intero auto-increment → loop INSERT se gestito da diff
-      // - corsi: IDs demo corti (c1..c10) non sono UUID validi → fm_sync li vede come
-      //          "nuovi" e fa INSERT con UUID generato → duplicati
-      // Entrambi vengono gestiti con scritture dirette su Supabase in app.js.
+      ['studenti', 'students', toDB.studenti],
       ['docenti',  'docenti',  toDB.docenti ],
+      ['corsi',    'courses',  toDB.corsi   ],
       ['lezioni',  'lessons',  toDB.lezioni ],
       ['quote',    'entrate',  toDB.quote   ],
       ['spese',    'spese',    toDB.spese   ],
@@ -602,22 +583,6 @@
     if (!_ready) return;
     clearTimeout(_timer);
     _timer = setTimeout(() => syncState(state), DEBOUNCE);
-  };
-
-  // Aggiorna lo snapshot _prev dall'esterno (usato da __FM_FORCE_REFRESH__ in app.js)
-  // IMPORTANTE: va chiamato PRIMA di __FM_RELOAD__ per evitare che syncState
-  // veda le differenze tra vecchio _prev e nuovi dati come "modifiche da scrivere"
-  window.__FM_UPDATE_PREV__ = function(data) {
-    if (data.students)  _prev.students  = [...data.students];
-    if (data.docenti)   _prev.docenti   = [...data.docenti];
-    if (data.courses)   _prev.courses   = [...data.courses];
-    if (data.lessons)   _prev.lessons   = [...data.lessons];
-    if (data.entrate)   _prev.entrate   = [...data.entrate];
-    if (data.spese)     _prev.spese     = [...data.spese];
-    if (data.brani)     _prev.brani     = [...data.brani];
-    if (data.concerti)  _prev.concerti  = [...data.concerti];
-    if (data.allegati)  _prev.allegati  = [...data.allegati];
-    if (data.prenotazioni_sala) _prev.prenotazioni_sala = [...data.prenotazioni_sala];
   };
 
   // ═══════════════════════════════════════════════════════════════════════════

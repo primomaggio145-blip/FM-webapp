@@ -10188,9 +10188,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                 in_recupero:      false,
                 recupero_scadenza:null,
                 durata:           nextLesson.durata     || null,
-                updated_at:       new Date().toISOString(),
               }).then(({ error }) => {
                 if (error) console.warn('[FM] handleEdit recurring insert error:', error.message);
+                // Aggiorna _prev in fm_sync per evitare che la lezione venga re-inserita dal diff
+                if (!error && window.__FM_UPDATE_PREV__) {
+                  window.__FM_UPDATE_PREV__({ lessons: [...(window.__FM_DATA__?.lessons || []), nextLesson] });
+                }
               });
             }
             setNextLessonCreated(nextDate);
@@ -17343,39 +17346,50 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
   const ruolo     = propRuolo     !== undefined ? propRuolo     : _lRuolo;
   const setRuolo  = propSetRuolo  !== undefined ? propSetRuolo  : _setLRuolo;
 
-  // Popup DOM nativo — non dipende da React state, non viene azzerato dai re-render
+  // Popup DOM nativo
   const showPopup = (ok, msg) => {
+    // Rimuovi popup precedente
     const existing = document.getElementById('fm-save-popup');
     if (existing) existing.remove();
     const el = document.createElement('div');
     el.id = 'fm-save-popup';
-    el.style.cssText = [
-      'position:fixed','top:24px','left:50%','transform:translateX(-50%)',
-      'z-index:99999','padding:14px 28px','border-radius:12px',
-      'font-family:"Open Sans",sans-serif','font-size:14px','font-weight:600',
-      'color:#fff','display:flex','align-items:center','gap:10px',
-      'box-shadow:0 8px 32px rgba(0,0,0,0.35)',
-      'animation:fadeUp .2s ease',
-      ok ? 'background:#16a34a' : 'background:#dc2626',
-    ].join(';');
-    el.innerHTML = (ok ? '✅ ' : '❌ ') + msg;
+    el.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:999999;padding:16px 32px;border-radius:12px;font-family:"Open Sans",sans-serif;font-size:15px;font-weight:600;color:#fff;box-shadow:0 8px 32px rgba(0,0,0,0.4);white-space:nowrap;' + (ok ? 'background:#16a34a;' : 'background:#dc2626;');
+    el.textContent = (ok ? '✅  ' : '❌  ') + msg;
     document.body.appendChild(el);
-    setTimeout(() => { if (el.parentNode) el.remove(); }, ok ? 3000 : 6000);
+    setTimeout(() => el.remove(), ok ? 3000 : 7000);
   };
 
   const handleSave = async () => {
+    // Feedback immediato che il click è stato ricevuto
+    const btn = document.querySelector('[data-fm-save-btn]');
+    if (btn) { btn.textContent = '⏳ Salvataggio...'; btn.disabled = true; }
+
+    const restore = () => {
+      if (btn) { btn.textContent = '💾 Salva impostazioni'; btn.disabled = false; }
+    };
+
     const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
     const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjE0NDAsImV4cCI6MjA4NzkzNzQ0MH0.ScXeqKD73hu1zMwVWppybmNRqCtKWnR9C_pfNMjwQio';
 
-    // Token sessione
+    // Token sessione — OBBLIGATORIO per operazioni di scrittura
     let authToken = SUPABASE_ANON;
     try {
       const sb = window.supabaseClient;
       if (sb) {
         const { data } = await sb.auth.getSession();
-        if (data?.session?.access_token) authToken = data.session.access_token;
+        if (data?.session?.access_token) {
+          authToken = data.session.access_token;
+        } else {
+          restore();
+          showPopup(false, 'Sessione scaduta — rieffettua il login');
+          return;
+        }
       }
-    } catch(e) {}
+    } catch(e) {
+      restore();
+      showPopup(false, 'Errore sessione: ' + (e?.message || e));
+      return;
+    }
 
     const headers = {
       'Content-Type': 'application/json',
@@ -17383,7 +17397,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
       'Authorization': 'Bearer ' + authToken,
     };
 
-    // Prepara righe
+    // Prepara righe (escludi funzioni)
     const rows = [];
     Object.entries(draft).forEach(([chiave, valore]) => {
       if (typeof valore === 'function') return;
@@ -17394,28 +17408,39 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     });
 
     try {
-      // DELETE
-      await fetch(`${SUPABASE_URL}/rest/v1/sito_config?chiave=neq.___x___`, { method:'DELETE', headers });
+      // 1. DELETE tutto tranne una chiave impossibile
+      const delRes = await fetch(`${SUPABASE_URL}/rest/v1/sito_config?chiave=neq.___x___`, {
+        method: 'DELETE', headers
+      });
+      if (!delRes.ok && delRes.status !== 404) {
+        const body = await delRes.text();
+        restore();
+        showPopup(false, `Delete fallita (${delRes.status}): ${body.slice(0,80)}`);
+        return;
+      }
 
-      // INSERT
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/sito_config`, {
+      // 2. INSERT tutte le righe
+      const insRes = await fetch(`${SUPABASE_URL}/rest/v1/sito_config`, {
         method: 'POST',
         headers: { ...headers, 'Prefer': 'return=minimal' },
         body: JSON.stringify(rows),
       });
 
-      if (!res.ok) {
-        const body = await res.text();
-        showPopup(false, `Errore ${res.status}: ${body.slice(0,100)}`);
+      if (!insRes.ok) {
+        const body = await insRes.text();
+        restore();
+        showPopup(false, `Salvataggio fallito (${insRes.status}): ${body.slice(0,80)}`);
         return;
       }
 
-      // Aggiorna React state dopo il salvataggio DB
+      // Successo
       setConfig({...draft});
-      showPopup(true, 'Impostazioni salvate correttamente!');
+      restore();
+      showPopup(true, 'Impostazioni salvate!');
 
     } catch(e) {
-      showPopup(false, 'Errore: ' + (e?.message || String(e)));
+      restore();
+      showPopup(false, 'Errore rete: ' + (e?.message || String(e)));
     }
   };
 
@@ -17425,12 +17450,12 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,margin:0}}, "Impostazioni")
         , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}}, "Configurazione generale del gestionale")
       )
-    , React.createElement('button', {onClick:handleSave,
+    , React.createElement('button', {'data-fm-save-btn':true, onClick:handleSave,
         style:{display:"flex",alignItems:"center",gap:7,padding:"10px 20px",borderRadius:9,
           border:"none", background:C.gold, color:"#ffffff", cursor:"pointer",
           fontSize:13, fontWeight:600, fontFamily:"'Open Sans',sans-serif"}}
       , React.createElement(Ic,{n:"check", size:14, stroke:"#ffffff"})
-      , "Salva impostazioni"
+      , "💾 Salva impostazioni"
     )
     )
 
