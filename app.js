@@ -8538,83 +8538,159 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
     setModData(rich.data_preferita || '');
     setModOra(rich.ora_recupero || '');
   };
-  var closeModal = function() { setSelRich(null); setModalMode(''); setSaving(false); };
-
-  // Salva azione
-  var handleSalva = async function() {
-    if (!selRich || saving) return;
-    setSaving(true);
-    var sb = window.supabaseClient;
-    if (!sb) { setSaving(false); return; }
-
-    var nuovoStato = modalMode === 'approva' ? 'confermata'
-                   : modalMode === 'rifiuta' ? 'rifiutata'
-                   : modalMode === 'ufficiale' ? 'completata' : selRich.stato;
-
-    // Aggiorna data/ora se modificata
-    var dataFin = modData || selRich.data_preferita;
-    var oraFin  = modOra  || selRich.ora_recupero;
-
-    await sb.from('richieste_recupero').update({
-      stato:          nuovoStato,
-      data_preferita: dataFin,
-      ora_recupero:   oraFin,
-      note_docente:   modNota || null,
-    }).eq('id', selRich.id);
-
-    // Aggiorna stato locale
-    setRichiesteRec(function(p){
-      return p.map(function(r){
-        return r.id===selRich.id
-          ? Object.assign({},r,{stato:nuovoStato,data_preferita:dataFin,ora_recupero:oraFin,note_docente:modNota||null})
-          : r;
-      });
-    });
-
-    var dataLabel = new Date((dataFin||'')+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'2-digit',month:'long'});
-
-    // Notifiche Supabase
-    if (modalMode === 'approva') {
-      // Admin: conferma ufficiale richiesta
-      await sb.from('notifiche').insert({
-        destinatario_ruolo:'admin', tipo:'recupero_approvato_docente',
-        titolo:'✅ Recupero approvato — conferma ufficiale richiesta',
-        messaggio:(selRich.docente||'Docente')+' ha approvato il recupero di '+(selRich.allievo_nome||'allievo')+' per '+dataLabel+' ore '+oraFin+(modNota?' (nota: '+modNota+')':''),
-        letto:false, created_at:new Date().toISOString(),
-        meta:JSON.stringify({allievo:selRich.allievo_nome,allievo_id:selRich.allievo_id,docente:selRich.docente,data:dataFin,ora:oraFin}),
-      });
-      // Allievo: confermato dal docente
-      await sb.from('notifiche').insert({
-        destinatario_ruolo:'allievo', destinatario_id:String(selRich.allievo_id||''), destinatario_nome:selRich.allievo_nome||'',
-        tipo:'recupero_confermato_docente',
-        titolo:'✅ Recupero confermato dal docente',
-        messaggio:'Il docente '+(selRich.docente||'')+' ha confermato il recupero per '+dataLabel+' ore '+oraFin+'. In attesa di conferma dell\'amministrazione.'+(modNota?' Nota: '+modNota:''),
-        letto:false, created_at:new Date().toISOString(),
-      });
-    } else if (modalMode === 'rifiuta') {
-      // Allievo: rifiutato
-      await sb.from('notifiche').insert({
-        destinatario_ruolo:'allievo', destinatario_id:String(selRich.allievo_id||''), destinatario_nome:selRich.allievo_nome||'',
-        tipo:'recupero_rifiutato',
-        titolo:'❌ Recupero non confermato',
-        messaggio:'Il docente '+(selRich.docente||'')+' non può confermare il recupero.'+(modNota?' Motivo: '+modNota:' Contattalo per concordare una nuova data.'),
-        letto:false, created_at:new Date().toISOString(),
-      });
-    } else if (modalMode === 'ufficiale') {
-      // Allievo: confermato ufficialmente
-      await sb.from('notifiche').insert({
-        destinatario_ruolo:'allievo', destinatario_id:String(selRich.allievo_id||''), destinatario_nome:selRich.allievo_nome||'',
-        tipo:'recupero_ufficiale',
-        titolo:'✅ Recupero confermato ufficialmente',
-        messaggio:'Il tuo recupero per '+dataLabel+' ore '+oraFin+' è stato confermato dall\'amministrazione.'+(modNota?' Nota: '+modNota:''),
-        letto:false, created_at:new Date().toISOString(),
-      });
-    }
-
+  var closeModal = function() {
+    setSelRich(null);
+    setModalMode('');
     setSaving(false);
-    closeModal();
-    setTimeout(function(){ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true); }, 800);
+    if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
   };
+
+  // Costruisce e mostra il modal globale ogni volta che selRich cambia
+  React.useEffect(function() {
+    if (!selRich || !modalMode) return;
+
+    var handleSalva = async function() {
+      if (saving) return;
+      setSaving(true);
+      var sb = window.supabaseClient;
+      if (!sb) { setSaving(false); return; }
+
+      var nuovoStato = modalMode === 'approva' ? 'confermata'
+                     : modalMode === 'rifiuta' ? 'rifiutata'
+                     : modalMode === 'ufficiale' ? 'completata' : selRich.stato;
+      var dataFin = modData || selRich.data_preferita;
+      var oraFin  = modOra  || selRich.ora_recupero;
+
+      await sb.from('richieste_recupero').update({
+        stato:          nuovoStato,
+        data_preferita: dataFin,
+        ora_recupero:   oraFin,
+        note_docente:   modNota || null,
+      }).eq('id', selRich.id);
+
+      setRichiesteRec(function(p){
+        return p.map(function(r){
+          return r.id===selRich.id
+            ? Object.assign({},r,{stato:nuovoStato,data_preferita:dataFin,ora_recupero:oraFin,note_docente:modNota||null})
+            : r;
+        });
+      });
+
+      var dataLabel = new Date((dataFin||'')+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'2-digit',month:'long'});
+
+      if (modalMode === 'approva') {
+        await sb.from('notifiche').insert({
+          destinatario_ruolo:'admin', tipo:'recupero_approvato_docente',
+          titolo:'✅ Recupero approvato — conferma ufficiale richiesta',
+          messaggio:(selRich.docente||'Docente')+' ha approvato il recupero di '+(selRich.allievo_nome||'allievo')+' per '+dataLabel+' ore '+oraFin+(modNota?' (nota: '+modNota+')':''),
+          letto:false, created_at:new Date().toISOString(),
+          meta:JSON.stringify({allievo:selRich.allievo_nome,allievo_id:selRich.allievo_id,docente:selRich.docente,data:dataFin,ora:oraFin}),
+        });
+        await sb.from('notifiche').insert({
+          destinatario_ruolo:'allievo', destinatario_id:String(selRich.allievo_id||''), destinatario_nome:selRich.allievo_nome||'',
+          tipo:'recupero_confermato_docente',
+          titolo:'✅ Recupero confermato dal docente',
+          messaggio:'Il docente '+(selRich.docente||'')+' ha confermato il recupero per '+dataLabel+' ore '+oraFin+'. In attesa di conferma dell\'amministrazione.'+(modNota?' Nota: '+modNota:''),
+          letto:false, created_at:new Date().toISOString(),
+        });
+      } else if (modalMode === 'rifiuta') {
+        await sb.from('notifiche').insert({
+          destinatario_ruolo:'allievo', destinatario_id:String(selRich.allievo_id||''), destinatario_nome:selRich.allievo_nome||'',
+          tipo:'recupero_rifiutato',
+          titolo:'❌ Recupero non confermato',
+          messaggio:'Il docente '+(selRich.docente||'')+' non può confermare il recupero.'+(modNota?' Motivo: '+modNota:' Contattalo per concordare una nuova data.'),
+          letto:false, created_at:new Date().toISOString(),
+        });
+      } else if (modalMode === 'ufficiale') {
+        await sb.from('notifiche').insert({
+          destinatario_ruolo:'allievo', destinatario_id:String(selRich.allievo_id||''), destinatario_nome:selRich.allievo_nome||'',
+          tipo:'recupero_ufficiale',
+          titolo:'✅ Recupero confermato ufficialmente',
+          messaggio:'Il tuo recupero per '+dataLabel+' ore '+oraFin+' è stato confermato dall\'amministrazione.'+(modNota?' Nota: '+modNota:''),
+          letto:false, created_at:new Date().toISOString(),
+        });
+      }
+
+      setSaving(false);
+      closeModal();
+      setTimeout(function(){ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true); }, 800);
+    };
+
+    var modalEl = React.createElement('div', {
+        style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16},
+        onClick:function(e){if(e.target===e.currentTarget)closeModal();}
+      }
+      , React.createElement('div', {style:{background:C.surface,borderRadius:16,width:'100%',maxWidth:480,boxShadow:'0 24px 60px rgba(0,0,0,0.45)',overflow:'hidden',animation:'fadeUp .2s ease'}}
+        , React.createElement('div', {style:{padding:'18px 22px',borderBottom:'1px solid '+C.border,display:'flex',alignItems:'center',justifyContent:'space-between',
+            background: modalMode==='approva' ? C.greenBg : modalMode==='rifiuta' ? C.redBg : C.blueBg}}
+          , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10}}
+            , React.createElement('span',{style:{fontSize:22}}, modalMode==='approva'?'✅':modalMode==='rifiuta'?'❌':'🏛️')
+            , React.createElement('div', null
+              , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",fontSize:16,fontWeight:700,
+                  color:modalMode==='approva'?C.green:modalMode==='rifiuta'?C.red:C.blue}},
+                  modalMode==='approva'?'Approva recupero':modalMode==='rifiuta'?'Rifiuta richiesta':'Conferma ufficiale')
+              , React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginTop:2}},selRich.allievo_nome||'—')
+            )
+          )
+          , React.createElement('button',{onClick:closeModal,style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted,fontSize:22,lineHeight:1,padding:'2px 6px'}},'×')
+        )
+        , React.createElement('div',{style:{padding:'20px 22px'}}
+          , React.createElement('div',{style:{background:C.bg,borderRadius:10,padding:'12px 16px',marginBottom:16,border:'1px solid '+C.border}}
+            , React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}
+              , [{label:'Allievo',val:selRich.allievo_nome||'—'},{label:'Docente',val:selRich.docente||'—'},
+                 {label:'Data richiesta',val:selRich.data_preferita?new Date(selRich.data_preferita+'T00:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'short'}):'—'},
+                 {label:'Ora richiesta',val:selRich.ora_recupero||'—'}
+                ].map(function(f){
+                  return React.createElement('div',{key:f.label}
+                    , React.createElement('div',{style:{fontSize:10,color:C.textDim,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}},f.label)
+                    , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.text}},f.val)
+                  );
+                })
+            )
+            , selRich.note && React.createElement('div',{style:{marginTop:10,paddingTop:10,borderTop:'1px solid '+C.border,fontSize:12,color:C.textMuted,fontStyle:'italic'}},'"'+selRich.note+'"')
+          )
+          , (modalMode==='approva'||modalMode==='ufficiale') && React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}
+            , React.createElement('div',null
+              , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:5}},'Data confermata')
+              , React.createElement('input',{type:'date',value:modData,onChange:function(e){setModData(e.target.value);},
+                  style:{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",boxSizing:'border-box'}})
+            )
+            , React.createElement('div',null
+              , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:5}},'Ora confermata')
+              , React.createElement('input',{type:'time',value:modOra,onChange:function(e){setModOra(e.target.value);},
+                  style:{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",boxSizing:'border-box'}})
+            )
+          )
+          , React.createElement('div',{style:{marginBottom:16}}
+            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:5}},
+                modalMode==='rifiuta'?'Motivo rifiuto (opzionale)':'Nota aggiuntiva (opzionale)')
+            , React.createElement('textarea',{value:modNota,onChange:function(e){setModNota(e.target.value);},
+                rows:2,
+                placeholder:modalMode==='rifiuta'?'Es. data non disponibile, contattami per riorganizzare...':'Es. porta lo spartito, aula B...',
+                style:{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",resize:'vertical',boxSizing:'border-box'}})
+          )
+          , React.createElement('div',{style:{display:'flex',gap:8,justifyContent:'flex-end'}}
+            , React.createElement('button',{onClick:closeModal,disabled:saving,
+                style:{padding:'9px 18px',borderRadius:8,border:'1px solid '+C.border,background:'none',color:C.textMuted,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+            , React.createElement('button',{onClick:handleSalva,disabled:saving,
+                style:{padding:'9px 22px',borderRadius:8,border:'none',fontSize:13,fontWeight:700,cursor:saving?'wait':'pointer',fontFamily:"'Open Sans',sans-serif",
+                  background:modalMode==='approva'?C.green:modalMode==='rifiuta'?C.red:C.purple,
+                  color:'#fff',opacity:saving?0.7:1}}
+              , saving?'Salvataggio...'
+              : modalMode==='approva'?'✓ Approva e notifica'
+              : modalMode==='rifiuta'?'✗ Rifiuta e notifica'
+              : '✅ Conferma ufficialmente'
+            )
+          )
+        )
+      )
+    );
+
+    if (window.__FM_SHOW_MODAL__) window.__FM_SHOW_MODAL__(modalEl);
+  }, [selRich, modalMode, modData, modOra, modNota, saving]);
+
+  // Salva azione — ora gestita dentro il useEffect del modal globale
+  var saving_placeholder = saving; // mantenuto per compatibilità con il jsx
 
   // Filtra richieste per ruolo
   var richFiltered = richiesteRec.filter(function(r) {
@@ -8747,7 +8823,6 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
   );
 
   return React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
-    , richModal
 
     /* ── SEZIONE RICHIESTE RECUPERO ── */
     , (role === 'docente' || role === 'admin') && React.createElement('div', {style:{marginBottom:32}}
