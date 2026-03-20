@@ -8573,10 +8573,14 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
       var lezioniIds = [];
       try { lezioniIds = JSON.parse(selRich.lezioni_ids||'[]'); } catch(e){}
       var dataLezOriginale = '';
+      var corsoId = null, corsoNome = null, roomOrig = null;
       if (lezioniIds.length > 0) {
-        var { data: lezOrig } = await sb.from('lezioni').select('data,strumento').eq('id', lezioniIds[0]).single();
+        var { data: lezOrig } = await sb.from('lezioni').select('data,strumento,corso_id,corso_nome,room').eq('id', lezioniIds[0]).single();
         if (lezOrig) {
           dataLezOriginale = lezOrig.data || '';
+          corsoId   = lezOrig.corso_id   || null;
+          corsoNome = lezOrig.corso_nome  || null;
+          roomOrig  = lezOrig.room        || null;
           // Usa strumento dalla lezione originale se non già in selRich
           if (!selRich.strumento && lezOrig.strumento) selRich = Object.assign({}, selRich, {strumento: lezOrig.strumento});
         }
@@ -8595,6 +8599,9 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
         studente_id:selRich.allievo_id   || null,
         teacher:    selRich.docente      || '',
         strumento:  selRich.strumento    || null,
+        corso_id:   corsoId,
+        corso_nome: corsoNome,
+        room:       roomOrig,
         topic:      'Recupero del ' + dLOrigine,
         attendance: 'recupero',
         tipo:       'individuale',
@@ -9995,12 +10002,16 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           recurrence:       dataNorm.recurrence  || 'Nessuna',
           notes:            dataNorm.notes       || null,
           exercises:        dataNorm.exercises   || null,
-          tipo:             dataNorm.type        || 'individuale',
+          tipo:             dataNorm.type        || dataNorm.tipo || 'individuale',
           link_url:         dataNorm.linkUrl     || null,
           in_recupero:      inRecNorm,
           recupero_scadenza:scadNorm,
           repertorio_ids:   dataNorm.repertorioIds && dataNorm.repertorioIds.length > 0
                               ? JSON.stringify(dataNorm.repertorioIds) : null,
+          corso_id:         dataNorm.courseId    || null,
+          corso_nome:       dataNorm.courseName  || null,
+          students:         dataNorm.students && dataNorm.students.length > 0
+                              ? JSON.stringify(dataNorm.students) : null,
         };
         sb.from('lezioni').update(row).eq('id', data.id)
           .then(({ error }) => {
@@ -17027,6 +17038,8 @@ function App() {
               allegati: [],
               students: (function(){ try{return r.students?JSON.parse(r.students):[];}catch(e){return [];} })(),
               courseId: r.corso_id||null,
+              courseName: r.corso_nome||null,
+              notesRecupero: r.notes_recupero||'',
             };
           };
           const todayAdapted = sL.map(adaptL);

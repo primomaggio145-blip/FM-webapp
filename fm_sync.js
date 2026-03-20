@@ -79,6 +79,14 @@
       linkUrl: r.link_url || '',
       inRecupero: r.in_recupero || false,
       recuperoScadenza: r.recupero_scadenza || null,
+      courseId:   r.corso_id   || null,
+      courseName: r.corso_nome || null,
+      // Array allievi per lezioni collettive (stored as JSON in DB)
+      students: (() => {
+        if (!r.students) return [];
+        if (Array.isArray(r.students)) return r.students;
+        try { return JSON.parse(r.students); } catch(e) { return []; }
+      })(),
       // Durata in minuti (default per tipo se non salvata)
       durata: r.durata
         ? parseInt(r.durata)
@@ -219,11 +227,12 @@
         id: l.id || null,
         data: l.date, ora: l.hour || null,
         student: l.student || null,
+        studente_id: l.studentId ? parseInt(l.studentId, 10) : null,
         strumento: l.instrument || l.strumento || null,
         teacher: l.teacher || null, room: l.room || null,
         topic: l.topic || null, attendance: l.attendance || null,
         recurrence: l.recurrence || 'Nessuna', notes: l.notes || null,
-        tipo: l.type || 'individuale', updated_at: new Date().toISOString(),
+        tipo: l.type || l.tipo || 'individuale',
         link_url: l.linkUrl || null,
         in_recupero: l.inRecupero || false,
         recupero_scadenza: l.recuperoScadenza || null,
@@ -231,6 +240,12 @@
         exercises: l.exercises || null,
         repertorio_ids: l.repertorioIds && l.repertorioIds.length > 0
           ? JSON.stringify(l.repertorioIds)
+          : null,
+        corso_id:   l.courseId   || null,
+        corso_nome: l.courseName || null,
+        // Array allievi per collettive: serializzato come JSON
+        students: l.students && l.students.length > 0
+          ? JSON.stringify(l.students)
           : null,
       };
     },
