@@ -11371,12 +11371,13 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
       : f.desc;
     onSave({
       ...f,
-      studentId:   needStudent ? Number(f.studentId) : null,
-      studentName: _optionalChain([s, 'optionalAccess', _57 => _57.name]) || "",
-      importo:     Number(f.importo),
-      mese:        Number(f.mese),
-      anno:        Number(f.anno),
-      desc:        autoDesc || f.desc,
+      studentId:    needStudent ? Number(f.studentId) : null,
+      studentName:  _optionalChain([s, 'optionalAccess', _57 => _57.name]) || "",
+      importo:      Number(f.importo),
+      mese:         Number(f.mese),
+      anno:         Number(f.anno),
+      desc:         autoDesc || f.desc,
+      dataPagamento: f.data || f.dataPagamento || '',  // normalizza: form usa 'data', toDB usa 'dataPagamento'
     });
   };
 
@@ -11568,7 +11569,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       setConfig(p=>({...p, progressivoRicevute: progressivo + 1}));
       closeModal();
     };
-    const handleEditQ  = d => { setEntrate(p=>p.map(x=>x.id===d.id?{...x,...d}:x)); closeModal(); };
+    const handleEditQ  = d => { setEntrate(p=>p.map(x=>x.id===d.id?{...x,...d, dataPagamento: d.data||d.dataPagamento||x.dataPagamento}:x)); closeModal(); };
     const handleDelQ   = () => { setEntrate(p=>p.filter(x=>x.id!==_optionalChain([selQuota, 'optionalAccess', _61 => _61.id]))); closeModal(); };
   
     // Stats ribbon
