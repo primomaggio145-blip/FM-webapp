@@ -2818,9 +2818,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const morosi           = ruolo==="docente" ? 0 : _students.filter(a=>a.status==="scaduto"||a.stato==="scaduto").length;
     const oraNum  = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
     const nowMins = oggi.getHours()*60+oggi.getMinutes();
-    const lezioniOggi      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(oggi);}).length;
-    const lezComplete      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(oggi)&&oraNum(l.time||l.ora||"0:0")+(l.duration||l.durata||0)<=nowMins;}).length;
-    const lezioniSettimana = _lessons.filter(l=>{if(!l.recurring&&!l.ricorrente) return false; const d=new Date(l.date||l.data||oggi); return d<=oggi&&(!l.endDate||new Date(l.endDate)>=oggi);}).length || _lessons.length;
+    const lezioniOggi      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(oggi) && l.attendance !== 'recuperata';}).length;
+    const lezComplete      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(oggi)&&l.attendance !== 'recuperata'&&oraNum(l.time||l.ora||"0:0")+(l.duration||l.durata||0)<=nowMins;}).length;
+    const lezioniSettimana = _lessons.filter(l=>{if(!l.recurring&&!l.ricorrente) return false; if(l.attendance==='recuperata') return false; const d=new Date(l.date||l.data||oggi); return d<=oggi&&(!l.endDate||new Date(l.endDate)>=oggi);}).length || _lessons.filter(l=>l.attendance!=='recuperata').length;
     const meseCorrente = oggi.getMonth()+1;
     const annoCorrente = oggi.getFullYear();
     const entrMeseLiveLive = ruolo==="docente" ? 0 : _entrate.filter(e=>e.mese===meseCorrente&&e.anno===annoCorrente).reduce((t,e)=>t+(e.importo||0),0);
@@ -2999,8 +2999,8 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               )
               , React.createElement('p', { style: {fontSize:13,color:C.textMuted,marginTop:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2171}}
                 , config.annoScolastico
-                , ruolo==="docente" ? " · " + _lessons.filter(matchDocLezione).length + " mie lezioni"
-                : ruolo==="allievo" ? " · " + (_lessons||[]).filter(matchLezioneAllievo).length + " lezioni assegnate"
+                , ruolo==="docente" ? " · " + _lessons.filter(function(l){return matchDocLezione(l) && l.attendance !== "recuperata";}).length + " mie lezioni"
+                : ruolo==="allievo" ? " · " + (_lessons||[]).filter(l => matchLezioneAllievo(l) && l.attendance !== 'recuperata').length + " lezioni assegnate"
                 : " · " + lezioniOggi + " lezioni oggi · " + lezComplete + " completate · " + (lezioniOggi-lezComplete) + " rimanenti"
               )
               , React.createElement('div', { style: {marginTop:10,width:220}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2174}}
@@ -3039,7 +3039,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2188}}
               , ruolo==="docente" ? React.createElement(React.Fragment, null
                   , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni settimana",
-                      value: _lessons.filter(matchDocLezione).length,
+                      value: _lessons.filter(function(l){return matchDocLezione(l) && l.attendance !== "recuperata";}).length,
                       sub: "mie lezioni", hex: C.teal})
                   , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
                       value: (()=>{ const p=_lessons.filter(l=>matchDocLezione(l)&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0]; return p?new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}):"—"; })(),
@@ -3091,7 +3091,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     );
                   })()
                   , React.createElement(KpiCard, { icon: "calendar", label: "Le mie lezioni",
-                      value: (_lessons||[]).filter(matchLezioneAllievo).length,
+                      value: (_lessons||[]).filter(l => matchLezioneAllievo(l) && l.attendance !== 'recuperata').length,
                       sub: "questa settimana", hex: C.teal})
                   , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
                       value: (()=>{
@@ -3402,13 +3402,13 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                               const annoC = oggi.getFullYear();
                               // KPI strip compensi
                               const lezMeseDoc = (_lessons||[]).filter(l=>
-                                myDocRecord && matchDocLezione(l) &&
+                                myDocRecord && matchDocLezione(l) && l.attendance !== 'recuperata' &&
                                 (l.attendance==="presente"||l.attendance==="assente") &&
                                 l.date && new Date(l.date+"T00:00:00").getMonth()+1===meseC &&
                                 new Date(l.date+"T00:00:00").getFullYear()===annoC
                               );
                               const lezAnnoDoc = (_lessons||[]).filter(l=>
-                                myDocRecord && matchDocLezione(l) &&
+                                myDocRecord && matchDocLezione(l) && l.attendance !== 'recuperata' &&
                                 (l.attendance==="presente"||l.attendance==="assente") &&
                                 l.date && new Date(l.date+"T00:00:00").getFullYear()===annoC
                               );
@@ -3433,7 +3433,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                                 , React.createElement('div', {style:{fontSize:10,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}, "Ultime lezioni")
                                 , (()=>{
                                     const ultime = (_lessons||[]).filter(l=>
-                                      myDocRecord && matchDocLezione(l) &&
+                                      myDocRecord && matchDocLezione(l) && l.attendance !== 'recuperata' &&
                                       (l.attendance==="presente"||l.attendance==="assente")
                                     ).sort((a,b)=>(b.date||"").localeCompare(a.date||"")).slice(0,4);
                                     if(!ultime.length) return React.createElement('p',{style:{fontSize:13,color:C.textDim,textAlign:"center",padding:"8px 0"}},"Nessuna lezione registrata");
@@ -4427,8 +4427,8 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const [sortKeyQuote, sortDirQuote, handleSortQuote, sortFnQuote] = useSortable("mese", "asc");
   const config = _nullishCoalesce(propConfig, () => ( CONFIG_DEFAULT));
 
-  // Lezioni globali per questo allievo
-  const lezStudente = lessons.filter(l => studentInLesson(l, student.name, student.id));
+  // Lezioni globali per questo allievo — esclude 'recuperata' (flag, non conta nel totale)
+  const lezStudente = lessons.filter(l => studentInLesson(l, student.name, student.id) && l.attendance !== 'recuperata');
   const lezMese     = (m, y) => lezStudente.filter(l => { const [ly,lm] = l.date.split("-").map(Number); return ly===y && lm===m; });
   const lezSel      = lezMese(selMese.m, selMese.y);
 
@@ -8569,6 +8569,22 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
       // 1. Notifica finale all'allievo
       await sb.from('notifiche').insert({destinatario_ruolo:'allievo',destinatario_id:String(selRich.allievo_id||''),destinatario_nome:selRich.allievo_nome||'',tipo:'recupero_ufficiale',titolo:'✅ Recupero confermato ufficialmente',messaggio:'Il tuo recupero per '+dL+' ore '+oraFin+" è stato confermato dall'amministrazione."+(modNota?' Nota: '+modNota:''),letto:false,created_at:new Date().toISOString()});
 
+      // Trova la data della lezione ORIGINALE per il titolo "Recupero del..."
+      var lezioniIds = [];
+      try { lezioniIds = JSON.parse(selRich.lezioni_ids||'[]'); } catch(e){}
+      var dataLezOriginale = '';
+      if (lezioniIds.length > 0) {
+        var { data: lezOrig } = await sb.from('lezioni').select('data,strumento').eq('id', lezioniIds[0]).single();
+        if (lezOrig) {
+          dataLezOriginale = lezOrig.data || '';
+          // Usa strumento dalla lezione originale se non già in selRich
+          if (!selRich.strumento && lezOrig.strumento) selRich = Object.assign({}, selRich, {strumento: lezOrig.strumento});
+        }
+      }
+      var dLOrigine = dataLezOriginale
+        ? new Date(dataLezOriginale+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'2-digit',month:'long'})
+        : dL; // fallback alla data recupero se non trovata
+
       // 2. Crea la nuova lezione di RECUPERO su Supabase
       var newLezId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);});
       var lezRow = {
@@ -8579,7 +8595,7 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
         studente_id:selRich.allievo_id   || null,
         teacher:    selRich.docente      || '',
         strumento:  selRich.strumento    || null,
-        topic:      'Recupero del '+dL,
+        topic:      'Recupero del ' + dLOrigine,
         attendance: 'recupero',
         tipo:       'individuale',
         recurrence: 'Nessuna',
@@ -8591,11 +8607,8 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
       var { error: lezErr } = await sb.from('lezioni').insert(lezRow);
       if (lezErr) console.warn('[FM] crea lezione recupero error:', lezErr.message);
 
-      // 3. Segna la lezione ORIGINALE come "recuperata" e blocca modifiche
-      var lezioniIds = [];
-      try { lezioniIds = JSON.parse(selRich.lezioni_ids||'[]'); } catch(e){}
+      // 3. Segna le lezioni ORIGINALI come "recuperata"
       if (lezioniIds.length > 0) {
-        var dataRecuperoStr = dataFin || '';
         for (var li = 0; li < lezioniIds.length; li++) {
           await sb.from('lezioni').update({
             attendance:        'recuperata',
@@ -15354,7 +15367,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
         || tf.includes(nom) || nom.includes(tf);
   };
   const allievi  = (d) => students.filter(s => matchTeacher(d, s.teacher));
-  const lezioniD = (d) => lessons.filter(l  => matchTeacher(d, l.teacher));
+  const lezioniD = (d) => lessons.filter(l  => matchTeacher(d, l.teacher) && l.attendance !== 'recuperata');
 
   // Calcoli mensili basati su lezioni effettive
   const nowDate   = new Date(today);
@@ -15366,6 +15379,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   // Lezioni del mese di un docente: SOLO presenza "presente" o "assente" contano per il compenso
   // (giustificato, recupero, in_recupero, vuoto → non retribuiti)
   const lezioniMese = (d, m, y) => lessons.filter(l => {
+    if(l.attendance === 'recuperata') return false; // non conta nel totale
     if(!matchTeacher(d, l.teacher)) return false;
     const att = l.attendance || '';
     if(att !== 'presente' && att !== 'assente') return false;
@@ -15378,6 +15392,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   // Tutte le lezioni del mese di un docente (indipendentemente dalla presenza)
   // Usata nel tab Lezioni per mostrare il conteggio reale, non solo le retribuite
   const tutteLezioniMese = (d, m, y) => lessons.filter(l => {
+    if(l.attendance === 'recuperata') return false;
     if(!matchTeacher(d, l.teacher)) return false;
     const [ly,lm] = l.date.split("-").map(Number);
     return ly===y && lm===m;
