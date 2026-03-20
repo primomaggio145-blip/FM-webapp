@@ -17343,21 +17343,48 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
   const ruolo     = propRuolo     !== undefined ? propRuolo     : _lRuolo;
   const setRuolo  = propSetRuolo  !== undefined ? propSetRuolo  : _setLRuolo;
 
+  const [saveError, setSaveError] = useState('');
+
   const handleSave = async () => {
+    setSaved(false);
+    setSaveError('');
+    // 1. Aggiorna React state immediatamente
     setConfig(draft);
-    setSaved(true);
-    setTimeout(()=>setSaved(false), 2000);
-    // Salva su Supabase sito_config
+
+    // 2. Salva su Supabase
     const sb = window.supabaseClient;
-    if (sb) {
-      try {
-        const rows = Object.entries(draft).map(([chiave, valore]) => ({
-          chiave,
-          valore: typeof valore === 'object' ? JSON.stringify(valore) : String(valore ?? ''),
-          updated_at: new Date().toISOString(),
-        }));
-        await sb.from('sito_config').upsert(rows, { onConflict: 'chiave' });
-      } catch(e) { console.warn('[FM] Errore salvataggio config:', e); }
+    if (!sb) {
+      setSaveError('Supabase non disponibile');
+      return;
+    }
+
+    try {
+      // Ogni chiave del draft diventa una riga in sito_config
+      const rows = Object.entries(draft).map(([chiave, valore]) => ({
+        chiave,
+        valore: valore === null || valore === undefined
+          ? ''
+          : typeof valore === 'object'
+            ? JSON.stringify(valore)
+            : String(valore),
+      }));
+
+      console.log('[FM] Salvataggio config — righe:', rows.length, rows.map(r=>r.chiave).join(', '));
+
+      const { error } = await sb.from('sito_config').upsert(rows, { onConflict: 'chiave' });
+
+      if (error) {
+        console.warn('[FM] Errore upsert sito_config:', error.message, error.code, error.details);
+        setSaveError(error.message || 'Errore salvataggio');
+      } else {
+        console.log('[FM] Config salvata correttamente su Supabase');
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } catch(e) {
+      const msg = e?.message || String(e);
+      console.warn('[FM] Errore catch handleSave:', msg);
+      setSaveError(msg);
     }
   };
 
@@ -17367,13 +17394,18 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,margin:0}}, "Impostazioni")
         , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}}, "Configurazione generale del gestionale")
       )
+    , React.createElement('div', {style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}
       , React.createElement('button', {onClick:handleSave,
           style:{display:"flex",alignItems:"center",gap:7,padding:"10px 20px",borderRadius:9,
-            border:"none",background:saved?C.green:C.gold,color:"#ffffff",cursor:"pointer",
+            border:"none",
+            background: saveError ? C.red : saved ? C.green : C.gold,
+            color:"#ffffff",cursor:"pointer",
             fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif",transition:"background .2s"}}
-        , React.createElement(Ic,{n:saved?"check":"check",size:14,stroke:"#ffffff"})
-        , saved ? "Salvato!" : "Salva impostazioni"
+        , React.createElement(Ic,{n: saveError ? "x" : "check", size:14, stroke:"#ffffff"})
+        , saveError ? "Errore!" : saved ? "Salvato!" : "Salva impostazioni"
       )
+      , saveError && React.createElement('div', {style:{fontSize:11,color:C.red,maxWidth:260,textAlign:'right'}}, saveError)
+    )
     )
 
     , React.createElement(ImpSection, {title:"Identità scuola", icon:"flag"}
