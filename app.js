@@ -8491,16 +8491,16 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
   const [rfAllievo, setRfAllievo] = useState('');
   const [richiesteRec, setRichiesteRec] = useState([]);
   const [loadingR, setLoadingR] = useState(false);
-  const [selRich, setSelRich] = useState(null);   // richiesta aperta nel modal
-  const [modalMode, setModalMode] = useState(''); // 'approva' | 'rifiuta' | 'ufficiale'
-  const [modNota, setModNota] = useState('');      // nota del docente/admin
-  const [modData, setModData] = useState('');      // data modificata
-  const [modOra, setModOra]   = useState('');      // ora modificata
+  const [selRich, setSelRich] = useState(null);
+  const [modalMode, setModalMode] = useState('');
+  const [modNota, setModNota] = useState('');
+  const [modData, setModData] = useState('');
+  const [modOra, setModOra]   = useState('');
   const [saving, setSaving]   = useState(false);
   const [sortKeyR, sortDirR, handleSortR, sortFnR] = useSortable("date", "asc");
   const oggi_r = new Date(); oggi_r.setHours(0,0,0,0);
 
-  // Risolvi il nome/key del docente loggato
+  // Risolvi teacherKey del docente loggato
   var myDocKey = (function() {
     if (role !== 'docente') return '';
     var allDoc = window.__docenti__ || [];
@@ -8508,470 +8508,268 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
     var rec = myId
       ? allDoc.find(function(d){ return String(d.id)===String(myId); })
       : allDoc.find(function(d){
-          var nm = (d.nome||'').toLowerCase();
-          var un = ((appUser&&appUser.nome)||'').toLowerCase();
-          return nm === un || nm.indexOf(un) >= 0 || un.indexOf(nm) >= 0;
+          var nm=(d.nome||'').toLowerCase(), un=((appUser&&appUser.nome)||'').toLowerCase();
+          return nm===un || nm.indexOf(un)>=0 || un.indexOf(nm)>=0;
         });
-    return rec ? (rec.teacherKey || rec.nome || '') : ((appUser&&appUser.nome)||'');
+    return rec ? (rec.teacherKey||rec.nome||'') : ((appUser&&appUser.nome)||'');
   })();
 
-  // Carica richieste recupero da Supabase
+  // Carica richieste da Supabase
   React.useEffect(function() {
-    var sb = window.supabaseClient;
-    if (!sb) return;
+    var sb = window.supabaseClient; if (!sb) return;
     setLoadingR(true);
-    sb.from('richieste_recupero').select('*').order('created_at', {ascending:false}).limit(200)
-      .then(function(r) {
-        setLoadingR(false);
-        if (r.data) {
-          setRichiesteRec(r.data);
-          window.__richiesteRecupero__ = r.data;
-        }
-      });
+    sb.from('richieste_recupero').select('*').order('created_at',{ascending:false}).limit(200)
+      .then(function(r){ setLoadingR(false); if(r.data){ setRichiesteRec(r.data); window.__richiesteRecupero__=r.data; } });
   }, []);
 
-  // Apre modal di gestione
   var openModal = function(rich, mode) {
-    setSelRich(rich);
-    setModalMode(mode);
-    setModNota('');
-    setModData(rich.data_preferita || '');
-    setModOra(rich.ora_recupero || '');
+    setSelRich(rich); setModalMode(mode);
+    setModNota(''); setModData(rich.data_preferita||''); setModOra(rich.ora_recupero||'');
   };
-  var closeModal = function() {
-    setSelRich(null);
-    setModalMode('');
-    setSaving(false);
-    if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
+  var closeModal = function() { setSelRich(null); setModalMode(''); setSaving(false); };
+
+  var handleSalva = async function() {
+    if (!selRich || saving) return;
+    setSaving(true);
+    var sb = window.supabaseClient; if(!sb){ setSaving(false); return; }
+    var nuovoStato = modalMode==='approva'?'confermata':modalMode==='rifiuta'?'rifiutata':modalMode==='ufficiale'?'completata':selRich.stato;
+    var dataFin = modData||selRich.data_preferita, oraFin = modOra||selRich.ora_recupero;
+    await sb.from('richieste_recupero').update({stato:nuovoStato,data_preferita:dataFin,ora_recupero:oraFin,note_docente:modNota||null}).eq('id',selRich.id);
+    setRichiesteRec(function(p){ return p.map(function(r){ return r.id===selRich.id?Object.assign({},r,{stato:nuovoStato,data_preferita:dataFin,ora_recupero:oraFin,note_docente:modNota||null}):r; }); });
+    var dL = new Date((dataFin||'')+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'2-digit',month:'long'});
+    if(modalMode==='approva'){
+      await sb.from('notifiche').insert({destinatario_ruolo:'admin',tipo:'recupero_approvato_docente',titolo:'✅ Recupero approvato — conferma richiesta',messaggio:(selRich.docente||'Docente')+' ha approvato il recupero di '+(selRich.allievo_nome||'')+' per '+dL+' ore '+oraFin,letto:false,created_at:new Date().toISOString(),meta:JSON.stringify({allievo:selRich.allievo_nome,allievo_id:selRich.allievo_id,docente:selRich.docente,data:dataFin,ora:oraFin})});
+      await sb.from('notifiche').insert({destinatario_ruolo:'allievo',destinatario_id:String(selRich.allievo_id||''),destinatario_nome:selRich.allievo_nome||'',tipo:'recupero_confermato_docente',titolo:'✅ Recupero confermato dal docente',messaggio:'Il docente '+(selRich.docente||'')+' ha confermato il tuo recupero per '+dL+' ore '+oraFin+'.'+(modNota?' Nota: '+modNota:''),letto:false,created_at:new Date().toISOString()});
+    } else if(modalMode==='rifiuta'){
+      await sb.from('notifiche').insert({destinatario_ruolo:'allievo',destinatario_id:String(selRich.allievo_id||''),destinatario_nome:selRich.allievo_nome||'',tipo:'recupero_rifiutato',titolo:'❌ Recupero non confermato',messaggio:'Il docente '+(selRich.docente||'')+' non può confermare il recupero.'+(modNota?' Motivo: '+modNota:' Contattalo per concordare una nuova data.'),letto:false,created_at:new Date().toISOString()});
+    } else if(modalMode==='ufficiale'){
+      await sb.from('notifiche').insert({destinatario_ruolo:'allievo',destinatario_id:String(selRich.allievo_id||''),destinatario_nome:selRich.allievo_nome||'',tipo:'recupero_ufficiale',titolo:'✅ Recupero confermato ufficialmente',messaggio:'Il tuo recupero per '+dL+' ore '+oraFin+" è stato confermato dall'amministrazione."+(modNota?' Nota: '+modNota:''),letto:false,created_at:new Date().toISOString()});
+    }
+    setSaving(false); closeModal();
+    setTimeout(function(){ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true); }, 800);
   };
 
-  // Costruisce e mostra il modal globale ogni volta che selRich cambia
-  React.useEffect(function() {
-    if (!selRich || !modalMode) return;
+  // Filtra per ruolo
+  var richFiltered = richiesteRec.filter(function(r){
+    if(role==='docente'){
+      if(!myDocKey) return true;
+      var docR=(r.docente||'').toLowerCase().trim(), myK=myDocKey.toLowerCase().trim();
+      return docR===myK||docR.indexOf(myK)>=0||myK.indexOf(docR)>=0;
+    }
+    return true;
+  });
+  var richInAttesa   = richFiltered.filter(function(r){ return r.stato==='in_attesa'; });
+  var richConfermata = richFiltered.filter(function(r){ return r.stato==='confermata'; });
 
-    var handleSalva = async function() {
-      if (saving) return;
-      setSaving(true);
-      var sb = window.supabaseClient;
-      if (!sb) { setSaving(false); return; }
+  const lezioniRec = (lessons||[]).filter(l=>l.inRecupero||l.attendance==='in_recupero');
+  const docenteOptsR=[...new Set(lezioniRec.map(l=>l.teacher).filter(Boolean))].sort();
+  const allievoOptsR=[...new Set(lezioniRec.map(l=>l.student).filter(Boolean))].sort();
+  const corsoOptsR  =[...new Set(lezioniRec.map(l=>l.instrument||l.courseId).filter(Boolean))].sort();
+  const filtered_r=lezioniRec.filter(l=>(!rfCorso||l.instrument===rfCorso||l.courseId===rfCorso)&&(!rfDocente||l.teacher===rfDocente)&&(!rfAllievo||l.student===rfAllievo));
+  const sorted_r=sortFnR(filtered_r,(l,k)=>{
+    if(k==="date") return l.date||""; if(k==="student") return l.student||"";
+    if(k==="teacher") return l.teacher||""; if(k==="instrument") return l.instrument||"";
+    if(k==="recuperoScadenza") return l.recuperoScadenza||""; return l[k]||"";
+  });
 
-      var nuovoStato = modalMode === 'approva' ? 'confermata'
-                     : modalMode === 'rifiuta' ? 'rifiutata'
-                     : modalMode === 'ufficiale' ? 'completata' : selRich.stato;
-      var dataFin = modData || selRich.data_preferita;
-      var oraFin  = modOra  || selRich.ora_recupero;
+  var StatoBadge=function(props){
+    var s=props.stato, cfg={in_attesa:{bg:'rgba(245,158,11,0.1)',color:'#b45309',border:'rgba(245,158,11,0.3)',label:'In attesa'},confermata:{bg:C.blueBg,color:C.blue,border:C.blueBorder,label:'Approvata dal docente'},completata:{bg:C.greenBg,color:C.green,border:C.greenBorder,label:'Confermata ufficialmente'},rifiutata:{bg:C.redBg,color:C.red,border:C.redBorder,label:'Rifiutata'}};
+    var c=cfg[s]||{bg:C.surface,color:C.textMuted,border:C.border,label:s||'—'};
+    return React.createElement('span',{style:{background:c.bg,color:c.color,border:'1px solid '+c.border,borderRadius:20,padding:'3px 10px',fontSize:11,fontWeight:600}},c.label);
+  };
 
-      await sb.from('richieste_recupero').update({
-        stato:          nuovoStato,
-        data_preferita: dataFin,
-        ora_recupero:   oraFin,
-        note_docente:   modNota || null,
-      }).eq('id', selRich.id);
+  // Colori modal
+  var mBg = modalMode==='approva'?C.greenBg:modalMode==='rifiuta'?C.redBg:C.blueBg;
+  var mColor = modalMode==='approva'?C.green:modalMode==='rifiuta'?C.red:C.blue;
+  var mIcon  = modalMode==='approva'?'✅':modalMode==='rifiuta'?'❌':'🏛️';
+  var mTitle = modalMode==='approva'?'Approva recupero':modalMode==='rifiuta'?'Rifiuta richiesta':'Conferma ufficiale';
+  var mBtn   = saving?'Salvataggio...':(modalMode==='approva'?'✓ Approva e notifica':modalMode==='rifiuta'?'✗ Rifiuta e notifica':'✅ Conferma ufficialmente');
+  var mBtnBg = modalMode==='approva'?C.green:modalMode==='rifiuta'?C.red:C.purple;
 
-      setRichiesteRec(function(p){
-        return p.map(function(r){
-          return r.id===selRich.id
-            ? Object.assign({},r,{stato:nuovoStato,data_preferita:dataFin,ora_recupero:oraFin,note_docente:modNota||null})
-            : r;
-        });
-      });
-
-      var dataLabel = new Date((dataFin||'')+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'2-digit',month:'long'});
-
-      if (modalMode === 'approva') {
-        await sb.from('notifiche').insert({
-          destinatario_ruolo:'admin', tipo:'recupero_approvato_docente',
-          titolo:'✅ Recupero approvato — conferma ufficiale richiesta',
-          messaggio:(selRich.docente||'Docente')+' ha approvato il recupero di '+(selRich.allievo_nome||'allievo')+' per '+dataLabel+' ore '+oraFin+(modNota?' (nota: '+modNota+')':''),
-          letto:false, created_at:new Date().toISOString(),
-          meta:JSON.stringify({allievo:selRich.allievo_nome,allievo_id:selRich.allievo_id,docente:selRich.docente,data:dataFin,ora:oraFin}),
-        });
-        await sb.from('notifiche').insert({
-          destinatario_ruolo:'allievo', destinatario_id:String(selRich.allievo_id||''), destinatario_nome:selRich.allievo_nome||'',
-          tipo:'recupero_confermato_docente',
-          titolo:'✅ Recupero confermato dal docente',
-          messaggio:'Il docente '+(selRich.docente||'')+' ha confermato il recupero per '+dataLabel+' ore '+oraFin+'. In attesa di conferma dell\'amministrazione.'+(modNota?' Nota: '+modNota:''),
-          letto:false, created_at:new Date().toISOString(),
-        });
-      } else if (modalMode === 'rifiuta') {
-        await sb.from('notifiche').insert({
-          destinatario_ruolo:'allievo', destinatario_id:String(selRich.allievo_id||''), destinatario_nome:selRich.allievo_nome||'',
-          tipo:'recupero_rifiutato',
-          titolo:'❌ Recupero non confermato',
-          messaggio:'Il docente '+(selRich.docente||'')+' non può confermare il recupero.'+(modNota?' Motivo: '+modNota:' Contattalo per concordare una nuova data.'),
-          letto:false, created_at:new Date().toISOString(),
-        });
-      } else if (modalMode === 'ufficiale') {
-        await sb.from('notifiche').insert({
-          destinatario_ruolo:'allievo', destinatario_id:String(selRich.allievo_id||''), destinatario_nome:selRich.allievo_nome||'',
-          tipo:'recupero_ufficiale',
-          titolo:'✅ Recupero confermato ufficialmente',
-          messaggio:'Il tuo recupero per '+dataLabel+' ore '+oraFin+' è stato confermato dall\'amministrazione.'+(modNota?' Nota: '+modNota:''),
-          letto:false, created_at:new Date().toISOString(),
-        });
+  return React.createElement(React.Fragment, null
+    /* ══ MODAL OVERLAY — renderizzato al livello del Fragment, fuori da ogni overflow ══ */
+    , selRich && React.createElement('div', {
+        style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:9999,
+               display:'flex',alignItems:'center',justifyContent:'center',padding:'20px'},
+        onClick:function(e){if(e.target===e.currentTarget) closeModal();}
       }
-
-      setSaving(false);
-      closeModal();
-      setTimeout(function(){ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true); }, 800);
-    };
-
-    var modalEl = React.createElement('div', {
-        style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16},
-        onClick:function(e){if(e.target===e.currentTarget)closeModal();}
-      }
-      , React.createElement('div', {style:{background:C.surface,borderRadius:16,width:'100%',maxWidth:480,boxShadow:'0 24px 60px rgba(0,0,0,0.45)',overflow:'hidden',animation:'fadeUp .2s ease'}}
-        , React.createElement('div', {style:{padding:'18px 22px',borderBottom:'1px solid '+C.border,display:'flex',alignItems:'center',justifyContent:'space-between',
-            background: modalMode==='approva' ? C.greenBg : modalMode==='rifiuta' ? C.redBg : C.blueBg}}
-          , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10}}
-            , React.createElement('span',{style:{fontSize:22}}, modalMode==='approva'?'✅':modalMode==='rifiuta'?'❌':'🏛️')
-            , React.createElement('div', null
-              , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",fontSize:16,fontWeight:700,
-                  color:modalMode==='approva'?C.green:modalMode==='rifiuta'?C.red:C.blue}},
-                  modalMode==='approva'?'Approva recupero':modalMode==='rifiuta'?'Rifiuta richiesta':'Conferma ufficiale')
+      , React.createElement('div', {style:{background:C.surface,borderRadius:16,width:'100%',maxWidth:480,
+          boxShadow:'0 24px 80px rgba(0,0,0,0.5)',overflow:'hidden'}}
+        , React.createElement('div',{style:{padding:'18px 22px',borderBottom:'1px solid '+C.border,
+            display:'flex',alignItems:'center',justifyContent:'space-between',background:mBg}}
+          , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10}}
+            , React.createElement('span',{style:{fontSize:22}},mIcon)
+            , React.createElement('div',null
+              , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",fontSize:17,fontWeight:700,color:mColor}},mTitle)
               , React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginTop:2}},selRich.allievo_nome||'—')
             )
           )
-          , React.createElement('button',{onClick:closeModal,style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted,fontSize:22,lineHeight:1,padding:'2px 6px'}},'×')
+          , React.createElement('button',{onClick:closeModal,
+              style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted,fontSize:24,lineHeight:1,padding:'2px 8px'}},'×')
         )
-        , React.createElement('div',{style:{padding:'20px 22px'}}
-          , React.createElement('div',{style:{background:C.bg,borderRadius:10,padding:'12px 16px',marginBottom:16,border:'1px solid '+C.border}}
-            , React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}
+        , React.createElement('div',{style:{padding:'22px'}}
+          , React.createElement('div',{style:{background:C.bg,borderRadius:10,padding:'14px 16px',marginBottom:18,border:'1px solid '+C.border}}
+            , React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px 20px'}}
               , [{label:'Allievo',val:selRich.allievo_nome||'—'},{label:'Docente',val:selRich.docente||'—'},
                  {label:'Data richiesta',val:selRich.data_preferita?new Date(selRich.data_preferita+'T00:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'short'}):'—'},
                  {label:'Ora richiesta',val:selRich.ora_recupero||'—'}
                 ].map(function(f){
                   return React.createElement('div',{key:f.label}
-                    , React.createElement('div',{style:{fontSize:10,color:C.textDim,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}},f.label)
-                    , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.text}},f.val)
+                    , React.createElement('div',{style:{fontSize:10,color:C.textDim,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:3}},f.label)
+                    , React.createElement('div',{style:{fontSize:14,fontWeight:600,color:C.text}},f.val)
                   );
                 })
             )
-            , selRich.note && React.createElement('div',{style:{marginTop:10,paddingTop:10,borderTop:'1px solid '+C.border,fontSize:12,color:C.textMuted,fontStyle:'italic'}},'"'+selRich.note+'"')
+            , selRich.note && React.createElement('div',{style:{marginTop:12,paddingTop:10,borderTop:'1px solid '+C.border,fontSize:12,color:C.textMuted,fontStyle:'italic'}},'"'+selRich.note+'"')
           )
-          , (modalMode==='approva'||modalMode==='ufficiale') && React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}
+          , (modalMode==='approva'||modalMode==='ufficiale') && React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}
             , React.createElement('div',null
-              , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:5}},'Data confermata')
+              , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',display:'block',marginBottom:6}},'Data confermata')
               , React.createElement('input',{type:'date',value:modData,onChange:function(e){setModData(e.target.value);},
-                  style:{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",boxSizing:'border-box'}})
+                  style:{width:'100%',padding:'9px 11px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",boxSizing:'border-box'}})
             )
             , React.createElement('div',null
-              , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:5}},'Ora confermata')
+              , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',display:'block',marginBottom:6}},'Ora confermata')
               , React.createElement('input',{type:'time',value:modOra,onChange:function(e){setModOra(e.target.value);},
-                  style:{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",boxSizing:'border-box'}})
+                  style:{width:'100%',padding:'9px 11px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",boxSizing:'border-box'}})
             )
           )
-          , React.createElement('div',{style:{marginBottom:16}}
-            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:5}},
-                modalMode==='rifiuta'?'Motivo rifiuto (opzionale)':'Nota aggiuntiva (opzionale)')
-            , React.createElement('textarea',{value:modNota,onChange:function(e){setModNota(e.target.value);},
-                rows:2,
-                placeholder:modalMode==='rifiuta'?'Es. data non disponibile, contattami per riorganizzare...':'Es. porta lo spartito, aula B...',
-                style:{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",resize:'vertical',boxSizing:'border-box'}})
+          , React.createElement('div',{style:{marginBottom:18}}
+            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.06em',display:'block',marginBottom:6}},
+                modalMode==='rifiuta'?'Motivo del rifiuto (opzionale)':'Nota per l\'allievo (opzionale)')
+            , React.createElement('textarea',{value:modNota,onChange:function(e){setModNota(e.target.value);},rows:3,
+                placeholder:modalMode==='rifiuta'?'Es. sono già impegnato quel giorno, contattami...':'Es. porta lo spartito, aula B...',
+                style:{width:'100%',padding:'9px 11px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",resize:'vertical',boxSizing:'border-box'}})
           )
           , React.createElement('div',{style:{display:'flex',gap:8,justifyContent:'flex-end'}}
             , React.createElement('button',{onClick:closeModal,disabled:saving,
-                style:{padding:'9px 18px',borderRadius:8,border:'1px solid '+C.border,background:'none',color:C.textMuted,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+                style:{padding:'10px 20px',borderRadius:8,border:'1px solid '+C.border,background:'none',color:C.textMuted,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
             , React.createElement('button',{onClick:handleSalva,disabled:saving,
-                style:{padding:'9px 22px',borderRadius:8,border:'none',fontSize:13,fontWeight:700,cursor:saving?'wait':'pointer',fontFamily:"'Open Sans',sans-serif",
-                  background:modalMode==='approva'?C.green:modalMode==='rifiuta'?C.red:C.purple,
-                  color:'#fff',opacity:saving?0.7:1}}
-              , saving?'Salvataggio...'
-              : modalMode==='approva'?'✓ Approva e notifica'
-              : modalMode==='rifiuta'?'✗ Rifiuta e notifica'
-              : '✅ Conferma ufficialmente'
-            )
+                style:{padding:'10px 24px',borderRadius:8,border:'none',fontSize:13,fontWeight:700,cursor:saving?'wait':'pointer',fontFamily:"'Open Sans',sans-serif",background:mBtnBg,color:'#fff',opacity:saving?0.7:1}},mBtn)
           )
         )
       )
-    );
+    )
 
-    if (window.__FM_SHOW_MODAL__) window.__FM_SHOW_MODAL__(modalEl);
-  }, [selRich, modalMode, modData, modOra, modNota, saving]);
+    /* ══ CONTENUTO PRINCIPALE ══ */
+    , React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
 
-  // Salva azione — ora gestita dentro il useEffect del modal globale
-  var saving_placeholder = saving; // mantenuto per compatibilità con il jsx
-
-  // Filtra richieste per ruolo
-  var richFiltered = richiesteRec.filter(function(r) {
-    if (role === 'docente') {
-      if (!myDocKey) return true; // se non riesce a trovare il key, mostra tutto
-      var docR = (r.docente||'').toLowerCase().trim();
-      var myK  = myDocKey.toLowerCase().trim();
-      return docR === myK || docR.indexOf(myK) >= 0 || myK.indexOf(docR) >= 0;
-    }
-    return true; // admin vede tutto
-  });
-
-  var richInAttesa   = richFiltered.filter(function(r){ return r.stato==='in_attesa'; });
-  var richConfermata = richFiltered.filter(function(r){ return r.stato==='confermata'; });
-
-  const lezioniRec = (lessons||[]).filter(l=>l.inRecupero || l.attendance==='in_recupero');
-  const docenteOptsR = [...new Set(lezioniRec.map(l=>l.teacher).filter(Boolean))].sort();
-  const allievoOptsR = [...new Set(lezioniRec.map(l=>l.student).filter(Boolean))].sort();
-  const corsoOptsR   = [...new Set(lezioniRec.map(l=>l.instrument||l.courseId).filter(Boolean))].sort();
-  const filtered_r = lezioniRec.filter(l =>
-    (!rfCorso   || l.instrument===rfCorso   || l.courseId===rfCorso) &&
-    (!rfDocente || l.teacher===rfDocente) &&
-    (!rfAllievo || l.student===rfAllievo)
-  );
-  const sorted_r = sortFnR(filtered_r, (l,k) => {
-    if (k==="date")              return l.date||"";
-    if (k==="student")           return l.student||"";
-    if (k==="teacher")           return l.teacher||"";
-    if (k==="instrument")        return l.instrument||"";
-    if (k==="recuperoScadenza")  return l.recuperoScadenza||"";
-    return l[k]||"";
-  });
-
-  var StatoBadge = function(props) {
-    var s = props.stato;
-    var cfg = {
-      in_attesa:  {bg:'rgba(245,158,11,0.1)', color:'#b45309', border:'rgba(245,158,11,0.3)', label:'In attesa'},
-      confermata: {bg:C.blueBg, color:C.blue, border:C.blueBorder, label:'Approvata dal docente'},
-      completata: {bg:C.greenBg, color:C.green, border:C.greenBorder, label:'Confermata ufficialmente'},
-      rifiutata:  {bg:C.redBg, color:C.red, border:C.redBorder, label:'Rifiutata'},
-    };
-    var c = cfg[s] || {bg:C.surface, color:C.textMuted, border:C.border, label:s||'—'};
-    return React.createElement('span',{style:{background:c.bg,color:c.color,border:'1px solid '+c.border,borderRadius:20,padding:'3px 10px',fontSize:11,fontWeight:600}}, c.label);
-  };
-
-  // Modal di gestione richiesta
-  var richModal = selRich && React.createElement('div', {
-      style:{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:9000,display:'flex',alignItems:'center',justifyContent:'center',padding:16},
-      onClick:function(e){if(e.target===e.currentTarget)closeModal();}
-    }
-    , React.createElement('div', {style:{background:C.surface,borderRadius:16,width:'100%',maxWidth:480,boxShadow:'0 20px 60px rgba(0,0,0,0.4)',overflow:'hidden'}}
-      /* Header */
-      , React.createElement('div', {style:{padding:'18px 22px',borderBottom:'1px solid '+C.border,display:'flex',alignItems:'center',justifyContent:'space-between',
-          background: modalMode==='approva' ? C.greenBg : modalMode==='rifiuta' ? C.redBg : C.blueBg}}
-        , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10}}
-          , React.createElement('span', {style:{fontSize:20}},
-              modalMode==='approva' ? '✅' : modalMode==='rifiuta' ? '❌' : '🏛️')
-          , React.createElement('div', null
-            , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:16,fontWeight:700,
-                color: modalMode==='approva'?C.green:modalMode==='rifiuta'?C.red:C.blue}},
-                modalMode==='approva' ? 'Approva recupero'
-              : modalMode==='rifiuta' ? 'Rifiuta richiesta'
-              : 'Conferma ufficiale')
-            , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}, selRich.allievo_nome||'—')
-          )
+      /* Richieste */
+      , (role === 'docente' || role === 'admin') && React.createElement('div', {style:{marginBottom:32}}
+        , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,marginBottom:14}}
+          , React.createElement('h3', {style:{fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,margin:0}}, 'Richieste di recupero')
+          , richInAttesa.length > 0 && React.createElement('span',{style:{background:'rgba(245,158,11,0.12)',color:'#b45309',border:'1px solid rgba(245,158,11,0.3)',borderRadius:20,padding:'3px 12px',fontSize:12,fontWeight:700}}, richInAttesa.length+' da gestire')
+          , role==='admin' && richConfermata.length > 0 && React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:'1px solid '+C.blueBorder,borderRadius:20,padding:'3px 12px',fontSize:12,fontWeight:700}}, richConfermata.length+' da confermare')
         )
-        , React.createElement('button', {onClick:closeModal,
-            style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted,fontSize:20,lineHeight:1,padding:'0 4px'}}, '×')
-      )
-      /* Corpo */
-      , React.createElement('div', {style:{padding:'20px 22px'}}
-        /* Info richiesta */
-        , React.createElement('div', {style:{background:C.bg,borderRadius:10,padding:'12px 16px',marginBottom:16,border:'1px solid '+C.border}}
-          , React.createElement('div', {style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px 16px'}}
-            , [
-                {label:'Allievo',  val:selRich.allievo_nome||'—'},
-                {label:'Docente',  val:selRich.docente||'—'},
-                {label:'Data prop.', val:selRich.data_preferita ? new Date(selRich.data_preferita+'T00:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'short'}) : '—'},
-                {label:'Ora prop.', val:selRich.ora_recupero||'—'},
-              ].map(function(f){
-                return React.createElement('div', {key:f.label}
-                  , React.createElement('div',{style:{fontSize:10,color:C.textDim,textTransform:'uppercase',letterSpacing:'0.07em',marginBottom:2}},f.label)
-                  , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.text}},f.val)
+        , loadingR && React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'16px 0',color:C.textDim,fontSize:13}}
+            , 'Caricamento richieste...')
+        , !loadingR && richFiltered.length === 0 && React.createElement('div',{style:{textAlign:'center',padding:'28px 0',color:C.textDim,fontSize:13,background:C.surface,borderRadius:12,border:'1px solid '+C.border}}
+            , React.createElement('div',{style:{fontSize:28,marginBottom:8}}, role==='docente'?'📭':'📋')
+            , role==='docente' ? ('Nessuna richiesta di recupero'+(myDocKey?' per '+myDocKey:'')) : 'Nessuna richiesta di recupero')
+        , !loadingR && richFiltered.length > 0 && React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
+            , richFiltered.map(function(rich) {
+                var dL = rich.data_preferita ? new Date(rich.data_preferita+'T00:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'short',year:'numeric'}) : '—';
+                var isActionable = (rich.stato==='in_attesa'&&role==='docente')||(rich.stato==='confermata'&&role==='admin');
+                return React.createElement('div',{key:rich.id,style:{background:C.surface,borderRadius:12,padding:'16px 20px',
+                    border:'1px solid '+(isActionable?'rgba(245,158,11,0.45)':C.border),
+                    display:'flex',alignItems:'center',flexWrap:'wrap',gap:12,
+                    boxShadow:isActionable?'0 2px 10px rgba(245,158,11,0.1)':'none'}}
+                  , React.createElement('div',{style:{flex:1,minWidth:180}}
+                    , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:5}}
+                      , React.createElement('span',{style:{fontSize:15,fontWeight:700,color:C.text}}, rich.allievo_nome||'—')
+                      , React.createElement(StatoBadge,{stato:rich.stato})
+                    )
+                    , React.createElement('div',{style:{fontSize:12,color:C.textMuted}}
+                      , '📅 '+dL+(rich.ora_recupero?' alle '+rich.ora_recupero:'')
+                      , rich.docente && role==='admin' ? ' · 👤 '+rich.docente : ''
+                    )
+                    , rich.note && React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:4,fontStyle:'italic'}},'"'+rich.note+'"')
+                    , rich.note_docente && React.createElement('div',{style:{fontSize:11,color:C.green,marginTop:4,fontWeight:500}},'💬 '+rich.note_docente)
+                  )
+                  , isActionable && React.createElement('div',{style:{display:'flex',gap:7,flexShrink:0}}
+                    , rich.stato==='in_attesa' && role==='docente' && React.createElement(React.Fragment,null
+                      , React.createElement('button',{onClick:function(){openModal(rich,'approva');},
+                          style:{padding:'9px 18px',borderRadius:8,border:'none',background:C.green,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},
+                          React.createElement(Ic,{n:'check',size:13,stroke:'#fff'}), ' Approva')
+                      , React.createElement('button',{onClick:function(){openModal(rich,'rifiuta');},
+                          style:{padding:'9px 14px',borderRadius:8,border:'1px solid '+C.redBorder,background:C.redBg,color:C.red,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}},'✗ Rifiuta')
+                    )
+                    , rich.stato==='confermata' && role==='admin' && React.createElement('button',{onClick:function(){openModal(rich,'ufficiale');},
+                        style:{padding:'9px 18px',borderRadius:8,border:'none',background:C.purple,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},
+                        '✅ Conferma ufficiale')
+                  )
                 );
               })
           )
-          , selRich.note && React.createElement('div',{style:{marginTop:10,paddingTop:10,borderTop:'1px solid '+C.border,fontSize:12,color:C.textMuted,fontStyle:'italic'}},'"'+selRich.note+'"')
-        )
+      )
 
-        /* Modifica data/ora (solo per approva o ufficiale) */
-        , (modalMode==='approva'||modalMode==='ufficiale') && React.createElement('div', {style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}
-          , React.createElement('div', null
-            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:5}},'Data confermata')
-            , React.createElement('input',{type:'date', value:modData, onChange:function(e){setModData(e.target.value);},
-                style:{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",boxSizing:'border-box'}})
-          )
-          , React.createElement('div', null
-            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:5}},'Ora confermata')
-            , React.createElement('input',{type:'time', value:modOra, onChange:function(e){setModOra(e.target.value);},
-                style:{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",boxSizing:'border-box'}})
-          )
+      /* ── LEZIONI IN RECUPERO (tabella) ── */
+      , React.createElement('div', {style:{marginBottom:16, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}
+        , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif", fontSize:22, fontWeight:600, margin:0}}, 'Lezioni in Recupero')
+        , React.createElement('span', {style:{background:'rgba(245,158,11,0.1)', color:'#f59e0b', border:'1px solid rgba(245,158,11,0.3)', borderRadius:20, padding:'3px 10px', fontSize:12}}, lezioniRec.length+' lezioni')
+      )
+      , React.createElement('div', {style:{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}}
+        , React.createElement('select', {value:rfCorso, onChange:e=>setRfCorso(e.target.value), style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfCorso?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
+          , React.createElement('option',{value:''},'Tutti i corsi')
+          , corsoOptsR.map(c=>React.createElement('option',{key:c,value:c},c))
         )
-
-        /* Nota */
-        , React.createElement('div', {style:{marginBottom:16}}
-          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:5}},
-              modalMode==='rifiuta' ? 'Motivo del rifiuto (opzionale)' : 'Nota aggiuntiva (opzionale)')
-          , React.createElement('textarea',{value:modNota, onChange:function(e){setModNota(e.target.value);},
-              rows:2, placeholder: modalMode==='rifiuta' ? 'Es. data non disponibile, contattami per riorganizzare...' : 'Es. porta lo spartito, aula B...',
-              style:{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",resize:'vertical',boxSizing:'border-box'}})
+        , React.createElement('select', {value:rfDocente, onChange:e=>setRfDocente(e.target.value), style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfDocente?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
+          , React.createElement('option',{value:''},'Tutti i docenti')
+          , docenteOptsR.map(d=>React.createElement('option',{key:d,value:d},d))
         )
-
-        /* Azioni */
-        , React.createElement('div', {style:{display:'flex',gap:8,justifyContent:'flex-end'}}
-          , React.createElement('button', {onClick:closeModal, disabled:saving,
-              style:{padding:'9px 18px',borderRadius:8,border:'1px solid '+C.border,background:'none',color:C.textMuted,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}, 'Annulla')
-          , React.createElement('button', {onClick:handleSalva, disabled:saving,
-              style:{padding:'9px 20px',borderRadius:8,border:'none',fontSize:13,fontWeight:700,cursor:saving?'wait':'pointer',fontFamily:"'Open Sans',sans-serif",
-                background: modalMode==='approva'?C.green:modalMode==='rifiuta'?C.red:C.purple,
-                color:'#fff',
-                opacity:saving?0.7:1}}
-            , saving ? 'Salvataggio...'
-            : modalMode==='approva' ? '✓ Approva e notifica'
-            : modalMode==='rifiuta' ? '✗ Rifiuta e notifica'
-            : '✅ Conferma ufficialmente'
-          )
+        , React.createElement('select', {value:rfAllievo, onChange:e=>setRfAllievo(e.target.value), style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfAllievo?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
+          , React.createElement('option',{value:''},'Tutti gli allievi')
+          , allievoOptsR.map(a=>React.createElement('option',{key:a,value:a},a))
         )
       )
-    )
-  );
-
-  return React.createElement('div', {style:{flex:1, padding:'20px', overflow:'auto'}}
-
-    /* ── SEZIONE RICHIESTE RECUPERO ── */
-    , (role === 'docente' || role === 'admin') && React.createElement('div', {style:{marginBottom:32}}
-      , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,marginBottom:14}}
-        , React.createElement('h3', {style:{fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,margin:0}}, 'Richieste di recupero')
-        , richInAttesa.length > 0 && React.createElement('span',{style:{background:'rgba(245,158,11,0.12)',color:'#b45309',border:'1px solid rgba(245,158,11,0.3)',borderRadius:20,padding:'3px 12px',fontSize:12,fontWeight:700}}, richInAttesa.length+' da gestire')
-        , role === 'admin' && richConfermata.length > 0 && React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:'1px solid '+C.blueBorder,borderRadius:20,padding:'3px 12px',fontSize:12,fontWeight:700}}, richConfermata.length+' da confermare')
-      )
-      , loadingR && React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'16px 0',color:C.textDim,fontSize:13}}
-          , React.createElement('div',{style:{width:14,height:14,border:'2px solid '+C.border,borderTopColor:C.gold,borderRadius:'50%',animation:'spin 0.8s linear infinite'}})
-          , 'Caricamento richieste...')
-      , !loadingR && richFiltered.length === 0
-        && React.createElement('div',{style:{textAlign:'center',padding:'28px 0',color:C.textDim,fontSize:13,background:C.surface,borderRadius:12,border:'1px solid '+C.border}}
-          , React.createElement('div',{style:{fontSize:28,marginBottom:8}}, role==='docente'?'📭':'📋')
-          , role==='docente'
-            ? 'Nessuna richiesta di recupero per te'+(myDocKey?' ('+myDocKey+')':'')
-            : 'Nessuna richiesta di recupero')
-      , !loadingR && richFiltered.length > 0 && React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
-          , richFiltered.map(function(rich, idx) {
-              var dataLabel = rich.data_preferita
-                ? new Date(rich.data_preferita+'T00:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'short',year:'numeric'})
-                : '—';
-              var isActionable = (rich.stato==='in_attesa' && role==='docente') ||
-                                 (rich.stato==='confermata' && role==='admin');
-              return React.createElement('div',{key:rich.id,style:{
-                  background:C.surface,borderRadius:12,border:'1px solid '+(isActionable ? 'rgba(245,158,11,0.4)' : C.border),
-                  padding:'16px 20px',display:'flex',alignItems:'center',flexWrap:'wrap',gap:12,
-                  boxShadow:isActionable?'0 2px 8px rgba(245,158,11,0.08)':'none',
-                  transition:'all 0.12s',
-                }}
-                , React.createElement('div',{style:{flex:1,minWidth:200}}
-                  , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:4}}
-                    , React.createElement('span',{style:{fontSize:15,fontWeight:700,color:C.text}}, rich.allievo_nome||'—')
-                    , React.createElement(StatoBadge,{stato:rich.stato})
-                  )
-                  , React.createElement('div',{style:{fontSize:12,color:C.textMuted,display:'flex',gap:12,flexWrap:'wrap'}}
-                    , React.createElement('span',null,'📅 '+dataLabel+(rich.ora_recupero?' alle '+rich.ora_recupero:''))
-                    , rich.docente && role==='admin' && React.createElement('span',null,'👤 '+rich.docente)
-                    , React.createElement('span',{style:{color:C.textDim,fontSize:11}}, new Date(rich.created_at).toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit'})+' richiesta')
-                  )
-                  , rich.note && React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:4,fontStyle:'italic'}},'"'+rich.note+'"')
-                  , rich.note_docente && React.createElement('div',{style:{fontSize:11,color:C.green,marginTop:4}}, '💬 '+rich.note_docente)
+      , filtered_r.length===0
+        ? React.createElement('div',{style:{textAlign:'center', padding:'60px 20px', color:C.textMuted}}
+            , React.createElement('div',{style:{fontSize:40,marginBottom:12}},'✓')
+            , React.createElement('div',{style:{fontSize:16,fontWeight:600,marginBottom:8}},'Nessuna lezione in recupero')
+            , React.createElement('p',{style:{fontSize:13,color:C.textDim}},'Tutte le lezioni sono in regola.')
+          )
+        : React.createElement('div',{style:{background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, overflow:'hidden'}}
+            , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
+              , React.createElement('thead',null
+                , React.createElement('tr',{style:{background:C.bg, borderBottom:`1px solid ${C.border}`}}
+                  , React.createElement(SortTh,{label:'Data', sortKey:'date', currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
+                  , React.createElement(SortTh,{label:'Allievo', sortKey:'student', currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
+                  , React.createElement(SortTh,{label:'Docente', sortKey:'teacher', currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
+                  , React.createElement(SortTh,{label:'Strumento', sortKey:'instrument', currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
+                  , React.createElement(SortTh,{label:'Scadenza', sortKey:'recuperoScadenza', currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
+                  , React.createElement('th',{style:{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},'Stato')
+                  , React.createElement('th',{style:{padding:'10px 14px'}})
                 )
-                /* Pulsanti azione */
-                , isActionable && React.createElement('div',{style:{display:'flex',gap:6,flexShrink:0}}
-                  , rich.stato==='in_attesa' && role==='docente' && React.createElement(React.Fragment,null
-                    , React.createElement('button',{
-                        onClick:function(){openModal(rich,'approva');},
-                        style:{padding:'8px 16px',borderRadius:8,border:'none',background:C.green,color:'#fff',fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700,display:'flex',alignItems:'center',gap:5}
-                      }, React.createElement(Ic,{n:'check',size:12,stroke:'#fff'}), ' Approva')
-                    , React.createElement('button',{
-                        onClick:function(){openModal(rich,'rifiuta');},
-                        style:{padding:'8px 14px',borderRadius:8,border:'1px solid '+C.redBorder,background:C.redBg,color:C.red,fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}
-                      }, '✗ Rifiuta')
-                  )
-                  , rich.stato==='confermata' && role==='admin' && React.createElement('button',{
-                      onClick:function(){openModal(rich,'ufficiale');},
-                      style:{padding:'8px 16px',borderRadius:8,border:'none',background:C.purple,color:'#fff',fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700,display:'flex',alignItems:'center',gap:5}
-                    }, '✅ Conferma ufficiale')
-                )
-                /* Se già gestita, mostra solo il badge (nessun pulsante) */
-                , !isActionable && (rich.stato==='rifiutata'||rich.stato==='completata') && React.createElement('div',{style:{fontSize:11,color:C.textDim}},
-                    rich.stato==='completata' ? '✅ Completata' : '✗ Rifiutata'
-                  )
-              );
-            })
-        )
-      )
-    )
-    /* ── SEZIONE LEZIONI IN RECUPERO (tabella classica) ── */
-    , React.createElement('div', {style:{marginBottom:16, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap'}}
-      , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif", fontSize:22, fontWeight:600, margin:0}}, 'Lezioni in Recupero')
-      , React.createElement('span', {style:{background:'rgba(245,158,11,0.1)', color:'#f59e0b', border:'1px solid rgba(245,158,11,0.3)', borderRadius:20, padding:'3px 10px', fontSize:12}}, lezioniRec.length+' lezioni')
-    )
-    , React.createElement('div', {style:{display:'flex', gap:8, marginBottom:16, flexWrap:'wrap'}}
-      , React.createElement('select', {value:rfCorso, onChange:e=>setRfCorso(e.target.value),
-        style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfCorso?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
-        , React.createElement('option',{value:''},'Tutti i corsi')
-        , corsoOptsR.map(c=>React.createElement('option',{key:c,value:c},c))
-      )
-      , React.createElement('select', {value:rfDocente, onChange:e=>setRfDocente(e.target.value),
-        style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfDocente?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
-        , React.createElement('option',{value:''},'Tutti i docenti')
-        , docenteOptsR.map(d=>React.createElement('option',{key:d,value:d},d))
-      )
-      , React.createElement('select', {value:rfAllievo, onChange:e=>setRfAllievo(e.target.value),
-        style:{padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:C.surface, color:rfAllievo?C.text:C.textMuted, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
-        , React.createElement('option',{value:''},'Tutti gli allievi')
-        , allievoOptsR.map(a=>React.createElement('option',{key:a,value:a},a))
-      )
-    )
-    , filtered_r.length===0
-      ? React.createElement('div',{style:{textAlign:'center', padding:'60px 20px', color:C.textMuted}}
-        , React.createElement('div',{style:{fontSize:40,marginBottom:12}},'✓')
-        , React.createElement('div',{style:{fontSize:16,fontWeight:600,marginBottom:8}},'Nessuna lezione in recupero')
-        , React.createElement('p',{style:{fontSize:13,color:C.textDim}},'Tutte le lezioni sono in regola.')
-      )
-      : React.createElement('div',{style:{background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, overflow:'hidden'}}
-        , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
-          , React.createElement('thead',null
-            , React.createElement('tr',{style:{background:C.bg, borderBottom:`1px solid ${C.border}`}}
-              , React.createElement(SortTh,{label:'Data',      sortKey:'date',            currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
-              , React.createElement(SortTh,{label:'Allievo',   sortKey:'student',         currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
-              , React.createElement(SortTh,{label:'Docente',   sortKey:'teacher',         currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
-              , React.createElement(SortTh,{label:'Strumento', sortKey:'instrument',      currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
-              , React.createElement(SortTh,{label:'Scadenza',  sortKey:'recuperoScadenza',currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
-              , React.createElement('th',{style:{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},'Stato')
-              , React.createElement('th',{style:{padding:'10px 14px'}})
+              )
+              , React.createElement('tbody',null
+                , sorted_r.map(l => {
+                    const scad = l.recuperoScadenza ? new Date(l.recuperoScadenza+'T00:00:00') : null;
+                    const scaduto = scad && scad < oggi_r;
+                    const urgente = scad && !scaduto && (scad - oggi_r)/86400000 <= 5;
+                    return React.createElement('tr',{key:l.id, style:{borderBottom:`1px solid ${C.border}`},
+                      onMouseEnter:e=>e.currentTarget.style.background=C.bg,
+                      onMouseLeave:e=>e.currentTarget.style.background='transparent'}
+                      , React.createElement('td',{style:{padding:'11px 14px',fontSize:13}},l.date||'—')
+                      , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,fontWeight:500}},l.student||'—')
+                      , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,color:C.textMuted}},l.teacher||'—')
+                      , React.createElement('td',{style:{padding:'11px 14px',fontSize:12}},React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},l.instrument||l.courseId||'—'))
+                      , React.createElement('td',{style:{padding:'11px 14px',fontSize:12,color:scaduto?C.red:urgente?C.orange:C.textMuted}},l.recuperoScadenza||'—')
+                      , React.createElement('td',{style:{padding:'11px 14px'}},
+                          scaduto ? React.createElement('span',{style:{background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},'SCADUTO')
+                          : urgente ? React.createElement('span',{style:{background:'rgba(245,158,11,0.1)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.3)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In scadenza')
+                          : React.createElement('span',{style:{background:'rgba(245,158,11,0.08)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.2)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In recupero')
+                        )
+                      , React.createElement('td',{style:{padding:'11px 14px'}},
+                          React.createElement('button',{onClick:()=>onOpenLesson&&onOpenLesson(l),style:{padding:'4px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Apri')
+                        )
+                    );
+                  })
+              )
             )
           )
-          , React.createElement('tbody',null
-            , sorted_r.map(l => {
-              const scad = l.recuperoScadenza ? new Date(l.recuperoScadenza+'T00:00:00') : null;
-              const scaduto = scad && scad < oggi_r;
-              const urgente = scad && !scaduto && (scad - oggi_r)/86400000 <= 5;
-              return React.createElement('tr',{key:l.id, style:{borderBottom:`1px solid ${C.border}`},
-                onMouseEnter:e=>e.currentTarget.style.background=C.bg,
-                onMouseLeave:e=>e.currentTarget.style.background='transparent'}
-                , React.createElement('td',{style:{padding:'11px 14px',fontSize:13}},l.date||'—')
-                , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,fontWeight:500}},l.student||'—')
-                , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,color:C.textMuted}},l.teacher||'—')
-                , React.createElement('td',{style:{padding:'11px 14px',fontSize:12}}
-                  , React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},l.instrument||l.courseId||'—')
-                )
-                , React.createElement('td',{style:{padding:'11px 14px',fontSize:12,color:scaduto?C.red:urgente?C.orange:C.textMuted}},
-                  l.recuperoScadenza||'—'
-                )
-                , React.createElement('td',{style:{padding:'11px 14px'}}
-                  , scaduto
-                    ? React.createElement('span',{style:{background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},'SCADUTO → ASSENTE')
-                    : urgente
-                    ? React.createElement('span',{style:{background:'rgba(245,158,11,0.1)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.3)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In scadenza')
-                    : React.createElement('span',{style:{background:'rgba(245,158,11,0.08)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.2)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In recupero')
-                )
-                , React.createElement('td',{style:{padding:'11px 14px'}}
-                  , React.createElement('button',{onClick:()=>onOpenLesson&&onOpenLesson(l),
-                    style:{padding:'4px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
-                    ,'Apri'
-                  )
-                )
-              );
-            })
-          )
-        )
-      )
-  ;
+    )
+  );
 };
-
-// ─── LEZIONI ADMIN VIEW (sub-tab di CalendarioView) ──────────────────────────
 const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
   const [laSearch,   setLaSearch]   = useState('');
   const [laDocente,  setLaDocente]  = useState('');
