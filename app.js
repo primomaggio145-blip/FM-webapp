@@ -6053,6 +6053,7 @@ const ATT_STYLES = {
   giustificato:{ bg:"#e8edf5",  fg:C.gold,   bd:C.goldDim,      label:'Giustificato'},
   recupero:    { bg:C.blueBg,   fg:C.blue,   bd:C.blueBorder,   label:'Recupero'    },
   in_recupero: { bg:'rgba(255,160,0,0.10)', fg:'#f59e0b', bd:'rgba(245,158,11,0.4)', label:'In recupero' },
+  recuperata:  { bg:C.tealBg,   fg:C.teal,   bd:C.tealBorder,   label:'Recuperata'  },
 };
 
 const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, courses:_coursesRaw, role:_roleLF }) => {
@@ -6178,24 +6179,30 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
 
         , React.createElement(SDiv, { label: "Presenza", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4240}})
         , React.createElement('div', { style: {gridColumn:"1/-1", display:"flex", gap:8, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4241}}
-          , ["presente","assente","giustificato","recupero","in_recupero"].map(a => {
-            const s = ATT_STYLES[a] || ATT_STYLES.presente;
-            const active = a === 'in_recupero'
-              ? (f.attendance === 'in_recupero' || f.inRecupero === true)
-              : f.attendance === a;
-            return (
-              React.createElement('button', { key: a, onClick: () => set("attendance", active ? "" : a),
-                style: {flex:1, minWidth:90, padding:"9px 12px", borderRadius:8,
-                  border:`2px solid ${active ? s.bd : C.border}`,
-                  background: active ? s.bg : C.bg,
-                  cursor:"pointer", fontSize:12,
-                  color: active ? s.fg : C.textMuted,
-                  fontFamily:"'Open Sans',sans-serif", fontWeight: active ? 500 : 400,
-                  textTransform:"capitalize", transition:"all 0.12s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4246}}
-                , s.label || a
+          , (f.attendance === 'recuperata')
+            ? React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8}}
+                , React.createElement('span', {style:{background:C.tealBg,color:C.teal,border:'1px solid '+C.tealBorder,borderRadius:8,padding:'8px 16px',fontSize:12,fontWeight:600}}, '✅ Recuperata')
+                , (f.notesRecupero||f.notes_recupero) && React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontStyle:'italic'}}, f.notesRecupero||f.notes_recupero)
+                , React.createElement('span',{style:{fontSize:11,color:C.textDim}},'(sola lettura)')
               )
-            );
-          })
+            : ["presente","assente","giustificato","recupero","in_recupero"].map(a => {
+              const s = ATT_STYLES[a] || ATT_STYLES.presente;
+              const active = a === 'in_recupero'
+                ? (f.attendance === 'in_recupero' || f.inRecupero === true)
+                : f.attendance === a;
+              return (
+                React.createElement('button', { key: a, onClick: () => set("attendance", active ? "" : a),
+                  style: {flex:1, minWidth:90, padding:"9px 12px", borderRadius:8,
+                    border:`2px solid ${active ? s.bd : C.border}`,
+                    background: active ? s.bg : C.bg,
+                    cursor:"pointer", fontSize:12,
+                    color: active ? s.fg : C.textMuted,
+                    fontFamily:"'Open Sans',sans-serif", fontWeight: active ? 500 : 400,
+                    textTransform:"capitalize", transition:"all 0.12s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4246}}
+                  , s.label || a
+                )
+              );
+            })
         )
 
         , React.createElement(SDiv, { label: "Repertorio studiato" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 4260}})
@@ -6843,33 +6850,49 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
         /* ── Segna presenza ── */
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4636}}
           , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4637}}, "Segna presenza" )
-          , React.createElement('div', { className: "att-row", style: {display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4638}}
-            , ["presente","assente","giustificato","recupero","in_recupero"].map(a => {
-              const s = ATT_STYLES[a] || ATT_STYLES.presente;
-              // in_recupero non usa attendance, usa il flag
-              const active = a === 'in_recupero' ? lesson.inRecupero : lesson.attendance === a;
-              return (
-                React.createElement('button', { key: a, onClick: () => canEdit && onAttendance(lesson.id, active ? "" : a),
-                  style: {flex:1, padding:"9px 0", borderRadius:8,
-                    border:`2px solid ${active ? s.bd : C.border}`,
-                    background: active ? s.bg : C.bg,
-                    cursor: canEdit ? "pointer" : "default", fontSize:11,
-                    color: active ? s.fg : C.textMuted,
-                    opacity: canEdit ? 1 : 0.5,
-                    fontFamily:"'Open Sans',sans-serif", fontWeight: active ? 600 : 400,
-                    transition:"all 0.12s"},}
-                  , s.label || a
+          , lesson.attendance === 'recuperata'
+            ? React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:C.tealBg,border:'1px solid '+C.tealBorder,borderRadius:8}}
+                , React.createElement(Ic,{n:'check',size:15,stroke:C.teal})
+                , React.createElement('div',null
+                  , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.teal}},'✅ Lezione recuperata')
+                  , (lesson.notesRecupero||lesson.notes_recupero) && React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2}},lesson.notesRecupero||lesson.notes_recupero)
                 )
-              );
-            })
-            /* Badge scadenza recupero */
-            , lesson.inRecupero && lesson.recuperoScadenza && (
-              React.createElement('div', {style:{marginTop:6, padding:'6px 10px', borderRadius:7, background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.25)', fontSize:11, color:'#f59e0b', display:'flex', alignItems:'center', gap:5}}
-                , React.createElement(Ic,{n:'clock',size:12,stroke:'#f59e0b'})
-                , 'Lezione in recupero — scade il ', lesson.recuperoScadenza
+                , React.createElement('span',{style:{fontSize:10,color:C.textDim,marginLeft:'auto'}},'(sola lettura)')
               )
-            )
-          )
+            : lesson.attendance === 'recupero'
+            ? React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:C.blueBg,border:'1px solid '+C.blueBorder,borderRadius:8}}
+                , React.createElement(Ic,{n:'calendar',size:15,stroke:C.blue})
+                , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.blue}},'Lezione di recupero')
+                , React.createElement('span',{style:{fontSize:10,color:C.textDim,marginLeft:'auto'}},'(sola lettura)')
+              )
+            : React.createElement(React.Fragment, null
+                , React.createElement('div', { className: "att-row", style: {display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4638}}
+                  , ["presente","assente","giustificato","recupero","in_recupero"].map(a => {
+                    const s = ATT_STYLES[a] || ATT_STYLES.presente;
+                    const active = a === 'in_recupero' ? lesson.inRecupero : lesson.attendance === a;
+                    return (
+                      React.createElement('button', { key: a, onClick: () => canEdit && onAttendance(lesson.id, active ? "" : a),
+                        style: {flex:1, padding:"9px 0", borderRadius:8,
+                          border:`2px solid ${active ? s.bd : C.border}`,
+                          background: active ? s.bg : C.bg,
+                          cursor: canEdit ? "pointer" : "default", fontSize:11,
+                          color: active ? s.fg : C.textMuted,
+                          opacity: canEdit ? 1 : 0.5,
+                          fontFamily:"'Open Sans',sans-serif", fontWeight: active ? 600 : 400,
+                          transition:"all 0.12s"},}
+                        , s.label || a
+                      )
+                    );
+                  })
+                  /* Badge scadenza recupero */
+                  , lesson.inRecupero && lesson.recuperoScadenza && (
+                    React.createElement('div', {style:{marginTop:6, padding:'6px 10px', borderRadius:7, background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.25)', fontSize:11, color:'#f59e0b', display:'flex', alignItems:'center', gap:5}}
+                      , React.createElement(Ic,{n:'clock',size:12,stroke:'#f59e0b'})
+                      , 'Lezione in recupero — scade il ', lesson.recuperoScadenza
+                    )
+                  )
+                )
+              )
           /* Feedback prossima lezione */
           , lesson.recurrence && lesson.recurrence !== "Nessuna" && (
             React.createElement('div', { style: {marginTop:10, padding:"10px 14px", borderRadius:8,
@@ -8543,7 +8566,47 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
     } else if(modalMode==='rifiuta'){
       await sb.from('notifiche').insert({destinatario_ruolo:'allievo',destinatario_id:String(selRich.allievo_id||''),destinatario_nome:selRich.allievo_nome||'',tipo:'recupero_rifiutato',titolo:'❌ Recupero non confermato',messaggio:'Il docente '+(selRich.docente||'')+' non può confermare il recupero.'+(modNota?' Motivo: '+modNota:' Contattalo per concordare una nuova data.'),letto:false,created_at:new Date().toISOString()});
     } else if(modalMode==='ufficiale'){
+      // 1. Notifica finale all'allievo
       await sb.from('notifiche').insert({destinatario_ruolo:'allievo',destinatario_id:String(selRich.allievo_id||''),destinatario_nome:selRich.allievo_nome||'',tipo:'recupero_ufficiale',titolo:'✅ Recupero confermato ufficialmente',messaggio:'Il tuo recupero per '+dL+' ore '+oraFin+" è stato confermato dall'amministrazione."+(modNota?' Nota: '+modNota:''),letto:false,created_at:new Date().toISOString()});
+
+      // 2. Crea la nuova lezione di RECUPERO su Supabase
+      var newLezId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return(c==='x'?r:(r&0x3|0x8)).toString(16);});
+      var lezRow = {
+        id:         newLezId,
+        data:       dataFin,
+        ora:        oraFin ? (oraFin.length===5 ? oraFin+':00' : oraFin) : null,
+        student:    selRich.allievo_nome || '',
+        studente_id:selRich.allievo_id   || null,
+        teacher:    selRich.docente      || '',
+        strumento:  selRich.strumento    || null,
+        topic:      'Recupero del '+dL,
+        attendance: 'recupero',
+        tipo:       'individuale',
+        recurrence: 'Nessuna',
+        notes:      'Lezione di recupero creata automaticamente. Richiesta #'+(selRich.id||''),
+        in_recupero: false,
+        recupero_scadenza: null,
+        created_at: new Date().toISOString(),
+      };
+      var { error: lezErr } = await sb.from('lezioni').insert(lezRow);
+      if (lezErr) console.warn('[FM] crea lezione recupero error:', lezErr.message);
+
+      // 3. Segna la lezione ORIGINALE come "recuperata" e blocca modifiche
+      var lezioniIds = [];
+      try { lezioniIds = JSON.parse(selRich.lezioni_ids||'[]'); } catch(e){}
+      if (lezioniIds.length > 0) {
+        var dataRecuperoStr = dataFin || '';
+        for (var li = 0; li < lezioniIds.length; li++) {
+          await sb.from('lezioni').update({
+            attendance:        'recuperata',
+            in_recupero:       false,
+            recupero_scadenza: null,
+            notes_recupero:    'Recuperata il '+dL+' ore '+oraFin,
+          }).eq('id', lezioniIds[li]);
+        }
+      }
+
+      // 4. Aggiorna il React state locale tramite force refresh
     }
     setSaving(false); closeModal();
     setTimeout(function(){ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true); }, 800);
@@ -9883,7 +9946,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       closeModal();
     };
     const handleEdit = (data) => {
-      // Normalizza: 'recupero' = lezione recupero completata → presente + azzera in_recupero
+      // BLOCCO: lezioni recuperate non possono essere modificate
+      const existingLesson = (lessons||[]).find(function(l){ return l.id === data.id; });
+      if (existingLesson && (existingLesson.attendance === 'recuperata' || existingLesson.attendance === 'recupero')) {
+        return; // sola lettura
+      }
       var attNorm = data.attendance || null;
       var inRecNorm = data.inRecupero || false;
       var scadNorm = data.recuperoScadenza || null;
@@ -10040,6 +10107,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const handleAttendance = (id, val) => {
       setLessons(prev => {
         const lesson = prev.find(l => l.id === id);
+        // BLOCCO: lezioni recuperate o di recupero non possono essere modificate
+        if (lesson && (lesson.attendance === 'recuperata' || lesson.attendance === 'recupero')) {
+          return prev; // nessuna modifica
+        }
         let extraProps = {};
         // Logica IN RECUPERO:
         // - Se si segna "in_recupero" → imposta flag e scadenza fine mese
