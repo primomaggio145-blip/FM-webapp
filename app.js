@@ -8596,7 +8596,7 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
         data:       dataFin,
         ora:        oraFin ? (oraFin.length===5 ? oraFin+':00' : oraFin) : null,
         student:    selRich.allievo_nome || '',
-        studente_id:selRich.allievo_id   || null,
+        studente_id:selRich.allievo_id ? parseInt(selRich.allievo_id, 10) : null,
         teacher:    selRich.docente      || '',
         strumento:  strumentoOrig,
         corso_id:   corsoId,
@@ -8609,21 +8609,31 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
         notes:      'Lezione di recupero creata automaticamente. Richiesta #'+(selRich.id||''),
         in_recupero: false,
         recupero_scadenza: null,
-        created_at: new Date().toISOString(),
       };
       var { error: lezErr } = await sb.from('lezioni').insert(lezRow);
-      if (lezErr) console.warn('[FM] crea lezione recupero error:', lezErr.message);
+      if (lezErr) {
+        console.warn('[FM] crea lezione recupero error:', lezErr.message, '| codice:', lezErr.code, '| row:', JSON.stringify(lezRow));
+        // Mostra errore visibile
+        var tErr = document.getElementById('sync-toast');
+        if (tErr) { tErr.textContent = '⚠️ Errore creazione lezione: ' + lezErr.message; tErr.style.opacity='1'; setTimeout(function(){ tErr.style.opacity='0'; }, 5000); }
+        setSaving(false); return; // blocca qui se la creazione lezione fallisce
+      }
+      console.log('[FM] Lezione recupero creata:', newLezId, dataFin, oraFin);
 
       // 3. Segna le lezioni ORIGINALI come "recuperata"
       if (lezioniIds.length > 0) {
         for (var li = 0; li < lezioniIds.length; li++) {
-          await sb.from('lezioni').update({
+          var { error: updErr } = await sb.from('lezioni').update({
             attendance:        'recuperata',
             in_recupero:       false,
             recupero_scadenza: null,
             notes_recupero:    'Recuperata il '+dL+' ore '+oraFin,
           }).eq('id', lezioniIds[li]);
+          if (updErr) console.warn('[FM] update lezione originale error:', updErr.message, lezioniIds[li]);
+          else console.log('[FM] Lezione originale segnata recuperata:', lezioniIds[li]);
         }
+      } else {
+        console.warn('[FM] Nessuna lezione_id trovata in selRich.lezioni_ids:', selRich.lezioni_ids);
       }
 
       // 4. Aggiorna il React state locale tramite force refresh
