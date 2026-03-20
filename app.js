@@ -17327,13 +17327,14 @@ const ImpRSToggle = ({k, label, rs, ac, setRS}) => {
 
 const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: propSetPanels, ruolo: propRuolo, setRuolo: propSetRuolo }) => {
   const [draft, setDraft] = useState(config||CONFIG_DEFAULT);
-  // Sync when config changes from outside
-  useEffect(()=>{ setDraft(config||CONFIG_DEFAULT); }, [config]);
+  // NON aggiornare draft quando config cambia dall'esterno — altrimenti handleSave viene interrotto
+  // Il draft viene aggiornato solo dall'utente che modifica i campi
   const setD  = (k,v) => setDraft(p=>({...p,[k]:v}));
   const setRS = (k,v) => setDraft(p=>({...p, ricevutaStyle:{...(p.ricevutaStyle||{}), [k]:v}}));
   const rs = draft.ricevutaStyle || {};
   const ac = rs.accentColor || "#1a4fa0";
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   // Panels e Ruolo locali se non passati dall'esterno
   const [_lPanels, _setLPanels] = useState({});
@@ -17343,66 +17344,70 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
   const ruolo     = propRuolo     !== undefined ? propRuolo     : _lRuolo;
   const setRuolo  = propSetRuolo  !== undefined ? propSetRuolo  : _setLRuolo;
 
-  const [saveError, setSaveError] = useState('');
-
   const handleSave = async () => {
     setSaved(false);
     setSaveError('');
 
-    // 1. Aggiorna React state immediatamente
-    setConfig(draft);
+    // Prepara righe per sito_config
+    const rows = [];
+    Object.entries(draft).forEach(([chiave, valore]) => {
+      if (typeof valore === 'function') return;
+      rows.push({
+        chiave,
+        valore: valore === null || valore === undefined
+          ? ''
+          : typeof valore === 'object'
+            ? JSON.stringify(valore)
+            : String(valore),
+      });
+    });
 
-    const sb = window.supabaseClient;
-    if (!sb) { setSaveError('Supabase non disponibile'); return; }
-
+    // Scrivi su Supabase usando fetch diretto (evita problemi con il client JS)
     try {
-      // 2. Test connessione
-      const { error: testErr } = await sb.from('sito_config').select('chiave').limit(1);
-      if (testErr) {
-        console.warn('[FM] sito_config SELECT error:', testErr.message, testErr.code);
-        setSaveError('Tabella non accessibile: ' + testErr.message);
+      const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
+      const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjE0NDAsImV4cCI6MjA4NzkzNzQ0MH0.ScXeqKD73hu1zMwVWppybmNRqCtKWnR9C_pfNMjwQio';
+
+      // Ottieni il token della sessione corrente se disponibile
+      let authToken = SUPABASE_ANON;
+      try {
+        const sb = window.supabaseClient;
+        if (sb) {
+          const { data: { session } } = await sb.auth.getSession();
+          if (session?.access_token) authToken = session.access_token;
+        }
+      } catch(e) {}
+
+      const headers = {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON,
+        'Authorization': 'Bearer ' + authToken,
+        'Prefer': 'resolution=merge-duplicates',
+      };
+
+      // Prima elimina tutto, poi inserisce
+      await fetch(`${SUPABASE_URL}/rest/v1/sito_config?chiave=neq.___x___`, {
+        method: 'DELETE', headers
+      });
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/sito_config`, {
+        method: 'POST',
+        headers: { ...headers, 'Prefer': 'return=minimal' },
+        body: JSON.stringify(rows),
+      });
+
+      if (!res.ok) {
+        const body = await res.text();
+        setSaveError(`Errore ${res.status}: ${body.slice(0,120)}`);
         return;
       }
 
-      // 3. Prepara righe — filtra valori undefined/funzione
-      const rows = [];
-      Object.entries(draft).forEach(([chiave, valore]) => {
-        if (typeof valore === 'function') return;
-        rows.push({
-          chiave,
-          valore: valore === null || valore === undefined
-            ? ''
-            : typeof valore === 'object'
-              ? JSON.stringify(valore)
-              : String(valore),
-        });
-      });
-      console.log('[FM] Salvo', rows.length, 'chiavi config:', rows.map(r=>r.chiave).join(', '));
-
-      // 4. DELETE tutte le chiavi esistenti poi INSERT nuove
-      //    Più affidabile di upsert(onConflict) se la struttura PK è incerta
-      const { error: delErr } = await sb.from('sito_config').delete().neq('chiave', '___never___');
-      if (delErr) console.warn('[FM] delete config (non bloccante):', delErr.message);
-
-      const { error: insErr } = await sb.from('sito_config').insert(rows);
-      if (insErr) {
-        // Fallback: upsert riga per riga
-        console.warn('[FM] insert fallita, provo upsert per riga:', insErr.message);
-        let anyErr = null;
-        for (const row of rows) {
-          const { error: e } = await sb.from('sito_config').upsert(row);
-          if (e) { anyErr = e; console.warn('[FM] upsert singola', row.chiave, ':', e.message); }
-        }
-        if (anyErr) { setSaveError('Errore parziale: ' + anyErr.message); return; }
-      }
-
-      console.log('[FM] Config salvata OK');
+      // Scritto su DB — ora aggiorna React state
+      setConfig(draft);
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
+
     } catch(e) {
-      const msg = e?.message || String(e);
-      console.warn('[FM] handleSave catch:', msg);
-      setSaveError(msg);
+      setSaveError(e?.message || String(e));
     }
   };
 
