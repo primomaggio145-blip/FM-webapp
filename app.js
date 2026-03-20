@@ -2904,13 +2904,49 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const _concerti = propConcertiDash || [];
 
     // ALLIEVI live: prende da _students con formato compatibile AlertPanel/StatoAllievi
-    const ALLIEVI_LIVE = _students.map(s => ({
-      id: s.id, name: s.name || s.nome || '',
-      instrument: s.instrument || s.strumento || '',
-      teacher: s.teacher || s.docente || '',
-      stato: s.status || s.stato || 'pagato',
-      monthlyFee: s.monthlyFee || s.quota || 0,
-    }));
+    // Mese e anno corrente per calcolo stato pagamento
+    const meseOggi = oggi.getMonth() + 1; // 1-indexed
+    const annoOggi = oggi.getFullYear();
+
+    // Allievi attivi con stato pagamento REALE calcolato dalle entrate
+    const ALLIEVI_LIVE = _students
+      .filter(s => (s.status || s.stato || '') !== 'inattivo')
+      .map(s => {
+        // Cerca un pagamento quota per questo allievo nel mese corrente
+        const idAllievo = s.id;
+        const nomeAllievo = (s.name || s.nome || '').toLowerCase();
+        const quotaMeseCorrente = _entrate.find(e =>
+          e.mese === meseOggi && e.anno === annoOggi &&
+          (e.categoria === 'quota' || !e.categoria) &&
+          (
+            (e.studentId && String(e.studentId) === String(idAllievo)) ||
+            (e.studentName && e.studentName.toLowerCase() === nomeAllievo)
+          )
+        );
+
+        let stato = 'attesa'; // default: non ancora pagato questo mese
+        if (quotaMeseCorrente) {
+          const statoQ = quotaMeseCorrente.stato || '';
+          if (statoQ === 'pagato' || statoQ === 'pagata') stato = 'pagato';
+          else if (statoQ === 'ritardo' || statoQ === 'in_ritardo') stato = 'scaduto';
+          else stato = 'attesa';
+        } else {
+          // Nessun pagamento trovato: controlla se l'allievo è sospeso/inattivo
+          const st = (s.status || s.stato || '');
+          if (st === 'sospeso') stato = 'sospeso';
+          else if (st === 'scaduto' || st === 'ritardo') stato = 'scaduto';
+          // Altrimenti resta 'attesa' (non ha ancora pagato)
+        }
+
+        return {
+          id: idAllievo,
+          name: s.name || s.nome || '',
+          instrument: s.instrument || s.strumento || '',
+          teacher: s.teacher || s.docente || '',
+          stato,
+          monthlyFee: s.monthlyFee || s.quota || 0,
+        };
+      });
 
     // LEZIONI_OGGI live: lezioni di oggi con formato compatibile AlertPanel
     const todayStr = yyyymmdd(oggi);
