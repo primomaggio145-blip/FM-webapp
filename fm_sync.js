@@ -72,6 +72,7 @@
       studentId: r.studente_id || null,
       instrument: r.strumento || r.instrument || '', teacher: r.teacher || '', room: r.room || '',
       topic: r.topic || '', attendance: r.attendance || '',
+      notesRecupero: r.notes_recupero || '',
       recurrence: r.recurrence || 'Nessuna', notes: r.notes || '',
       exercises: r.exercises || '', repertorio: r.repertorio || '',
       type: r.tipo || 'individuale',
