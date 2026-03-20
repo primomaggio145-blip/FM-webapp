@@ -1817,9 +1817,46 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
 
   const setD = (k,v) => setDraft(p=>({...p,[k]:v}));
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const annoAs = (anniScolastici||[]).find(a=>a.stato==="attivo");
-    onConfig({...draft, annoInizioAttivo: _nullishCoalesce(_optionalChain([annoAs, 'optionalAccess', _7 => _7.annoInizio]), () => ( draft.annoInizioAttivo))});
+    const newConfig = {...draft, annoInizioAttivo: _nullishCoalesce(_optionalChain([annoAs, 'optionalAccess', _7 => _7.annoInizio]), () => ( draft.annoInizioAttivo))};
+    onConfig(newConfig);
+
+    // Scrivi su Supabase
+    try {
+      const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
+      const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjE0NDAsImV4cCI6MjA4NzkzNzQ0MH0.ScXeqKD73hu1zMwVWppybmNRqCtKWnR9C_pfNMjwQio';
+      let authToken = SUPABASE_ANON;
+      try {
+        const sb = window.supabaseClient;
+        if (sb) {
+          const { data } = await sb.auth.getSession();
+          if (data?.session?.access_token) authToken = data.session.access_token;
+        }
+      } catch(e) {}
+      const headers = {'Content-Type':'application/json','apikey':SUPABASE_ANON,'Authorization':'Bearer '+authToken};
+      const rows = [];
+      Object.entries(newConfig).forEach(([chiave, valore]) => {
+        if (typeof valore === 'function') return;
+        rows.push({ chiave, valore: valore == null ? '' : typeof valore === 'object' ? JSON.stringify(valore) : String(valore) });
+      });
+      await fetch(`${SUPABASE_URL}/rest/v1/sito_config?chiave=neq.___x___`, {method:'DELETE', headers});
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/sito_config`, {
+        method:'POST', headers:{...headers,'Prefer':'return=minimal'}, body:JSON.stringify(rows)
+      });
+      if (res.ok) {
+        // Popup conferma
+        const el = document.createElement('div');
+        el.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:999999;padding:14px 28px;border-radius:12px;font-family:"Open Sans",sans-serif;font-size:14px;font-weight:600;color:#fff;background:#16a34a;box-shadow:0 8px 32px rgba(0,0,0,0.35);white-space:nowrap;';
+        el.textContent = '✅  Impostazioni salvate!';
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3000);
+      } else {
+        const body = await res.text();
+        console.warn('[FM] SettingsDrawer save error:', res.status, body);
+      }
+    } catch(e) { console.warn('[FM] SettingsDrawer save catch:', e?.message); }
+
     onClose();
   };
 
