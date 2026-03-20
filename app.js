@@ -10121,7 +10121,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       var attNorm = data.attendance || null;
       var inRecNorm = data.inRecupero || false;
       var scadNorm = data.recuperoScadenza || null;
-      if (attNorm === 'recupero') {
+      if (attNorm === 'in_recupero') {
+        attNorm = null;  // in_recupero non è un valore attendance valido in DB
+      } else if (attNorm === 'recupero') {
         attNorm = 'presente';
         inRecNorm = false;
         scadNorm = null;
@@ -10314,11 +10316,13 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           var inRecDb = extraProps.inRecupero  ?? (lesson.inRecupero  || false);
           var scadDb  = extraProps.recuperoScadenza ?? (lesson.recuperoScadenza || null);
           if (attDb === 'in_recupero') {
-            attDb = null;
+            attDb = null;  // in_recupero non è un valore attendance valido in DB
           } else if (attDb === 'recupero') {
-            attDb = 'presente';
+            attDb = 'presente';  // segna recupero completato come presente
             inRecDb = false;
             scadDb = null;
+          } else if (!attDb || attDb === '') {
+            attDb = null;  // stringa vuota → NULL (il check constraint accetta solo i valori noti)
           }
           sb.from('lezioni').update({
             attendance:        attDb,
