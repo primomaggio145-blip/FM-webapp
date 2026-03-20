@@ -434,10 +434,12 @@
     if (!_ready) { warn('Sync non ancora attivo — salto'); return; }
 
     const MAP = [
-      // ATTENZIONE: studenti è ESCLUSO dall'auto-sync per evitare loop di duplicazione.
-      // Gli studenti vengono gestiti con scritture dirette su Supabase in app.js.
+      // ATTENZIONE: studenti e corsi sono ESCLUSI dall'auto-sync per evitare loop di duplicazione.
+      // - studenti: ID intero auto-increment → loop INSERT se gestito da diff
+      // - corsi: IDs demo corti (c1..c10) non sono UUID validi → fm_sync li vede come
+      //          "nuovi" e fa INSERT con UUID generato → duplicati
+      // Entrambi vengono gestiti con scritture dirette su Supabase in app.js.
       ['docenti',  'docenti',  toDB.docenti ],
-      ['corsi',    'courses',  toDB.corsi   ],
       ['lezioni',  'lessons',  toDB.lezioni ],
       ['quote',    'entrate',  toDB.quote   ],
       ['spese',    'spese',    toDB.spese   ],
