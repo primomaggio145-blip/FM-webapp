@@ -17348,42 +17348,60 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
   const handleSave = async () => {
     setSaved(false);
     setSaveError('');
+
     // 1. Aggiorna React state immediatamente
     setConfig(draft);
 
-    // 2. Salva su Supabase
     const sb = window.supabaseClient;
-    if (!sb) {
-      setSaveError('Supabase non disponibile');
-      return;
-    }
+    if (!sb) { setSaveError('Supabase non disponibile'); return; }
 
     try {
-      // Ogni chiave del draft diventa una riga in sito_config
-      const rows = Object.entries(draft).map(([chiave, valore]) => ({
-        chiave,
-        valore: valore === null || valore === undefined
-          ? ''
-          : typeof valore === 'object'
-            ? JSON.stringify(valore)
-            : String(valore),
-      }));
-
-      console.log('[FM] Salvataggio config — righe:', rows.length, rows.map(r=>r.chiave).join(', '));
-
-      const { error } = await sb.from('sito_config').upsert(rows, { onConflict: 'chiave' });
-
-      if (error) {
-        console.warn('[FM] Errore upsert sito_config:', error.message, error.code, error.details);
-        setSaveError(error.message || 'Errore salvataggio');
-      } else {
-        console.log('[FM] Config salvata correttamente su Supabase');
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
+      // 2. Test connessione
+      const { error: testErr } = await sb.from('sito_config').select('chiave').limit(1);
+      if (testErr) {
+        console.warn('[FM] sito_config SELECT error:', testErr.message, testErr.code);
+        setSaveError('Tabella non accessibile: ' + testErr.message);
+        return;
       }
+
+      // 3. Prepara righe — filtra valori undefined/funzione
+      const rows = [];
+      Object.entries(draft).forEach(([chiave, valore]) => {
+        if (typeof valore === 'function') return;
+        rows.push({
+          chiave,
+          valore: valore === null || valore === undefined
+            ? ''
+            : typeof valore === 'object'
+              ? JSON.stringify(valore)
+              : String(valore),
+        });
+      });
+      console.log('[FM] Salvo', rows.length, 'chiavi config:', rows.map(r=>r.chiave).join(', '));
+
+      // 4. DELETE tutte le chiavi esistenti poi INSERT nuove
+      //    Più affidabile di upsert(onConflict) se la struttura PK è incerta
+      const { error: delErr } = await sb.from('sito_config').delete().neq('chiave', '___never___');
+      if (delErr) console.warn('[FM] delete config (non bloccante):', delErr.message);
+
+      const { error: insErr } = await sb.from('sito_config').insert(rows);
+      if (insErr) {
+        // Fallback: upsert riga per riga
+        console.warn('[FM] insert fallita, provo upsert per riga:', insErr.message);
+        let anyErr = null;
+        for (const row of rows) {
+          const { error: e } = await sb.from('sito_config').upsert(row);
+          if (e) { anyErr = e; console.warn('[FM] upsert singola', row.chiave, ':', e.message); }
+        }
+        if (anyErr) { setSaveError('Errore parziale: ' + anyErr.message); return; }
+      }
+
+      console.log('[FM] Config salvata OK');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     } catch(e) {
       const msg = e?.message || String(e);
-      console.warn('[FM] Errore catch handleSave:', msg);
+      console.warn('[FM] handleSave catch:', msg);
       setSaveError(msg);
     }
   };
