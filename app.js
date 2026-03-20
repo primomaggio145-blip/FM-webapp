@@ -16981,6 +16981,7 @@ function App() {
       if (data.concerti)  setSharedConcerti(data.concerti);
       if (data.allegati)  setSharedAllegati(data.allegati);
       if (data.richieste) setSharedRichieste(data.richieste);
+      if (data.config)    setSharedConfig(c => ({...CONFIG_DEFAULT, ...c, ...data.config}));
     };
 
     // ── Refresh completo da Supabase ─────────────────────────────────────────
@@ -16990,7 +16991,6 @@ function App() {
       if (_refreshing) return;
       _refreshing = true;
       if (!silent) {
-        // Mostra toast "Aggiornamento…"
         const t = document.getElementById('sync-toast');
         if (t) { t.textContent = '⟳ Aggiornamento…'; t.style.opacity = '1'; }
       }
@@ -17000,7 +17000,7 @@ function App() {
         const [
           { data: sS }, { data: sD }, { data: sC }, { data: sL },
           { data: sB }, { data: sP }, { data: sQ }, { data: sEV },
-          { data: sAL }, { data: sSALA },
+          { data: sAL }, { data: sSALA }, { data: sCFG },
         ] = await Promise.all([
           sb.from('studenti').select('*').order('nome'),
           sb.from('docenti').select('*').order('nome'),
@@ -17012,6 +17012,7 @@ function App() {
           sb.from('concerti').select('*').order('data', { ascending: false }),
           sb.from('allegati').select('*').order('created_at', { ascending: false }),
           sb.from('prenotazioni_sala').select('*').order('data').order('ora_inizio'),
+          sb.from('sito_config').select('*'),
         ]);
         const FA = window.FMAdapter;
         const adaptL = (r) => {
@@ -17046,6 +17047,12 @@ function App() {
           descrizione:r.descrizione||null, fileUrl:r.file_url||null,
           fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null,
         });
+        // Converti array righe sito_config → oggetto config
+        const configFromDB = {};
+        (sCFG || []).forEach(r => {
+          try { configFromDB[r.chiave] = JSON.parse(r.valore); }
+          catch(e) { configFromDB[r.chiave] = r.valore; }
+        });
         if (window.__FM_RELOAD__) {
           const reloadData = {
             students: (sS||[]).map(r => {
@@ -17064,6 +17071,7 @@ function App() {
             entrate:  (sQ||[]).map(r => ({ id:String(r.id), studentId:r.studente_id||null, studentName:r.studente_nome||'', importo:parseFloat(r.importo)||0, mese:r.mese, anno:r.anno, data:r.data_pagamento||'', metodo:r.metodo||'Contanti', categoria:'quota', desc:r.note||'', stato:r.stato||'attesa' })),
             concerti: (sEV||[]).map(r => ({ id:r.id, nome:r.nome||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:[], partecipanti:[], prenotazioni:[], biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0 })),
             allegati: (sAL||[]).map(adaptA),
+            config:   Object.keys(configFromDB).length > 0 ? configFromDB : null,
           };
           // CRITICO: aggiorna _prev in fm_sync PRIMA di chiamare __FM_RELOAD__
           // altrimenti syncState vede le differenze come "modifiche da scrivere"
