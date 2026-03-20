@@ -17333,7 +17333,6 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
   const setRS = (k,v) => setDraft(p=>({...p, ricevutaStyle:{...(p.ricevutaStyle||{}), [k]:v}}));
   const rs = draft.ricevutaStyle || {};
   const ac = rs.accentColor || "#1a4fa0";
-  const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
 
   // Panels e Ruolo locali se non passati dall'esterno
@@ -17344,51 +17343,61 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
   const ruolo     = propRuolo     !== undefined ? propRuolo     : _lRuolo;
   const setRuolo  = propSetRuolo  !== undefined ? propSetRuolo  : _setLRuolo;
 
-  const handleSave = async () => {
-    setSaved(false);
-    setSaveError('');
+  // Popup DOM nativo — non dipende da React state, non viene azzerato dai re-render
+  const showPopup = (ok, msg) => {
+    const existing = document.getElementById('fm-save-popup');
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.id = 'fm-save-popup';
+    el.style.cssText = [
+      'position:fixed','top:24px','left:50%','transform:translateX(-50%)',
+      'z-index:99999','padding:14px 28px','border-radius:12px',
+      'font-family:"Open Sans",sans-serif','font-size:14px','font-weight:600',
+      'color:#fff','display:flex','align-items:center','gap:10px',
+      'box-shadow:0 8px 32px rgba(0,0,0,0.35)',
+      'animation:fadeUp .2s ease',
+      ok ? 'background:#16a34a' : 'background:#dc2626',
+    ].join(';');
+    el.innerHTML = (ok ? '✅ ' : '❌ ') + msg;
+    document.body.appendChild(el);
+    setTimeout(() => { if (el.parentNode) el.remove(); }, ok ? 3000 : 6000);
+  };
 
-    // Prepara righe per sito_config
+  const handleSave = async () => {
+    const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjE0NDAsImV4cCI6MjA4NzkzNzQ0MH0.ScXeqKD73hu1zMwVWppybmNRqCtKWnR9C_pfNMjwQio';
+
+    // Token sessione
+    let authToken = SUPABASE_ANON;
+    try {
+      const sb = window.supabaseClient;
+      if (sb) {
+        const { data } = await sb.auth.getSession();
+        if (data?.session?.access_token) authToken = data.session.access_token;
+      }
+    } catch(e) {}
+
+    const headers = {
+      'Content-Type': 'application/json',
+      'apikey': SUPABASE_ANON,
+      'Authorization': 'Bearer ' + authToken,
+    };
+
+    // Prepara righe
     const rows = [];
     Object.entries(draft).forEach(([chiave, valore]) => {
       if (typeof valore === 'function') return;
       rows.push({
         chiave,
-        valore: valore === null || valore === undefined
-          ? ''
-          : typeof valore === 'object'
-            ? JSON.stringify(valore)
-            : String(valore),
+        valore: valore == null ? '' : typeof valore === 'object' ? JSON.stringify(valore) : String(valore),
       });
     });
 
-    // Scrivi su Supabase usando fetch diretto (evita problemi con il client JS)
     try {
-      const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
-      const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjE0NDAsImV4cCI6MjA4NzkzNzQ0MH0.ScXeqKD73hu1zMwVWppybmNRqCtKWnR9C_pfNMjwQio';
+      // DELETE
+      await fetch(`${SUPABASE_URL}/rest/v1/sito_config?chiave=neq.___x___`, { method:'DELETE', headers });
 
-      // Ottieni il token della sessione corrente se disponibile
-      let authToken = SUPABASE_ANON;
-      try {
-        const sb = window.supabaseClient;
-        if (sb) {
-          const { data: { session } } = await sb.auth.getSession();
-          if (session?.access_token) authToken = session.access_token;
-        }
-      } catch(e) {}
-
-      const headers = {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON,
-        'Authorization': 'Bearer ' + authToken,
-        'Prefer': 'resolution=merge-duplicates',
-      };
-
-      // Prima elimina tutto, poi inserisce
-      await fetch(`${SUPABASE_URL}/rest/v1/sito_config?chiave=neq.___x___`, {
-        method: 'DELETE', headers
-      });
-
+      // INSERT
       const res = await fetch(`${SUPABASE_URL}/rest/v1/sito_config`, {
         method: 'POST',
         headers: { ...headers, 'Prefer': 'return=minimal' },
@@ -17397,17 +17406,16 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
 
       if (!res.ok) {
         const body = await res.text();
-        setSaveError(`Errore ${res.status}: ${body.slice(0,120)}`);
+        showPopup(false, `Errore ${res.status}: ${body.slice(0,100)}`);
         return;
       }
 
-      // Scritto su DB — ora aggiorna React state
-      setConfig(draft);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      // Aggiorna React state dopo il salvataggio DB
+      setConfig({...draft});
+      showPopup(true, 'Impostazioni salvate correttamente!');
 
     } catch(e) {
-      setSaveError(e?.message || String(e));
+      showPopup(false, 'Errore: ' + (e?.message || String(e)));
     }
   };
 
@@ -17417,17 +17425,12 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,margin:0}}, "Impostazioni")
         , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}}, "Configurazione generale del gestionale")
       )
-    , React.createElement('div', {style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}
-      , React.createElement('button', {onClick:handleSave,
-          style:{display:"flex",alignItems:"center",gap:7,padding:"10px 20px",borderRadius:9,
-            border:"none",
-            background: saveError ? C.red : saved ? C.green : C.gold,
-            color:"#ffffff",cursor:"pointer",
-            fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif",transition:"background .2s"}}
-        , React.createElement(Ic,{n: saveError ? "x" : "check", size:14, stroke:"#ffffff"})
-        , saveError ? "Errore!" : saved ? "Salvato!" : "Salva impostazioni"
-      )
-      , saveError && React.createElement('div', {style:{fontSize:11,color:C.red,maxWidth:260,textAlign:'right'}}, saveError)
+    , React.createElement('button', {onClick:handleSave,
+        style:{display:"flex",alignItems:"center",gap:7,padding:"10px 20px",borderRadius:9,
+          border:"none", background:C.gold, color:"#ffffff", cursor:"pointer",
+          fontSize:13, fontWeight:600, fontFamily:"'Open Sans',sans-serif"}}
+      , React.createElement(Ic,{n:"check", size:14, stroke:"#ffffff"})
+      , "Salva impostazioni"
     )
     )
 
