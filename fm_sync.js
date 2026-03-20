@@ -602,6 +602,22 @@
     _timer = setTimeout(() => syncState(state), DEBOUNCE);
   };
 
+  // Aggiorna lo snapshot _prev dall'esterno (usato da __FM_FORCE_REFRESH__ in app.js)
+  // IMPORTANTE: va chiamato PRIMA di __FM_RELOAD__ per evitare che syncState
+  // veda le differenze tra vecchio _prev e nuovi dati come "modifiche da scrivere"
+  window.__FM_UPDATE_PREV__ = function(data) {
+    if (data.students)  _prev.students  = [...data.students];
+    if (data.docenti)   _prev.docenti   = [...data.docenti];
+    if (data.courses)   _prev.courses   = [...data.courses];
+    if (data.lessons)   _prev.lessons   = [...data.lessons];
+    if (data.entrate)   _prev.entrate   = [...data.entrate];
+    if (data.spese)     _prev.spese     = [...data.spese];
+    if (data.brani)     _prev.brani     = [...data.brani];
+    if (data.concerti)  _prev.concerti  = [...data.concerti];
+    if (data.allegati)  _prev.allegati  = [...data.allegati];
+    if (data.prenotazioni_sala) _prev.prenotazioni_sala = [...data.prenotazioni_sala];
+  };
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  MOUNT REACT
   // ═══════════════════════════════════════════════════════════════════════════

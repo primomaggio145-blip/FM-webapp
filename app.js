@@ -16973,7 +16973,7 @@ function App() {
           fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null,
         });
         if (window.__FM_RELOAD__) {
-          window.__FM_RELOAD__({
+          const reloadData = {
             students: (sS||[]).map(r => {
               const base = FA ? FA.studente(r) : r;
               const pj = (v,f=[]) => { if(!v) return f; if(Array.isArray(v)) return v; try { return JSON.parse(v); } catch(e) { return f; } };
@@ -16990,7 +16990,11 @@ function App() {
             entrate:  (sQ||[]).map(r => ({ id:String(r.id), studentId:r.studente_id||null, studentName:r.studente_nome||'', importo:parseFloat(r.importo)||0, mese:r.mese, anno:r.anno, data:r.data_pagamento||'', metodo:r.metodo||'Contanti', categoria:'quota', desc:r.note||'', stato:r.stato||'attesa' })),
             concerti: (sEV||[]).map(r => ({ id:r.id, nome:r.nome||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:[], partecipanti:[], prenotazioni:[], biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0 })),
             allegati: (sAL||[]).map(adaptA),
-          });
+          };
+          // CRITICO: aggiorna _prev in fm_sync PRIMA di chiamare __FM_RELOAD__
+          // altrimenti syncState vede le differenze come "modifiche da scrivere"
+          if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__(reloadData);
+          window.__FM_RELOAD__(reloadData);
         }
         // Ricarica notifiche non lette
         try {
@@ -17053,7 +17057,9 @@ function App() {
             };
           };
           const todayAdapted = sL.map(adaptL);
-          window.__FM_RELOAD__({ lessons: [...otherDays, ...todayAdapted] });
+          const mergedLessons = [...otherDays, ...todayAdapted];
+          if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ lessons: mergedLessons });
+          window.__FM_RELOAD__({ lessons: mergedLessons });
         }
 
         // 2. Notifiche non lette
@@ -17084,6 +17090,7 @@ function App() {
       window.__FM_RELOAD__ = null;
       window.__FM_FORCE_REFRESH__ = null;
       window.__FM_POLL_TODAY__ = null;
+      window.__FM_UPDATE_PREV__ = null;
       window.__FM_SHOW_MODAL__ = null;
       window.__FM_HIDE_MODAL__ = null;
       clearInterval(_pollInterval);
