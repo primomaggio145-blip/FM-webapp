@@ -11642,7 +11642,9 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       const anno = d.anno || new Date().getFullYear();
       const progressivo = config.progressivoRicevute || 1;
       const numRicevuta = String(progressivo).padStart(3,"0") + "/" + anno;
-      setEntrate(p=>[...p,{...d, id:uid(), numRicevuta}]);
+      // Normalizza: il form usa 'data', toDB.quote usa 'dataPagamento'
+      const dataPagamento = d.dataPagamento || d.data || '';
+      setEntrate(p=>[...p,{...d, id:uid(), numRicevuta, dataPagamento}]);
       setConfig(p=>({...p, progressivoRicevute: progressivo + 1}));
       closeModal();
     };
