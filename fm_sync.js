@@ -586,6 +586,21 @@
     _timer = setTimeout(() => syncState(state), DEBOUNCE);
   };
 
+  // Esposto a app.js per aggiornare _prev dopo insert diretto su Supabase
+  // Evita che il diff di fm_sync veda la lezione come "nuova" e tenti un secondo INSERT → 409
+  window.__FM_UPDATE_PREV__ = function(data) {
+    if (data.lessons) {
+      _prev.lessons = data.lessons.map(l => {
+        try { return toDB.lezioni(l); } catch(e) { return l; }
+      });
+    }
+    if (data.entrate) {
+      _prev.entrate = data.entrate.map(e => {
+        try { return toDB.quote(e); } catch(e2) { return e; }
+      });
+    }
+  };
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  MOUNT REACT
   // ═══════════════════════════════════════════════════════════════════════════
