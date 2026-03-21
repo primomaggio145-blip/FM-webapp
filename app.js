@@ -10428,7 +10428,17 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                 updated_at:       new Date().toISOString(),
               };
               sb.from('lezioni').insert(row).then(({ error }) => {
-                if (error) console.warn('[FM] recurring lesson insert error:', error.message);
+                if (error) {
+                  console.warn('[FM] recurring lesson insert error:', error.message);
+                } else {
+                  // Aggiorna _prev in fm_sync per evitare che la lezione venga re-inserita dal diff → 409
+                  if (window.__FM_UPDATE_PREV__) {
+                    setLessons(current => {
+                      if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ lessons: current });
+                      return current;
+                    });
+                  }
+                }
               });
             }
 
