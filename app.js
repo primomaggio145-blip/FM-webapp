@@ -2912,30 +2912,34 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const ALLIEVI_LIVE = _students
       .filter(s => (s.status || s.stato || '') !== 'inattivo')
       .map(s => {
-        // Cerca un pagamento quota per questo allievo nel mese corrente
         const idAllievo = s.id;
-        const nomeAllievo = (s.name || s.nome || '').toLowerCase();
+        const nomeAllievo = (s.name || s.nome || '').toLowerCase().trim();
+
+        // Cerca pagamento del mese corrente per questo allievo
+        // Matching robusto: per ID, per nome esatto, per nome parziale
+        const matchAllievo = (e) => {
+          if (e.studentId && idAllievo && String(e.studentId) === String(idAllievo)) return true;
+          const en = (e.studentName || '').toLowerCase().trim();
+          if (!en || !nomeAllievo) return false;
+          return en === nomeAllievo || en.includes(nomeAllievo) || nomeAllievo.includes(en);
+        };
+
         const quotaMeseCorrente = _entrate.find(e =>
-          e.mese === meseOggi && e.anno === annoOggi &&
-          (e.categoria === 'quota' || !e.categoria) &&
-          (
-            (e.studentId && String(e.studentId) === String(idAllievo)) ||
-            (e.studentName && e.studentName.toLowerCase() === nomeAllievo)
-          )
+          Number(e.mese) === meseOggi &&
+          Number(e.anno) === annoOggi &&
+          matchAllievo(e)
         );
 
-        let stato = 'attesa'; // default: non ancora pagato questo mese
+        let stato = 'attesa';
         if (quotaMeseCorrente) {
-          const statoQ = quotaMeseCorrente.stato || '';
-          if (statoQ === 'pagato' || statoQ === 'pagata') stato = 'pagato';
-          else if (statoQ === 'ritardo' || statoQ === 'in_ritardo') stato = 'scaduto';
+          const statoQ = (quotaMeseCorrente.stato || '').toLowerCase();
+          if (statoQ === 'pagato' || statoQ === 'pagata' || statoQ === 'paid') stato = 'pagato';
+          else if (statoQ === 'ritardo' || statoQ === 'in_ritardo' || statoQ === 'in ritardo') stato = 'scaduto';
           else stato = 'attesa';
         } else {
-          // Nessun pagamento trovato: controlla se l'allievo è sospeso/inattivo
           const st = (s.status || s.stato || '');
           if (st === 'sospeso') stato = 'sospeso';
           else if (st === 'scaduto' || st === 'ritardo') stato = 'scaduto';
-          // Altrimenti resta 'attesa' (non ha ancora pagato)
         }
 
         return {
@@ -17350,15 +17354,12 @@ function App() {
       window.__FM_POLL_TODAY__ && window.__FM_POLL_TODAY__();
     }, 45000);
 
-    // ── beforeunload: avvisa se ci sono notifiche non lette ──────────
+    // ── beforeunload: avvisa sempre quando l'utente prova a uscire ──────────
     const handleBeforeUnload = (e) => {
-      const unread = (window.__unreadCount__ || 0);
-      if (unread > 0) {
-        const msg = `Hai ${unread} notifiche non lette. Sei sicuro di voler uscire?`;
-        e.preventDefault();
-        e.returnValue = msg;
-        return msg;
-      }
+      // Mostra sempre il dialog nativo del browser quando si è loggati
+      e.preventDefault();
+      e.returnValue = ''; // stringa vuota = il browser usa il suo testo standard
+      return '';
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
 
@@ -17511,15 +17512,38 @@ function App() {
 
 
 // ─── NOTIFICHE VIEW ────────────────────────────────────────────────────────────
-const NotificheView = ({ notifiche, setNotifiche, ruolo, appUser }) => {
-  const [filter, setFilter] = useState('non_lette'); // 'non_lette' | 'tutte'
+const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser }) => {
+  const [filter, setFilter] = useState('non_lette');
   const [marking, setMarking] = useState(false);
+  const [allNotifiche, setAllNotifiche] = useState(null); // null = non ancora caricate
+  const [loading, setLoading] = useState(false);
 
-  const myId   = appUser?.allievoId || appUser?.docenteId || null;
+  const myId    = appUser?.allievoId || appUser?.docenteId || null;
   const myRuolo = ruolo || 'admin';
 
-  // Filtra per destinatario
-  const mieNotifiche = (notifiche||[]).filter(n => {
+  // Carica TUTTE le notifiche al mount (sharedNotifiche ha solo le non lette)
+  React.useEffect(function() {
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    setLoading(true);
+    sb.from('notifiche').select('*').order('created_at', {ascending:false}).limit(200)
+      .then(function(r) {
+        setLoading(false);
+        if (r.data) setAllNotifiche(r.data);
+      });
+  }, []);
+
+  // Usa le notifiche caricate da Supabase se disponibili, altrimenti quelle dalla prop
+  const tutteNotifiche = allNotifiche || propNotifiche || [];
+
+  // Filtra per destinatario (più permissivo: admin vede tutto, altri solo le proprie)
+  const mieNotifiche = tutteNotifiche.filter(n => {
+    if (myRuolo === 'admin') {
+      // Admin vede tutte le notifiche destinate ad admin, più quelle senza destinatario specifico
+      if (n.destinatario_ruolo && n.destinatario_ruolo !== 'admin') return false;
+      return true;
+    }
+    // Docente/allievo: vede solo le proprie
     if (n.destinatario_ruolo && n.destinatario_ruolo !== myRuolo) return false;
     if (n.destinatario_id && myId && String(n.destinatario_id) !== String(myId)) return false;
     return true;
@@ -17535,7 +17559,9 @@ const NotificheView = ({ notifiche, setNotifiche, ruolo, appUser }) => {
     if (sb) {
       const ids = nonLette.map(n=>n.id);
       await sb.from('notifiche').update({letto:true}).in('id', ids);
-      setNotifiche(p => p.map(n => ids.includes(n.id) ? {...n, letto:true} : n));
+      const updater = p => (p||[]).map(n => ids.includes(n.id) ? {...n, letto:true} : n);
+      setAllNotifiche(updater);
+      setNotifiche(updater);
     }
     setMarking(false);
   };
@@ -17544,7 +17570,9 @@ const NotificheView = ({ notifiche, setNotifiche, ruolo, appUser }) => {
     if (n.letto) return;
     const sb = window.supabaseClient;
     if (sb) await sb.from('notifiche').update({letto:true}).eq('id', n.id);
-    setNotifiche(p => p.map(x => x.id===n.id ? {...x, letto:true} : x));
+    const updater = p => (p||[]).map(x => x.id===n.id ? {...x, letto:true} : x);
+    setAllNotifiche(updater);
+    setNotifiche(updater);
   };
 
   const tipoIcon = (tipo) => {
