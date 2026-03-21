@@ -10199,36 +10199,41 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         inRecNorm = false;
         scadNorm = null;
       }
-      const dataNorm = { ...data, attendance: attNorm, inRecupero: inRecNorm, recuperoScadenza: scadNorm };
-      setLessons(p => p.map(l => l.id === data.id ? { ...l, ...dataNorm } : l));
+      // Per lezioni collettive: preserva students/courseId se il form non li ha modificati
+      const existingStudents = existingLesson?.students || [];
+      const mergedStudents   = (dataNorm.students && dataNorm.students.length > 0)
+        ? dataNorm.students : existingStudents;
+      const mergedCourseId   = dataNorm.courseId   || existingLesson?.courseId   || null;
+      const mergedCourseName = dataNorm.courseName || existingLesson?.courseName || null;
+
+      const dataNormFull = { ...dataNorm, students: mergedStudents, courseId: mergedCourseId, courseName: mergedCourseName };
+      setLessons(p => p.map(l => l.id === data.id ? { ...l, ...dataNormFull } : l));
 
       // Write diretto su Supabase — non aspetta il debounce di fm_sync
-      // Evita che il realtime listener sovrascriva la modifica prima che syncState giri
       const sb = window.supabaseClient;
       if (sb && data.id) {
         const row = {
-          data:             dataNorm.date        || null,
-          ora:              dataNorm.hour        || null,
-          student:          dataNorm.student     || null,
-          studente_id:      dataNorm.studentId   || null,
-          strumento:        dataNorm.instrument  || dataNorm.strumento || null,
-          teacher:          dataNorm.teacher     || null,
-          room:             dataNorm.room        || null,
-          topic:            dataNorm.topic       || null,
+          data:             dataNormFull.date        || null,
+          ora:              dataNormFull.hour        || null,
+          student:          dataNormFull.student     || null,
+          studente_id:      dataNormFull.studentId   || null,
+          strumento:        dataNormFull.instrument  || dataNormFull.strumento || null,
+          teacher:          dataNormFull.teacher     || null,
+          room:             dataNormFull.room        || null,
+          topic:            dataNormFull.topic       || null,
           attendance:       attNorm,
-          recurrence:       dataNorm.recurrence  || 'Nessuna',
-          notes:            dataNorm.notes       || null,
-          exercises:        dataNorm.exercises   || null,
-          tipo:             dataNorm.type        || dataNorm.tipo || 'individuale',
-          link_url:         dataNorm.linkUrl     || null,
+          recurrence:       dataNormFull.recurrence  || 'Nessuna',
+          notes:            dataNormFull.notes       || null,
+          exercises:        dataNormFull.exercises   || null,
+          tipo:             dataNormFull.type        || dataNormFull.tipo || 'individuale',
+          link_url:         dataNormFull.linkUrl     || null,
           in_recupero:      inRecNorm,
           recupero_scadenza:scadNorm,
-          repertorio_ids:   dataNorm.repertorioIds && dataNorm.repertorioIds.length > 0
-                              ? JSON.stringify(dataNorm.repertorioIds) : null,
-          corso_id:         dataNorm.courseId    || null,
-          corso_nome:       dataNorm.courseName  || null,
-          students:         dataNorm.students && dataNorm.students.length > 0
-                              ? JSON.stringify(dataNorm.students) : null,
+          repertorio_ids:   dataNormFull.repertorioIds && dataNormFull.repertorioIds.length > 0
+                              ? JSON.stringify(dataNormFull.repertorioIds) : null,
+          corso_id:         mergedCourseId,
+          corso_nome:       mergedCourseName,
+          students:         mergedStudents.length > 0 ? JSON.stringify(mergedStudents) : null,
         };
         sb.from('lezioni').update(row).eq('id', data.id)
           .then(({ error }) => {
@@ -10288,25 +10293,22 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       }
 
       // ── Crea lezione successiva se ricorrente e viene segnata presenza ──
-      // Condizione: l'attendance ora è valorizzata E la lezione ha ricorrenza
-      // Non creare se: è un recupero, o la lezione successiva esiste già
       const originalLesson = (lessons||[]).find(l => l.id === data.id);
-      const attendanceWasEmpty = !originalLesson?.attendance || originalLesson.attendance === '';
       const attendanceNow = data.attendance && data.attendance !== '';
-      if (attendanceNow && data.recurrence && data.recurrence !== "Nessuna") {
-        const isLezioneRecupero = data.tipo === 'recupero' || data.inRecupero === true;
+      if (attendanceNow && dataNormFull.recurrence && dataNormFull.recurrence !== "Nessuna") {
+        const isLezioneRecupero = dataNormFull.tipo === 'recupero' || dataNormFull.inRecupero === true;
         if (!isLezioneRecupero) {
           const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
-          const gap      = daysMap[data.recurrence] || 7;
-          const nextDate = yyyymmdd(addDays(new Date((data.date||"")+"T00:00:00"), gap));
+          const gap      = daysMap[dataNormFull.recurrence] || 7;
+          const nextDate = yyyymmdd(addDays(new Date((dataNormFull.date||"")+"T00:00:00"), gap));
           setLessons(prev => {
             const exists = prev.some(l =>
-              l.date === nextDate && l.hour === data.hour &&
-              (isColl(data) ? l.courseId === data.courseId : l.student === data.student)
+              l.date === nextDate && l.hour === dataNormFull.hour &&
+              (isColl(dataNormFull) ? l.courseId === dataNormFull.courseId : l.student === dataNormFull.student)
             );
             if (exists) return prev;
             const nextLesson = {
-              ...data,
+              ...dataNormFull,
               id:               uid(),
               date:             nextDate,
               attendance:       "",
@@ -10314,7 +10316,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               exercises:        "",
               inRecupero:       false,
               recuperoScadenza: null,
-              tipo:             data.tipo === 'recupero' ? 'individuale' : (data.tipo || 'individuale'),
+              tipo:             dataNormFull.tipo === 'recupero' ? 'individuale' : (dataNormFull.tipo || 'individuale'),
             };
             const sbR = window.supabaseClient;
             if (sbR) {
@@ -10468,12 +10470,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                 if (error) {
                   console.warn('[FM] recurring lesson insert error:', error.message);
                 } else {
-                  // Aggiorna _prev in fm_sync per evitare che la lezione venga re-inserita dal diff → 409
+                  // Aggiorna _prev con la nuova lezione per evitare re-INSERT da fm_sync → 409
                   if (window.__FM_UPDATE_PREV__) {
-                    setLessons(current => {
-                      if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ lessons: current });
-                      return current;
-                    });
+                    window.__FM_UPDATE_PREV__({ lessons: [...(window.__FM_DATA__?.lessons || []), nextLesson] });
                   }
                 }
               });
