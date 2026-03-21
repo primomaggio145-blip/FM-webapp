@@ -2670,8 +2670,14 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
                (nm && dest.indexOf(nm) >= 0) || (nm && nm.indexOf(dest) >= 0);
       }
       if (ruoloNB === 'allievo') {
-        return n.destinatario_id === String(myAllievoId) ||
-               (n.destinatario_nome||"").toLowerCase() === myAllievoNome.toLowerCase();
+        if (!n.destinatario_id && !n.destinatario_nome) return true; // broadcast allievo
+        if (myAllievoId && n.destinatario_id && String(n.destinatario_id) === String(myAllievoId)) return true;
+        if (myAllievoNome && n.destinatario_nome) {
+          var dn = (n.destinatario_nome||'').toLowerCase().trim();
+          var an = myAllievoNome.toLowerCase().trim();
+          return dn === an || dn.includes(an) || an.includes(dn);
+        }
+        return false;
       }
       return true; // admin vede tutto
     }
@@ -17118,12 +17124,33 @@ function App() {
             if ((profilo.ruolo||'admin')==='admin' && window.FM_AUTH.getRichieste) {
               try { const r = await window.FM_AUTH.getRichieste(); setSharedRichieste(r||[]); } catch(e){}
             }
-            // Carica notifiche non lette per tutti i ruoli
+            // Carica notifiche non lette — filtrate per ruolo/utente
             const sb0 = window.supabaseClient;
             if (sb0) {
               try {
-                const { data: nn } = await sb0.from('notifiche').select('*').eq('letto', false).order('created_at', {ascending:false}).limit(50);
-                if (nn) setSharedNotifiche(nn);
+                // Usa l'utente corrente se disponibile, altrimenti skip
+                // (verrà caricato correttamente al login)
+                const _cu = window.__currentUser__;
+                if (_cu && _cu.ruolo) {
+                  const _r0 = _cu.ruolo;
+                  const _i0 = _cu.allievoId || _cu.docenteId || null;
+                  const _n0 = _cu.nome || '';
+                  const { data: nn } = await sb0.from('notifiche').select('*')
+                    .eq('letto', false).eq('destinatario_ruolo', _r0)
+                    .order('created_at', {ascending:false}).limit(50);
+                  if (nn) {
+                    let filtered = nn;
+                    if (_r0 !== 'admin') {
+                      filtered = nn.filter(function(n){
+                        if(!n.destinatario_id && !n.destinatario_nome) return true;
+                        if(_i0 && n.destinatario_id && String(n.destinatario_id)===String(_i0)) return true;
+                        if(_n0 && n.destinatario_nome){const dn=(n.destinatario_nome||'').toLowerCase();const mn=_n0.toLowerCase();return dn===mn||dn.includes(mn)||mn.includes(dn);}
+                        return false;
+                      });
+                    }
+                    setSharedNotifiche(filtered);
+                  }
+                }
               } catch(e){}
               try {
                 const { data: rr } = await sb0.from('richieste_recupero').select('*').order('created_at', {ascending:false}).limit(200);
@@ -17280,10 +17307,26 @@ function App() {
           if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__(reloadData);
           window.__FM_RELOAD__(reloadData);
         }
-        // Ricarica notifiche non lette
+        // Ricarica notifiche non lette — filtrate per l'utente corrente
         try {
-          const { data: nn } = await sb.from('notifiche').select('*').eq('letto', false).order('created_at', {ascending:false}).limit(50);
-          if (nn) setSharedNotifiche(nn);
+          const _u = window.__currentUser__;
+          const _ruolo = (_u && _u.ruolo) || 'admin';
+          const _id = (_u && (_u.allievoId || _u.docenteId)) || null;
+          const _nome = (_u && _u.nome) || '';
+          let nq = sb.from('notifiche').select('*').eq('letto', false).eq('destinatario_ruolo', _ruolo).order('created_at', {ascending:false}).limit(50);
+          const { data: nn } = await nq;
+          if (nn) {
+            let filtered = nn;
+            if (_ruolo !== 'admin') {
+              filtered = nn.filter(function(n){
+                if(!n.destinatario_id && !n.destinatario_nome) return true;
+                if(_id && n.destinatario_id && String(n.destinatario_id)===String(_id)) return true;
+                if(_nome && n.destinatario_nome){const dn=(n.destinatario_nome||'').toLowerCase();const mn=_nome.toLowerCase();return dn===mn||dn.includes(mn)||mn.includes(dn);}
+                return false;
+              });
+            }
+            setSharedNotifiche(filtered);
+          }
         } catch(e) {}
         // Ricarica richieste recupero (per dashboard card)
         try {
@@ -17346,10 +17389,28 @@ function App() {
           window.__FM_RELOAD__({ lessons: mergedLessons });
         }
 
-        // 2. Notifiche non lette
-        const { data: nn } = await sb.from('notifiche').select('*')
-          .eq('letto', false).order('created_at', {ascending:false}).limit(50);
-        if (nn) setSharedNotifiche(nn);
+        // 2. Notifiche non lette — filtrate per utente corrente
+        try {
+          const _pu = window.__currentUser__;
+          const _pr = (_pu && _pu.ruolo) || 'admin';
+          const _pi = (_pu && (_pu.allievoId || _pu.docenteId)) || null;
+          const _pn = (_pu && _pu.nome) || '';
+          const { data: nn } = await sb.from('notifiche').select('*')
+            .eq('letto', false).eq('destinatario_ruolo', _pr)
+            .order('created_at', {ascending:false}).limit(50);
+          if (nn) {
+            let filtered = nn;
+            if (_pr !== 'admin') {
+              filtered = nn.filter(function(n){
+                if(!n.destinatario_id && !n.destinatario_nome) return true;
+                if(_pi && n.destinatario_id && String(n.destinatario_id)===String(_pi)) return true;
+                if(_pn && n.destinatario_nome){const dn=(n.destinatario_nome||'').toLowerCase();const mn=_pn.toLowerCase();return dn===mn||dn.includes(mn)||mn.includes(dn);}
+                return false;
+              });
+            }
+            setSharedNotifiche(filtered);
+          }
+        } catch(e) {}
 
         // 3. Richieste recupero recenti
         const { data: rr } = await sb.from('richieste_recupero').select('*')
@@ -17410,9 +17471,31 @@ function App() {
                     setUser(u);setSharedRuolo(u.ruolo||"admin");setView("dashboard");
                     try{window.__currentUserName__=u.nome||"";}catch(e){};
                     if(u.ruolo==="admin"&&window.FM_AUTH&&window.FM_AUTH.getRichieste){window.FM_AUTH.getRichieste().then(r=>setSharedRichieste(r||[])).catch(()=>{});}
-                    // Carica notifiche non lette al login
+                    // Carica notifiche non lette al login — filtrate per ruolo/utente
                     const sbLogin = window.supabaseClient;
-                    if(sbLogin){sbLogin.from('notifiche').select('*').eq('letto',false).order('created_at',{ascending:false}).limit(50).then(function(r){if(r.data)setSharedNotifiche(r.data);});}
+                    if(sbLogin){
+                      const ruoloLogin = u.ruolo || 'admin';
+                      const idLogin = u.allievoId || u.docenteId || null;
+                      const nomeLogin = u.nome || '';
+                      sbLogin.from('notifiche').select('*').eq('letto',false).eq('destinatario_ruolo', ruoloLogin).order('created_at',{ascending:false}).limit(50).then(function(r){
+                        if(r.data){
+                          let nn = r.data;
+                          if(ruoloLogin !== 'admin'){
+                            nn = r.data.filter(function(n){
+                              if(!n.destinatario_id && !n.destinatario_nome) return true;
+                              if(idLogin && n.destinatario_id && String(n.destinatario_id)===String(idLogin)) return true;
+                              if(nomeLogin && n.destinatario_nome){
+                                const dn=(n.destinatario_nome||'').toLowerCase().trim();
+                                const mn=nomeLogin.toLowerCase().trim();
+                                return dn===mn||dn.includes(mn)||mn.includes(dn);
+                              }
+                              return false;
+                            });
+                          }
+                          setSharedNotifiche(nn);
+                        }
+                      });
+                    }
                   },
                   onRegistrazione: ()=>cambiaSchermata("register"),
                   onRecupero: ()=>cambiaSchermata("recover"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10752}}
@@ -17528,39 +17611,68 @@ function App() {
 const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser }) => {
   const [filter, setFilter] = useState('non_lette');
   const [marking, setMarking] = useState(false);
-  const [allNotifiche, setAllNotifiche] = useState(null); // null = non ancora caricate
+  const [allNotifiche, setAllNotifiche] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const myId    = appUser?.allievoId || appUser?.docenteId || null;
-  const myRuolo = ruolo || 'admin';
+  const myId      = appUser?.allievoId || appUser?.docenteId || null;
+  const myNome    = appUser?.nome || '';
+  const myRuolo   = ruolo || 'admin';
 
-  // Carica TUTTE le notifiche al mount (sharedNotifiche ha solo le non lette)
+  // Risolvi il teacherKey del docente loggato per matching nome
+  const myDocenteTeacherKey = React.useMemo(function() {
+    if (myRuolo !== 'docente') return '';
+    var allDoc = window.__docenti__ || [];
+    var rec = myId
+      ? allDoc.find(function(d){ return String(d.id) === String(myId); })
+      : allDoc.find(function(d){ return (d.nome||'').toLowerCase() === myNome.toLowerCase(); });
+    return rec ? (rec.teacherKey || rec.nome || myNome) : myNome;
+  }, [myRuolo, myId, myNome]);
+
+  // Funzione di matching notifica → utente corrente
+  const matchNotifica = function(n) {
+    // 1. Filtra per ruolo — deve corrispondere esattamente
+    if (!n.destinatario_ruolo || n.destinatario_ruolo !== myRuolo) return false;
+    // 2. Per admin: vede solo le notifiche destinate ad admin
+    if (myRuolo === 'admin') return true;
+    // 3. Notifica broadcast (nessun destinatario specifico) → visibile a tutto il ruolo
+    if (!n.destinatario_id && !n.destinatario_nome) return true;
+    // 4. Match per ID specifico
+    if (myId && n.destinatario_id && String(n.destinatario_id) === String(myId)) return true;
+    // 5. Match per nome (docente: confronto con teacherKey e nome)
+    const destNome = (n.destinatario_nome||'').toLowerCase().trim();
+    const mieiNomi = [myNome, myDocenteTeacherKey].filter(Boolean).map(s=>s.toLowerCase().trim());
+    return mieiNomi.some(function(mn) {
+      return destNome === mn || destNome.includes(mn) || mn.includes(destNome);
+    });
+  };
+
+  // Carica notifiche al mount — filtro server-side stretto per ruolo + id
   React.useEffect(function() {
     const sb = window.supabaseClient;
     if (!sb) return;
     setLoading(true);
-    sb.from('notifiche').select('*').order('created_at', {ascending:false}).limit(200)
+
+    sb.from('notifiche')
+      .select('*')
+      .eq('destinatario_ruolo', myRuolo)
+      .order('created_at', {ascending:false})
+      .limit(200)
       .then(function(r) {
         setLoading(false);
-        if (r.data) setAllNotifiche(r.data);
+        if (!r.data) return;
+        // Filtra ulteriormente lato client per destinatario specifico
+        setAllNotifiche(r.data.filter(matchNotifica));
       });
-  }, []);
+  }, [myRuolo, myId, myNome, myDocenteTeacherKey]);
 
-  // Usa le notifiche caricate da Supabase se disponibili, altrimenti quelle dalla prop
-  const tutteNotifiche = allNotifiche || propNotifiche || [];
+  // Filtra anche la prop (fallback pre-caricamento)
+  const _filterNotifiche = function(arr) {
+    return (arr||[]).filter(matchNotifica).sort(function(a,b){ return (b.created_at||'').localeCompare(a.created_at||''); });
+  };
 
-  // Filtra per destinatario (più permissivo: admin vede tutto, altri solo le proprie)
-  const mieNotifiche = tutteNotifiche.filter(n => {
-    if (myRuolo === 'admin') {
-      // Admin vede tutte le notifiche destinate ad admin, più quelle senza destinatario specifico
-      if (n.destinatario_ruolo && n.destinatario_ruolo !== 'admin') return false;
-      return true;
-    }
-    // Docente/allievo: vede solo le proprie
-    if (n.destinatario_ruolo && n.destinatario_ruolo !== myRuolo) return false;
-    if (n.destinatario_id && myId && String(n.destinatario_id) !== String(myId)) return false;
-    return true;
-  }).sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
+  const mieNotifiche = allNotifiche !== null
+    ? allNotifiche  // già filtrate dal server + client
+    : _filterNotifiche(propNotifiche); // fallback prima del caricamento
 
   const nonLette = mieNotifiche.filter(n => !n.letto);
   const mostrate = filter === 'non_lette' ? nonLette : mieNotifiche;
