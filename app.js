@@ -2859,20 +2859,36 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     // Helper: matcha una lezione all'allievo loggato (prima per ID, poi per nome studente, poi per nome profilo)
     const matchLezioneAllievo = (l) => {
       if (ruolo !== "allievo") return true;
-      // Per collettive: controlla nella lista students della lezione
       const tipoL = l.tipo || l.type || "individuale";
       if (tipoL === "collettivo") {
-        return (l.students||[]).some(s =>
-          (myAllievoId && s.id != null && String(s.id) === String(myAllievoId)) ||
-          (s.name||"").toLowerCase() === myStudentName.toLowerCase()
-        );
+        // Match per lista students della lezione
+        const studentsArr = l.students || [];
+        if (studentsArr.length > 0) {
+          return studentsArr.some(s =>
+            (myAllievoId && s.id != null && String(s.id) === String(myAllievoId)) ||
+            (s.name||"").toLowerCase() === myStudentName.toLowerCase()
+          );
+        }
+        // Fallback: se students è vuoto, controlla se l'allievo è iscritto al corso
+        // tramite il courseId della lezione vs i corsi dell'allievo
+        if (l.courseId && myStudentRecord) {
+          const myCorsi = [
+            myStudentRecord.instrument,
+            myStudentRecord.complementaryCourse,
+            ...(myStudentRecord.extraInstruments || []),
+          ].filter(Boolean);
+          // Controlla match per nome corso
+          if (l.courseName) {
+            return myCorsi.some(c => (c||'').toLowerCase() === (l.courseName||'').toLowerCase());
+          }
+        }
+        return false;
       }
-      // Per individuali: prima studentId, poi nome studente, poi nome profilo
+      // Per individuali
       if (myAllievoId && (l.studentId ?? null) != null) return String(l.studentId) === String(myAllievoId);
       const sn = (l.student || l.allievo || "").toLowerCase().trim();
       if (myStudentName && sn && sn === myStudentName.toLowerCase().trim()) return true;
       if (myNome && sn && sn === myNome.toLowerCase().trim()) return true;
-      // Fallback parziale: solo se nome studente contiene il nome profilo
       if (myStudentName && sn && sn.includes(myStudentName.toLowerCase().split(" ")[0])) return true;
       return false;
     };
@@ -6044,9 +6060,18 @@ const isProva     = l => _optionalChain([l, 'optionalAccess', _47 => _47.tipo]) 
 const isSalaProve = l => _optionalChain([l, 'optionalAccess', _47b => _47b.tipo]) === "sala_prove";
 const lessonHex   = l => isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaProve(l) ? C.orange2 : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
 const studentInLesson = (l, name, studentId) => {
-  if (isColl(l)) return (l.students||[]).some(s =>
-    (studentId && s.id != null && String(s.id)===String(studentId)) || s.name===name
-  );
+  if (isColl(l)) {
+    const arr = l.students || [];
+    if (arr.length > 0) {
+      return arr.some(s =>
+        (studentId && s.id != null && String(s.id)===String(studentId)) ||
+        (s.name||'').toLowerCase() === (name||'').toLowerCase()
+      );
+    }
+    // Fallback quando students è vuoto: la lezione è collettiva ma non ha ancora l'array
+    // In questo caso mostriamo la lezione al docente (non all'allievo senza certezza)
+    return false;
+  }
   if (studentId && l.studentId != null && String(l.studentId)===String(studentId)) return true;
   const ln = (l.student||'').toLowerCase().trim();
   const nn = (name||'').toLowerCase().trim();
@@ -10311,9 +10336,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                 in_recupero:      false,
                 recupero_scadenza:null,
                 durata:           nextLesson.durata     || null,
+                corso_id:         nextLesson.courseId   || null,
+                corso_nome:       nextLesson.courseName || null,
+                students:         nextLesson.students && nextLesson.students.length > 0
+                                    ? JSON.stringify(nextLesson.students) : null,
               }).then(({ error }) => {
                 if (error) console.warn('[FM] handleEdit recurring insert error:', error.message);
-                // Aggiorna _prev in fm_sync per evitare che la lezione venga re-inserita dal diff
                 if (!error && window.__FM_UPDATE_PREV__) {
                   window.__FM_UPDATE_PREV__({ lessons: [...(window.__FM_DATA__?.lessons || []), nextLesson] });
                 }
@@ -10431,7 +10459,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                 in_recupero:      false,
                 recupero_scadenza:null,
                 durata:           nextLesson.durata      || null,
-                updated_at:       new Date().toISOString(),
+                corso_id:         nextLesson.courseId    || null,
+                corso_nome:       nextLesson.courseName  || null,
+                students:         nextLesson.students && nextLesson.students.length > 0
+                                    ? JSON.stringify(nextLesson.students) : null,
               };
               sb.from('lezioni').insert(row).then(({ error }) => {
                 if (error) {
