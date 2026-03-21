@@ -2908,6 +2908,13 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const meseOggi = oggi.getMonth() + 1; // 1-indexed
     const annoOggi = oggi.getFullYear();
 
+    // DEBUG: log entrate per capire perché matching fallisce (rimuovere dopo fix)
+    if (_entrate.length > 0 && _students.length > 0) {
+      console.log('[FM DASH] entrate sample:', _entrate.slice(0,3).map(e=>({id:e.id,studentId:e.studentId,studentName:e.studentName,mese:e.mese,anno:e.anno,stato:e.stato})));
+      console.log('[FM DASH] students sample:', _students.slice(0,3).map(s=>({id:s.id,name:s.name||s.nome,status:s.status})));
+      console.log('[FM DASH] meseOggi:', meseOggi, 'annoOggi:', annoOggi);
+    }
+
     // Allievi attivi con stato pagamento REALE calcolato dalle entrate
     const ALLIEVI_LIVE = _students
       .filter(s => (s.status || s.stato || '') !== 'inattivo')
@@ -2918,17 +2925,25 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
         // Cerca pagamento del mese corrente per questo allievo
         // Matching robusto: per ID, per nome esatto, per nome parziale
         const matchAllievo = (e) => {
-          if (e.studentId && idAllievo && String(e.studentId) === String(idAllievo)) return true;
+          if (e.studentId != null && idAllievo != null && String(e.studentId) === String(idAllievo)) return true;
           const en = (e.studentName || '').toLowerCase().trim();
           if (!en || !nomeAllievo) return false;
-          return en === nomeAllievo || en.includes(nomeAllievo) || nomeAllievo.includes(en);
+          // Matching parziale bidirezionale
+          const partiNome = nomeAllievo.split(' ').filter(p => p.length > 2);
+          if (en === nomeAllievo) return true;
+          if (partiNome.length > 0 && partiNome.every(p => en.includes(p))) return true;
+          return en.includes(nomeAllievo) || nomeAllievo.includes(en);
         };
 
+        // Prima cerca nel mese corrente
         const quotaMeseCorrente = _entrate.find(e =>
           Number(e.mese) === meseOggi &&
           Number(e.anno) === annoOggi &&
           matchAllievo(e)
         );
+
+        // Fallback: entrata più recente qualunque mese/anno (per casi in cui mese/anno non salvati)
+        const quotaRecente = quotaMeseCorrente || _entrate.find(e => matchAllievo(e));
 
         let stato = 'attesa';
         if (quotaMeseCorrente) {
@@ -2936,6 +2951,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
           if (statoQ === 'pagato' || statoQ === 'pagata' || statoQ === 'paid') stato = 'pagato';
           else if (statoQ === 'ritardo' || statoQ === 'in_ritardo' || statoQ === 'in ritardo') stato = 'scaduto';
           else stato = 'attesa';
+        } else if (quotaRecente) {
+          // Entrata trovata ma non del mese corrente — mostra attesa
+          stato = 'attesa';
         } else {
           const st = (s.status || s.stato || '');
           if (st === 'sospeso') stato = 'sospeso';
