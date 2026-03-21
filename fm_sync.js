@@ -234,14 +234,15 @@
       };
     },
     quote(q) {
-      const sm = { 'attesa': 'da pagare', 'ritardo': 'in ritardo' };
+      // React state → DB values
+      const smToDB = { 'attesa': 'da pagare', 'ritardo': 'in ritardo', 'pagato': 'pagato' };
       return {
         id: String(q.id), studente_id: q.studentId ? parseInt(q.studentId, 10) : null,
         studente_nome: q.studentName || '', importo: parseFloat(q.importo) || 0,
         mese: q.mese, anno: q.anno,
         anno_scolastico: (q.anno && q.mese) ? (q.mese >= 9 ? q.anno : q.anno - 1) : null,
-        stato: sm[q.stato] || q.stato || 'da pagare',
-        data_pagamento: q.dataPagamento || null,
+        stato: smToDB[q.stato] || q.stato || 'da pagare',
+        data_pagamento: q.dataPagamento || q.data || null,
         num_ricevuta: q.numRicevuta || '', metodo: q.metodo || 'Contanti',
         note: q.note || '',
       };

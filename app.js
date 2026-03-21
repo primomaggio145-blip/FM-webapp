@@ -4620,8 +4620,31 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
     }
 
     risultato.sort(function(a,b){ return a.key < b.key ? -1 : a.key > b.key ? 1 : 0; });
+
+    // Segna gli slot occupati (conflitti sala o docente)
+    var tutteLezioni = lessons || [];
+    risultato = risultato.map(function(s) {
+      var oraIniMin = toMin(s.oraInizio);
+      var oraFinMin = toMin(s.oraFine);
+      var conflitto = tutteLezioni.some(function(l) {
+        if (l.date !== s.data) return false;
+        if (!l.hour) return false;
+        var lIni = toMin(l.hour);
+        var lFin = lIni + (l.durata || 45);
+        // Sovrapposizione temporale
+        var sovrappone = oraIniMin < lFin && oraFinMin > lIni;
+        if (!sovrappone) return false;
+        // Stesso docente?
+        var stessoDoc = lezInfo && l.teacher && (l.teacher||"").toLowerCase() === (lezInfo.teacher||"").toLowerCase();
+        // Stessa sala (se valorizzata)?
+        var stessaSala = lezInfo && lezInfo.room && l.room && l.room === lezInfo.room;
+        return stessoDoc || stessaSala;
+      });
+      return Object.assign({}, s, { occupato: conflitto });
+    });
+
     return risultato;
-  }, [recuperoForm.lezId, student.teacher]);
+  }, [recuperoForm.lezId, student.teacher, lessons]);
 
   // Andamento anno per grafici
   const andamento = MESI_AS.map(x => {
@@ -5400,19 +5423,26 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                           , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
                             , slots.map(function(s) {
                                 var isSel = slotSel === s.key;
+                                var isOccupato = s.occupato;
                                 return React.createElement('button', {
                                     key: s.key,
-                                    onClick: function(){ setRecuperoForm(function(p){ return Object.assign({},p,{slotSel:s.key,date:s.data,ora:s.oraInizio}); }); },
+                                    onClick: isOccupato ? undefined : function(){ setRecuperoForm(function(p){ return Object.assign({},p,{slotSel:s.key,date:s.data,ora:s.oraInizio}); }); },
+                                    title: isOccupato ? "Slot non disponibile — docente o sala già occupati" : "",
+                                    disabled: isOccupato,
                                     style:{
                                       padding:"6px 12px",borderRadius:20,fontSize:12,fontFamily:"'Open Sans',sans-serif",
-                                      border:"2px solid "+(isSel ? C.purple : C.border),
-                                      background: isSel ? C.purple : C.bg,
-                                      color: isSel ? "#fff" : C.textMuted,
-                                      cursor:"pointer",fontWeight: isSel ? 600 : 400,
+                                      border:"2px solid "+(isSel ? C.purple : isOccupato ? C.border : C.border),
+                                      background: isSel ? C.purple : isOccupato ? C.bg : C.bg,
+                                      color: isSel ? "#fff" : isOccupato ? C.textDim : C.textMuted,
+                                      cursor: isOccupato ? "not-allowed" : "pointer",
+                                      fontWeight: isSel ? 600 : 400,
+                                      opacity: isOccupato ? 0.45 : 1,
+                                      textDecoration: isOccupato ? "line-through" : "none",
                                       transition:"all 0.12s"
                                     }
                                   }
                                   , s.oraInizio + " — " + s.oraFine
+                                  , isOccupato && React.createElement('span',{style:{fontSize:9,marginLeft:4,verticalAlign:'middle'}},'🚫')
                                 );
                               })
                           )
@@ -10219,8 +10249,13 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         );
       }
 
-      // ── Crea lezione successiva se ricorrente e docente ha segnato presenza ──
-      if (data.attendance && data.attendance !== "" && data.recurrence && data.recurrence !== "Nessuna") {
+      // ── Crea lezione successiva se ricorrente e viene segnata presenza ──
+      // Condizione: l'attendance ora è valorizzata E la lezione ha ricorrenza
+      // Non creare se: è un recupero, o la lezione successiva esiste già
+      const originalLesson = (lessons||[]).find(l => l.id === data.id);
+      const attendanceWasEmpty = !originalLesson?.attendance || originalLesson.attendance === '';
+      const attendanceNow = data.attendance && data.attendance !== '';
+      if (attendanceNow && data.recurrence && data.recurrence !== "Nessuna") {
         const isLezioneRecupero = data.tipo === 'recupero' || data.inRecupero === true;
         if (!isLezioneRecupero) {
           const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
@@ -10477,7 +10512,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const ws           = startOfWeek(today);
     const we           = addDays(ws, 6);
     const weekLessons  = visibleLessons.filter(l => l.date >= yyyymmdd(ws) && l.date <= yyyymmdd(we));
-    const pending      = visibleLessons.filter(l => l.date <= todayStr && !l.attendance).length;
+    const pending      = visibleLessons.filter(l => l.date <= todayStr && !l.attendance && l.attendance !== 'recuperata').length;
+    const pendingLessons = visibleLessons.filter(l => l.date <= todayStr && !l.attendance && l.attendance !== 'recuperata');
+    const [showPending, setShowPending] = useState(false);
   
     return (
       React.createElement(React.Fragment, null
@@ -10503,11 +10540,18 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           , React.createElement('div', { style: {background:C.surface, borderBottom:`1px solid ${C.border}`,
             padding:"8px 16px", display:"flex", gap:16, flexShrink:0, overflowX:"auto", WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5966}}
             , [
-              { label:"Oggi",                  count:todayLessons.length, sub:"lezioni",       hex:C.gold   },
-              { label:"Questa settimana",       count:weekLessons.length,  sub:"lezioni",       hex:C.blue   },
-              { label:"Presenza da segnare",    count:pending,             sub:"lezioni passate", hex:pending > 0 ? C.orange : C.green },
+              { label:"Oggi",                  count:todayLessons.length, sub:"lezioni",       hex:C.gold,   click: null },
+              { label:"Questa settimana",       count:weekLessons.length,  sub:"lezioni",       hex:C.blue,   click: null },
+              { label:"Presenza da segnare",    count:pending,             sub:"lezioni passate", hex:pending > 0 ? C.orange : C.green, click: (role==='admin'||role==='docente') && pending > 0 ? ()=>setShowPending(p=>!p) : null },
             ].map(s => (
-              React.createElement('div', { key: s.label, style: {display:"flex", alignItems:"center", gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5973}}
+              React.createElement('div', { key: s.label,
+                onClick: s.click || undefined,
+                style: {display:"flex", alignItems:"center", gap:10, cursor: s.click ? "pointer" : "default",
+                  padding:"4px 8px", borderRadius:8, transition:"background .12s",
+                  background: (s.label==="Presenza da segnare" && showPending) ? `${C.orange}15` : "transparent"},
+                onMouseEnter: s.click ? e=>{e.currentTarget.style.background=`${s.hex}15`;} : undefined,
+                onMouseLeave: s.click ? e=>{e.currentTarget.style.background=(s.label==="Presenza da segnare"&&showPending)?`${C.orange}15`:"transparent";} : undefined,
+                __self: this, __source: {fileName: _jsxFileName, lineNumber: 5973}}
                 , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif", fontSize:24, fontWeight:600, color:s.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5974}}, s.count)
                 , React.createElement('div', { style: {fontSize:11}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5975}}
                   , React.createElement('div', { style: {color:s.hex, opacity:0.8, textTransform:"uppercase", letterSpacing:"0.06em", fontSize:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5976}}, s.label)
@@ -10516,6 +10560,41 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                 , React.createElement('div', { style: {width:1, height:30, background:C.border, marginLeft:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5979}})
               )
             ))
+          )
+
+          /* Pannello lezioni da segnare */
+          , showPending && pendingLessons.length > 0 && (
+            React.createElement('div', {style:{background:C.surface, borderBottom:`1px solid ${C.border}`,
+              padding:"12px 16px", flexShrink:0, maxHeight:280, overflow:"auto"}}
+              , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}
+                , React.createElement('span', {style:{fontSize:12,fontWeight:700,color:C.orange,textTransform:"uppercase",letterSpacing:"0.07em"}},
+                    React.createElement(Ic,{n:"clock",size:12,stroke:C.orange}), " ", pending, " lezioni senza presenza")
+                , React.createElement('button', {onClick:()=>setShowPending(false),
+                    style:{background:"none",border:"none",cursor:"pointer",color:C.textMuted,fontSize:16}}, "×")
+              )
+              , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:4}}
+                , pendingLessons
+                    .sort((a,b)=>(a.date+' '+(a.hour||'')).localeCompare(b.date+' '+(b.hour||'')))
+                    .map(l => {
+                      const d = new Date((l.date||"")+"T00:00:00");
+                      const dateStr = d.toLocaleDateString("it-IT",{weekday:"short",day:"2-digit",month:"short"});
+                      return React.createElement('div', {key:l.id,
+                          onClick:()=>{ setSelLesson(l); setModal(role==='docente'?'edit':'detail'); setShowPending(false); },
+                          style:{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,
+                            background:C.bg,border:`1px solid ${C.border}`,cursor:"pointer",transition:"all .12s"},
+                          onMouseEnter:e=>{e.currentTarget.style.borderColor=C.orange;},
+                          onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;}}
+                        , React.createElement('div', {style:{fontSize:11,color:C.orange,fontWeight:600,minWidth:70}}, dateStr)
+                        , React.createElement('div', {style:{fontSize:11,color:C.textMuted,minWidth:40}}, l.hour||"—")
+                        , React.createElement('div', {style:{fontSize:12,fontWeight:500,color:C.text,flex:1}},
+                            isColl(l) ? (l.courseName||"Collettiva") : (l.student||"—"))
+                        , React.createElement('div', {style:{fontSize:11,color:C.textDim}}, l.teacher||"")
+                        , React.createElement('span', {style:{fontSize:10,background:"rgba(245,158,11,0.12)",color:C.orange,
+                            border:"1px solid rgba(245,158,11,0.3)",borderRadius:20,padding:"2px 7px",fontWeight:600}}, "da segnare")
+                      );
+                    })
+              )
+            )
           )
 
           /* Sub-tabs Calendario / Recupero / Elenco Lezioni */
@@ -11411,6 +11490,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
     studentId: "", importo: "", mese: new Date().getMonth()+1,
     anno: new Date().getFullYear(), data: yyyymmdd(today),
     metodo: "Bonifico bancario", desc: "", note: "",
+    stato: "pagato",  // default: registrare un'entrata = già pagata
   });
   const [err, setErr] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
@@ -11454,7 +11534,8 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
       mese:         Number(f.mese),
       anno:         Number(f.anno),
       desc:         autoDesc || f.desc,
-      dataPagamento: f.data || f.dataPagamento || '',  // normalizza: form usa 'data', toDB usa 'dataPagamento'
+      stato:        f.stato || 'pagato',
+      dataPagamento: f.data || f.dataPagamento || '',
     });
   };
 
@@ -11549,6 +11630,25 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
           , React.createElement(Input, { label: "Data *" , type: "date", value: f.data, onChange: e=>set("data",e.target.value), error: err.data, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6785}})
         )
         , React.createElement(Sel, { label: "Metodo di pagamento"  , value: f.metodo, onChange: e=>set("metodo",e.target.value), options: METODI_PAG, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6787}})
+        , React.createElement('div', null
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}, "Stato pagamento")
+          , React.createElement('div', {style:{display:"flex",gap:8}}
+            , [
+                {v:"pagato",   label:"✅ Pagato",     bg:C.greenBg,  bd:C.greenBorder,  fg:C.green},
+                {v:"attesa",   label:"⏳ In attesa",  bg:"rgba(245,158,11,0.1)", bd:"rgba(245,158,11,0.35)", fg:"#b45309"},
+                {v:"ritardo",  label:"⚠️ In ritardo", bg:C.redBg,    bd:C.redBorder,    fg:C.red},
+              ].map(opt => {
+                const sel = (f.stato||"pagato") === opt.v;
+                return React.createElement('button', {key:opt.v, type:"button",
+                    onClick:()=>set("stato",opt.v),
+                    style:{flex:1,padding:"8px 10px",borderRadius:8,border:`2px solid ${sel?opt.bd:C.border}`,
+                      background:sel?opt.bg:C.bg,color:sel?opt.fg:C.textMuted,
+                      cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif",fontWeight:sel?600:400,transition:"all .12s"}}
+                  , opt.label
+                );
+              })
+          )
+        )
         , React.createElement(Textarea, { label: "Note", value: f.note, onChange: e=>set("note",e.target.value), placeholder: "Note aggiuntive..." , __self: this, __source: {fileName: _jsxFileName, lineNumber: 6788}})
       )
       , React.createElement('div', { style: {padding:"14px 22px",borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"flex-end",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6790}}
@@ -16683,6 +16783,7 @@ const NAV_ITEMS = [
   { id:"allegati",    label:"Allegati",     icon:"paperclip"},
   { id:"biblioteca",  label:"Manuali & Libri", icon:"courses"},
   { id:"utenti",      label:"Utenti",       icon:"shield"   },
+  { id:"notifiche",   label:"Notifiche",    icon:"bell"     },
 ];
 
 const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction }) => {
@@ -17049,6 +17150,7 @@ function App() {
     }
     // Espone docenti globalmente per recupero modal e altri componenti profondi
     window.__docenti__ = sharedDocenti;
+    window.__unreadCount__ = (sharedNotifiche||[]).filter(n=>!n.letto).length;
   }, [sharedStudents, sharedCourses, sharedDocenti, sharedLessons, sharedRepertorio, sharedSpese, sharedEntrate, sharedConcerti, sharedAllegati]);
 
   useEffect(() => {
@@ -17248,6 +17350,18 @@ function App() {
       window.__FM_POLL_TODAY__ && window.__FM_POLL_TODAY__();
     }, 45000);
 
+    // ── beforeunload: avvisa se ci sono notifiche non lette ──────────
+    const handleBeforeUnload = (e) => {
+      const unread = (window.__unreadCount__ || 0);
+      if (unread > 0) {
+        const msg = `Hai ${unread} notifiche non lette. Sei sicuro di voler uscire?`;
+        e.preventDefault();
+        e.returnValue = msg;
+        return msg;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     // Overlay globale
     window.__FM_SHOW_MODAL__ = (element) => setGlobalModal(element);
     window.__FM_HIDE_MODAL__ = ()        => setGlobalModal(null);
@@ -17258,6 +17372,7 @@ function App() {
       window.__FM_UPDATE_PREV__ = null;
       window.__FM_SHOW_MODAL__ = null;
       window.__FM_HIDE_MODAL__ = null;
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       clearInterval(_pollInterval);
     };
   }, []);
@@ -17346,13 +17461,27 @@ function App() {
     impostazioni:  React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo }),
     schedaScuola:  React.createElement(SchedaScuolaView, { config: sharedConfig }),
     modulistica:   React.createElement(ModulisticaView, { }),
+    notifiche:     React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user }),
+  };
+
+  // Logout con controllo notifiche non lette
+  const handleLogout = async () => {
+    const unread = (sharedNotifiche||[]).filter(n=>!n.letto).length;
+    if (unread > 0) {
+      const ok = window.confirm(`Hai ${unread} notific${unread===1?'a':'he'} non lett${unread===1?'a':'e'}.\nVuoi leggerle prima di uscire?`);
+      if (ok) { setView("notifiche"); return; }
+    }
+    try { if(window.FM_AUTH) await window.FM_AUTH.signOut(); } catch(e) {}
+    setUser(null); setSharedRuolo("admin"); setView("dashboard");
+    setSchermata("login"); setPanKey(p=>p+1);
+    try{window.__currentUserName__="";}catch(e){}
   };
 
   return (
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
       , React.createElement('div', { style: {display:"flex",height:"100vh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: async ()=>{ try{ if(window.FM_AUTH) await window.FM_AUTH.signOut(); }catch(e){} setUser(null); setSharedRuolo("admin"); setView("dashboard"); setSchermata("login"); setPanKey(p=>p+1); try{window.__currentUserName__="";}catch(e){}}, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , settingsDrawerOpen && React.createElement(SettingsDrawer, {
             open: settingsDrawerOpen,
             onClose: ()=>setSettingsDrawerOpen(false),
@@ -17380,6 +17509,114 @@ function App() {
   );
 }
 
+
+// ─── NOTIFICHE VIEW ────────────────────────────────────────────────────────────
+const NotificheView = ({ notifiche, setNotifiche, ruolo, appUser }) => {
+  const [filter, setFilter] = useState('non_lette'); // 'non_lette' | 'tutte'
+  const [marking, setMarking] = useState(false);
+
+  const myId   = appUser?.allievoId || appUser?.docenteId || null;
+  const myRuolo = ruolo || 'admin';
+
+  // Filtra per destinatario
+  const mieNotifiche = (notifiche||[]).filter(n => {
+    if (n.destinatario_ruolo && n.destinatario_ruolo !== myRuolo) return false;
+    if (n.destinatario_id && myId && String(n.destinatario_id) !== String(myId)) return false;
+    return true;
+  }).sort((a,b) => (b.created_at||'').localeCompare(a.created_at||''));
+
+  const nonLette = mieNotifiche.filter(n => !n.letto);
+  const mostrate = filter === 'non_lette' ? nonLette : mieNotifiche;
+
+  const markAllRead = async () => {
+    if (!nonLette.length) return;
+    setMarking(true);
+    const sb = window.supabaseClient;
+    if (sb) {
+      const ids = nonLette.map(n=>n.id);
+      await sb.from('notifiche').update({letto:true}).in('id', ids);
+      setNotifiche(p => p.map(n => ids.includes(n.id) ? {...n, letto:true} : n));
+    }
+    setMarking(false);
+  };
+
+  const markOneRead = async (n) => {
+    if (n.letto) return;
+    const sb = window.supabaseClient;
+    if (sb) await sb.from('notifiche').update({letto:true}).eq('id', n.id);
+    setNotifiche(p => p.map(x => x.id===n.id ? {...x, letto:true} : x));
+  };
+
+  const tipoIcon = (tipo) => {
+    if (!tipo) return '🔔';
+    if (tipo.includes('recupero')) return '🔄';
+    if (tipo.includes('approvato')||tipo.includes('ufficiale')) return '✅';
+    if (tipo.includes('rifiutato')) return '❌';
+    if (tipo.includes('confermato')) return '✅';
+    return '🔔';
+  };
+
+  return React.createElement('div', {style:{maxWidth:700, margin:'0 auto', padding:'28px 24px'}}
+    // Header
+    , React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}
+      , React.createElement('div', null
+        , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,margin:0}}, '🔔 Notifiche')
+        , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}},
+            nonLette.length > 0 ? `${nonLette.length} non lette su ${mieNotifiche.length} totali` : `${mieNotifiche.length} notifiche · tutte lette`)
+      )
+      , nonLette.length > 0 && React.createElement('button', {
+          onClick: markAllRead, disabled: marking,
+          style:{padding:'9px 18px',borderRadius:8,border:'none',background:C.green,color:'#fff',
+            fontSize:13,fontWeight:600,cursor:marking?'wait':'pointer',fontFamily:"'Open Sans',sans-serif",opacity:marking?0.7:1}}
+        , marking ? '...' : `✓ Segna tutte come lette (${nonLette.length})`
+      )
+    )
+    // Filter tabs
+    , React.createElement('div', {style:{display:'flex',gap:4,marginBottom:16,background:C.surface,borderRadius:10,padding:4,border:`1px solid ${C.border}`,width:'fit-content'}}
+      , ['non_lette','tutte'].map(f => React.createElement('button', {key:f,
+            onClick:()=>setFilter(f),
+            style:{padding:'7px 16px',borderRadius:7,border:'none',fontSize:12,fontWeight:600,cursor:'pointer',
+              fontFamily:"'Open Sans',sans-serif",transition:'all .12s',
+              background: filter===f ? C.gold : 'none',
+              color: filter===f ? '#fff' : C.textMuted}}
+          , f==='non_lette' ? `Non lette${nonLette.length>0?' ('+nonLette.length+')':''}` : 'Tutte'
+        ))
+    )
+    // List
+    , mostrate.length === 0
+      ? React.createElement('div', {style:{textAlign:'center',padding:'40px 20px',color:C.textDim,background:C.surface,borderRadius:12,border:`1px solid ${C.border}`}}
+          , React.createElement('div', {style:{fontSize:32,marginBottom:8}}, filter==='non_lette'?'📭':'🔔')
+          , filter==='non_lette' ? 'Nessuna notifica da leggere' : 'Nessuna notifica'
+        )
+      : React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}}
+          , mostrate.map(n => React.createElement('div', {
+              key: n.id,
+              onClick: ()=>markOneRead(n),
+              style:{
+                background: n.letto ? C.surface : `${C.gold}08`,
+                border: `1px solid ${n.letto ? C.border : C.goldDim}`,
+                borderRadius:12, padding:'14px 18px',
+                display:'flex', gap:14, alignItems:'flex-start',
+                cursor: n.letto ? 'default' : 'pointer',
+                transition:'all .12s',
+              },
+              onMouseEnter: !n.letto ? e=>{e.currentTarget.style.background=`${C.gold}14`;} : undefined,
+              onMouseLeave: !n.letto ? e=>{e.currentTarget.style.background=`${C.gold}08`;} : undefined,
+            }
+            , React.createElement('div', {style:{fontSize:22,flexShrink:0,marginTop:1}}, tipoIcon(n.tipo))
+            , React.createElement('div', {style:{flex:1}}
+              , React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:3}}
+                , React.createElement('div', {style:{fontSize:14,fontWeight:n.letto?400:700,color:C.text}}, n.titolo||'—')
+                , !n.letto && React.createElement('div', {style:{width:8,height:8,borderRadius:'50%',background:C.gold,flexShrink:0}})
+              )
+              , n.messaggio && React.createElement('div', {style:{fontSize:12,color:C.textMuted,lineHeight:1.5}}, n.messaggio)
+              , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:4}},
+                  n.created_at ? new Date(n.created_at).toLocaleString('it-IT',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '')
+            )
+          ))
+        )
+  );
+};
 
 // ─── IMPOSTAZIONI VIEW (standalone page) ──────────────────────────────────────
 // ⚠ ImpToggle e ImpSection DEVONO essere FUORI da ImpostazioniView.
