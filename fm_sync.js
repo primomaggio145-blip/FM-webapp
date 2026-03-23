@@ -69,23 +69,29 @@
       hour: r.ora ? r.ora.slice(0,5) : '',
       student: r.student || '',
       tipo: r.tipo || 'individuale',
+      type: r.tipo || 'individuale',   // alias per compatibilità
       studentId: r.studente_id || null,
       instrument: r.strumento || r.instrument || '', teacher: r.teacher || '', room: r.room || '',
       topic: r.topic || '', attendance: r.attendance || '',
       recurrence: r.recurrence || 'Nessuna', notes: r.notes || '',
       exercises: r.exercises || '', repertorio: r.repertorio || '',
-      type: r.tipo || 'individuale',
       linkUrl: r.link_url || '',
       inRecupero: r.in_recupero || false,
       recuperoScadenza: r.recupero_scadenza || null,
-      // Durata in minuti (default per tipo se non salvata)
       durata: r.durata
         ? parseInt(r.durata)
         : (r.tipo === 'collettivo' ? 60 : r.tipo === 'prova' ? 30 : 45),
-      // Brani collegati alla lezione
       repertorioIds: (() => {
         if (!r.repertorio_ids) return [];
         try { return JSON.parse(r.repertorio_ids); } catch(e) { return []; }
+      })(),
+      // Campi collettive
+      courseId:   r.corso_id   || null,
+      courseName: r.corso_nome || null,
+      students: (() => {
+        if (!r.students) return [];
+        if (Array.isArray(r.students)) return r.students;
+        try { return JSON.parse(r.students); } catch(e) { return []; }
       })(),
       allegati,
     };
@@ -218,11 +224,14 @@
         id: l.id || null,
         data: l.date, ora: l.hour || null,
         student: l.student || null,
+        studente_id: l.studentId ? parseInt(l.studentId, 10) : null,
         strumento: l.instrument || l.strumento || null,
         teacher: l.teacher || null, room: l.room || null,
         topic: l.topic || null, attendance: l.attendance || null,
         recurrence: l.recurrence || 'Nessuna', notes: l.notes || null,
-        tipo: l.type || 'individuale', updated_at: new Date().toISOString(),
+        // tipo: leggi da l.tipo PRIMA di l.type (l.type è il vecchio alias, tipo è il campo corretto)
+        tipo: l.tipo || l.type || 'individuale',
+        updated_at: new Date().toISOString(),
         link_url: l.linkUrl || null,
         in_recupero: l.inRecupero || false,
         recupero_scadenza: l.recuperoScadenza || null,
@@ -230,6 +239,12 @@
         exercises: l.exercises || null,
         repertorio_ids: l.repertorioIds && l.repertorioIds.length > 0
           ? JSON.stringify(l.repertorioIds)
+          : null,
+        // Campi collettive — essenziali per non perdere gli allievi
+        corso_id:   l.courseId   || null,
+        corso_nome: l.courseName || null,
+        students: l.students && l.students.length > 0
+          ? JSON.stringify(l.students)
           : null,
       };
     },
