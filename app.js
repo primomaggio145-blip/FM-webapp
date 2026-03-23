@@ -10033,7 +10033,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         setAppView("calendario");
         // Naviga alla data della lezione
         setCurDate(new Date((found.date||found.data||yyyymmdd(oggi))+"T00:00:00"));
-        setModal(role==="docente" ? "edit" : "detail");
+        setModal("detail");
       }
       if(clearQaCV)clearQaCV();
     }
@@ -10196,6 +10196,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       var scadNorm = data.recuperoScadenza || null;
       if (attNorm === 'in_recupero') {
         attNorm = null;  // in_recupero non è un valore attendance valido in DB
+        inRecNorm = true;  // setta il flag in_recupero
+        // scadenza = ultimo giorno del mese della lezione
+        const dLezione = data.date ? new Date(data.date+'T00:00:00') : new Date();
+        const lastDay = new Date(dLezione.getFullYear(), dLezione.getMonth()+1, 0);
+        scadNorm = lastDay.toISOString().split('T')[0];
       } else if (attNorm === 'recupero') {
         attNorm = 'presente';
         inRecNorm = false;
@@ -10204,7 +10209,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         inRecNorm = false;
         scadNorm = null;
       }
-      const dataNorm = { ...data, attendance: attNorm, inRecupero: inRecNorm, recuperoScadenza: scadNorm };
+      const dataNorm = {
+        ...data,
+        attendance: attNorm,    // null per in_recupero (non è un valore DB valido)
+        inRecupero: inRecNorm,
+        recuperoScadenza: scadNorm,
+      };
 
       // Per lezioni collettive: preserva students/courseId se il form non li ha modificati
       const existingStudents = existingLesson?.students || [];
@@ -10641,7 +10651,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                       const d = new Date((l.date||"")+"T00:00:00");
                       const dateStr = d.toLocaleDateString("it-IT",{weekday:"short",day:"2-digit",month:"short"});
                       return React.createElement('div', {key:l.id,
-                          onClick:()=>{ setSelLesson(l); setModal(role==='docente'?'edit':'detail'); setShowPending(false); },
+                          onClick:()=>{ setSelLesson(l); setModal('detail'); setShowPending(false); },
                           style:{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",borderRadius:8,
                             background:C.bg,border:`1px solid ${C.border}`,cursor:"pointer",transition:"all .12s"},
                           onMouseEnter:e=>{e.currentTarget.style.borderColor=C.orange;},
@@ -10682,7 +10692,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               lessons: visibleLessons,
               role: role,
               appUser: _appUserCV,
-              onOpenLesson: (l) => { setSelLesson(l); setModal(isSalaProve(l) ? 'detailsala' : (role==='docente'?'edit':'detail')); },
+              onOpenLesson: (l) => { setSelLesson(l); setModal(isSalaProve(l) ? 'detailsala' : ('detail')); },
             })
 
           /* ── ELENCO LEZIONI ADMIN ───────────────────────── */
@@ -10852,9 +10862,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           /* Contenuto */
           , React.createElement('div', { style: {flex:1, padding:"0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
             , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden"}, className: "table-scroll", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
-              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding:20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal(role==="docente"?"edit":"detail");} }}))
-              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal(role==="docente"?"edit":"detail");} }})
-              , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal(role==="docente"?"edit":"detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
+              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding:20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
+              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
+              , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
             )
           )
           )
