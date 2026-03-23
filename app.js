@@ -10199,6 +10199,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         inRecNorm = false;
         scadNorm = null;
       }
+      const dataNorm = { ...data, attendance: attNorm, inRecupero: inRecNorm, recuperoScadenza: scadNorm };
+
       // Per lezioni collettive: preserva students/courseId se il form non li ha modificati
       const existingStudents = existingLesson?.students || [];
       const mergedStudents   = (dataNorm.students && dataNorm.students.length > 0)
