@@ -6062,20 +6062,25 @@ const lessonHex   = l => isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaPr
 const studentInLesson = (l, name, studentId) => {
   if (isColl(l)) {
     const arr = l.students || [];
+    // 1. Match diretto nell'array students
     if (arr.length > 0) {
       return arr.some(s =>
-        (studentId && s.id != null && String(s.id)===String(studentId)) ||
+        (studentId != null && s.id != null && String(s.id) === String(studentId)) ||
         (s.name||'').toLowerCase() === (name||'').toLowerCase()
       );
     }
-    // Fallback quando students è vuoto: la lezione è collettiva ma non ha ancora l'array
-    // In questo caso mostriamo la lezione al docente (non all'allievo senza certezza)
+    // 2. Fallback: students array vuoto → la lezione è collettiva ma manca l'array
+    //    (lezioni vecchie o caricate senza students). Non escludiamo l'allievo:
+    //    se ha studentId → non possiamo verificare, restituiamo false per sicurezza
+    //    L'admin/docente vedrà comunque la lezione tramite il teacher match
     return false;
   }
-  if (studentId && l.studentId != null && String(l.studentId)===String(studentId)) return true;
+  // Individuali: match per ID
+  if (studentId != null && l.studentId != null && String(l.studentId) === String(studentId)) return true;
   const ln = (l.student||'').toLowerCase().trim();
   const nn = (name||'').toLowerCase().trim();
-  return ln===nn || ln.includes(nn) || nn.includes(ln);
+  if (!ln || !nn) return false;
+  return ln === nn || ln.includes(nn) || nn.includes(ln);
 };
 const lessonLabel = l => isColl(l)
   ? (l.courseName||"Collettiva")
@@ -15727,7 +15732,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
         || tf.includes(nom) || nom.includes(tf);
   };
   const allievi  = (d) => students.filter(s => matchTeacher(d, s.teacher));
-  const lezioniD = (d) => lessons.filter(l  => matchTeacher(d, l.teacher) && l.attendance !== 'recuperata');
+  const lezioniD = (d) => lessons.filter(l => l.date && matchTeacher(d, l.teacher) && l.attendance !== 'recuperata');
 
   // Calcoli mensili basati su lezioni effettive
   const nowDate   = new Date(today);
@@ -15738,23 +15743,23 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 
   // Lezioni del mese di un docente: SOLO presenza "presente" o "assente" contano per il compenso
   // (giustificato, recupero, in_recupero, vuoto → non retribuiti)
+  // Lezioni del mese di un docente che contano per il COMPENSO: presenza presente|assente
   const lezioniMese = (d, m, y) => lessons.filter(l => {
-    if(l.attendance === 'recuperata') return false; // non conta nel totale
+    if(l.attendance === 'recuperata') return false;
     if(!matchTeacher(d, l.teacher)) return false;
     const att = l.attendance || '';
     if(att !== 'presente' && att !== 'assente') return false;
-    const [ly,lm] = l.date.split("-").map(Number);
+    const [ly,lm] = (l.date||'').split("-").map(Number);
     return ly===y && lm===m;
   });
   // Nota: lezioniMese già funziona per collettive perché l.teacher è sempre valorizzato
   const stipendioMese = (d, m=curMonth, y=curYear) => lezioniMese(d,m,y).length * d.tariffaOra;
 
-  // Tutte le lezioni del mese di un docente (indipendentemente dalla presenza)
-  // Usata nel tab Lezioni per mostrare il conteggio reale, non solo le retribuite
+  // Tutte le lezioni del mese di un docente (per conteggio totale)
   const tutteLezioniMese = (d, m, y) => lessons.filter(l => {
     if(l.attendance === 'recuperata') return false;
     if(!matchTeacher(d, l.teacher)) return false;
-    const [ly,lm] = l.date.split("-").map(Number);
+    const [ly,lm] = (l.date||'').split("-").map(Number);
     return ly===y && lm===m;
   });
 
@@ -16436,6 +16441,56 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   )
                   , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10538}})
                 )
+              )
+            )
+          )
+          /* Pulsante STAMPA RESOCONTO MENSILE — solo admin */
+          , ruoloDocView === 'admin' && (
+            React.createElement('div', {style:{display:'flex',justifyContent:'flex-end',marginTop:12}}
+              , React.createElement('button', {
+                  onClick: () => {
+                    const mLabel = MESI_LABEL_L[selMese.m-1] + ' ' + selMese.y;
+                    const lezioni = lezSel.slice().sort((a,b)=>a.date.localeCompare(b.date));
+                    const nLez = lezioni.length;
+                    const totale = nLez * selected.tariffaOra;
+                    const rows = lezioni.map((l,i) => `
+                      <tr style="border-bottom:1px solid #eee;">
+                        <td style="padding:8px 12px;font-size:13px;">${i+1}</td>
+                        <td style="padding:8px 12px;font-size:13px;">${new Date(l.date+'T00:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'long'})}</td>
+                        <td style="padding:8px 12px;font-size:13px;">${l.hour||'—'}</td>
+                        <td style="padding:8px 12px;font-size:13px;">${isColl(l)?(l.courseName||'Collettiva'):(l.student||'—')}</td>
+                        <td style="padding:8px 12px;font-size:13px;">${l.topic||'—'}</td>
+                        <td style="padding:8px 12px;font-size:13px;text-align:right;">€${selected.tariffaOra}</td>
+                        <td style="padding:8px 12px;font-size:12px;text-align:center;"><span style="background:${l.attendance==='presente'?'#dcfce7':l.attendance==='assente'?'#fee2e2':'#fef3c7'};color:${l.attendance==='presente'?'#166534':l.attendance==='assente'?'#991b1b':'#92400e'};padding:2px 8px;border-radius:20px;">${l.attendance||'—'}</span></td>
+                      </tr>`).join('');
+                    const html = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Resoconto ${selected.nome||selected.name} — ${mLabel}</title>
+<style>body{font-family:'Open Sans',Arial,sans-serif;margin:0;padding:32px;color:#1a1a1a;background:#fff;}h1{font-size:22px;font-weight:700;margin:0 0 4px;}
+.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:28px;padding-bottom:16px;border-bottom:2px solid #e5e7eb;}
+.logo{font-size:18px;font-weight:700;color:#8c1818;}table{width:100%;border-collapse:collapse;}
+th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-transform:uppercase;letter-spacing:.07em;color:#666;border-bottom:2px solid #e5e7eb;}
+.totale{display:flex;justify-content:flex-end;gap:32px;margin-top:20px;padding:16px 20px;background:#f9fafb;border-radius:8px;}
+.totale-label{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#666;}
+.footer{margin-top:40px;padding-top:16px;border-top:1px solid #e5e7eb;font-size:11px;color:#999;text-align:center;}
+@media print{body{padding:20px;}}</style></head><body>
+<div class="header"><div><div class="logo">🎵 Futuro Musica</div><div style="font-size:11px;color:#999;margin-top:2px;">Generato il ${new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'})}</div></div>
+<div style="text-align:right;"><div style="font-size:16px;font-weight:700;">${selected.nome||selected.name||'Docente'}</div><div style="font-size:12px;color:#666;">Tariffa: €${selected.tariffaOra}/ora · ${selected.strumento||'—'}</div></div></div>
+<h1>Resoconto mensile — ${mLabel}</h1><div style="font-size:14px;color:#666;margin-bottom:24px;">${nLez} lezioni · compenso totale: €${totale.toLocaleString('it-IT')}</div>
+<table><thead><tr><th>#</th><th>Data</th><th>Ora</th><th>Allievo / Corso</th><th>Argomento</th><th style="text-align:right;">Tariffa</th><th style="text-align:center;">Presenza</th></tr></thead>
+<tbody>${rows}</tbody></table>
+<div class="totale"><div><div class="totale-label">Lezioni</div><div style="font-size:22px;font-weight:700;">${nLez}</div></div>
+<div><div class="totale-label">Compenso</div><div style="font-size:22px;font-weight:700;color:#166534;">€${totale.toLocaleString('it-IT')}</div></div></div>
+<div class="footer">Futuro Musica — Resoconto compensi ${mLabel} · ${selected.nome||selected.name}</div>
+</body></html>`;
+                    const w = window.open('','_blank','width=900,height=700');
+                    if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);}
+                  },
+                  style:{display:'flex',alignItems:'center',gap:8,padding:'10px 22px',borderRadius:9,
+                    border:'none',background:C.gold,color:'#fff',cursor:'pointer',
+                    fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif",
+                    boxShadow:'0 2px 8px rgba(0,0,0,0.15)'}
+                }
+                , React.createElement(Ic,{n:'download',size:14,stroke:'#fff'})
+                , '🖨\uFE0F Stampa resoconto ' + MESI_LABEL_L[selMese.m-1] + ' ' + selMese.y
               )
             )
           )
