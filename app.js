@@ -8108,27 +8108,33 @@ const CalRepertorioTab = ({ repertorio, lessons, onAdd, onEdit, onDelete, canEdi
 };
 
 // ─── FORM LEZIONE COLLETTIVA ─────────────────────────────────────────────────
-const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose }) => {
+const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose }) => {
   const docenti    = _docentiRaw    || [];
   const repertorio = _repertorioRaw || [];
   const collettivi = courses.filter(c => c.type === "collettivo");
 
-  const [step,        setStep]       = useState(1);      // 1=corso  2=dettagli+allievi
-  const [selCourse,   setSelCourse]  = useState(null);
-  const [selStudents, setSelStudents]= useState([]);      // id[] allievi selezionati
-  const [repertorioIds, setRepertorioIds] = useState([]); // brani aggiunti alla lezione
+  // In modalità edit (initial presente) si salta lo step di selezione corso
+  const initCourse = initial ? (courses.find(c => c.id === initial.courseId) || null) : null;
+
+  const [step,        setStep]       = useState(initial ? 2 : 1); // edit → salta al step 2
+  const [selCourse,   setSelCourse]  = useState(initCourse);
+  const [selStudents, setSelStudents]= useState(
+    initial ? (initial.students || []).map(s => s.id).filter(Boolean) : []
+  );
+  const [repertorioIds, setRepertorioIds] = useState(initial?.repertorioIds || []);
   const [showBranoForm, setShowBranoForm] = useState(false);
   const [newBranoForm, setNewBranoForm]   = useState({ title:'', composer:'', period:'', tonality:'', type:'collettivo', difficulty:'', notes:'' });
   const [form, setForm] = useState({
-    date:      yyyymmdd(today),
-    hour:      "15:00",
-    durata:    60,
-    teacherId: "",
-    room:      "",
-    topic:     "",
-    notes:     "",
-    exercises: "",
-    recurrence:"Nessuna",
+    date:      initial?.date      || yyyymmdd(today),
+    hour:      initial?.hour      || "15:00",
+    durata:    initial?.durata    || 60,
+    teacherId: initial?.teacher   || "",
+    room:      initial?.room      || "",
+    topic:     initial?.topic     || "",
+    notes:     initial?.notes     || "",
+    exercises: initial?.exercises || "",
+    recurrence:initial?.recurrence|| "Nessuna",
+    attendance:initial?.attendance|| "",
   });
   const [err, setErr] = useState({});
   const set = (k,v) => setForm(p=>({...p,[k]:v}));
@@ -8177,7 +8183,7 @@ const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, repertor
       return { id: s.id, name: s.name, instrument: s.instrument, level: s.level||"" };
     });
     onSave({
-      id:         uid(),
+      id:         initial?.id || uid(),  // preserva id in edit mode
       tipo:       "collettivo",
       courseId:   selCourse.id,
       courseName: selCourse.name,
@@ -8190,13 +8196,12 @@ const CollectiveLessonForm = ({ courses, students, docenti:_docentiRaw, repertor
       notes:      form.notes,
       exercises:  form.exercises,
       recurrence: form.recurrence,
-      attendance: "",
-      // campo compat. individuale (nome del corso per visualizzazioni legacy)
+      attendance: form.attendance || initial?.attendance || "",
+      inRecupero: initial?.inRecupero || false,
+      recuperoScadenza: initial?.recuperoScadenza || null,
       student:    selCourse.name,
       instrument: "Vari",
-      // array allievi — la vera struttura collettiva
       students:      studObjs,
-      // brani aggiunti durante la lezione collettiva
       repertorioIds: repertorioIds,
       durata: form.durata || 60,
     });
@@ -10413,23 +10418,25 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           });
         }
 
-        // Se segno presenza (qualsiasi valore, incluso in_recupero) su lezione ricorrente → crea la prossima
-        // MA NON se la lezione corrente è già un recupero (non genera una catena infinita)
+        // Se segno presenza REALE (non in_recupero) su lezione ricorrente → crea la prossima
+        // in_recupero = lezione saltata, NON deve generare la successiva
         const isLezioneRecupero = lesson && (lesson.tipo === 'recupero' || lesson.inRecupero === true);
-        if (lesson && val && val !== "" && lesson.recurrence && lesson.recurrence !== "Nessuna" && !isLezioneRecupero) {
+        const valCreaLezione = val && val !== "" && val !== "in_recupero";
+        if (lesson && valCreaLezione && lesson.recurrence && lesson.recurrence !== "Nessuna" && !isLezioneRecupero) {
           const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
           const gap     = daysMap[lesson.recurrence] || 7;
           const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap));
 
-          // Evita duplicati: controlla se esiste già una lezione stesso studente/ora/data
-          const exists = updated.some(l =>
+          // Evita duplicati RIGOROSO: controlla per data + ora + corso/studente
+          const alreadyExists = updated.some(l =>
+            l.id !== lesson.id &&           // non è la lezione corrente
             l.date === nextDate &&
             l.hour === lesson.hour &&
             (isColl(lesson)
               ? l.courseId === lesson.courseId
               : l.student  === lesson.student)
           );
-          if (!exists) {
+          if (!alreadyExists) {
             const nextLesson = {
               ...lesson,
               id:               uid(),
@@ -10859,9 +10866,22 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           )
         )
         , modal === "edit" && selLesson && (
-          React.createElement(Modal, { title: "Modifica lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6141}}
-            , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
-          )
+          isColl(selLesson)
+            ? React.createElement(Modal, { title: "Modifica lezione collettiva", onClose: closeModal, wide: true}
+                , React.createElement(CollectiveLessonForm, {
+                    initial: selLesson,
+                    courses: propCourses,
+                    students: propStudents,
+                    docenti: propDocenti,
+                    repertorio: repertorio,
+                    onAddBrano: b => setRepertorio(p=>[...p,b]),
+                    onSave: handleEdit,
+                    onClose: closeModal,
+                  })
+              )
+            : React.createElement(Modal, { title: "Modifica lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6141}}
+                , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
+              )
         )
         , modal === "detail" && selLesson && (
           React.createElement(LessonDetailModal, {
