@@ -4537,11 +4537,25 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const annoInizio = _nullishCoalesce(annoInizioAttivo, () => ( (curMonth >= 9 ? curYear : curYear - 1)));
   const MESI_LABEL_L = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const MESI_LABEL_S = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
-  const MESI_AS = [
+  // Anno scolastico base (Set→Giu). Esteso dinamicamente fino al mese corrente.
+  const MESI_AS_BASE = [
     {m:9,y:annoInizio},{m:10,y:annoInizio},{m:11,y:annoInizio},{m:12,y:annoInizio},
     {m:1,y:annoInizio+1},{m:2,y:annoInizio+1},{m:3,y:annoInizio+1},
     {m:4,y:annoInizio+1},{m:5,y:annoInizio+1},{m:6,y:annoInizio+1},
   ];
+  // Se il mese corrente è oltre giugno dell'anno scolastico, aggiungiamo i mesi mancanti
+  const lastAS = MESI_AS_BASE[MESI_AS_BASE.length-1];
+  const curAsNum = curYear * 100 + curMonth;
+  const lastAsNum = lastAS.y * 100 + lastAS.m;
+  const MESI_AS = [...MESI_AS_BASE];
+  if (curAsNum > lastAsNum) {
+    // Aggiungi mesi da luglio fino al mese corrente
+    let my = lastAS.y, mm = lastAS.m;
+    while (my * 100 + mm < curAsNum) {
+      mm++; if (mm > 12) { mm = 1; my++; }
+      MESI_AS.push({m:mm, y:my});
+    }
+  }
   const isFuture = x => new Date(x.y, x.m-1, 1) > new Date(curYear, curMonth-1, 1);
   const defaultSelMese = MESI_AS.find(x => x.m===curMonth && x.y===curYear) || MESI_AS[MESI_AS.length-1];
 
@@ -4565,9 +4579,13 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const [sortKeyQuote, sortDirQuote, handleSortQuote, sortFnQuote] = useSortable("mese", "asc");
   const config = _nullishCoalesce(propConfig, () => ( CONFIG_DEFAULT));
 
-  // Lezioni globali per questo allievo — esclude 'recuperata' (flag, non conta nel totale)
-  const lezStudente = lessons.filter(l => studentInLesson(l, student.name, student.id) && l.attendance !== 'recuperata');
-  const lezMese     = (m, y) => lezStudente.filter(l => { const [ly,lm] = l.date.split("-").map(Number); return ly===y && lm===m; });
+  // Lezioni globali per questo allievo — esclude 'recuperata' e lezioni senza data
+  const lezStudente = lessons.filter(l => {
+    if (!l.date) return false;
+    if (l.attendance === 'recuperata') return false;
+    return studentInLesson(l, student.name, student.id);
+  });
+  const lezMese     = (m, y) => lezStudente.filter(l => { const [ly,lm] = (l.date||'').split("-").map(Number); return ly===y && lm===m; });
   const lezSel      = lezMese(selMese.m, selMese.y);
 
   // Lezioni da recuperare (inRecupero=true oppure attendance='in_recupero')
@@ -15776,11 +15794,23 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 
   // Anno scolastico — usa il prop dall'admin (fallback: auto da data corrente)
   const annoInizio = _nullishCoalesce(annoInizioAttivo, () => ( (curMonth >= 9 ? curYear : curYear-1)));
-  const MESI_AS = [
+  const MESI_AS_BASE = [
     {m:9, y:annoInizio},{m:10,y:annoInizio},{m:11,y:annoInizio},{m:12,y:annoInizio},
     {m:1, y:annoInizio+1},{m:2,y:annoInizio+1},{m:3,y:annoInizio+1},
     {m:4, y:annoInizio+1},{m:5,y:annoInizio+1},{m:6,y:annoInizio+1},
   ];
+  // Estende l'array fino al mese corrente se siamo oltre giugno
+  const lastAS2 = MESI_AS_BASE[MESI_AS_BASE.length-1];
+  const curAsNum2 = curYear * 100 + curMonth;
+  const lastAsNum2 = lastAS2.y * 100 + lastAS2.m;
+  const MESI_AS = [...MESI_AS_BASE];
+  if (curAsNum2 > lastAsNum2) {
+    let my = lastAS2.y, mm = lastAS2.m;
+    while (my * 100 + mm < curAsNum2) {
+      mm++; if (mm > 12) { mm = 1; my++; }
+      MESI_AS.push({m:mm, y:my});
+    }
+  }
   const isFuture = (x) => new Date(x.y, x.m-1, 1) > new Date(curYear, curMonth-1, 1);
   const defaultSelMese = MESI_AS.find(x=>x.m===curMonth && x.y===curYear) || MESI_AS[MESI_AS.length-1];
   // ← useState QUI, prima di qualsiasi return condizionale
