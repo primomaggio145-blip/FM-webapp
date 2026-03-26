@@ -4538,24 +4538,15 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const MESI_LABEL_L = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const MESI_LABEL_S = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
   // Anno scolastico base (Set→Giu). Esteso dinamicamente fino al mese corrente.
-  const MESI_AS_BASE = [
+  const MESI_AS = [
     {m:9,y:annoInizio},{m:10,y:annoInizio},{m:11,y:annoInizio},{m:12,y:annoInizio},
     {m:1,y:annoInizio+1},{m:2,y:annoInizio+1},{m:3,y:annoInizio+1},
     {m:4,y:annoInizio+1},{m:5,y:annoInizio+1},{m:6,y:annoInizio+1},
   ];
-  // Se il mese corrente è oltre giugno dell'anno scolastico, aggiungiamo i mesi mancanti
-  const lastAS = MESI_AS_BASE[MESI_AS_BASE.length-1];
-  const curAsNum = curYear * 100 + curMonth;
-  const lastAsNum = lastAS.y * 100 + lastAS.m;
-  const MESI_AS = [...MESI_AS_BASE];
-  if (curAsNum > lastAsNum) {
-    // Aggiungi mesi da luglio fino al mese corrente
-    let my = lastAS.y, mm = lastAS.m;
-    while (my * 100 + mm < curAsNum) {
-      mm++; if (mm > 12) { mm = 1; my++; }
-      MESI_AS.push({m:mm, y:my});
-    }
-  }
+  // Se il mese corrente non è nell'anno scolastico, aggiunge SOLO il mese corrente
+  // (non tutti i mesi intermedi — evita di mostrare 19 mesi nel selettore)
+  const isCurInAS = MESI_AS.some(x => x.m===curMonth && x.y===curYear);
+  if (!isCurInAS) MESI_AS.push({m:curMonth, y:curYear});
   const isFuture = x => new Date(x.y, x.m-1, 1) > new Date(curYear, curMonth-1, 1);
   const defaultSelMese = MESI_AS.find(x => x.m===curMonth && x.y===curYear) || MESI_AS[MESI_AS.length-1];
 
@@ -15821,22 +15812,14 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 
   // Anno scolastico — usa il prop dall'admin (fallback: auto da data corrente)
   const annoInizio = _nullishCoalesce(annoInizioAttivo, () => ( (curMonth >= 9 ? curYear : curYear-1)));
-  const MESI_AS_BASE = [
+  const MESI_AS = [
     {m:9, y:annoInizio},{m:10,y:annoInizio},{m:11,y:annoInizio},{m:12,y:annoInizio},
     {m:1, y:annoInizio+1},{m:2,y:annoInizio+1},{m:3,y:annoInizio+1},
     {m:4, y:annoInizio+1},{m:5,y:annoInizio+1},{m:6,y:annoInizio+1},
   ];
-  // Estende l'array fino al mese corrente se siamo oltre giugno
-  const lastAS2 = MESI_AS_BASE[MESI_AS_BASE.length-1];
-  const curAsNum2 = curYear * 100 + curMonth;
-  const lastAsNum2 = lastAS2.y * 100 + lastAS2.m;
-  const MESI_AS = [...MESI_AS_BASE];
-  if (curAsNum2 > lastAsNum2) {
-    let my = lastAS2.y, mm = lastAS2.m;
-    while (my * 100 + mm < curAsNum2) {
-      mm++; if (mm > 12) { mm = 1; my++; }
-      MESI_AS.push({m:mm, y:my});
-    }
+  // Aggiunge SOLO il mese corrente se non è nel range dell'anno scolastico
+  if (!MESI_AS.some(x => x.m===curMonth && x.y===curYear)) {
+    MESI_AS.push({m:curMonth, y:curYear});
   }
   const isFuture = (x) => new Date(x.y, x.m-1, 1) > new Date(curYear, curMonth-1, 1);
   const defaultSelMese = MESI_AS.find(x=>x.m===curMonth && x.y===curYear) || MESI_AS[MESI_AS.length-1];
@@ -17769,7 +17752,7 @@ function App() {
     impostazioni:  React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo }),
     schedaScuola:  React.createElement(SchedaScuolaView, { config: sharedConfig }),
     modulistica:   React.createElement(ModulisticaView, { }),
-    notifiche:     React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user }),
+    notifiche:     React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste }),
   };
 
   // Logout con controllo notifiche non lette
@@ -17935,7 +17918,7 @@ const RecuperoScadutoModal = ({ lesson, onExtend, onDismiss, setLessons }) => {
 };
 
 // ─── NOTIFICHE VIEW ────────────────────────────────────────────────────────────
-const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser }) => {
+const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser, lessons, students, richieste }) => {
   const [filter, setFilter] = useState('non_lette');
   const [marking, setMarking] = useState(false);
   const [allNotifiche, setAllNotifiche] = useState(null);
@@ -17997,9 +17980,53 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser 
     return (arr||[]).filter(matchNotifica).sort(function(a,b){ return (b.created_at||'').localeCompare(a.created_at||''); });
   };
 
-  const mieNotifiche = allNotifiche !== null
-    ? allNotifiche  // già filtrate dal server + client
-    : _filterNotifiche(propNotifiche); // fallback prima del caricamento
+  // Genera notifiche "live" dagli stessi dati della campanella (lezioni senza presenza, recuperi scaduti, richieste)
+  const liveNotifiche = React.useMemo(function() {
+    if (myRuolo === 'allievo') return [];
+    const oggi = new Date(); oggi.setHours(0,0,0,0);
+    const todayStr = oggi.toISOString().split('T')[0];
+    const results = [];
+    const allLessons = lessons || [];
+    const mieLessons = myRuolo === 'docente'
+      ? allLessons.filter(function(l){ const tk = (myDocenteTeacherKey||myNome).toLowerCase(); return tk && (l.teacher||'').toLowerCase().includes(tk); })
+      : allLessons;
+
+    // Lezioni senza presenza passate
+    const senzaPresenza = mieLessons.filter(function(l){
+      return l.date && l.date < todayStr && !l.attendance && l.attendance !== 'recuperata' && l.attendance !== 'recupero';
+    });
+    if (senzaPresenza.length > 0) {
+      results.push({ id:'__live_senza_presenza__', letto:false, destinatario_ruolo:myRuolo, tipo:'avviso_presenza',
+        titolo: senzaPresenza.length + (senzaPresenza.length>1?' lezioni senza presenza':" lezione senza presenza"),
+        messaggio: senzaPresenza.slice(0,4).map(function(l){ return (l.student||l.courseName||'—')+' · '+(l.date||''); }).join('; '),
+        created_at: todayStr+'T08:00:00', _isLive:true });
+    }
+
+    // Recuperi scaduti
+    const recuperiScaduti = mieLessons.filter(function(l){ return l.inRecupero && l.recuperoScadenza && l.recuperoScadenza < todayStr; });
+    if (recuperiScaduti.length > 0) {
+      results.push({ id:'__live_recuperi_scaduti__', letto:false, destinatario_ruolo:myRuolo, tipo:'recupero_scaduto',
+        titolo: recuperiScaduti.length + (recuperiScaduti.length>1?' recuperi scaduti':' recupero scaduto'),
+        messaggio: recuperiScaduti.slice(0,4).map(function(l){ return (l.student||'—')+' — scaduto il '+l.recuperoScadenza; }).join('; '),
+        created_at: todayStr+'T07:00:00', _isLive:true });
+    }
+
+    // Richieste di recupero in attesa
+    const richiesteAttesa = (richieste||[]).filter(function(r){ return r.stato === 'in_attesa' || !r.stato; });
+    if (richiesteAttesa.length > 0) {
+      results.push({ id:'__live_richieste__', letto:false, destinatario_ruolo:myRuolo, tipo:'recupero_richiesto',
+        titolo: richiesteAttesa.length + (richiesteAttesa.length>1?' richieste di recupero in attesa':' richiesta di recupero in attesa'),
+        messaggio: richiesteAttesa.slice(0,4).map(function(r){ return r.allievo_nome||'—'; }).join(', '),
+        created_at: todayStr+'T06:00:00', _isLive:true });
+    }
+    return results;
+  }, [myRuolo, myNome, myDocenteTeacherKey, lessons, richieste]);
+
+  // Unione DB + live, ordinate per data
+  const mieNotifiche = React.useMemo(function() {
+    const db = allNotifiche !== null ? allNotifiche : _filterNotifiche(propNotifiche);
+    return [...liveNotifiche, ...db].sort(function(a,b){ return (b.created_at||'').localeCompare(a.created_at||''); });
+  }, [allNotifiche, propNotifiche, liveNotifiche]);
 
   const nonLette = mieNotifiche.filter(n => !n.letto);
   const mostrate = filter === 'non_lette' ? nonLette : mieNotifiche;
