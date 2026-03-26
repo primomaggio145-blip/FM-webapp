@@ -6727,6 +6727,10 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
   const hex = lessonHex(lesson);
+
+  // Recupero scaduto: per admin mostra banner con possibilità di proroga
+  const isRecuperoScaduto = lesson.inRecupero && lesson.recuperoScadenza &&
+    new Date(lesson.recuperoScadenza+'T00:00:00') < new Date(new Date().toISOString().split('T')[0]+'T00:00:00');
   // ATT_STYLES: vedi definizione globale
 
   const [showIscrizionePanel, setShowIscrizionePanel] = useState(false);
@@ -7091,6 +7095,29 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                 , React.createElement('span',{style:{fontSize:10,color:C.textDim,marginLeft:'auto'}},'(sola lettura)')
               )
             : React.createElement(React.Fragment, null
+                /* ── Banner recupero scaduto (solo admin) ── */
+                , isRecuperoScaduto && (
+                  React.createElement('div', {style:{marginBottom:10,padding:'12px 14px',background:'rgba(220,38,38,0.08)',border:'1px solid rgba(220,38,38,0.3)',borderRadius:10,display:'flex',alignItems:'center',gap:10}}
+                    , React.createElement(Ic,{n:'alert',size:16,stroke:C.red})
+                    , React.createElement('div',{style:{flex:1}}
+                      , React.createElement('div',{style:{fontSize:13,fontWeight:700,color:C.red}}, '⏰ Recupero scaduto')
+                      , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2}},
+                          'Termine scaduto il ', lesson.recuperoScadenza,
+                          ' — la lezione verrà segnata come assente')
+                    )
+                    , role === 'admin' && React.createElement('button', {
+                        onClick: () => {
+                          if (window.__FM_SHOW_RECUPERO_SCADUTO__) {
+                            window.__FM_SHOW_RECUPERO_SCADUTO__({
+                              lesson,
+                              onExtend: () => { /* il modal aggiorna già lo state */ },
+                            });
+                          }
+                        },
+                        style:{padding:'7px 14px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}
+                      }, '📅 Proroga')
+                  )
+                )
                 , React.createElement('div', { className: "att-row", style: {display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4638}}
                   , ["presente","assente","giustificato","recupero","in_recupero"].map(a => {
                     const s = ATT_STYLES[a] || ATT_STYLES.presente;
@@ -17244,6 +17271,7 @@ function App() {
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
 
   const [globalModal,        setGlobalModal]        = useState(null); // overlay top-level fuori da main-scroll animato
+  const [recuperoScadutoModal, setRecuperoScadutoModal] = useState(null); // {lesson, onExtend, onDismiss}
   // ── Ripristina sessione Auth al refresh pagina + gestisci link invito ──────
   useEffect(()=>{
     if(!window.FM_AUTH) return;
@@ -17564,6 +17592,41 @@ function App() {
           .order('created_at', {ascending:false}).limit(100);
         if (rr) window.__richiesteRecupero__ = rr;
 
+        // 4. Auto-marca recuperi scaduti come ASSENTE
+        // Lezioni con inRecupero=true e recuperoScadenza < oggi → assente (così il docente viene pagato)
+        try {
+          const todayISO2 = new Date().toISOString().split('T')[0];
+          const { data: scaduti } = await sb.from('lezioni')
+            .select('id,student,teacher,data')
+            .eq('in_recupero', true)
+            .lt('recupero_scadenza', todayISO2)
+            .is('attendance', null);  // solo quelle senza presenza ancora
+          if (scaduti && scaduti.length > 0) {
+            console.log('[FM] Recuperi scaduti da marcare come assente:', scaduti.length);
+            // Aggiorna in batch
+            const ids = scaduti.map(function(l){ return l.id; });
+            await sb.from('lezioni').update({
+              attendance: 'assente',
+              in_recupero: false,
+              recupero_scadenza: null,
+            }).in('id', ids);
+            // Aggiorna React state
+            if (window.__FM_RELOAD__) {
+              const allLessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
+              const updated = allLessons.map(function(l) {
+                if (ids.includes(l.id)) {
+                  return { ...l, attendance: 'assente', inRecupero: false, recuperoScadenza: null };
+                }
+                return l;
+              });
+              if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ lessons: updated });
+              window.__FM_RELOAD__({ lessons: updated });
+            }
+          }
+        } catch(eRec) {
+          console.warn('[FM] Auto-mark recuperi error:', eRec?.message);
+        }
+
       } catch(e) {
         console.warn('[FM] Poll today error:', e);
       } finally {
@@ -17587,6 +17650,7 @@ function App() {
     // Overlay globale
     window.__FM_SHOW_MODAL__ = (element) => setGlobalModal(element);
     window.__FM_HIDE_MODAL__ = ()        => setGlobalModal(null);
+    window.__FM_SHOW_RECUPERO_SCADUTO__ = (data) => setRecuperoScadutoModal(data);
     return () => {
       window.__FM_RELOAD__ = null;
       window.__FM_FORCE_REFRESH__ = null;
@@ -17749,10 +17813,126 @@ function App() {
          i position:fixed dentro vengono trappola da esso. Qui siamo nel Fragment
          root, quindi position:fixed si aggancia al viewport come previsto.  */
       , globalModal
+      /* Modal recupero scaduto — solo admin, position:fixed fuori da main-scroll */
+      , recuperoScadutoModal && React.createElement(RecuperoScadutoModal, {
+          lesson: recuperoScadutoModal.lesson,
+          onExtend: recuperoScadutoModal.onExtend,
+          onDismiss: () => setRecuperoScadutoModal(null),
+          setLessons: setSharedLessons,
+        })
     )
   );
 }
 
+
+// ─── MODAL RECUPERO SCADUTO (solo admin) ──────────────────────────────────────
+const RecuperoScadutoModal = ({ lesson, onExtend, onDismiss, setLessons }) => {
+  const [nuovaScadenza, setNuovaScadenza] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // Calcola fine del prossimo mese come default
+  const oggi = new Date();
+  const fineMesseProssimo = new Date(oggi.getFullYear(), oggi.getMonth()+2, 0).toISOString().split('T')[0];
+
+  const handleEstendi = async () => {
+    if (!nuovaScadenza) return;
+    setSaving(true);
+    const sb = window.supabaseClient;
+    if (sb) {
+      await sb.from('lezioni').update({
+        in_recupero:       true,
+        recupero_scadenza: nuovaScadenza,
+        attendance:        null,   // rimuovi 'assente' se era già stato marcato
+      }).eq('id', lesson.id);
+      // Aggiorna React state
+      setLessons(p => p.map(l => l.id === lesson.id
+        ? {...l, inRecupero: true, recuperoScadenza: nuovaScadenza, attendance: ''}
+        : l));
+      if (window.__FM_UPDATE_PREV__) {
+        const all = (window.__FM_DATA__?.lessons || []);
+        window.__FM_UPDATE_PREV__({ lessons: all.map(l => l.id === lesson.id
+          ? {...l, inRecupero: true, recuperoScadenza: nuovaScadenza, attendance: ''}
+          : l)});
+      }
+    }
+    setSaving(false);
+    onDismiss();
+    if (onExtend) onExtend();
+  };
+
+  const dataLez = lesson.date
+    ? new Date(lesson.date+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})
+    : '—';
+  const scadenza = lesson.recuperoScadenza
+    ? new Date(lesson.recuperoScadenza+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'})
+    : '—';
+
+  return React.createElement(React.Fragment, null
+    // Overlay
+    , React.createElement('div', {
+        onClick: onDismiss,
+        style:{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,0.65)',backdropFilter:'blur(3px)'}
+      })
+    // Modal
+    , React.createElement('div', {
+        style:{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',
+          zIndex:9999,background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,
+          width:460,maxWidth:'calc(100vw - 32px)',boxShadow:'0 20px 60px rgba(0,0,0,0.4)',
+          fontFamily:"'Open Sans',sans-serif"}
+      }
+      // Header rosso
+      , React.createElement('div', {style:{background:'rgba(220,38,38,0.08)',borderBottom:`1px solid ${C.redBorder}`,borderRadius:'16px 16px 0 0',padding:'18px 24px',display:'flex',alignItems:'center',gap:12}}
+        , React.createElement('div', {style:{width:36,height:36,borderRadius:10,background:C.redBg,border:`1px solid ${C.redBorder}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+          , React.createElement(Ic, {n:'alert',size:18,stroke:C.red})
+        )
+        , React.createElement('div', null
+          , React.createElement('div', {style:{fontSize:15,fontWeight:700,color:C.red}}, '⏰ Recupero scaduto')
+          , React.createElement('div', {style:{fontSize:12,color:C.textDim,marginTop:2}}, 'Termine di recupero superato')
+        )
+      )
+      // Body
+      , React.createElement('div', {style:{padding:'20px 24px',display:'flex',flexDirection:'column',gap:14}}
+        , React.createElement('div', {style:{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:'14px 16px'}}
+          , React.createElement('div', {style:{fontSize:13,fontWeight:600,marginBottom:4}},
+              lesson.student || lesson.courseName || '—')
+          , React.createElement('div', {style:{fontSize:12,color:C.textMuted}},
+              '📅 ', dataLez, ' · 🕐 ', lesson.hour||'—')
+          , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:4}},
+              '👨‍🏫 ', lesson.teacher||'—')
+          , React.createElement('div', {style:{fontSize:12,color:C.red,marginTop:6,fontWeight:600}},
+              '⚠️ Scadenza: ', scadenza)
+        )
+        , React.createElement('div', {style:{fontSize:13,color:C.text,lineHeight:1.5}}
+          , 'La lezione verrà automaticamente segnata come ', React.createElement('strong',null,'ASSENTE'),
+            ' così da essere retribuita al docente. '
+          , React.createElement('br',null)
+          , 'Vuoi comunque prorogare il termine di recupero?'
+        )
+        , React.createElement('div', null
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:6}}, 'Nuova scadenza recupero')
+          , React.createElement('input', {
+              type:'date',
+              min: new Date().toISOString().split('T')[0],
+              value: nuovaScadenza || fineMesseProssimo,
+              onChange: e => setNuovaScadenza(e.target.value),
+              style:{width:'100%',boxSizing:'border-box',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:'10px 14px',fontFamily:"'Open Sans',sans-serif"}
+            })
+        )
+        , React.createElement('div', {style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+          , React.createElement('button', {
+              onClick: onDismiss,
+              style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:'none',color:C.textMuted,cursor:'pointer',fontSize:13,fontFamily:"'Open Sans',sans-serif"}
+            }, 'Lascia come assente')
+          , React.createElement('button', {
+              onClick: handleEstendi,
+              disabled: saving,
+              style:{padding:'9px 18px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:saving?'wait':'pointer',fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif",opacity:saving?0.7:1}
+            }, saving ? '⏳...' : '✓ Proroga recupero')
+        )
+      )
+    )
+  );
+};
 
 // ─── NOTIFICHE VIEW ────────────────────────────────────────────────────────────
 const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser }) => {
