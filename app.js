@@ -2152,6 +2152,9 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                               setAnniScolastici(p=>p.map(a=>({...a,stato:a.id===as.id?"attivo":"archiviato"})));
                               setConfig(p=>({...p,annoScolastico:as.label,annoInizioAttivo:as.annoInizio}));
                               setD("annoScolastico",as.label);
+                              setD("annoInizioAttivo",as.annoInizio);
+                              // Aggiorna subito il config globale senza aspettare Salva
+                              if (onConfig) onConfig(c=>({...c,annoScolastico:as.label,annoInizioAttivo:as.annoInizio}));
                             },
                               style: {fontSize:11,padding:"3px 10px",borderRadius:6,cursor:"pointer",
                                 background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,
@@ -4534,7 +4537,10 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const nowDate   = new Date(today);
   const curYear   = nowDate.getFullYear();
   const curMonth  = nowDate.getMonth() + 1;
-  const annoInizio = _nullishCoalesce(annoInizioAttivo, () => ( (curMonth >= 9 ? curYear : curYear - 1)));
+  const annoInizio = (() => {
+    if (annoInizioAttivo) return Number(annoInizioAttivo);
+    return curMonth >= 9 ? curYear : curYear - 1;
+  })();
   const MESI_LABEL_L = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const MESI_LABEL_S = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
   // Anno scolastico base (Set→Giu). Esteso dinamicamente fino al mese corrente.
@@ -8625,8 +8631,12 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
     const e = validate();
     if(Object.keys(e).length){ setErr(e); return; }
     onSave({
-      ...f, id: uid(), tipo:"prova",
-      student: "", iscritto: false, attendance:"",
+      ...f,
+      id: (initial && initial.id) || uid(),  // preserva id in edit mode
+      tipo:"prova",
+      student: f.student || "",
+      iscritto: f.iscritto || false,
+      attendance: f.attendance || "",
       recurrence:"Nessuna", repertorioIds:[],
       durata: f.durata || 30,
     });
@@ -10926,6 +10936,16 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                     docenti: propDocenti,
                     repertorio: repertorio,
                     onAddBrano: b => setRepertorio(p=>[...p,b]),
+                    onSave: handleEdit,
+                    onClose: closeModal,
+                  })
+              )
+            : isProva(selLesson)
+            ? React.createElement(Modal, { title: "Modifica lezione di prova", onClose: closeModal, wide: true}
+                , React.createElement(TrialLessonForm, {
+                    initial: selLesson,
+                    docenti: propDocenti,
+                    courses: propCourses,
                     onSave: handleEdit,
                     onClose: closeModal,
                   })
@@ -15811,7 +15831,12 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   };
 
   // Anno scolastico — usa il prop dall'admin (fallback: auto da data corrente)
-  const annoInizio = _nullishCoalesce(annoInizioAttivo, () => ( (curMonth >= 9 ? curYear : curYear-1)));
+  // Supporta sia annoInizioAttivo (integer) sia label "YYYY/YYYY" dal config
+  const annoInizio = (() => {
+    if (annoInizioAttivo) return Number(annoInizioAttivo);
+    // Fallback: ricava dall'anno scolastico corrente basandosi sulla data
+    return curMonth >= 9 ? curYear : curYear - 1;
+  })();
   const MESI_AS = [
     {m:9, y:annoInizio},{m:10,y:annoInizio},{m:11,y:annoInizio},{m:12,y:annoInizio},
     {m:1, y:annoInizio+1},{m:2,y:annoInizio+1},{m:3,y:annoInizio+1},
