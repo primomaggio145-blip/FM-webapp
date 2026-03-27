@@ -602,7 +602,6 @@
   };
 
   // Esposto a app.js per aggiornare _prev dopo insert diretto su Supabase
-  // Evita che il diff di fm_sync veda la lezione come "nuova" e tenti un secondo INSERT → 409
   window.__FM_UPDATE_PREV__ = function(data) {
     if (data.lessons) {
       _prev.lessons = data.lessons.map(l => {
@@ -615,6 +614,10 @@
       });
     }
   };
+
+  // Guard globale: set di chiavi "data_ora_corso/studente" per cui un insert è in corso o completato
+  // Previene inserimenti doppi da handleEdit + debounce fm_sync
+  window.__FM_LESSON_INSERTED__ = window.__FM_LESSON_INSERTED__ || new Set();
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  MOUNT REACT
