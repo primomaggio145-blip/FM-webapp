@@ -6073,6 +6073,98 @@ const addDays  = (d, n) => { const dt = new Date(d); dt.setDate(dt.getDate()+n);
 const isColl      = l => _optionalChain([l, 'optionalAccess', _46 => _46.tipo]) === "collettivo";
 const isProva     = l => _optionalChain([l, 'optionalAccess', _47 => _47.tipo]) === "prova";
 const isSalaProve = l => _optionalChain([l, 'optionalAccess', _47b => _47b.tipo]) === "sala_prove";
+
+// ── Inserimento SICURO di una lezione ricorrente ──────────────────────────────
+// Previene duplicati con un guard globale + controllo Supabase prima di inserire
+// Restituisce true se la lezione è stata inserita, false se già esisteva
+const safeInsertRecurringLesson = async (lesson, setLessons) => {
+  // Chiave univoca per questa lezione: data + ora + corso/studente
+  const guardKey = `${lesson.date}_${lesson.hour}_${
+    isColl(lesson) ? (lesson.courseId || lesson.courseName || 'coll') : (lesson.student || lesson.studentId || 'ind')
+  }`;
+
+  // 1. Check guard in-memory: previene doppio inserimento nello stesso tick
+  const guard = window.__FM_LESSON_INSERTED__ || (window.__FM_LESSON_INSERTED__ = new Set());
+  if (guard.has(guardKey)) {
+    console.log('[FM] safeInsert: SKIP (guard in-memory)', guardKey);
+    return false;
+  }
+  guard.add(guardKey);
+  // Rimuovi dalla guard dopo 30s (per permettere future sessioni)
+  setTimeout(() => guard.delete(guardKey), 30000);
+
+  const sb = window.supabaseClient;
+  if (!sb) return false;
+
+  // 2. Check Supabase: la lezione esiste già nel DB?
+  try {
+    let q = sb.from('lezioni').select('id').eq('data', lesson.date).eq('ora', lesson.hour);
+    if (isColl(lesson) && lesson.courseId) {
+      q = q.eq('corso_id', lesson.courseId);
+    } else if (lesson.student) {
+      q = q.eq('student', lesson.student);
+    }
+    const { data: existing } = await q.limit(1);
+    if (existing && existing.length > 0) {
+      console.log('[FM] safeInsert: SKIP (già in Supabase)', guardKey, existing[0].id);
+      // Aggiorna React state se non c'è già
+      setLessons(prev => {
+        const alreadyInState = prev.some(l => l.id === existing[0].id || (l.date === lesson.date && l.hour === lesson.hour && (isColl(lesson) ? l.courseId === lesson.courseId : l.student === lesson.student)));
+        return alreadyInState ? prev : [...prev, {...lesson, id: existing[0].id}];
+      });
+      return false;
+    }
+  } catch(e) {
+    console.warn('[FM] safeInsert check error:', e?.message);
+  }
+
+  // 3. Aggiorna _prev PRIMA dell'insert per bloccare il debounce di fm_sync
+  if (window.__FM_UPDATE_PREV__) {
+    const currentLessons = (window.__FM_DATA__?.lessons || []);
+    window.__FM_UPDATE_PREV__({ lessons: [...currentLessons, lesson] });
+  }
+
+  // 4. Inserisci su Supabase
+  const row = {
+    id:               lesson.id,
+    data:             lesson.date,
+    ora:              lesson.hour       || null,
+    student:          lesson.student    || null,
+    studente_id:      lesson.studentId  ? parseInt(lesson.studentId, 10) : null,
+    strumento:        lesson.instrument || lesson.strumento || null,
+    teacher:          lesson.teacher    || null,
+    room:             lesson.room       || null,
+    topic:            lesson.topic      || null,
+    attendance:       null,
+    recurrence:       lesson.recurrence || 'Nessuna',
+    notes:            null,
+    tipo:             lesson.tipo || lesson.type || 'individuale',
+    link_url:         lesson.linkUrl    || null,
+    in_recupero:      false,
+    recupero_scadenza:null,
+    durata:           lesson.durata     || null,
+    corso_id:         lesson.courseId   || null,
+    corso_nome:       lesson.courseName || null,
+    students:         lesson.students && lesson.students.length > 0 ? JSON.stringify(lesson.students) : null,
+  };
+
+  try {
+    const { error } = await sb.from('lezioni').insert(row);
+    if (error) {
+      if (error.code === '23505' || error.message?.includes('conflict') || error.message?.includes('duplicate')) {
+        console.log('[FM] safeInsert: 409 ignorato (duplicato già gestito)', guardKey);
+      } else {
+        console.warn('[FM] safeInsert error:', error.message);
+      }
+      return false;
+    }
+    console.log('[FM] safeInsert: OK', guardKey);
+    return true;
+  } catch(e) {
+    console.warn('[FM] safeInsert catch:', e?.message);
+    return false;
+  }
+};
 const lessonHex   = l => isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaProve(l) ? C.orange2 : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
 const studentInLesson = (l, name, studentId) => {
   if (isColl(l)) {
@@ -10369,12 +10461,14 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
           const gap      = daysMap[dataNormFull.recurrence] || 7;
           const nextDate = yyyymmdd(addDays(new Date((dataNormFull.date||"")+"T00:00:00"), gap));
-          setLessons(prev => {
-            const exists = prev.some(l =>
-              l.date === nextDate && l.hour === dataNormFull.hour &&
-              (isColl(dataNormFull) ? l.courseId === dataNormFull.courseId : l.student === dataNormFull.student)
-            );
-            if (exists) return prev;
+          // Check sincrono nello state React per evitare doppio render
+          const alreadyInState = (lessons||[]).some(l =>
+            l.date === nextDate && l.hour === dataNormFull.hour &&
+            (isColl(dataNormFull)
+              ? (l.courseId && dataNormFull.courseId && l.courseId === dataNormFull.courseId)
+              : (l.student && dataNormFull.student && l.student === dataNormFull.student))
+          );
+          if (!alreadyInState) {
             const nextLesson = {
               ...dataNormFull,
               id:               uid(),
@@ -10386,40 +10480,17 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               recuperoScadenza: null,
               tipo:             dataNormFull.tipo === 'recupero' ? 'individuale' : (dataNormFull.tipo || 'individuale'),
             };
-            const sbR = window.supabaseClient;
-            if (sbR) {
-              sbR.from('lezioni').insert({
-                id:               nextLesson.id,
-                data:             nextLesson.date,
-                ora:              nextLesson.hour       || null,
-                student:          nextLesson.student    || null,
-                studente_id:      nextLesson.studentId  || null,
-                strumento:        nextLesson.instrument || nextLesson.strumento || null,
-                teacher:          nextLesson.teacher    || null,
-                room:             nextLesson.room       || null,
-                topic:            nextLesson.topic      || null,
-                attendance:       null,
-                recurrence:       nextLesson.recurrence || 'Nessuna',
-                notes:            null,
-                tipo:             nextLesson.tipo || 'individuale',
-                link_url:         nextLesson.linkUrl    || null,
-                in_recupero:      false,
-                recupero_scadenza:null,
-                durata:           nextLesson.durata     || null,
-                corso_id:         nextLesson.courseId   || null,
-                corso_nome:       nextLesson.courseName || null,
-                students:         nextLesson.students && nextLesson.students.length > 0
-                                    ? JSON.stringify(nextLesson.students) : null,
-              }).then(({ error }) => {
-                if (error) console.warn('[FM] handleEdit recurring insert error:', error.message);
-                if (!error && window.__FM_UPDATE_PREV__) {
-                  window.__FM_UPDATE_PREV__({ lessons: [...(window.__FM_DATA__?.lessons || []), nextLesson] });
-                }
-              });
-            }
+            // Aggiorna React state
+            setLessons(prev => {
+              const dup = prev.some(l => l.date === nextDate && l.hour === nextLesson.hour &&
+                (isColl(nextLesson) ? l.courseId === nextLesson.courseId : l.student === nextLesson.student));
+              if (dup) return prev;
+              return [...prev, nextLesson];
+            });
             setNextLessonCreated(nextDate);
-            return [...prev, nextLesson];
-          });
+            // Insert sicuro su Supabase (con guard + check DB)
+            safeInsertRecurringLesson(nextLesson, setLessons);
+          }
         }
       }
 
@@ -10480,7 +10551,6 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         }
 
         // Se segno presenza REALE (non in_recupero) su lezione ricorrente → crea la prossima
-        // in_recupero = lezione saltata, NON deve generare la successiva
         const isLezioneRecupero = lesson && (lesson.tipo === 'recupero' || lesson.inRecupero === true);
         const valCreaLezione = val && val !== "" && val !== "in_recupero";
         if (lesson && valCreaLezione && lesson.recurrence && lesson.recurrence !== "Nessuna" && !isLezioneRecupero) {
@@ -10488,14 +10558,14 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           const gap     = daysMap[lesson.recurrence] || 7;
           const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap));
 
-          // Evita duplicati RIGOROSO: controlla per data + ora + corso/studente
+          // Check duplicato con confronto robusto (no null === null per courseId)
           const alreadyExists = updated.some(l =>
-            l.id !== lesson.id &&           // non è la lezione corrente
+            l.id !== lesson.id &&
             l.date === nextDate &&
             l.hour === lesson.hour &&
             (isColl(lesson)
-              ? l.courseId === lesson.courseId
-              : l.student  === lesson.student)
+              ? (l.courseId && lesson.courseId && l.courseId === lesson.courseId)
+              : (l.student  && lesson.student  && l.student  === lesson.student))
           );
           if (!alreadyExists) {
             const nextLesson = {
@@ -10505,50 +10575,14 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               attendance:       "",
               notes:            "",
               exercises:        "",
-              // La nuova lezione NON eredita lo stato recupero dalla precedente
               inRecupero:       false,
               recuperoScadenza: null,
               tipo:             lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
             };
 
-            // ── Persisti la nuova lezione ricorrente su Supabase ───────────
-            if (sb) {
-              const row = {
-                id:               nextLesson.id,
-                data:             nextLesson.date,
-                ora:              nextLesson.hour        || null,
-                student:          nextLesson.student     || null,
-                studente_id:      nextLesson.studentId   || null,
-                strumento:        nextLesson.instrument  || nextLesson.strumento || null,
-                teacher:          nextLesson.teacher     || null,
-                room:             nextLesson.room        || null,
-                topic:            nextLesson.topic       || null,
-                attendance:       null,
-                recurrence:       nextLesson.recurrence  || 'Nessuna',
-                notes:            null,
-                tipo:             nextLesson.type        || nextLesson.tipo || 'individuale',
-                link_url:         nextLesson.linkUrl     || null,
-                in_recupero:      false,
-                recupero_scadenza:null,
-                durata:           nextLesson.durata      || null,
-                corso_id:         nextLesson.courseId    || null,
-                corso_nome:       nextLesson.courseName  || null,
-                students:         nextLesson.students && nextLesson.students.length > 0
-                                    ? JSON.stringify(nextLesson.students) : null,
-              };
-              sb.from('lezioni').insert(row).then(({ error }) => {
-                if (error) {
-                  console.warn('[FM] recurring lesson insert error:', error.message);
-                } else {
-                  // Aggiorna _prev con la nuova lezione per evitare re-INSERT da fm_sync → 409
-                  if (window.__FM_UPDATE_PREV__) {
-                    window.__FM_UPDATE_PREV__({ lessons: [...(window.__FM_DATA__?.lessons || []), nextLesson] });
-                  }
-                }
-              });
-            }
-
-            setNextLessonCreated(nextDate); // feedback toast
+            // Insert sicuro su Supabase (guard + check DB + _prev aggiornato prima)
+            safeInsertRecurringLesson(nextLesson, setLessons);
+            setNextLessonCreated(nextDate);
             return [...updated, nextLesson];
           }
         }
