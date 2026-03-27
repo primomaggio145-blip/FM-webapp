@@ -1484,7 +1484,15 @@ const MiniChart = ({ dati }) => {
 // ─── LESSON TIMELINE ──────────────────────────────────────────────────────────
 const LessonTimeline = ({ lezioni, onLessonClick }) => {
   const oraNum = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
-  const nowMins = oggi.getHours()*60+oggi.getMinutes();
+
+  // Clock locale che si aggiorna ogni 60s → la timeline scorre col tempo reale
+  const [nowLive, setNowLive] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNowLive(new Date()), 60000);
+    return () => clearInterval(t);
+  }, []);
+  const nowMins = nowLive.getHours()*60 + nowLive.getMinutes();
+
   const scrollRef = React.useRef(null);
 
   // Auto-scroll: porta la prima lezione in corso / prossima in cima al contenitore
@@ -2818,6 +2826,12 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
 
 const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, notifiche:propNotifiche, panels:propPanels, setPanels:propSetPanels, onQuickAction }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Clock live: aggiorna ogni 60s per far scorrere la progressbar e la timeline
+  const [dashNow, setDashNow] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setDashNow(new Date()), 60000);
+    return () => clearInterval(t);
+  }, []);
     const [showAmounts,  setShowAmounts]  = useState(false);
     const [_localPanels, _setLocalPanels]  = useState({});
     const panels    = propPanels    !== undefined ? propPanels    : _localPanels;
@@ -2912,9 +2926,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const allieviAttivi    = _myStudentsForDash.filter(a=>a.status==="attivo"||a.stato==="attivo").length;
     const morosi           = ruolo==="docente" ? 0 : _students.filter(a=>a.status==="scaduto"||a.stato==="scaduto").length;
     const oraNum  = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
-    const nowMins = oggi.getHours()*60+oggi.getMinutes();
-    const lezioniOggi      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(oggi) && l.attendance !== 'recuperata';}).length;
-    const lezComplete      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(oggi)&&l.attendance !== 'recuperata'&&oraNum(l.time||l.ora||"0:0")+(l.duration||l.durata||0)<=nowMins;}).length;
+    const nowMins = dashNow.getHours()*60+dashNow.getMinutes();
+    const lezioniOggi      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(dashNow) && l.attendance !== 'recuperata';}).length;
+    const lezComplete      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(dashNow)&&l.attendance !== 'recuperata'&&oraNum(l.hour||l.time||l.ora||"0:0")+(l.duration||l.durata||0)<=nowMins;}).length;
     const lezioniSettimana = _lessons.filter(l=>{if(!l.recurring&&!l.ricorrente) return false; if(l.attendance==='recuperata') return false; const d=new Date(l.date||l.data||oggi); return d<=oggi&&(!l.endDate||new Date(l.endDate)>=oggi);}).length || _lessons.filter(l=>l.attendance!=='recuperata').length;
     const meseCorrente = oggi.getMonth()+1;
     const annoCorrente = oggi.getFullYear();
@@ -8697,7 +8711,8 @@ const emptyProva = {
 const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, onSave, onClose, date }) => {
   const docenti = _docentiRaw || [];
   const courses = _coursesRaw || [];
-  const [f, setF] = useState(initial || {...emptyProva, date: date || yyyymmdd(today)});
+  // Merge initial con emptyProva per garantire tutti i campi (phone potrebbe mancare nelle lezioni di prova salvate prima)
+  const [f, setF] = useState({...emptyProva, date: date || yyyymmdd(today), ...(initial||{})});
   const [err, setErr] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
 
@@ -8715,7 +8730,7 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
     if(!f.instrument) e.instrument = "Seleziona un corso/strumento";
     if(!f.date)       e.date       = "Data obbligatoria";
     if(!f.hour)       e.hour       = "Orario obbligatorio";
-    if(!f.phone.trim()) e.phone    = "Recapito obbligatorio";
+    if(!(f.phone||'').trim()) e.phone    = "Recapito obbligatorio";
     return e;
   };
 
@@ -17570,17 +17585,24 @@ function App() {
       try {
         const sb = window.supabaseClient;
         if (!sb) return;
-        const FA = window.FMAdapter;
         const todayISO = new Date().toISOString().split('T')[0];
+        // Soglia "recente": tutto ciò che è stato modificato negli ultimi 10 minuti
+        const recentThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
-        // 1. Solo lezioni di OGGI (1 query leggera invece di tutte le lezioni)
-        const { data: sL } = await sb.from('lezioni').select('*')
-          .eq('data', todayISO);
-        if (sL && window.__FM_RELOAD__) {
-          // Merge con le lezioni esistenti: sostituisci quelle di oggi, mantieni il resto
+        // 1. Lezioni di OGGI + lezioni modificate di recente (nuove ricorrenti, nuove prove, modifiche stato)
+        //    Due query leggere invece di scaricare tutto il DB
+        const [{ data: sLToday }, { data: sLRecent }] = await Promise.all([
+          sb.from('lezioni').select('*').eq('data', todayISO),
+          sb.from('lezioni').select('*').gt('updated_at', recentThreshold).neq('data', todayISO),
+        ]);
+
+        const allFetched = [...(sLToday||[]), ...(sLRecent||[])];
+
+        if (allFetched.length > 0 && window.__FM_RELOAD__) {
           const existingLessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
-          const todayIds = new Set(sL.map(function(r){ return r.id; }));
-          const otherDays = existingLessons.filter(function(l){ return (l.date||l.data) !== todayISO && !todayIds.has(l.id); });
+          const fetchedIds = new Set(allFetched.map(function(r){ return r.id; }));
+          // Mantieni le lezioni non toccate da questo poll
+          const untouched = existingLessons.filter(function(l){ return !fetchedIds.has(l.id); });
           const adaptL = function(r) {
             return {
               id: r.id, date: r.data, hour: r.ora ? r.ora.slice(0,5) : '',
@@ -17595,13 +17617,11 @@ function App() {
               repertorioIds: (function(){ try{return r.repertorio_ids?JSON.parse(r.repertorio_ids):[];}catch(e){return [];} })(),
               allegati: [],
               students: (function(){ try{return r.students?JSON.parse(r.students):[];}catch(e){return [];} })(),
-              courseId: r.corso_id||null,
-              courseName: r.corso_nome||null,
+              courseId: r.corso_id||null, courseName: r.corso_nome||null,
               notesRecupero: r.notes_recupero||'',
             };
           };
-          const todayAdapted = sL.map(adaptL);
-          const mergedLessons = [...otherDays, ...todayAdapted];
+          const mergedLessons = [...untouched, ...allFetched.map(adaptL)];
           if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ lessons: mergedLessons });
           window.__FM_RELOAD__({ lessons: mergedLessons });
         }
@@ -17677,8 +17697,18 @@ function App() {
     };
 
     const _pollInterval = setInterval(function() {
+      // Poll adattivo: ogni 60s durante l'orario scolastico (8-20), ogni 5 minuti di notte
+      const h = new Date().getHours();
+      const isScoolHours = h >= 8 && h < 20;
+      if (!isScoolHours) {
+        // Di notte, esegui solo ogni 5 minuti (ogni 5° tick)
+        _pollNightCounter = (_pollNightCounter||0) + 1;
+        if (_pollNightCounter < 5) return;
+        _pollNightCounter = 0;
+      }
       window.__FM_POLL_TODAY__ && window.__FM_POLL_TODAY__();
-    }, 45000);
+    }, 60000);
+    var _pollNightCounter = 0;
 
     // ── beforeunload: avvisa sempre quando l'utente prova a uscire ──────────
     const handleBeforeUnload = (e) => {
@@ -17784,34 +17814,27 @@ function App() {
   }
 
   // ── WEBAPP PRINCIPALE ──
-  const views = {
-    dashboard:   React.createElement(DashboardView, { appUser: user, onNavigate: setView,
-                   config: sharedConfig, setConfig: setSharedConfig,
-                   anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici,
-                   students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate,
-                   spese: sharedSpese,
-                   docenti: sharedDocenti, lessons: sharedLessons,
-                   concerti: sharedConcerti,
-                   richieste: sharedRichieste,
-                   notifiche: sharedNotifiche,
-                   panels: sharedPanels, setPanels: setSharedPanels,
-                   onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10769}}),
-    allievi:     React.createElement(AllieviView, {    students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10772}}),
-    docenti:     React.createElement(DocentiView, {   students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user,
-                   annoInizioAttivo: sharedConfig.annoInizioAttivo, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10773}}),
-    corsi:       React.createElement(CorsiView, {     courses: sharedCourses,   setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10775}}),
-    calendario:  React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10776}}),
-    contabilita: React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10777}}),
-    repertorio:  React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10778}}),
-    allegati:    React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
-    biblioteca:  React.createElement(BibliotecaView, { userRuolo: user?.ruolo||"admin", appUser: user }),
-    concerti:    React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10779}}),
-    utenti:      (user?.ruolo||"admin")==="admin" && React.createElement(UtentiView, { students: sharedStudents, docenti: sharedDocenti }),
-    sitoWeb:       null,
-    impostazioni:  React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo }),
-    schedaScuola:  React.createElement(SchedaScuolaView, { config: sharedConfig }),
-    modulistica:   React.createElement(ModulisticaView, { }),
-    notifiche:     React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste }),
+  // Render della vista corrente — NON usare un oggetto views{} perché ricrea i componenti
+  // ad ogni render di App (ogni cambio stato), causando il reset dei setInterval interni
+  const renderCurrentView = () => {
+    switch(view) {
+      case 'dashboard':   return React.createElement(DashboardView, { appUser: user, onNavigate: setView, config: sharedConfig, setConfig: setSharedConfig, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, docenti: sharedDocenti, lessons: sharedLessons, concerti: sharedConcerti, richieste: sharedRichieste, notifiche: sharedNotifiche, panels: sharedPanels, setPanels: setSharedPanels, onQuickAction: (action)=>setSharedQuickAction(action)});
+      case 'allievi':     return React.createElement(AllieviView, { students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'docenti':     return React.createElement(DocentiView, { students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user, annoInizioAttivo: sharedConfig.annoInizioAttivo, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null)});
+      case 'corsi':       return React.createElement(CorsiView, { courses: sharedCourses, setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'calendario':  return React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'contabilita': return React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'repertorio':  return React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'allegati':    return React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user});
+      case 'biblioteca':  return React.createElement(BibliotecaView, { userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'concerti':    return React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti});
+      case 'utenti':      return (user?.ruolo||"admin")==="admin" ? React.createElement(UtentiView, { students: sharedStudents, docenti: sharedDocenti}) : null;
+      case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo});
+      case 'schedaScuola':return React.createElement(SchedaScuolaView, { config: sharedConfig});
+      case 'modulistica': return React.createElement(ModulisticaView, {});
+      case 'notifiche':   return React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste});
+      default: return null;
+    }
   };
 
   // Logout con controllo notifiche non lette
@@ -17846,7 +17869,7 @@ function App() {
           })
         , React.createElement('div', { key: view, className: "main-scroll", style: {flex:1,overflow:"auto",background:C.bg,animation:"fadeIn 0.25s ease",
           paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 4px)",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10788}}
-          , views[view] || null
+          , renderCurrentView()
         )
       )
       /* ─── Global Modal Slot ───────────────────────────────────────────────────
