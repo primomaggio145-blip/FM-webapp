@@ -578,11 +578,28 @@
       try {
         sb.channel(`fm4:${t}`)
           .on('postgres_changes', { event: '*', schema: 'public', table: t }, async () => {
-            const asc = (t !== 'lezioni' && t !== 'spese');
+            // Per 'lezioni': carica solo oggi + ultime modifiche (non tutto il DB)
+            if (t === 'lezioni') {
+              const todayISO = new Date().toISOString().split('T')[0];
+              const recentThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+              const [{ data: dToday }, { data: dRecent }] = await Promise.all([
+                sb.from('lezioni').select('*').eq('data', todayISO),
+                sb.from('lezioni').select('*').gt('updated_at', recentThreshold).neq('data', todayISO),
+              ]);
+              const allFetched = [...(dToday||[]), ...(dRecent||[])];
+              const fetchedIds = new Set(allFetched.map(r => r.id));
+              const existing = (_prev[k] || []).filter(l => !fetchedIds.has(l.id));
+              const adapted = [...existing, ...allFetched.map(r => adaptLezione(r, []))];
+              _prev[k] = adapted;
+              if (window.__FM_RELOAD__) window.__FM_RELOAD__({ [k]: adapted });
+              return;
+            }
+            // Per le altre tabelle: carica tutto (sono tabelle piccole)
+            const asc = (t !== 'spese');
             const { data, error } = await sb.from(t).select('*').order(o, { ascending: asc });
             if (error) { warn('realtime', t, error.message); return; }
             const adapted = (data || []).map(a);
-            _prev[k] = adapted;  // aggiorna snapshot senza triggerare write
+            _prev[k] = adapted;
             if (window.__FM_RELOAD__) window.__FM_RELOAD__({ [k]: adapted });
           })
           .subscribe();

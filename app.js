@@ -3571,12 +3571,15 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                                 /* KPI strip */
                                 , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}
                                   , [
-                                      {label:"Lezioni mese",  value:lezMeseDoc.length, hex:C.teal},
-                                      {label:`Compenso ${MESI_N[meseC-1]}`, value:fmt(compMese), hex:C.green},
-                                      {label:`Totale ${annoC}`, value:fmt(compAnno), hex:C.gold},
+                                      {label:"Lezioni mese",  value:lezMeseDoc.length, hex:C.teal, monetary:false},
+                                      {label:`Compenso ${MESI_N[meseC-1]}`, value:fmt(compMese), hex:C.green, monetary:true},
+                                      {label:`Totale ${annoC}`, value:fmt(compAnno), hex:C.gold, monetary:true},
                                     ].map(k=>
                                       React.createElement('div', {key:k.label, style:{background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 12px",textAlign:"center"}}
-                                        , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,color:k.hex,lineHeight:1}}, k.value)
+                                        , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,color:k.hex,lineHeight:1,
+                                          filter: (!showAmounts && k.monetary) ? "blur(6px)" : "none",
+                                          userSelect: (!showAmounts && k.monetary) ? "none" : "auto",
+                                          transition:"filter 0.2s"}}, (!showAmounts && k.monetary) ? "••••" : k.value)
                                         , React.createElement('div', {style:{fontSize:9,color:C.textDim,textTransform:"uppercase",letterSpacing:"0.08em",marginTop:3}}, k.label)
                                       )
                                     )
@@ -6382,6 +6385,7 @@ const ATT_STYLES = {
   recupero:    { bg:C.blueBg,   fg:C.blue,   bd:C.blueBorder,   label:'Recupero'    },
   in_recupero: { bg:'rgba(255,160,0,0.10)', fg:'#f59e0b', bd:'rgba(245,158,11,0.4)', label:'In recupero' },
   recuperata:  { bg:C.tealBg,   fg:C.teal,   bd:C.tealBorder,   label:'Recuperata'  },
+  cambio_ora:  { bg:'rgba(139,92,246,0.10)', fg:'#7c3aed', bd:'rgba(139,92,246,0.4)', label:'Cambio ora'  },
 };
 
 const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, courses:_coursesRaw, role:_roleLF }) => {
@@ -6513,7 +6517,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
                 , (f.notesRecupero||f.notes_recupero) && React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontStyle:'italic'}}, f.notesRecupero||f.notes_recupero)
                 , React.createElement('span',{style:{fontSize:11,color:C.textDim}},'(sola lettura)')
               )
-            : ["presente","assente","giustificato","recupero","in_recupero"].map(a => {
+            : ["presente","assente","giustificato","recupero","in_recupero","cambio_ora"].map(a => {
               const s = ATT_STYLES[a] || ATT_STYLES.presente;
               const active = a === 'in_recupero'
                 ? (f.attendance === 'in_recupero' || f.inRecupero === true)
@@ -7222,7 +7226,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                   )
                 )
                 , React.createElement('div', { className: "att-row", style: {display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4638}}
-                  , ["presente","assente","giustificato","recupero","in_recupero"].map(a => {
+                  , ["presente","assente","giustificato","recupero","in_recupero","cambio_ora"].map(a => {
                     const s = ATT_STYLES[a] || ATT_STYLES.presente;
                     const active = a === 'in_recupero' ? lesson.inRecupero : lesson.attendance === a;
                     return (
@@ -10352,10 +10356,15 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       var attNorm = data.attendance || null;
       var inRecNorm = data.inRecupero || false;
       var scadNorm = data.recuperoScadenza || null;
-      if (attNorm === 'in_recupero') {
-        attNorm = null;  // in_recupero non è un valore attendance valido in DB
-        inRecNorm = true;  // setta il flag in_recupero
-        // scadenza = ultimo giorno del mese della lezione
+      var openCambioOra = false;
+      if (attNorm === 'cambio_ora') {
+        attNorm = existingLesson?.attendance || null; // mantieni la presenza precedente
+        inRecNorm = false;
+        scadNorm = null;
+        openCambioOra = true;
+      } else if (attNorm === 'in_recupero') {
+        attNorm = null;
+        inRecNorm = true;
         const dLezione = data.date ? new Date(data.date+'T00:00:00') : new Date();
         const lastDay = new Date(dLezione.getFullYear(), dLezione.getMonth()+1, 0);
         scadNorm = lastDay.toISOString().split('T')[0];
@@ -10369,7 +10378,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       }
       const dataNorm = {
         ...data,
-        attendance: attNorm,    // null per in_recupero (non è un valore DB valido)
+        attendance: attNorm,
         inRecupero: inRecNorm,
         recuperoScadenza: scadNorm,
       };
@@ -10510,6 +10519,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       }
 
       closeModal();
+      // Se cambio_ora: apri il modal per cambiare giorno/orario della lezione corrente
+      if (openCambioOra && window.__FM_SHOW_CAMBIO_ORA__) {
+        const lessonRef = existingLesson || { ...data, id: data.id };
+        setTimeout(() => window.__FM_SHOW_CAMBIO_ORA__({ lesson: lessonRef }), 120);
+      }
     };
     const handleDelete     = ()          => { setLessons(p => p.filter(l => l.id !== _optionalChain([selLesson, 'optionalAccess', _54 => _54.id]))); closeModal(); };
     const handleAttendance = (id, val) => {
@@ -10520,37 +10534,35 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           return prev; // nessuna modifica
         }
         let extraProps = {};
-        // Logica IN RECUPERO:
-        // - Se si segna "in_recupero" → imposta flag e scadenza fine mese
-        // - Se si segna "recupero" → chiudi il recupero
-        // - Se si toglie la presenza da lezione in recupero → mantieni il flag
         if (val === 'in_recupero') {
           const d = lesson?.date ? new Date(lesson.date+'T00:00:00') : new Date();
           const lastDay = new Date(d.getFullYear(), d.getMonth()+1, 0);
           extraProps = { inRecupero: true, recuperoScadenza: lastDay.toISOString().split('T')[0] };
         } else if (val === 'recupero') {
           extraProps = { inRecupero: false, recuperoScadenza: null };
+        } else if (val === 'cambio_ora') {
+          // cambio_ora: non modifica l'attendance, solo crea la prossima ricorrente
+          // L'attendance reale viene gestita dal CambioOraModal dopo
+          extraProps = { inRecupero: false, recuperoScadenza: null };
         } else if (!val) {
-          // toglie la presenza: mantieni inRecupero se era già impostato
           extraProps = {};
         } else {
-          // presente/assente/giustificato: rimuovi il flag recupero
           extraProps = { inRecupero: false, recuperoScadenza: null };
         }
-        const updated = prev.map(l => l.id === id ? {...l, attendance: val === 'in_recupero' ? '' : val, ...extraProps} : l);
+        // cambio_ora non aggiorna attendance in state — lascia quella attuale
+        const attStateVal = val === 'cambio_ora' ? (lesson.attendance || '') : (val === 'in_recupero' ? '' : val);
+        const updated = prev.map(l => l.id === id ? {...l, attendance: attStateVal, ...extraProps} : l);
 
-        // Persisti l'aggiornamento presenza su Supabase
+        // Persisti su Supabase (cambio_ora non persiste ancora — lo fa il modal dopo)
         const sb = window.supabaseClient;
-        if (sb && lesson) {
-          // 'in_recupero' → attendance vuoto nel DB (non è un valore attendance)
-          // 'recupero' → lezione completata come recupero: salva 'presente' e azzera in_recupero
+        if (sb && lesson && val !== 'cambio_ora') {
           var attDb = val;
           var inRecDb = extraProps.inRecupero  ?? (lesson.inRecupero  || false);
           var scadDb  = extraProps.recuperoScadenza ?? (lesson.recuperoScadenza || null);
           if (attDb === 'in_recupero') {
-            attDb = null;  // in_recupero non è un valore attendance valido in DB
+            attDb = null;
           } else if (attDb === 'recupero') {
-            attDb = 'presente';  // segna recupero completato come presente
+            attDb = 'presente';
             inRecDb = false;
             scadDb = null;
           } else if (!attDb || attDb === '') {
@@ -10566,14 +10578,16 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         }
 
         // Se segno presenza REALE (non in_recupero) su lezione ricorrente → crea la prossima
+        // cambio_ora: crea la prossima lezione all'orario originale, poi apre modal per cambiare l'attuale
         const isLezioneRecupero = lesson && (lesson.tipo === 'recupero' || lesson.inRecupero === true);
         const valCreaLezione = val && val !== "" && val !== "in_recupero";
+        const isCambioOra = val === 'cambio_ora';
+        let shouldOpenCambioOra = false;
         if (lesson && valCreaLezione && lesson.recurrence && lesson.recurrence !== "Nessuna" && !isLezioneRecupero) {
           const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
           const gap     = daysMap[lesson.recurrence] || 7;
           const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap));
 
-          // Check duplicato con confronto robusto (no null === null per courseId)
           const alreadyExists = updated.some(l =>
             l.id !== lesson.id &&
             l.date === nextDate &&
@@ -10594,12 +10608,20 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               recuperoScadenza: null,
               tipo:             lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
             };
-
-            // Insert sicuro su Supabase (guard + check DB + _prev aggiornato prima)
             safeInsertRecurringLesson(nextLesson, setLessons);
             setNextLessonCreated(nextDate);
+            if (isCambioOra) shouldOpenCambioOra = true;
             return [...updated, nextLesson];
           }
+          if (isCambioOra) shouldOpenCambioOra = true;
+        } else if (isCambioOra) {
+          shouldOpenCambioOra = true;
+        }
+        // Side effect (apertura modal) schedulata DOPO il ritorno dallo state updater
+        if (shouldOpenCambioOra) {
+          setTimeout(() => {
+            if (window.__FM_SHOW_CAMBIO_ORA__) window.__FM_SHOW_CAMBIO_ORA__({ lesson });
+          }, 80);
         }
         return updated;
       });
@@ -15738,10 +15760,23 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const [draft,     setDraft]     = useState({});
 
   // Quando arrivano i dati da Supabase, aggiorna selected per il docente loggato
+  // MA NON durante un salvataggio attivo (evita di sovrascrivere le modifiche)
   React.useEffect(() => {
     if (ruoloDocView !== "docente") return;
+    // Non aggiornare se c'è un profiloForm attivo o un salvataggio in corso
+    if (docSettings.profiloForm || docSettings.savingProfilo) return;
     if (_myDocRecord) setSelected(_myDocRecord);
   }, [_myDocRecord, ruoloDocView]);
+
+  // Per admin: sincronizza selected con l'array docenti aggiornato
+  React.useEffect(() => {
+    if (ruoloDocView === "docente") return;
+    if (!selected) return;
+    const updated = (_studentsRaw ? null : null) || docenti.find(d => d.id === selected.id);
+    if (updated && JSON.stringify(updated) !== JSON.stringify(selected)) {
+      setSelected(updated);
+    }
+  }, [docenti]);
 
   // Carica disponibilità recuperi dal record selezionato quando cambia
   React.useEffect(() => {
@@ -16891,6 +16926,11 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
                             // Aggiorna anche il profilo auth
                             await sb.from('profili').update({nome:f.nome,updated_at:new Date().toISOString()}).eq('id',auth.uid?.()??_appUserDocView?.userId??'');
                           }
+                          // Aggiorna _prev in fm_sync per evitare che il realtime sovrascriva
+                          if (window.__FM_UPDATE_PREV__ && window.__FM_DATA__) {
+                            const newDocenti = (window.__FM_DATA__.docenti||[]).map(d => d.id===selected.id ? updated : d);
+                            window.__FM_DATA__.docenti = newDocenti;
+                          }
                           setDocSettings(p=>({...p,savingProfilo:false,profiloForm:null,msgProfilo:{ok:true,text:"✓ Profilo aggiornato con successo"}}));
                           setTimeout(()=>setDocSettings(p=>({...p,msgProfilo:null})),3000);
                         } catch(e){
@@ -17329,6 +17369,7 @@ function App() {
 
   const [globalModal,        setGlobalModal]        = useState(null); // overlay top-level fuori da main-scroll animato
   const [recuperoScadutoModal, setRecuperoScadutoModal] = useState(null); // {lesson, onExtend, onDismiss}
+  const [cambioOraModal,     setCambioOraModal]         = useState(null); // {lesson, onSave}
   // ── Ripristina sessione Auth al refresh pagina + gestisci link invito ──────
   useEffect(()=>{
     if(!window.FM_AUTH) return;
@@ -17723,6 +17764,7 @@ function App() {
     window.__FM_SHOW_MODAL__ = (element) => setGlobalModal(element);
     window.__FM_HIDE_MODAL__ = ()        => setGlobalModal(null);
     window.__FM_SHOW_RECUPERO_SCADUTO__ = (data) => setRecuperoScadutoModal(data);
+    window.__FM_SHOW_CAMBIO_ORA__ = (data) => setCambioOraModal(data);
     return () => {
       window.__FM_RELOAD__ = null;
       window.__FM_FORCE_REFRESH__ = null;
@@ -17885,12 +17927,117 @@ function App() {
           onDismiss: () => setRecuperoScadutoModal(null),
           setLessons: setSharedLessons,
         })
+      , cambioOraModal && React.createElement(CambioOraModal, {
+          lesson: cambioOraModal.lesson,
+          onSave: (updatedLesson) => {
+            setSharedLessons(p => p.map(l => l.id === updatedLesson.id ? {...l, ...updatedLesson} : l));
+            if (cambioOraModal.onSave) cambioOraModal.onSave(updatedLesson);
+          },
+          onDismiss: () => setCambioOraModal(null),
+        })
     )
   );
 }
 
 
 // ─── MODAL RECUPERO SCADUTO (solo admin) ──────────────────────────────────────
+// ─── MODAL CAMBIO ORA ─────────────────────────────────────────────────────────
+// Aperto quando si seleziona "Cambio ora" su una lezione ricorrente.
+// Permette di modificare data e orario della lezione CORRENTE,
+// mentre la prossima lezione ricorrente viene già creata dall'orario originale.
+const CambioOraModal = ({ lesson, onSave, onDismiss }) => {
+  const [nuovaData, setNuovaData] = useState(lesson.date || '');
+  const [nuoraOra,  setNuovaOra]  = useState(lesson.hour || '');
+  const [saving, setSaving] = useState(false);
+
+  const dataOrig = lesson.date
+    ? new Date(lesson.date+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'2-digit',month:'long',year:'numeric'})
+    : '—';
+
+  const handleSalva = async () => {
+    if (!nuovaData || !nuoraOra) return;
+    setSaving(true);
+    const sb = window.supabaseClient;
+    if (sb) {
+      await sb.from('lezioni').update({
+        data: nuovaData,
+        ora:  nuoraOra + ':00',
+      }).eq('id', lesson.id);
+    }
+    onSave({ ...lesson, date: nuovaData, hour: nuoraOra });
+    setSaving(false);
+    onDismiss();
+  };
+
+  return React.createElement(React.Fragment, null
+    , React.createElement('div', {
+        onClick: onDismiss,
+        style:{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,0.65)',backdropFilter:'blur(3px)'}
+      })
+    , React.createElement('div', {
+        style:{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',
+          zIndex:9999,background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,
+          width:420,maxWidth:'calc(100vw - 32px)',boxShadow:'0 20px 60px rgba(0,0,0,0.4)',
+          fontFamily:"'Open Sans',sans-serif"}
+      }
+      // Header viola
+      , React.createElement('div', {style:{background:'rgba(139,92,246,0.08)',borderBottom:`1px solid rgba(139,92,246,0.25)`,borderRadius:'16px 16px 0 0',padding:'18px 24px',display:'flex',alignItems:'center',gap:12}}
+        , React.createElement('div', {style:{width:36,height:36,borderRadius:10,background:'rgba(139,92,246,0.12)',border:'1px solid rgba(139,92,246,0.3)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+          , React.createElement(Ic,{n:'clock',size:18,stroke:'#7c3aed'})
+        )
+        , React.createElement('div', null
+          , React.createElement('div', {style:{fontSize:15,fontWeight:700,color:'#7c3aed'}}, '🔄 Cambio ora')
+          , React.createElement('div', {style:{fontSize:12,color:C.textDim,marginTop:2}}, 'Modifica giorno/orario lezione corrente')
+        )
+      )
+      // Body
+      , React.createElement('div', {style:{padding:'20px 24px',display:'flex',flexDirection:'column',gap:16}}
+        , React.createElement('div', {style:{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:'12px 16px'}}
+          , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:2}}, 'Lezione originale')
+          , React.createElement('div', {style:{fontSize:13,fontWeight:600}}, lesson.student || lesson.courseName || '—')
+          , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}},
+              '📅 ', dataOrig, ' · 🕐 ', lesson.hour||'—')
+        )
+        , React.createElement('div', {style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}
+          , React.createElement('div', null
+            , React.createElement('label', {style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:6}}, 'Nuovo giorno')
+            , React.createElement('input', {
+                type:'date', value:nuovaData,
+                onChange:e=>setNuovaData(e.target.value),
+                style:{width:'100%',boxSizing:'border-box',background:C.bg,border:`1px solid ${nuovaData?C.border:'rgba(139,92,246,0.5)'}`,borderRadius:8,color:C.text,fontSize:13,padding:'9px 12px',fontFamily:"'Open Sans',sans-serif"}
+              })
+          )
+          , React.createElement('div', null
+            , React.createElement('label', {style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:6}}, 'Nuovo orario')
+            , React.createElement('input', {
+                type:'time', value:nuoraOra,
+                onChange:e=>setNuovaOra(e.target.value),
+                style:{width:'100%',boxSizing:'border-box',background:C.bg,border:`1px solid ${nuoraOra?C.border:'rgba(139,92,246,0.5)'}`,borderRadius:8,color:C.text,fontSize:13,padding:'9px 12px',fontFamily:"'Open Sans',sans-serif"}
+              })
+          )
+        )
+        , React.createElement('div', {style:{fontSize:12,color:C.textDim,background:'rgba(139,92,246,0.06)',border:'1px solid rgba(139,92,246,0.2)',borderRadius:8,padding:'10px 12px',lineHeight:1.5}}
+          , '💡 La prossima lezione ricorrente viene già creata dall\'orario originale. Solo questa lezione verrà spostata.'
+        )
+        , React.createElement('div', {style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+          , React.createElement('button', {
+              onClick: onDismiss,
+              style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:'none',color:C.textMuted,cursor:'pointer',fontSize:13,fontFamily:"'Open Sans',sans-serif"}
+            }, 'Annulla')
+          , React.createElement('button', {
+              onClick: handleSalva,
+              disabled: saving || !nuovaData || !nuoraOra,
+              style:{padding:'9px 18px',borderRadius:8,border:'none',background:'#7c3aed',color:'#fff',
+                cursor:(saving||!nuovaData||!nuoraOra)?'not-allowed':'pointer',
+                fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif",
+                opacity:(saving||!nuovaData||!nuoraOra)?0.6:1}
+            }, saving ? '⏳...' : '✓ Conferma cambio')
+        )
+      )
+    )
+  );
+};
+
 const RecuperoScadutoModal = ({ lesson, onExtend, onDismiss, setLessons }) => {
   const [nuovaScadenza, setNuovaScadenza] = useState('');
   const [saving, setSaving] = useState(false);
