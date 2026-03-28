@@ -1,62 +1,13 @@
-Sto sviluppando una web app gestionale per una scuola di musica chiamata Futuro Musica, costruita in React (compilato in `app.js` senza build system), con Supabase come backend. Allego `app.js` aggiornato (file principale React) e `fm_sync.js` (layer di sync con Supabase). Stack:
+In un'altra chat ho integrato un sistema di reminder tramite messaggistica Whatsapp. Vorrei creare una scheda REMINDERS che modifichi:
 
-* GitHub Pages: `https://primomaggio145-blip.github.io/FM-webapp/webapp.html`
+* attivazione/disattivazione dei reminders;
 
-*  Supabase: `https://ocsxrjommtrjelnbihfr.supabase.co` * `webapp.html` carica `supabase_integration.js` → `fm_sync.js` → `app.js` (dinamicamente)
+* template messaggio;
 
-* Tre ruoli: `AMMINISTRATORE`, `DOCENTE`, `ALLIEVO` 
+* Orario di invio;
 
+* destinatario(allievo, docente)
 
+* eventuale log del servizio.
 
-Stato attuale — cosa funziona:
-
-* Auth completa (login, registrazione, approvazione admin, set-password via token_hash)
-
-* Dashboard con card KPI live, recuperi, lezioni oggi, grafico andamento
-
-* Calendario con tab Calendario / Recuperi / Elenco lezioni
-
-* Sidebar con sottomenu Calendario (Calendario, Recuperi, Elenco lezioni)
-
-* Allegati: scheda dedicata con filtri, modifica descrizione, elimina (con DELETE su Supabase e rimozione Storage)
-
-* Modulistica su Supabase Storage (bucket `allegati`, subfolder `modulistica/`) 
-
-
-
-Problemi da risolvere
-
-* le lezioni collettive non risultano nel conteggio delle lezioni di ogni allievo;
-
-* gli altri corsi scelti oltre al corso principale (indicato con una stellina) non vengono conteggiati come corsi;
-
-* se inserisco una lezione di un corso secondario la lezione non viene conteggiata nel conteggio dell-allievo;
-
-* quando il docente (profilo DOCENTE) segna la presenza in una lezione ricorrente non viene creata la nuova lezione;
-
-* crea un pulsante nella kpi della dashboard che rende visibile/nascosto gli importi, tipo gli home banking che hanno la possibilita di nascondere il saldo; per default è nascosta;
-
-* nel profilo DOCENTE sostituisci compenso MESE e non compenso ANNO;
-
-* nel profilo ALLIEVO crea un pulsante PRENOTA RECUPERO se ha delle lezioni da recuperare;
-
-
-Role-based access control per tutte le sezioni 
-
-Credenziali test:
-
-* Admin: `admin@accademia.it` / `admin123'
-
-* Docente: `primomaggio@libero.it` (Nicola / Primo Michele Maggio)
-
-
-
-File allegati: 
-
-1. `app.js` 
-
-1. `fm_sync.js`
-
-1. `supabase_integration.js`
-
-2. `webapp.html`
+Di cosa hai bisogno per creare questa impostazione?
