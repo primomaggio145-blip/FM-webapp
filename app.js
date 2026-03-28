@@ -17078,6 +17078,7 @@ const NAV_ITEMS = [
   { id:"biblioteca",  label:"Manuali & Libri", icon:"courses"},
   { id:"utenti",      label:"Utenti",       icon:"shield"   },
   { id:"notifiche",   label:"Notifiche",    icon:"bell"     },
+  { id:"reminders",   label:"Reminders WA", icon:"phone"    },
 ];
 
 const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction }) => {
@@ -17875,6 +17876,7 @@ function App() {
       case 'schedaScuola':return React.createElement(SchedaScuolaView, { config: sharedConfig});
       case 'modulistica': return React.createElement(ModulisticaView, {});
       case 'notifiche':   return React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste});
+      case 'reminders':   return React.createElement(RemindersView, { ruolo: user?.ruolo||"admin" });
       default: return null;
     }
   };
@@ -18147,6 +18149,256 @@ const RecuperoScadutoModal = ({ lesson, onExtend, onDismiss, setLessons }) => {
 };
 
 // ─── NOTIFICHE VIEW ────────────────────────────────────────────────────────────
+// ─── REMINDERS VIEW ───────────────────────────────────────────────────────────
+const REMINDER_TYPES = [
+  { id:'individuale', label:'Lezioni individuali', icon:'user',     dest:'Allievo',  schedule:'Ogni giorno · 09:00',  desc:'Reminder lezione individuale del giorno seguente' },
+  { id:'collettivo',  label:'Lezioni collettive',  icon:'users',    dest:'Allievo',  schedule:'Ogni giorno · 09:00',  desc:'Reminder lezione collettiva del giorno seguente' },
+  { id:'docente',     label:'Calendario docenti',  icon:'calendar', dest:'Docente',  schedule:'Ogni giorno · 08:00',  desc:'Riepilogo lezioni del giorno per il docente' },
+  { id:'pagamento',   label:'Pagamento mensile',   icon:'euro',     dest:'Allievo',  schedule:'1° del mese · 09:00',  desc:'Promemoria quota mensile non ancora pagata' },
+  { id:'recupero',    label:'Recuperi in scadenza',icon:'clock',    dest:'Allievo',  schedule:'Ogni giorno · 09:00',  desc:'Avviso recupero che scade entro 3 giorni' },
+];
+
+const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
+const SERVICE_ROLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjM2MTQ0MCwiZXhwIjoyMDg3OTM3NDQwfQ.7gLyBPJtq3iR6GkW1p5FVJpvhBV-a5-s_dj4z4yVBLc';
+
+const RemindersView = ({ ruolo }) => {
+  const [log, setLog] = useState([]);
+  const [logLoading, setLogLoading] = useState(false);
+  const [sending, setSending] = useState({});
+  const [activeTab, setActiveTab] = useState('overview');
+  const [logFilter, setLogFilter] = useState('tutti');
+  const [config, setConfig] = useState(() =>
+    REMINDER_TYPES.reduce((acc, t) => ({ ...acc, [t.id]: { attivo: true } }), {})
+  );
+
+  // Carica config da Supabase (whatsapp_config se esiste) e log
+  React.useEffect(function() {
+    loadLog();
+  }, []);
+
+  const loadLog = async () => {
+    setLogLoading(true);
+    try {
+      const sb = window.supabaseClient;
+      if (!sb) return;
+      const { data } = await sb.from('whatsapp_log')
+        .select('*').order('created_at', { ascending: false }).limit(200);
+      if (data) setLog(data);
+    } catch(e) { console.warn('RemindersView log error:', e); }
+    setLogLoading(false);
+  };
+
+  const triggerReminder = async (tipo) => {
+    setSending(p => ({ ...p, [tipo]: true }));
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/functions/v1/whatsapp-reminder?tipo=${tipo}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SERVICE_ROLE_KEY}`,
+          },
+          body: JSON.stringify({}),
+        }
+      );
+      const ok = res.ok;
+      const body = await res.json().catch(() => ({}));
+      // Mostra feedback
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:999999;padding:14px 28px;border-radius:12px;font-family:"Open Sans",sans-serif;font-size:14px;font-weight:600;color:#fff;white-space:nowrap;' + (ok ? 'background:#16a34a;' : 'background:#dc2626;');
+      el.textContent = ok ? `✅ Reminder "${tipo}" inviato!` : `❌ Errore: ${res.status}`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 4000);
+      // Ricarica log dopo 2s
+      setTimeout(loadLog, 2000);
+    } catch(e) {
+      alert('Errore di rete: ' + e.message);
+    }
+    setSending(p => ({ ...p, [tipo]: false }));
+  };
+
+  const logFiltrato = logFilter === 'tutti' ? log
+    : log.filter(r => r.stato === logFilter);
+
+  const statInviati = log.filter(r => r.stato === 'inviato').length;
+  const statErrori  = log.filter(r => r.stato === 'errore').length;
+  const statOggi    = log.filter(r => r.created_at && r.created_at.startsWith(new Date().toISOString().split('T')[0])).length;
+
+  const isAdmin = ruolo === 'admin';
+
+  return React.createElement('div', {style:{maxWidth:900,margin:'0 auto',padding:'28px 24px'}}
+    // Header
+    , React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}
+      , React.createElement('div', null
+        , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,margin:0,display:'flex',alignItems:'center',gap:10}}
+          , '📱 Reminders WhatsApp'
+        )
+        , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}}, 'Gestione notifiche automatiche via WhatsApp · Meta Business API')
+      )
+      , React.createElement('button', {
+          onClick: loadLog,
+          style:{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.textMuted,cursor:'pointer',fontSize:12,fontFamily:"'Open Sans',sans-serif"}
+        }, React.createElement(Ic,{n:'refresh',size:14,stroke:C.textMuted}), 'Aggiorna log')
+    )
+
+    // KPI strip
+    , React.createElement('div', {style:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,marginBottom:24}}
+      , [
+          {label:'Inviati totali', value:statInviati, hex:C.green,  icon:'check'},
+          {label:'Errori totali',  value:statErrori,  hex:C.red,    icon:'alert'},
+          {label:'Oggi',           value:statOggi,    hex:C.gold,   icon:'calendar'},
+        ].map(k => React.createElement('div', {key:k.label,
+            style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'16px 20px',display:'flex',alignItems:'center',gap:14}}
+          , React.createElement('div', {style:{width:36,height:36,borderRadius:10,background:`${k.hex}18`,display:'flex',alignItems:'center',justifyContent:'center'}}
+            , React.createElement(Ic,{n:k.icon,size:18,stroke:k.hex})
+          )
+          , React.createElement('div', null
+            , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600,color:k.hex,lineHeight:1}}, k.value)
+            , React.createElement('div', {style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',marginTop:3}}, k.label)
+          )
+        ))
+    )
+
+    // Tabs
+    , React.createElement('div', {style:{display:'flex',gap:2,marginBottom:20,background:C.surface,borderRadius:10,padding:4,border:`1px solid ${C.border}`,width:'fit-content'}}
+      , ['overview','log'].map(t => React.createElement('button', {key:t,
+            onClick:()=>setActiveTab(t),
+            style:{padding:'8px 20px',borderRadius:7,border:'none',fontSize:12,fontWeight:600,cursor:'pointer',
+              fontFamily:"'Open Sans',sans-serif",transition:'all .12s',
+              background: activeTab===t ? C.gold : 'none',
+              color: activeTab===t ? '#fff' : C.textMuted}}
+          , t==='overview' ? '⚙️ Panoramica' : '📋 Log invii'
+        ))
+    )
+
+    // TAB OVERVIEW
+    , activeTab === 'overview' && React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:12}}
+        , REMINDER_TYPES.map(tipo => React.createElement('div', {key:tipo.id,
+              style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}
+            // Header reminder
+            , React.createElement('div', {style:{padding:'16px 20px',display:'flex',alignItems:'center',gap:14}}
+              , React.createElement('div', {style:{width:40,height:40,borderRadius:10,background:`${C.green}18`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+                , React.createElement(Ic,{n:tipo.icon,size:18,stroke:C.green})
+              )
+              , React.createElement('div', {style:{flex:1}}
+                , React.createElement('div', {style:{fontSize:14,fontWeight:700,color:C.text}}, tipo.label)
+                , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}, tipo.desc)
+              )
+              , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:12}}
+                // Badge destinatario
+                , React.createElement('span', {style:{fontSize:11,background:tipo.dest==='Docente'?C.tealBg:C.purpleBg,color:tipo.dest==='Docente'?C.teal:'#7c3aed',border:`1px solid ${tipo.dest==='Docente'?C.tealBorder:'rgba(139,92,246,0.3)'}`,borderRadius:20,padding:'3px 10px',fontWeight:600}}, tipo.dest)
+                // Schedule badge
+                , React.createElement('span', {style:{fontSize:11,background:C.bg,color:C.textMuted,border:`1px solid ${C.border}`,borderRadius:20,padding:'3px 10px',display:'flex',alignItems:'center',gap:4}}
+                  , React.createElement(Ic,{n:'clock',size:11,stroke:C.textDim})
+                  , tipo.schedule
+                )
+                // Pulsante trigger manuale (solo admin)
+                , isAdmin && React.createElement('button', {
+                    onClick: () => triggerReminder(tipo.id),
+                    disabled: sending[tipo.id],
+                    title: 'Invia manualmente ora',
+                    style:{display:'flex',alignItems:'center',gap:6,padding:'7px 14px',borderRadius:8,border:'none',
+                      background: sending[tipo.id] ? C.surface : '#25d366',
+                      color:'#fff',cursor:sending[tipo.id]?'wait':'pointer',
+                      fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",
+                      opacity:sending[tipo.id]?0.7:1,transition:'all .12s',whiteSpace:'nowrap'}
+                  }
+                  , sending[tipo.id]
+                    ? React.createElement(React.Fragment,null, React.createElement(Ic,{n:'clock',size:13,stroke:'#fff'}), ' Invio...')
+                    : React.createElement(React.Fragment,null, '▶ Invia ora')
+                )
+              )
+            )
+            // Stats per questo tipo dal log
+            , React.createElement('div', {style:{padding:'10px 20px 14px',borderTop:`1px solid ${C.border}`,background:C.bg,display:'flex',gap:20}}
+              , (() => {
+                  const typeLog = log.filter(r => r.tipo === tipo.id || (r.dettaglio||'').includes(tipo.id));
+                  const ok = log.filter(r => (r.tipo===tipo.id||(r.dettaglio||'').includes(tipo.id)) && r.stato==='inviato').length;
+                  const err = log.filter(r => (r.tipo===tipo.id||(r.dettaglio||'').includes(tipo.id)) && r.stato==='errore').length;
+                  const last = log.filter(r => r.tipo===tipo.id||(r.dettaglio||'').includes(tipo.id))[0];
+                  return React.createElement(React.Fragment,null
+                    , React.createElement('span',{style:{fontSize:12,color:C.textMuted}},
+                        React.createElement('span',{style:{color:C.green,fontWeight:600}}, ok), ' inviati')
+                    , React.createElement('span',{style:{fontSize:12,color:C.textMuted}},
+                        React.createElement('span',{style:{color:err>0?C.red:C.textDim,fontWeight:600}}, err), ' errori')
+                    , last && React.createElement('span',{style:{fontSize:12,color:C.textMuted}},
+                        'Ultimo: ', new Date(last.created_at).toLocaleString('it-IT',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}))
+                  );
+                })()
+            )
+          ))
+
+        // Info scheduling automatico
+        , React.createElement('div', {style:{marginTop:8,padding:'16px 20px',background:`${C.gold}08`,border:`1px solid ${C.goldDim}`,borderRadius:12,fontSize:13,color:C.textMuted,lineHeight:1.6}}
+          , React.createElement('strong',{style:{color:C.gold}}, '🤖 Scheduling automatico via pg_cron')
+          , React.createElement('br',null)
+          , 'Il servizio gira autonomamente su Supabase — non è necessaria nessuna azione manuale. I pulsanti "Invia ora" servono per test o invii urgenti fuori orario.'
+        )
+      )
+
+    // TAB LOG
+    , activeTab === 'log' && React.createElement('div', null
+        // Filtri
+        , React.createElement('div', {style:{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}
+          , [
+              {id:'tutti',    label:`Tutti (${log.length})`},
+              {id:'inviato',  label:`✅ Inviati (${statInviati})`},
+              {id:'errore',   label:`❌ Errori (${statErrori})`},
+            ].map(f => React.createElement('button', {key:f.id,
+                onClick:()=>setLogFilter(f.id),
+                style:{padding:'6px 14px',borderRadius:8,border:`1px solid ${logFilter===f.id?C.gold:C.border}`,
+                  background:logFilter===f.id?C.goldBg:'none',color:logFilter===f.id?C.gold:C.textMuted,
+                  cursor:'pointer',fontSize:12,fontFamily:"'Open Sans',sans-serif",fontWeight:logFilter===f.id?600:400}}
+              , f.label))
+        )
+
+        // Log table
+        , logLoading
+          ? React.createElement('div',{style:{textAlign:'center',padding:40,color:C.textDim}}, '⏳ Caricamento log...')
+          : logFiltrato.length === 0
+          ? React.createElement('div',{style:{textAlign:'center',padding:40,background:C.surface,borderRadius:12,border:`1px solid ${C.border}`,color:C.textDim}}
+              , '📭 Nessun record trovato'
+            )
+          : React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}
+              , React.createElement('table', {style:{width:'100%',borderCollapse:'collapse'}}
+                , React.createElement('thead', null
+                  , React.createElement('tr', {style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
+                    , ['Data/Ora','Telefono','Tipo','Stato','Dettaglio'].map(h =>
+                        React.createElement('th', {key:h, style:{padding:'10px 14px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.08em',color:C.textMuted,fontWeight:600}}, h))
+                  )
+                )
+                , React.createElement('tbody', null
+                  , logFiltrato.slice(0,100).map((r,i) => React.createElement('tr', {key:r.id||i,
+                        style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg}}
+                      , React.createElement('td', {style:{padding:'9px 14px',fontSize:12,color:C.textMuted,whiteSpace:'nowrap'}}
+                          , r.created_at ? new Date(r.created_at).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—'
+                        )
+                      , React.createElement('td', {style:{padding:'9px 14px',fontSize:12,color:C.text,fontFamily:'monospace'}}, r.telefono||'—')
+                      , React.createElement('td', {style:{padding:'9px 14px'}}
+                          , React.createElement('span', {style:{fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:'2px 8px',color:C.textMuted}},
+                              r.tipo || (r.lezione_id ? 'lezione' : '—'))
+                        )
+                      , React.createElement('td', {style:{padding:'9px 14px'}}
+                          , React.createElement('span', {style:{fontSize:11,fontWeight:600,
+                              background:r.stato==='inviato'?C.greenBg:C.redBg,
+                              color:r.stato==='inviato'?C.green:C.red,
+                              border:`1px solid ${r.stato==='inviato'?C.greenBorder:C.redBorder}`,
+                              borderRadius:20,padding:'3px 10px'}}
+                            , r.stato==='inviato' ? '✅ Inviato' : '❌ Errore'
+                          )
+                        )
+                      , React.createElement('td', {style:{padding:'9px 14px',fontSize:11,color:C.textMuted,maxWidth:280,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, r.dettaglio||'—')
+                    ))
+                )
+              )
+              , logFiltrato.length > 100 && React.createElement('div',{style:{padding:'10px 14px',fontSize:12,color:C.textMuted,textAlign:'center',borderTop:`1px solid ${C.border}`}},
+                  `Mostrati 100 di ${logFiltrato.length} record`)
+            )
+      )
+  );
+};
+
 const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser, lessons, students, richieste }) => {
   const [filter, setFilter] = useState('non_lette');
   const [marking, setMarking] = useState(false);
