@@ -18435,9 +18435,20 @@ const RemindersView = ({ ruolo }) => {
     setLogLoading(true);
     try {
       const sb = window.supabaseClient; if (!sb) return;
-      const { data } = await sb.from('whatsapp_log')
+      const { data, error } = await sb.from('whatsapp_log')
         .select('*').order('created_at', { ascending: false }).limit(200);
-      if (data) setLog(data);
+      if (error) {
+        console.warn('[WA log error]', error.message, error.code);
+        // Se la tabella non esiste ancora, mostra messaggio utile
+        if (error.code === '42P01') {
+          setLog([{ _errore: 'tabella_mancante' }]);
+        }
+        return;
+      }
+      if (data) {
+        console.log('[WA log] caricati', data.length, 'record. Primo:', data[0]);
+        setLog(data);
+      }
     } catch(e) { console.warn('[WA log]', e?.message); }
     setLogLoading(false);
   };
@@ -18473,11 +18484,23 @@ const RemindersView = ({ ruolo }) => {
   const triggerReminder = async (tipo) => {
     setSending(p => ({ ...p, [tipo]: true }));
     try {
-      const res = await fetch(`${WA_SUPABASE_URL}/functions/v1/whatsapp-reminder?tipo=${tipo}`,
-        { method:'POST', headers:{'Content-Type':'application/json','Authorization':`Bearer ${WA_SERVICE_KEY}`}, body:'{}' });
-      toast(res.ok, res.ok ? `Reminder "${tipo}" inviato!` : `Errore ${res.status}`);
-      setTimeout(loadLog, 2000);
-    } catch(e) { toast(false, 'Errore di rete: ' + e?.message); }
+      const sb = window.supabaseClient;
+      if (!sb) { toast(false, 'Supabase non disponibile'); setSending(p=>({...p,[tipo]:false})); return; }
+      // functions.invoke gestisce CORS correttamente — tipo passato nel body
+      const { data, error } = await sb.functions.invoke('whatsapp-reminder', {
+        body: { tipo },
+      });
+      if (error) {
+        // Se la funzione si aspetta ?tipo= nel query param, proviamo anche così
+        console.warn('[WA invoke error]', error);
+        toast(false, `Errore invio: ${error.message}. Verifica che l'Edge Function accetti il campo "tipo" nel body, oppure usa la Dashboard Supabase.`);
+      } else {
+        toast(true, `Reminder "${tipo}" avviato! ` + (data?.sent !== undefined ? `(${data.sent} messaggi)` : ''));
+        setTimeout(loadLog, 2500);
+      }
+    } catch(e) {
+      toast(false, 'Errore: ' + e?.message);
+    }
     setSending(p => ({ ...p, [tipo]: false }));
   };
 
@@ -18486,10 +18509,11 @@ const RemindersView = ({ ruolo }) => {
     return tipo === 'pagamento' ? `${mm||0} ${hh||9} 1 * *` : `${mm||0} ${hh||9} * * *`;
   };
 
-  const logFiltrato = logFilter === 'tutti' ? log : log.filter(r => r.stato === logFilter);
-  const statInviati = log.filter(r => r.stato === 'inviato').length;
-  const statErrori  = log.filter(r => r.stato === 'errore').length;
-  const statOggi    = log.filter(r => (r.created_at||'').startsWith(new Date().toISOString().split('T')[0])).length;
+  const realLog     = log.filter(r => !r._errore);
+  const logFiltrato = logFilter === 'tutti' ? realLog : realLog.filter(r => r.stato === logFilter);
+  const statInviati = realLog.filter(r => r.stato === 'inviato').length;
+  const statErrori  = realLog.filter(r => r.stato === 'errore').length;
+  const statOggi    = realLog.filter(r => (r.created_at||'').startsWith(new Date().toISOString().split('T')[0])).length;
   const statAttivi  = REMINDER_TYPES.filter(t => configs[t.id]?.attivo !== false).length;
   const isAdmin     = ruolo === 'admin';
 
@@ -18549,7 +18573,9 @@ const RemindersView = ({ ruolo }) => {
           const cfg   = configs[tipo.id] || defaultCfg(tipo);
           const isEdit= editingId === tipo.id;
           const isOn  = cfg.attivo !== false;
-          const tLog  = log.filter(r => r.tipo === tipo.id);
+          // Matching per tipo: usa r.tipo se esiste, altrimenti cerca nel dettaglio
+          const matchTipo = (r) => r.tipo === tipo.id || (!r.tipo && (r.dettaglio||'').toLowerCase().includes(tipo.id));
+          const tLog  = log.filter(r => !r._errore && matchTipo(r));
           const last  = tLog[0];
 
           return React.createElement('div', { key:tipo.id,
@@ -18656,7 +18682,7 @@ const RemindersView = ({ ruolo }) => {
     , activeTab === 'log' && React.createElement('div', null
       , React.createElement('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 } }
         , React.createElement('div', { style:{ display:'flex', gap:8 } }
-          , [ {id:'tutti',label:`Tutti (${log.length})`}, {id:'inviato',label:`✅ Inviati (${statInviati})`}, {id:'errore',label:`❌ Errori (${statErrori})`} ]
+          , [ {id:'tutti',label:`Tutti (${realLog.length})`}, {id:'inviato',label:`✅ Inviati (${statInviati})`}, {id:'errore',label:`❌ Errori (${statErrori})`} ]
             .map(f => React.createElement('button', { key:f.id, onClick:()=>setLogFilter(f.id),
                 style:{ padding:'6px 14px', borderRadius:8, border:`1px solid ${logFilter===f.id?C.gold:C.border}`, background:logFilter===f.id?C.goldBg:'none', color:logFilter===f.id?C.gold:C.textMuted, cursor:'pointer', fontSize:12, fontFamily:"'Open Sans',sans-serif", fontWeight:logFilter===f.id?600:400 } }
               , f.label))
@@ -18666,7 +18692,12 @@ const RemindersView = ({ ruolo }) => {
           , React.createElement(Ic,{n:'refresh',size:13,stroke:C.textMuted}), ' Ricarica')
       )
       , logLoading ? React.createElement('div',{style:{textAlign:'center',padding:40,color:C.textDim}},'⏳ Caricamento…')
-        : logFiltrato.length === 0 ? React.createElement('div',{style:{textAlign:'center',padding:40,background:C.surface,borderRadius:12,border:`1px solid ${C.border}`,color:C.textDim}},'📭 Nessun record')
+        : log.length === 1 && log[0]?._errore === 'tabella_mancante'
+        ? React.createElement('div',{style:{textAlign:'center',padding:32,background:`${C.red}08`,borderRadius:12,border:`1px solid ${C.redBorder}`,color:C.textMuted}}
+            , React.createElement('div',{style:{fontSize:15,fontWeight:700,color:C.red,marginBottom:8}}, '⚠️ Tabella whatsapp_log non trovata')
+            , React.createElement('div',{style:{fontSize:13}}, 'Esegui le migrazioni SQL indicate nel tab Istruzioni.')
+          )
+        : logFiltrato.length === 0 ? React.createElement('div',{style:{textAlign:'center',padding:40,background:C.surface,borderRadius:12,border:`1px solid ${C.border}`,color:C.textDim}},'📭 Nessun record trovato')
         : React.createElement('div', { style:{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' } }
             , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
               , React.createElement('thead',null
