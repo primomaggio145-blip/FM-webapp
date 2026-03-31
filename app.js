@@ -18470,31 +18470,22 @@ const RemindersView = ({ ruolo }) => {
     setLogLoading(true);
     try {
       const sb = window.supabaseClient; if (!sb) return;
-      // Prova prima con select semplice
+      // Usa select('*') — non richiedere 'tipo' esplicitamente perché potrebbe non esistere
       const { data, error, status } = await sb
         .from('whatsapp_log')
-        .select('id, stato, dettaglio, telefono, lezione_id, created_at, tipo')
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(200);
 
-      console.log('[WA log] status:', status, 'count:', data?.length, 'error:', error?.message, error?.code);
+      console.log('[WA log] status:', status, 'count:', data?.length, 'error:', error?.message);
 
       if (error) {
         if (error.code === '42P01') {
-          // Tabella non esiste
           setLog([{ _errore: 'tabella_mancante' }]);
-        } else if (error.code === '42703') {
-          // Colonna 'tipo' non esiste — riprova senza
-          const { data: data2, error: e2 } = await sb
-            .from('whatsapp_log')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(200);
-          if (!e2 && data2) setLog(data2);
-          else setLog([{ _errore: 'errore_query', msg: e2?.message }]);
         } else {
-          setLog([{ _errore: 'errore_query', msg: error.message + ' (code: ' + error.code + ')' }]);
+          setLog([{ _errore: 'errore_query', msg: `${error.message} (${error.code})` }]);
         }
+        setLogLoading(false);
         return;
       }
       setLog(data || []);
@@ -18538,22 +18529,32 @@ const RemindersView = ({ ruolo }) => {
     try {
       const sb = window.supabaseClient;
       if (!sb) { toast(false, 'Supabase non disponibile'); setSending(p=>({...p,[tipoId]:false})); return; }
-      // Passa tipo nel query param includendolo nel nome della funzione
-      // Supabase JS costruisce l'URL come: /functions/v1/<functionName>
-      const { data, error } = await sb.functions.invoke(`whatsapp-reminder?tipo=${tipoId}`, {
-        method: 'POST',
-        body: {},
-      });
-      if (error) {
-        console.warn('[WA invoke]', tipoId, error);
-        toast(false, `Errore invio "${tipoId}": ${error.message}`);
-      } else {
-        const n = data?.sent ?? data?.count ?? '';
+      // Recupera il token di sessione per l'Authorization header (evita il CORS del service role key)
+      const { data: { session } } = await sb.auth.getSession();
+      const token = session?.access_token || WA_SERVICE_KEY;
+      // fetch con il token di sessione — il CORS è gestito dall'Edge Function
+      const res = await fetch(
+        `${WA_SUPABASE_URL}/functions/v1/whatsapp-reminder?tipo=${tipoId}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: '{}',
+        }
+      );
+      if (res.ok) {
+        const json = await res.json().catch(() => ({}));
+        const n = json?.sent ?? json?.count ?? '';
         toast(true, `Reminder "${tipoId}" inviato!${n!==''?' ('+n+' messaggi)':''}`);
         setTimeout(loadLog, 2500);
+      } else {
+        const txt = await res.text().catch(() => res.status);
+        toast(false, `Errore ${res.status}: ${txt}`);
       }
     } catch(e) {
-      toast(false, 'Errore: ' + e?.message);
+      toast(false, 'Errore di rete: ' + e?.message + ' — verifica che l\'Edge Function abbia i CORS headers');
     }
     setSending(p => ({ ...p, [tipoId]: false }));
   };
@@ -18627,8 +18628,11 @@ const RemindersView = ({ ruolo }) => {
           const cfg   = configs[tipo.id] || defaultCfg(tipo);
           const isEdit= editingId === tipo.id;
           const isOn  = cfg.attivo !== false;
-          // Matching per tipo: usa r.tipo se esiste, altrimenti cerca nel dettaglio
-          const matchTipo = (r) => r.tipo === tipo.id || (!r.tipo && (r.dettaglio||'').toLowerCase().includes(tipo.id));
+          // tipo potrebbe non esistere come colonna — cerca nel dettaglio come fallback
+          const matchTipo = (r) => {
+            if (r.tipo) return r.tipo === tipo.id;
+            return (r.dettaglio||'').toLowerCase().includes(tipo.id);
+          };
           const tLog  = log.filter(r => !r._errore && matchTipo(r));
           const last  = tLog[0];
 
@@ -18768,7 +18772,7 @@ const RemindersView = ({ ruolo }) => {
                 , logFiltrato.slice(0,100).map((r,i)=>React.createElement('tr',{key:r.id||i,style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg}}
                     , React.createElement('td',{style:{padding:'9px 14px',fontSize:12,color:C.textMuted,whiteSpace:'nowrap'}}, r.created_at ? new Date(r.created_at).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—')
                     , React.createElement('td',{style:{padding:'9px 14px',fontSize:12,fontFamily:'monospace',color:C.text}}, r.telefono||'—')
-                    , React.createElement('td',{style:{padding:'9px 14px'}}, React.createElement('span',{style:{fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:'2px 8px',color:C.textMuted}}, r.tipo||'—'))
+                    , React.createElement('td',{style:{padding:'9px 14px'}}, React.createElement('span',{style:{fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:'2px 8px',color:C.textMuted}}, r.tipo || (r.dettaglio ? r.dettaglio.split(' ')[0] : '—')))
                     , React.createElement('td',{style:{padding:'9px 14px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:r.stato==='inviato'?C.greenBg:C.redBg,color:r.stato==='inviato'?C.green:C.red,border:`1px solid ${r.stato==='inviato'?C.greenBorder:C.redBorder}`,borderRadius:20,padding:'3px 10px'}}, r.stato==='inviato'?'✅ Inviato':'❌ Errore'))
                     , React.createElement('td',{style:{padding:'9px 14px',fontSize:11,color:C.textMuted,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, r.dettaglio||'—')
                   ))
