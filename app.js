@@ -8721,11 +8721,21 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
   const set = (k,v) => setF(p=>({...p,[k]:v}));
 
   // Corsi individuali + collettivi come opzioni strumento/corso
+  // Opzioni corso/strumento: usa i corsi reali dal DB
+  // Prima i corsi collettivi, poi i corsi individuali dal DB,
+  // poi come fallback la lista hardcoded filtrata per strumenti non già presenti
+  const corsiIndividuali = courses.filter(c => c.type !== "collettivo");
+  const corsiCollettivi  = courses.filter(c => c.type === "collettivo");
+  const STRUMENTI_FALLBACK = ["Pianoforte","Violino","Chitarra","Flauto","Batteria","Canto","Sassofono","Tromba","Violoncello","Solfeggio"];
+  const strumentiFallback = courses.length === 0
+    ? STRUMENTI_FALLBACK.map(s => ({ id:s, label:s }))
+    : STRUMENTI_FALLBACK
+        .filter(s => !courses.find(c => c.name === s))
+        .map(s => ({ id:s, label:s }));
   const corsiOpts = [
-    ...courses.filter(c=>c.type==="collettivo").map(c=>({id:c.id, label:c.name})),
-    ...["Pianoforte","Violino","Chitarra","Flauto","Batteria","Canto","Sassofono","Tromba","Violoncello","Solfeggio"]
-      .filter(s => !courses.find(c=>c.name===s))
-      .map(s=>({id:s, label:s}))
+    ...corsiCollettivi.map(c => ({ id:c.id, label:`${c.name} (collettivo)` })),
+    ...corsiIndividuali.map(c => ({ id:c.id, label:c.name })),
+    ...strumentiFallback,
   ];
 
   const validate = () => {
@@ -15830,6 +15840,21 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           const { error } = await sb.from('corsi_docenti').insert(nuovi);
           if (error) console.warn('[FM] corsi_docenti insert:', error.message);
         }
+        // Aggiorna immediatamente il campo docenti di ogni corso in React state
+        // così l'UI riflette subito senza aspettare realtime
+        if (window.__FM_RELOAD__ && window.__FM_DATA__) {
+          const updatedCourses = (window.__FM_DATA__.courses || []).map(c => {
+            const wasAssigned = (c.docenti||[]).map(String).includes(String(saved.id));
+            const nowAssigned = (saved.corsi||[]).map(String).includes(String(c.id));
+            if (wasAssigned === nowAssigned) return c;
+            const newDocenti = nowAssigned
+              ? [...(c.docenti||[]).filter(id=>String(id)!==String(saved.id)), saved.id]
+              : (c.docenti||[]).filter(id=>String(id)!==String(saved.id));
+            return { ...c, docenti: newDocenti };
+          });
+          window.__FM_DATA__.courses = updatedCourses;
+          window.__FM_RELOAD__({ courses: updatedCourses });
+        }
         // Aggiorna la tabella docenti con i nomi colonne del DB (non campi app)
         // NON usare FMAdapter.docente (è DB→App); costruiamo il row App→DB qui
         const strumentiDb = typeof saved.strumenti === 'string' && saved.strumenti
@@ -15963,16 +15988,26 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           , React.createElement('div', { style:{gridColumn:"1/-1"} }
             , React.createElement('label', { style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8} }, "Corsi assegnati")
             , (() => {
-                const corsiAssegnati = (_coursesDocView||[]).filter(c =>
-                  (c.docenti||[]).map(String).includes(String(draft.id)) ||
-                  (draft.corsi||[]).includes(c.id)
-                );
-                if (corsiAssegnati.length === 0) return React.createElement('div', {style:{fontSize:12,color:C.textDim,fontStyle:"italic",padding:"8px 0"}}, "Nessun corso assegnato — i corsi si assegnano dalla sezione Corsi");
+                const tuttiCorsi = (_coursesDocView||[]);
+                if (tuttiCorsi.length === 0) return React.createElement('div', {style:{fontSize:12,color:C.textDim,fontStyle:"italic",padding:"8px 0"}}, "Nessun corso disponibile — aggiungili prima nella sezione Corsi");
                 return React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
-                  , corsiAssegnati.map(c => {
+                  , tuttiCorsi.map(c => {
+                    const isSelected = (draft.corsi||[]).map(String).includes(String(c.id));
                     const isInd = c.type==="individuale";
                     const hex = isInd ? C.gold : C.purple;
-                    return React.createElement('span', {key:c.id, style:{padding:"4px 12px",borderRadius:6,border:`1.5px solid ${hex}`,background:hex+"18",color:hex,fontSize:12}}, c.name);
+                    return React.createElement('button', {
+                      key:c.id,
+                      onClick: () => setDraft(p => {
+                        const corsi = (p.corsi||[]).map(String);
+                        const cid = String(c.id);
+                        return { ...p, corsi: isSelected ? corsi.filter(x=>x!==cid) : [...corsi, cid] };
+                      }),
+                      style:{padding:"5px 14px",borderRadius:6,cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif",transition:"all .12s",
+                        border:`2px solid ${isSelected?hex:C.border}`,
+                        background: isSelected ? hex+"22" : C.bg,
+                        color: isSelected ? hex : C.textMuted,
+                        fontWeight: isSelected ? 600 : 400}
+                    }, (isSelected ? '✓ ' : '') + c.name);
                   })
                 );
               })()
@@ -17350,7 +17385,7 @@ function App() {
   const [schermata,      setSchermata]      = useState("login");
   const _d = window.__FM_DATA__ || {};
   const [sharedStudents,       setSharedStudents]       = useState(_d.students   || INIT_STUDENTS);
-  const [sharedCourses,        setSharedCourses]        = useState(_d.courses    || INIT_COURSES);
+  const [sharedCourses,        setSharedCourses]        = useState(_d.courses    || []);
   const [sharedDocenti,        setSharedDocenti]        = useState(_d.docenti    || INIT_DOCENTI_EXT);
   const [sharedLessons,        setSharedLessons]        = useState(_d.lessons    || INIT_LESSONS);
   const [sharedRepertorio,     setSharedRepertorio]     = useState(_d.brani      || INIT_BRANI);
@@ -18435,21 +18470,38 @@ const RemindersView = ({ ruolo }) => {
     setLogLoading(true);
     try {
       const sb = window.supabaseClient; if (!sb) return;
-      const { data, error } = await sb.from('whatsapp_log')
-        .select('*').order('created_at', { ascending: false }).limit(200);
+      // Prova prima con select semplice
+      const { data, error, status } = await sb
+        .from('whatsapp_log')
+        .select('id, stato, dettaglio, telefono, lezione_id, created_at, tipo')
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      console.log('[WA log] status:', status, 'count:', data?.length, 'error:', error?.message, error?.code);
+
       if (error) {
-        console.warn('[WA log error]', error.message, error.code);
-        // Se la tabella non esiste ancora, mostra messaggio utile
         if (error.code === '42P01') {
+          // Tabella non esiste
           setLog([{ _errore: 'tabella_mancante' }]);
+        } else if (error.code === '42703') {
+          // Colonna 'tipo' non esiste — riprova senza
+          const { data: data2, error: e2 } = await sb
+            .from('whatsapp_log')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(200);
+          if (!e2 && data2) setLog(data2);
+          else setLog([{ _errore: 'errore_query', msg: e2?.message }]);
+        } else {
+          setLog([{ _errore: 'errore_query', msg: error.message + ' (code: ' + error.code + ')' }]);
         }
         return;
       }
-      if (data) {
-        console.log('[WA log] caricati', data.length, 'record. Primo:', data[0]);
-        setLog(data);
-      }
-    } catch(e) { console.warn('[WA log]', e?.message); }
+      setLog(data || []);
+    } catch(e) {
+      console.warn('[WA log catch]', e?.message);
+      setLog([{ _errore: 'errore_query', msg: e?.message }]);
+    }
     setLogLoading(false);
   };
 
@@ -18481,27 +18533,29 @@ const RemindersView = ({ ruolo }) => {
     saveConfig(id, cfg);
   };
 
-  const triggerReminder = async (tipo) => {
-    setSending(p => ({ ...p, [tipo]: true }));
+  const triggerReminder = async (tipoId) => {
+    setSending(p => ({ ...p, [tipoId]: true }));
     try {
       const sb = window.supabaseClient;
-      if (!sb) { toast(false, 'Supabase non disponibile'); setSending(p=>({...p,[tipo]:false})); return; }
-      // functions.invoke gestisce CORS correttamente — tipo passato nel body
-      const { data, error } = await sb.functions.invoke('whatsapp-reminder', {
-        body: { tipo },
+      if (!sb) { toast(false, 'Supabase non disponibile'); setSending(p=>({...p,[tipoId]:false})); return; }
+      // Passa tipo nel query param includendolo nel nome della funzione
+      // Supabase JS costruisce l'URL come: /functions/v1/<functionName>
+      const { data, error } = await sb.functions.invoke(`whatsapp-reminder?tipo=${tipoId}`, {
+        method: 'POST',
+        body: {},
       });
       if (error) {
-        // Se la funzione si aspetta ?tipo= nel query param, proviamo anche così
-        console.warn('[WA invoke error]', error);
-        toast(false, `Errore invio: ${error.message}. Verifica che l'Edge Function accetti il campo "tipo" nel body, oppure usa la Dashboard Supabase.`);
+        console.warn('[WA invoke]', tipoId, error);
+        toast(false, `Errore invio "${tipoId}": ${error.message}`);
       } else {
-        toast(true, `Reminder "${tipo}" avviato! ` + (data?.sent !== undefined ? `(${data.sent} messaggi)` : ''));
+        const n = data?.sent ?? data?.count ?? '';
+        toast(true, `Reminder "${tipoId}" inviato!${n!==''?' ('+n+' messaggi)':''}`);
         setTimeout(loadLog, 2500);
       }
     } catch(e) {
       toast(false, 'Errore: ' + e?.message);
     }
-    setSending(p => ({ ...p, [tipo]: false }));
+    setSending(p => ({ ...p, [tipoId]: false }));
   };
 
   const cronExpr = (cfg, tipo) => {
@@ -18696,6 +18750,12 @@ const RemindersView = ({ ruolo }) => {
         ? React.createElement('div',{style:{textAlign:'center',padding:32,background:`${C.red}08`,borderRadius:12,border:`1px solid ${C.redBorder}`,color:C.textMuted}}
             , React.createElement('div',{style:{fontSize:15,fontWeight:700,color:C.red,marginBottom:8}}, '⚠️ Tabella whatsapp_log non trovata')
             , React.createElement('div',{style:{fontSize:13}}, 'Esegui le migrazioni SQL indicate nel tab Istruzioni.')
+          )
+        : log.length === 1 && log[0]?._errore === 'errore_query'
+        ? React.createElement('div',{style:{textAlign:'center',padding:32,background:`${C.red}08`,borderRadius:12,border:`1px solid ${C.redBorder}`,color:C.textMuted}}
+            , React.createElement('div',{style:{fontSize:15,fontWeight:700,color:C.red,marginBottom:8}}, '⚠️ Errore query')
+            , React.createElement('div',{style:{fontSize:13,fontFamily:'monospace'}}, log[0].msg || 'Controlla la console per dettagli.')
+            , React.createElement('div',{style:{fontSize:12,color:C.textDim,marginTop:8}}, 'Potrebbe essere un problema di RLS — verifica che la policy "admin_all" sia attiva su whatsapp_log.')
           )
         : logFiltrato.length === 0 ? React.createElement('div',{style:{textAlign:'center',padding:40,background:C.surface,borderRadius:12,border:`1px solid ${C.border}`,color:C.textDim}},'📭 Nessun record trovato')
         : React.createElement('div', { style:{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden' } }

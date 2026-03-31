@@ -596,7 +596,9 @@
             }
             // Per le altre tabelle: carica tutto (sono tabelle piccole)
             const asc = (t !== 'spese');
-            const { data, error } = await sb.from(t).select('*').order(o, { ascending: asc });
+            // Per corsi: include il join con corsi_docenti per preservare l'assegnazione docenti
+            const selectStr = t === 'corsi' ? '*, corsi_docenti(docente_id)' : '*';
+            const { data, error } = await sb.from(t).select(selectStr).order(o, { ascending: asc });
             if (error) { warn('realtime', t, error.message); return; }
             const adapted = (data || []).map(a);
             _prev[k] = adapted;
