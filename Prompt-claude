@@ -1,1 +1,28 @@
-Prevedi anche la possibilità di modificare lo schedule, cioè dammi la possibilità di cambiare giorno, orario ed altre impostazioni. In più prevedi la possibilità di di disattivare il servizio se non è già stato implementato. In più fai in modo di creare una tab di istruzioni per creare nuovi reminder e se possibile crea un pulsante di wizard per creare un nuovo reminder dalla pagina di istruzioni
+ok, adesso funziona il reminder pagamento ma non funziona il reminder collettivo. Parte dice che è saltato il messaggio senza dare spiegazioni.
+
+
+
+## Log 1
+
+**Timestamp:** 2026-03-31T17:35:13.667Z
+
+**Message:** [FM Reminder] tipo=collettivo data=2026-03-31
+
+**Details:**
+
+```json
+
+{
+
+  "event_type": "Log",
+
+  "function_id": "38fd3433-ffe7-49ad-8f0c-57f8f9939ad3",
+
+  "level": "info"
+
+}
+
+
+
+Questo dal log
+
