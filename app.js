@@ -6808,7 +6808,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
                 , lesson.stato==="in_attesa" ? "⏳" : "🤘"
               )
             )
-            , lesson.tipo!=="collettivo" && lesson.tipo!=="prova" && lesson.tipo!=="sala_prove" && lesson.attendance && (
+            , lesson.tipo!=="sala_prove" && lesson.attendance && (
               React.createElement('div', { style: {width:6, height:6, borderRadius:"50%", background:dotHex, flexShrink:0, marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4459}})
             )
           )
@@ -7212,17 +7212,28 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                           'Termine scaduto il ', lesson.recuperoScadenza,
                           ' — la lezione verrà segnata come assente')
                     )
-                    , role === 'admin' && React.createElement('button', {
-                        onClick: () => {
-                          if (window.__FM_SHOW_RECUPERO_SCADUTO__) {
-                            window.__FM_SHOW_RECUPERO_SCADUTO__({
-                              lesson,
-                              onExtend: () => { /* il modal aggiorna già lo state */ },
-                            });
-                          }
-                        },
-                        style:{padding:'7px 14px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}
-                      }, '📅 Proroga')
+                    , role === 'admin' && React.createElement('div',{style:{display:'flex',gap:6}}
+                      , React.createElement('button', {
+                          onClick: () => { if (window.__FM_SHOW_ADMIN_RECUPERO__) window.__FM_SHOW_ADMIN_RECUPERO__(lesson); },
+                          style:{padding:'7px 14px',borderRadius:8,border:'none',background:C.teal,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}
+                        }, '📅 Fissa recupero')
+                      , React.createElement('button', {
+                          onClick: () => { if (window.__FM_SHOW_RECUPERO_SCADUTO__) window.__FM_SHOW_RECUPERO_SCADUTO__({ lesson, onExtend: ()=>{} }); },
+                          style:{padding:'7px 14px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}
+                        }, '⏰ Proroga')
+                    )
+                  )
+                )
+                /* Banner "in recupero" non ancora scaduto — admin può fissare direttamente */
+                , !isRecuperoScaduto && lesson.inRecupero && role === 'admin' && (
+                  React.createElement('div', {style:{marginBottom:10,padding:'10px 14px',background:C.tealBg,border:`1px solid ${C.tealBorder}`,borderRadius:10,display:'flex',alignItems:'center',gap:10}}
+                    , React.createElement(Ic,{n:'calendar',size:15,stroke:C.teal})
+                    , React.createElement('div',{style:{flex:1,fontSize:12,color:C.teal,fontWeight:600}}
+                      , 'In recupero · scade il ', lesson.recuperoScadenza||'—')
+                    , React.createElement('button', {
+                        onClick: () => { if (window.__FM_SHOW_ADMIN_RECUPERO__) window.__FM_SHOW_ADMIN_RECUPERO__(lesson); },
+                        style:{padding:'6px 14px',borderRadius:8,border:'none',background:C.teal,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}
+                      }, '📅 Fissa recupero')
                   )
                 )
                 , React.createElement('div', { className: "att-row", style: {display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4638}}
@@ -8721,22 +8732,17 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
   const set = (k,v) => setF(p=>({...p,[k]:v}));
 
   // Corsi individuali + collettivi come opzioni strumento/corso
-  // Opzioni corso/strumento: usa i corsi reali dal DB
-  // Prima i corsi collettivi, poi i corsi individuali dal DB,
-  // poi come fallback la lista hardcoded filtrata per strumenti non già presenti
-  const corsiIndividuali = courses.filter(c => c.type !== "collettivo");
-  const corsiCollettivi  = courses.filter(c => c.type === "collettivo");
+  // Opzioni corso/strumento: usa SEMPRE i corsi reali dal DB
+  // Fallback alla lista hardcoded SOLO se il DB non ha ancora caricato nulla
   const STRUMENTI_FALLBACK = ["Pianoforte","Violino","Chitarra","Flauto","Batteria","Canto","Sassofono","Tromba","Violoncello","Solfeggio"];
-  const strumentiFallback = courses.length === 0
-    ? STRUMENTI_FALLBACK.map(s => ({ id:s, label:s }))
-    : STRUMENTI_FALLBACK
-        .filter(s => !courses.find(c => c.name === s))
-        .map(s => ({ id:s, label:s }));
-  const corsiOpts = [
-    ...corsiCollettivi.map(c => ({ id:c.id, label:`${c.name} (collettivo)` })),
-    ...corsiIndividuali.map(c => ({ id:c.id, label:c.name })),
-    ...strumentiFallback,
-  ];
+  const corsiCollettivi  = courses.filter(c => c.type === "collettivo");
+  const corsiIndividuali = courses.filter(c => c.type !== "collettivo");
+  const corsiOpts = courses.length > 0
+    ? [
+        ...corsiCollettivi.map(c => ({ id: c.id, label: `${c.name} (collettivo)` })),
+        ...corsiIndividuali.map(c => ({ id: c.id, label: c.name })),
+      ]
+    : STRUMENTI_FALLBACK.map(s => ({ id: s, label: s }));
 
   const validate = () => {
     const e = {};
@@ -17406,6 +17412,7 @@ function App() {
   const [globalModal,        setGlobalModal]        = useState(null); // overlay top-level fuori da main-scroll animato
   const [recuperoScadutoModal, setRecuperoScadutoModal] = useState(null); // {lesson, onExtend, onDismiss}
   const [cambioOraModal,     setCambioOraModal]         = useState(null); // {lesson, onSave}
+  const [adminRecuperoModal, setAdminRecuperoModal]     = useState(null); // {lesson}
   // ── Ripristina sessione Auth al refresh pagina + gestisci link invito ──────
   useEffect(()=>{
     if(!window.FM_AUTH) return;
@@ -17801,6 +17808,7 @@ function App() {
     window.__FM_HIDE_MODAL__ = ()        => setGlobalModal(null);
     window.__FM_SHOW_RECUPERO_SCADUTO__ = (data) => setRecuperoScadutoModal(data);
     window.__FM_SHOW_CAMBIO_ORA__ = (data) => setCambioOraModal(data);
+    window.__FM_SHOW_ADMIN_RECUPERO__ = (lesson) => setAdminRecuperoModal({ lesson });
     return () => {
       window.__FM_RELOAD__ = null;
       window.__FM_FORCE_REFRESH__ = null;
@@ -17972,6 +17980,11 @@ function App() {
           },
           onDismiss: () => setCambioOraModal(null),
         })
+      , adminRecuperoModal && React.createElement(AdminRecuperoModal, {
+          lesson: adminRecuperoModal.lesson,
+          setLessons: setSharedLessons,
+          onDismiss: () => setAdminRecuperoModal(null),
+        })
     )
   );
 }
@@ -18070,6 +18083,189 @@ const CambioOraModal = ({ lesson, onSave, onDismiss }) => {
                 opacity:(saving||!nuovaData||!nuoraOra)?0.6:1}
             }, saving ? '⏳...' : '✓ Conferma cambio')
         )
+      )
+    )
+  );
+};
+
+// ─── ADMIN RECUPERO MODAL ─────────────────────────────────────────────────────
+// Permette all'admin di fissare una lezione di recupero direttamente,
+// rispettando le disponibilità del docente senza richiedere la prenotazione dell'allievo.
+const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
+  const [slots,     setSlots]     = useState([]);
+  const [slotSel,   setSlotSel]   = useState(null);
+  const [note,      setNote]      = useState('');
+  const [saving,    setSaving]    = useState(false);
+  const [loadingSlots, setLoadingSlots] = useState(true);
+
+  // Calcola slot disponibili dalle disponibilità del docente
+  React.useEffect(() => {
+    const docName = (lesson.teacher || '').toLowerCase().trim();
+    const allDocenti = window.__docenti__ || [];
+    const docRecord = docName
+      ? allDocenti.find(d => {
+          const tk = (d.teacherKey||'').toLowerCase().trim();
+          const nm = (d.nome||'').toLowerCase().trim();
+          return tk===docName||nm===docName||tk.includes(docName)||docName.includes(tk)||nm.includes(docName)||docName.includes(nm);
+        })
+      : null;
+
+    const rawDisp = docRecord?.disponibilitaRecuperi || [];
+    const disp = typeof rawDisp === 'string'
+      ? (() => { try { return JSON.parse(rawDisp); } catch(e){ return []; } })()
+      : (Array.isArray(rawDisp) ? rawDisp : []);
+
+    if (!disp.length) { setLoadingSlots(false); return; }
+
+    const durataMin = lesson.durata || 45;
+    const toMin = t => { const [h,m]=(t||'0:0').split(':'); return +h*60+(+m||0); };
+    const toStr = m => String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+
+    const oggi_s = new Date(); oggi_s.setHours(0,0,0,0);
+    const domani  = new Date(oggi_s); domani.setDate(domani.getDate()+1);
+    // Per l'admin: può fissare recuperi fino a 60 giorni avanti (non solo fine mese)
+    const maxData = new Date(oggi_s); maxData.setDate(maxData.getDate()+60);
+
+    const giornoToIdx = { "domenica":0,"lunedi":1,"lunedì":1,"martedi":2,"martedì":2,"mercoledi":3,"mercoledì":3,"giovedi":4,"giovedì":4,"venerdi":5,"venerdì":5,"sabato":6 };
+
+    // Lezioni già presenti (per bloccare slot occupati)
+    const allLessons = window.__FM_DATA__?.lessons || [];
+    const occupati = new Set(allLessons.map(l => l.date+'_'+(l.hour||'').slice(0,5)));
+
+    const risultato = [];
+    for (const slot of disp) {
+      const dow = giornoToIdx[(slot.giorno||'').toLowerCase().trim()];
+      if (dow === undefined) continue;
+      const cursor = new Date(domani);
+      while (cursor <= maxData) {
+        if (cursor.getDay() === dow) {
+          const dataStr = cursor.toISOString().split('T')[0];
+          let cur = toMin(slot.oraInizio);
+          const end = toMin(slot.oraFine);
+          while (cur + durataMin <= end) {
+            const key = dataStr+'_'+toStr(cur);
+            risultato.push({
+              data: dataStr, giorno: slot.giorno,
+              oraInizio: toStr(cur), oraFine: toStr(cur+durataMin),
+              key, occupato: occupati.has(key),
+            });
+            cur += durataMin;
+          }
+        }
+        cursor.setDate(cursor.getDate()+1);
+      }
+    }
+    setSlots(risultato);
+    setLoadingSlots(false);
+  }, [lesson.id]);
+
+  const handleConferma = async () => {
+    if (!slotSel || saving) return;
+    setSaving(true);
+    const sb = window.supabaseClient;
+    if (sb) {
+      const nuovaLez = {
+        ...lesson,
+        id:              uid(),
+        date:            slotSel.data,
+        hour:            slotSel.oraInizio,
+        attendance:      'recupero',
+        tipo:            'recupero',
+        inRecupero:      false,
+        recuperoScadenza:null,
+        notes:           note || ('Recupero fissato dall\'admin · lezione del '+lesson.date),
+        recurrence:      'Nessuna',
+      };
+      await sb.from('lezioni').insert({
+        id: nuovaLez.id, data: nuovaLez.date, ora: nuovaLez.hour+':00',
+        student: nuovaLez.student, studente_id: nuovaLez.studentId||null,
+        strumento: nuovaLez.instrument||nuovaLez.strumento||null,
+        teacher: nuovaLez.teacher, room: nuovaLez.room||null,
+        attendance: 'recupero', tipo: 'recupero',
+        recurrence: 'Nessuna', notes: nuovaLez.notes,
+        in_recupero: false, recupero_scadenza: null,
+        durata: nuovaLez.durata||45,
+        corso_id: nuovaLez.courseId||null, corso_nome: nuovaLez.courseName||null,
+      });
+      // Segna la lezione originale come "in_recupero" risolta
+      await sb.from('lezioni').update({ attendance:'in_recupero', in_recupero:true }).eq('id', lesson.id);
+      setLessons(p => [...p, nuovaLez].map(l =>
+        l.id===lesson.id ? {...l, attendance:'in_recupero', inRecupero:true} : l
+      ));
+    }
+    setSaving(false);
+    onDismiss();
+  };
+
+  const MESI_L = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const fmtData = d => {
+    if (!d) return '—';
+    const [y,m,dd] = d.split('-');
+    return `${dd} ${MESI_L[+m-1]} ${y}`;
+  };
+
+  // Raggruppa slot per settimana
+  const slotLiberi = slots.filter(s => !s.occupato);
+  const oggi = new Date().toISOString().split('T')[0];
+
+  return React.createElement(React.Fragment, null
+    , React.createElement('div', { onClick:onDismiss, style:{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,.65)',backdropFilter:'blur(3px)'} })
+    , React.createElement('div', { style:{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',zIndex:9999,background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,width:520,maxWidth:'calc(100vw - 32px)',maxHeight:'85vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,.4)',fontFamily:"'Open Sans',sans-serif"} }
+      // Header
+      , React.createElement('div', {style:{padding:'18px 24px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:12,flexShrink:0}}
+        , React.createElement('div', {style:{width:36,height:36,borderRadius:10,background:C.tealBg,border:`1px solid ${C.tealBorder}`,display:'flex',alignItems:'center',justifyContent:'center'}}
+          , React.createElement(Ic,{n:'calendar',size:18,stroke:C.teal}))
+        , React.createElement('div', null
+          , React.createElement('div', {style:{fontSize:15,fontWeight:700,color:C.teal}}, '📅 Fissa recupero')
+          , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}, (lesson.student||lesson.courseName||'—')+' · lezione del '+fmtData(lesson.date))
+        )
+        , React.createElement('button', {onClick:onDismiss,style:{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',color:C.textMuted,fontSize:20}},'×')
+      )
+      // Body scrollabile
+      , React.createElement('div', {style:{flex:1,overflow:'auto',padding:'18px 24px',display:'flex',flexDirection:'column',gap:16}}
+        , loadingSlots
+          ? React.createElement('div',{style:{textAlign:'center',padding:32,color:C.textDim}},'⏳ Caricamento disponibilità...')
+          : slotLiberi.length === 0
+          ? React.createElement('div',{style:{padding:20,background:`${C.gold}08`,border:`1px solid ${C.goldDim}`,borderRadius:10,fontSize:13,color:C.textMuted,lineHeight:1.6}}
+              , '⚠️ Nessuno slot disponibile nei prossimi 60 giorni. '
+              , React.createElement('br',null)
+              , 'Verifica che il docente ', React.createElement('strong',null,lesson.teacher||'—'), ' abbia configurato le disponibilità recuperi nel suo profilo (Docenti → Impostazioni).'
+            )
+          : React.createElement(React.Fragment, null
+              , React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:4}}, `${slotLiberi.length} slot disponibili dalla disponibilità del docente · prossimi 60 giorni`)
+              , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:6}}
+                , slotLiberi.slice(0,30).map(s => {
+                    const isSel = slotSel?.key === s.key;
+                    return React.createElement('button', {key:s.key,
+                        onClick:()=>setSlotSel(s),
+                        style:{padding:'10px 14px',borderRadius:10,border:`2px solid ${isSel?C.teal:C.border}`,background:isSel?C.tealBg:C.bg,
+                          cursor:'pointer',display:'flex',alignItems:'center',gap:12,textAlign:'left',fontFamily:"'Open Sans',sans-serif",transition:'all .12s'}}
+                      , React.createElement('div', {style:{width:36,height:36,borderRadius:8,background:isSel?C.teal:C.surface,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}}
+                          , React.createElement('div',{style:{fontSize:11,fontWeight:700,color:isSel?'#fff':C.text,lineHeight:1}}, s.data.split('-')[2])
+                          , React.createElement('div',{style:{fontSize:9,color:isSel?'rgba(255,255,255,.8)':C.textDim,textTransform:'uppercase'}}, MESI_L[+s.data.split('-')[1]-1])
+                        )
+                      , React.createElement('div',{style:{flex:1}}
+                          , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:isSel?C.teal:C.text}}, fmtData(s.data) + ' · ' + s.giorno)
+                          , React.createElement('div',{style:{fontSize:12,color:C.textMuted}}, '🕐 ', s.oraInizio, ' → ', s.oraFine)
+                        )
+                      , isSel && React.createElement(Ic,{n:'check',size:16,stroke:C.teal})
+                    );
+                  })
+                , slotLiberi.length > 30 && React.createElement('div',{style:{fontSize:11,color:C.textDim,textAlign:'center',padding:8}}, `+${slotLiberi.length-30} altri slot...`)
+              )
+            )
+        // Note
+        , React.createElement('div', null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:6}},'Note (opzionale)')
+          , React.createElement('textarea',{value:note,rows:2,onChange:e=>setNote(e.target.value),placeholder:'Es. Recupero concordato telefonicamente',
+              style:{width:'100%',boxSizing:'border-box',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:'9px 12px',fontFamily:"'Open Sans',sans-serif",resize:'none'}})
+        )
+      )
+      // Footer
+      , React.createElement('div', {style:{padding:'14px 24px',borderTop:`1px solid ${C.border}`,display:'flex',gap:10,justifyContent:'flex-end',flexShrink:0}}
+        , React.createElement('button',{onClick:onDismiss,style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:'none',color:C.textMuted,cursor:'pointer',fontSize:13,fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+        , React.createElement('button',{onClick:handleConferma,disabled:!slotSel||saving,style:{padding:'9px 18px',borderRadius:8,border:'none',background:slotSel?C.teal:C.surface,color:slotSel?'#fff':C.textMuted,cursor:(!slotSel||saving)?'not-allowed':'pointer',fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif",opacity:saving?.7:1}}
+          , saving?'⏳ Salvo...':'✓ Conferma recupero')
       )
     )
   );
@@ -18628,9 +18824,12 @@ const RemindersView = ({ ruolo }) => {
           const cfg   = configs[tipo.id] || defaultCfg(tipo);
           const isEdit= editingId === tipo.id;
           const isOn  = cfg.attivo !== false;
-          // tipo potrebbe non esistere come colonna — cerca nel dettaglio come fallback
+          // tipo potrebbe non esistere come colonna — cerca nel lezione_id e dettaglio come fallback
           const matchTipo = (r) => {
             if (r.tipo) return r.tipo === tipo.id;
+            // fallback: "docente_xxx" → tipo docente, "pagamento_xxx" → tipo pagamento
+            const lid = String(r.lezione_id || '');
+            if (lid.startsWith(tipo.id + '_') || lid.startsWith(tipo.id)) return true;
             return (r.dettaglio||'').toLowerCase().includes(tipo.id);
           };
           const tLog  = log.filter(r => !r._errore && matchTipo(r));
