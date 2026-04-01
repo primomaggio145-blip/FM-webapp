@@ -7739,10 +7739,10 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
                           : (l.student||"").split(" ")[0]
                           }`
                     )
-                    , !isSala && !isColl(l) && !isProva(l) && l.attendance && (
+                    , !isSala && (l.attendance || l.inRecupero) && (
                       React.createElement('div',{style:{
                         width:6, height:6, borderRadius:"50%",
-                        background: attHex(l.attendance),
+                        background: l.inRecupero && !l.attendance ? '#f59e0b' : attHex(l.attendance),
                         flexShrink:0,
                       }})
                     )
@@ -10548,9 +10548,18 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
       closeModal();
       // Se cambio_ora: apri il modal per cambiare giorno/orario della lezione corrente
+      // E azzera la ricorrenza della lezione corrente nel DB così la prossima segnatura di presenza
+      // non creerà un'altra ricorrente (il sistema crea già la prossima qui sopra)
       if (openCambioOra && window.__FM_SHOW_CAMBIO_ORA__) {
         const lessonRef = existingLesson || { ...data, id: data.id };
-        setTimeout(() => window.__FM_SHOW_CAMBIO_ORA__({ lesson: lessonRef }), 120);
+        // Azzera ricorrenza nel DB
+        const sbCo = window.supabaseClient;
+        if (sbCo && data.id) {
+          sbCo.from('lezioni').update({ recurrence: 'Nessuna' }).eq('id', data.id).then(() => {});
+        }
+        // Azzera ricorrenza in React state
+        setLessons(p => p.map(l => l.id === data.id ? { ...l, recurrence: 'Nessuna' } : l));
+        setTimeout(() => window.__FM_SHOW_CAMBIO_ORA__({ lesson: { ...lessonRef, recurrence: 'Nessuna' } }), 120);
       }
     };
     const handleDelete     = ()          => { setLessons(p => p.filter(l => l.id !== _optionalChain([selLesson, 'optionalAccess', _54 => _54.id]))); closeModal(); };
@@ -10607,9 +10616,15 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
         // Se segno presenza REALE (non in_recupero) su lezione ricorrente → crea la prossima
         // cambio_ora: crea la prossima lezione all'orario originale, poi apre modal per cambiare l'attuale
+        // IMPORTANTE: le lezioni con recurrence='Nessuna' non creano ricorrenti — usato per lezioni già consumate
         const isLezioneRecupero = lesson && (lesson.tipo === 'recupero' || lesson.inRecupero === true);
         const valCreaLezione = val && val !== "" && val !== "in_recupero";
         const isCambioOra = val === 'cambio_ora';
+        // Se la lezione ha recurrence='Nessuna' (già consumata da un cambio_ora precedente) non creare ricorrente
+        if (lesson && lesson.recurrence === 'Nessuna_consumed') {
+          // Lezione già "consumata" — segna solo la presenza
+          return updated;
+        }
         let shouldOpenCambioOra = false;
         if (lesson && valCreaLezione && lesson.recurrence && lesson.recurrence !== "Nessuna" && !isLezioneRecupero) {
           const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
@@ -10638,7 +10653,19 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             };
             safeInsertRecurringLesson(nextLesson, setLessons);
             setNextLessonCreated(nextDate);
-            if (isCambioOra) shouldOpenCambioOra = true;
+            if (isCambioOra) {
+              shouldOpenCambioOra = true;
+              // Azzera la ricorrenza della lezione corrente nel DB e nello state
+              // così la prossima segnatura di presenza NON creerà un'altra ricorrente
+              const sb2 = window.supabaseClient;
+              if (sb2) {
+                sb2.from('lezioni').update({ recurrence: 'Nessuna' }).eq('id', id)
+                  .then(() => {});
+              }
+              return [...updated.map(l =>
+                l.id === id ? { ...l, recurrence: 'Nessuna' } : l
+              ), nextLesson];
+            }
             return [...updated, nextLesson];
           }
           if (isCambioOra) shouldOpenCambioOra = true;
