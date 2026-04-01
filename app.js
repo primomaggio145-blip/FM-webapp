@@ -6074,15 +6074,20 @@ const collHex = (l) => {
 
 // Presenza → colore
 const attHex = (att) =>
-  att === "presente"    ? C.green :
-  att === "assente"     ? C.red   :
-  att === "giustificato"? C.gold  :
-  att === "recupero"    ? C.blue  : C.textDim;
+  att === "presente"    ? C.green  :
+  att === "assente"     ? C.red    :
+  att === "giustificato"? C.gold   :
+  att === "recupero"    ? C.blue   :
+  att === "recuperata"  ? C.teal   :
+  att === "in_recupero" ? '#f59e0b':
+  att === "cambio_ora"  ? '#7c3aed': C.textDim;
 
 const attBadge = (att) =>
-  att === "presente"    ? "green" :
-  att === "assente"     ? "red"   :
-  att === "recupero"    ? "blue"  : "gold";
+  att === "presente"    ? "green"  :
+  att === "assente"     ? "red"    :
+  att === "recupero"    ? "blue"   :
+  att === "recuperata"  ? "teal"   :
+  att === "in_recupero" ? "gold"   : "gold";
 
 const today    = new Date();
 const addDays  = (d, n) => { const dt = new Date(d); dt.setDate(dt.getDate()+n); return dt; };
@@ -6808,8 +6813,10 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
                 , lesson.stato==="in_attesa" ? "⏳" : "🤘"
               )
             )
-            , lesson.tipo!=="sala_prove" && lesson.attendance && (
-              React.createElement('div', { style: {width:6, height:6, borderRadius:"50%", background:dotHex, flexShrink:0, marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4459}})
+            , lesson.tipo!=="sala_prove" && (lesson.attendance || lesson.inRecupero) && (
+              React.createElement('div', { style: {width:6, height:6, borderRadius:"50%",
+                background: lesson.inRecupero && !lesson.attendance ? '#f59e0b' : dotHex,
+                flexShrink:0, marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4459}})
             )
           )
         );
@@ -7508,9 +7515,14 @@ const DayView = ({ date, lessons, onSelect }) => {
                 )
               )
             )
-            , l.tipo !== "collettivo" && l.attendance && (
+            , l.tipo !== "sala_prove" && (l.attendance || l.inRecupero) && (
               React.createElement('div', { style: {flexShrink:0, alignSelf:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4871}}
-                , React.createElement(Badge, { label: l.attendance, variant: attBadge(l.attendance), __self: this, __source: {fileName: _jsxFileName, lineNumber: 4872}})
+                , (() => {
+                    const att = l.inRecupero && !l.attendance ? 'in_recupero' : l.attendance;
+                    const s = ATT_STYLES[att];
+                    const lbl = s ? s.label : att;
+                    return React.createElement(Badge, { label: lbl, variant: attBadge(att) });
+                  })()
               )
             )
           )
@@ -13375,7 +13387,7 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
   const braniEv = _braniEv || [];
   const def = initial || {id:"",tipo:"saggio",titolo:"",data:"",ora:"",luogo:"",capienza:100,
     biglietto:false,prezzoBiglietto:0,stato:"programmato",descrizione:"",note:"",programma:[],partecipanti:[],prenotazioni:[]};
-  const [f,setF] = useState({...def, programma:def.programma||[], partecipanti:def.partecipanti||[]});
+  const [f,setF] = useState({...def, titolo: def.titolo||'', programma:def.programma||[], partecipanti:def.partecipanti||[]});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const tp  = tipoEv(f.tipo);
   const hasProgramma  = ["saggio","concerto","pubblico"].includes(f.tipo);
@@ -13531,7 +13543,7 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
 
       , React.createElement('div', { style: {padding:"14px 24px",borderTop:"1px solid "+C.border,display:"flex",justifyContent:"flex-end",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8461}}
         , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8462}}, "Annulla")
-        , React.createElement(Btn, { onClick: ()=>{if(!f.titolo.trim()||!f.data)return alert("Titolo e data obbligatori");onSave({...f,id:f.id||("ev"+Date.now())});}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8463}}
+        , React.createElement(Btn, { onClick: ()=>{if(!(f.titolo||'').trim()||!f.data)return alert("Titolo e data obbligatori");onSave({...f,id:f.id||("ev"+Date.now())});}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8463}}
           , React.createElement(Ic, { n: "check", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 8464}}), initial && initial.id?"Salva modifiche":"Crea evento"
         )
       )
@@ -15132,12 +15144,62 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     ...allegatiBrani,
   ];
 
+  // Scansione storage bucket: trova file caricati direttamente senza record in DB
+  const [storageOrphans, setStorageOrphans] = useState([]);
+  const [scanningStorage, setScanningStorage] = useState(false);
+
+  React.useEffect(function() {
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    setScanningStorage(true);
+    const supabaseUrl = 'https://ocsxrjommtrjelnbihfr.supabase.co';
+    const dbUrls = new Set(allegatiLezioni.map(a => a.fileUrl).filter(Boolean));
+
+    // Funzione ricorsiva per listare tutti i file incluse sottocartelle
+    async function listAll(prefix) {
+      const { data: items } = await sb.storage.from('allegati').list(prefix, { limit: 500 });
+      if (!items) return [];
+      const files = [];
+      for (const item of items) {
+        if (item.id) {
+          // è un file
+          const fullPath = prefix ? `${prefix}/${item.name}` : item.name;
+          const url = `${supabaseUrl}/storage/v1/object/public/allegati/${fullPath}`;
+          if (!dbUrls.has(url)) {
+            files.push({
+              id: item.id || fullPath,
+              fileName: item.name,
+              fileUrl: url,
+              fileType: item.metadata?.mimetype || '',
+              createdAt: item.created_at || null,
+              descrizione: prefix ? `Cartella: ${prefix}` : '(storage non collegato)',
+              _categoria: 'storage_orphan', _isOrphan: true,
+            });
+          }
+        } else {
+          // è una cartella — scendi ricorsivamente
+          const subPath = prefix ? `${prefix}/${item.name}` : item.name;
+          const sub = await listAll(subPath);
+          files.push(...sub);
+        }
+      }
+      return files;
+    }
+
+    listAll('').then(function(orphans) {
+      setStorageOrphans(orphans);
+      setScanningStorage(false);
+    }).catch(function() { setScanningStorage(false); });
+  }, [allegatiLezioni.length]);
+
+  const allegatiAll = [...allegati, ...storageOrphans];
+
   const [sortKeyAl, sortDirAl, handleSortAl, sortFnAl] = useSortable("createdAt", "desc");
 
-  const corsiList   = [...new Set(allegati.map(a=>a.corso).filter(Boolean))].sort();
+  const corsiList   = [...new Set(allegatiAll.map(a=>a.corso).filter(Boolean))].sort();
   const allieviList = [...new Set(allegatiLezioni.map(a=>a.allievoNome||a.allievoId).filter(Boolean))].sort();
 
-  const filtered = allegati.filter(a => {
+  const filtered = allegatiAll.filter(a => {
     const q = search.toLowerCase();
     const matchQ = !q || (a.fileName||"").toLowerCase().includes(q) || (a.descrizione||"").toLowerCase().includes(q);
     const matchC = !fCorso   || a.corso === fCorso;
@@ -15166,7 +15228,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
       , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:24}}
         , React.createElement('div', null
           , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif", fontWeight:600, fontSize:26, letterSpacing:"0.02em", color:C.text}}, "Allegati")
-          , React.createElement('p', { style: {fontSize:13, color:C.textMuted, marginTop:4}}, allegati.length, " allegati totali (", allegatiLezioni.length, " lezioni · ", allegatiBrani.length, " brani)")
+          , React.createElement('p', { style: {fontSize:13, color:C.textMuted, marginTop:4}}, allegatiAll.length, " allegati totali (", allegatiLezioni.length, " lezioni · ", allegatiBrani.length, " brani", storageOrphans.length > 0 ? ` · ${storageOrphans.length} storage non collegati` : "", ")")
         )
         , React.createElement(RefreshBtn)
       )
@@ -15190,6 +15252,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
           , React.createElement('option', {value:"lezione"}, "📁 Allegati lezione")
           , React.createElement('option', {value:"spartito"}, "🎼 Spartiti")
           , React.createElement('option', {value:"file_brano"}, "🎵 File brani")
+          , storageOrphans.length > 0 && React.createElement('option', {value:"storage_orphan"}, `⚠️ Storage non collegati (${storageOrphans.length})`)
         )
         , React.createElement('select', { value: fAllievo, onChange: e=>setFAllievo(e.target.value),
           style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`,
