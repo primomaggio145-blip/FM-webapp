@@ -18915,11 +18915,16 @@ const RemindersView = ({ ruolo }) => {
           const isEdit= editingId === tipo.id;
           const isOn  = cfg.attivo !== false;
           // tipo potrebbe non esistere come colonna — cerca nel lezione_id e dettaglio come fallback
+          const VALID_TIPI = new Set(['individuale','collettivo','docente','pagamento','recupero']);
           const matchTipo = (r) => {
-            if (r.tipo) return r.tipo === tipo.id;
-            // fallback: "docente_xxx" → tipo docente, "pagamento_xxx" → tipo pagamento
+            // Usa r.tipo SOLO se è un tipo reminder valido (non un wamid o stringa casuale)
+            if (r.tipo && VALID_TIPI.has(r.tipo)) return r.tipo === tipo.id;
+            // Fallback 1: lezione_id prefissato — "docente_xxx" → tipo docente
             const lid = String(r.lezione_id || '');
-            if (lid.startsWith(tipo.id + '_') || lid.startsWith(tipo.id)) return true;
+            if (lid.startsWith(tipo.id + '_')) return true;
+            // Fallback 2: lezione_id è un UUID standard → tipo individuale/collettivo/recupero
+            if (tipo.id === 'individuale' && lid.match(/^[0-9a-f-]{36}$/i)) return true;
+            // Fallback 3: cerca nel dettaglio
             return (r.dettaglio||'').toLowerCase().includes(tipo.id);
           };
           const tLog  = log.filter(r => !r._errore && matchTipo(r));
@@ -19061,7 +19066,17 @@ const RemindersView = ({ ruolo }) => {
                 , logFiltrato.slice(0,100).map((r,i)=>React.createElement('tr',{key:r.id||i,style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg}}
                     , React.createElement('td',{style:{padding:'9px 14px',fontSize:12,color:C.textMuted,whiteSpace:'nowrap'}}, r.created_at ? new Date(r.created_at).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—')
                     , React.createElement('td',{style:{padding:'9px 14px',fontSize:12,fontFamily:'monospace',color:C.text}}, r.telefono||'—')
-                    , React.createElement('td',{style:{padding:'9px 14px'}}, React.createElement('span',{style:{fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:'2px 8px',color:C.textMuted}}, r.tipo || (r.dettaglio ? r.dettaglio.split(' ')[0] : '—')))
+                    , React.createElement('td',{style:{padding:'9px 14px'}}, (() => {
+                        const VALID_T = new Set(['individuale','collettivo','docente','pagamento','recupero']);
+                        const lid = String(r.lezione_id||'');
+                        // Ricava il tipo: preferisci r.tipo solo se è un tipo valido
+                        let label = VALID_T.has(r.tipo) ? r.tipo
+                          : lid.startsWith('docente_') ? 'docente'
+                          : lid.startsWith('pagamento_') ? 'pagamento'
+                          : lid.match(/^[0-9a-f-]{36}$/i) ? 'lezione'
+                          : '—';
+                        return React.createElement('span',{style:{fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:'2px 8px',color:C.textMuted}}, label);
+                      })())
                     , React.createElement('td',{style:{padding:'9px 14px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:r.stato==='inviato'?C.greenBg:C.redBg,color:r.stato==='inviato'?C.green:C.red,border:`1px solid ${r.stato==='inviato'?C.greenBorder:C.redBorder}`,borderRadius:20,padding:'3px 10px'}}, r.stato==='inviato'?'✅ Inviato':'❌ Errore'))
                     , React.createElement('td',{style:{padding:'9px 14px',fontSize:11,color:C.textMuted,maxWidth:260,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, r.dettaglio||'—')
                   ))
