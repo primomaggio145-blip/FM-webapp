@@ -17632,15 +17632,20 @@ function App() {
       try {
         const sb = window.supabaseClient;
         if (!sb) return;
+        const FA = window.FMAdapter;
+        const todayISO = new Date().toISOString().split('T')[0];
+        // Soglia: ultimi 24h per lezioni modificate/create (non tutto il DB)
+        const threshold24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+        // ── Tabelle piccole: carica tutto (cambiano raramente) ───────────────
         const [
-          { data: sS }, { data: sD }, { data: sC }, { data: sL },
+          { data: sS }, { data: sD }, { data: sC },
           { data: sB }, { data: sP }, { data: sQ }, { data: sEV },
           { data: sAL }, { data: sSALA }, { data: sCFG },
         ] = await Promise.all([
           sb.from('studenti').select('*').order('nome'),
           sb.from('docenti').select('*').order('nome'),
           sb.from('corsi').select('*, corsi_docenti(docente_id)').order('nome'),
-          sb.from('lezioni').select('*').order('data', { ascending: false }),
           sb.from('brani').select('*').order('titolo'),
           sb.from('spese').select('*').order('data', { ascending: false }),
           sb.from('quote').select('*').order('anno').order('mese'),
@@ -17649,7 +17654,19 @@ function App() {
           sb.from('prenotazioni_sala').select('*').order('data').order('ora_inizio'),
           sb.from('sito_config').select('*'),
         ]);
-        const FA = window.FMAdapter;
+
+        // ── Lezioni: SOLO oggi + modificate nelle ultime 24h ────────────────
+        // Mantiene in memoria quelle più vecchie già caricate
+        const [{ data: sLToday }, { data: sLRecent }] = await Promise.all([
+          sb.from('lezioni').select('*').eq('data', todayISO),
+          sb.from('lezioni').select('*').gt('updated_at', threshold24h).neq('data', todayISO),
+        ]);
+        const allFetchedL = [...(sLToday||[]), ...(sLRecent||[])];
+        const fetchedIds  = new Set(allFetchedL.map(r => r.id));
+        // Lezioni già in memoria che non sono state toccate → le teniamo
+        const existingLessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
+        const untouched = existingLessons.filter(l => !fetchedIds.has(l.id));
+
         const adaptL = (r) => {
           const allegatiAll = sAL || [];
           const allegati = allegatiAll.filter(a => a.lezione_id === r.id).map(a => ({
@@ -17676,13 +17693,14 @@ function App() {
             students: (() => { try { return r.students ? JSON.parse(r.students) : []; } catch(e) { return []; } })(),
           };
         };
+        const sL = [...untouched, ...allFetchedL.map(adaptL)];
+
         const adaptA = r => ({
           id:r.id, lezioneId:r.lezione_id||null, allievoId:r.allievo_id||null,
           allievoNome:r.allievo_nome||null, corso:r.corso||null,
           descrizione:r.descrizione||null, fileUrl:r.file_url||null,
           fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null,
         });
-        // Converti array righe sito_config → oggetto config
         const configFromDB = {};
         (sCFG || []).forEach(r => {
           try { configFromDB[r.chiave] = JSON.parse(r.valore); }
@@ -17700,7 +17718,7 @@ function App() {
             }),
             docenti:  (sD||[]).map(r => FA ? FA.docente(r) : r),
             courses:  (sC||[]).map(r => FA ? FA.corso(r) : r),
-            lessons:  (sL||[]).map(adaptL),
+            lessons:  sL,
             brani:    (sB||[]).map(r => ({ id:r.id, title:r.titolo||'', composer:r.compositore||'', periodo:r.periodo||'', tonality:r.tonalita||'', difficulty:r.difficolta||'Intermedio', tipo:r.tipo||'individuale', note:r.note||'', lezioni:r.lezioni||0 })),
             spese:    (sP||[]).map(r => ({ id:String(r.id), docenteId:r.docente_id||null, data:r.data||'', mese:r.mese!=null?r.mese:new Date((r.data||'')+'T00:00:00').getMonth(), anno:r.anno||new Date().getFullYear(), importo:parseFloat(r.importo)||0, desc:r.desc||r.descrizione||'', nota:r.nota||'', metodo:r.metodo||'Bonifico', categoria:r.categoria||'altro' })),
             entrate:  (sQ||[]).map(r => ({ id:String(r.id), studentId:r.studente_id||null, studentName:r.studente_nome||'', importo:parseFloat(r.importo)||0, mese:r.mese, anno:r.anno, data:r.data_pagamento||'', metodo:r.metodo||'Contanti', categoria:'quota', desc:r.note||'', stato:r.stato||'attesa' })),
@@ -17708,12 +17726,10 @@ function App() {
             allegati: (sAL||[]).map(adaptA),
             config:   Object.keys(configFromDB).length > 0 ? configFromDB : null,
           };
-          // CRITICO: aggiorna _prev in fm_sync PRIMA di chiamare __FM_RELOAD__
-          // altrimenti syncState vede le differenze come "modifiche da scrivere"
           if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__(reloadData);
           window.__FM_RELOAD__(reloadData);
         }
-        // Ricarica notifiche non lette — filtrate per l'utente corrente
+        // Notifiche
         try {
           const _u = window.__currentUser__;
           const _ruolo = (_u && _u.ruolo) || 'admin';
@@ -17734,17 +17750,26 @@ function App() {
             setSharedNotifiche(filtered);
           }
         } catch(e) {}
-        // Ricarica richieste recupero (per dashboard card)
+        // Richieste recupero
         try {
           const { data: rr } = await sb.from('richieste_recupero').select('*').order('created_at', {ascending:false}).limit(200);
           if (rr) window.__richiesteRecupero__ = rr;
         } catch(e) {}
         if (!silent) {
           const t = document.getElementById('sync-toast');
-          if (t) { t.textContent = '✓ Dati aggiornati'; t.style.opacity = '1'; setTimeout(() => { t.style.opacity = '0'; }, 2000); }
+          if (t) {
+            const nLezioni = allFetchedL.length;
+            t.textContent = `✓ Aggiornati ${nLezioni} lezioni oggi/recenti`;
+            t.style.opacity = '1';
+            setTimeout(() => { t.style.opacity = '0'; }, 2500);
+          }
         }
       } catch(e) {
-        console.warn('[FM] Force refresh error:', e);
+        console.warn('[FM] Refresh error:', e);
+        if (!silent) {
+          const t = document.getElementById('sync-toast');
+          if (t) { t.textContent = '⚠ Errore aggiornamento'; t.style.opacity = '1'; setTimeout(() => { t.style.opacity = '0'; }, 3000); }
+        }
       } finally {
         _refreshing = false;
       }
