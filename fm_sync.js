@@ -433,11 +433,13 @@
   async function syncState(state) {
     if (!_ready) { warn('Sync non ancora attivo — salto'); return; }
 
+    // NOTA: le lezioni NON sono in questo MAP — vengono scritte direttamente
+    // dall'app (handleEdit, handleAttendance, safeInsertRecurringLesson, ecc.)
+    // Includerle qui causerebbe scritture duplicate e falsi "~151 modifiche" ad ogni sync.
     const MAP = [
       ['studenti', 'students', toDB.studenti],
       ['docenti',  'docenti',  toDB.docenti ],
       ['corsi',    'courses',  toDB.corsi   ],
-      ['lezioni',  'lessons',  toDB.lezioni ],
       ['quote',    'entrate',  toDB.quote   ],
       ['spese',    'spese',    toDB.spese   ],
       ['brani',    'brani',    toDB.brani   ],
@@ -473,18 +475,26 @@
         allegati: state.allegati ? [...state.allegati] : _prev.allegati,
         prenotazioni_sala: state.prenotazioni_sala ? [...state.prenotazioni_sala] : _prev.prenotazioni_sala,
       };
-      log(`Sync completato (${totalChanges} modifiche)`);
+      log(`Sync completato (${totalChanges} modifiche) [lezioni scritte direttamente dall'app]`);
     }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
   //  LOAD ALL — carica tutti i dati da Supabase
+  //  PER LE LEZIONI: solo ultimi 60 giorni + future (non tutto il DB storico)
+  //  Le lezioni più vecchie rimangono in memoria dal caricamento iniziale
   // ═══════════════════════════════════════════════════════════════════════════
   async function loadAll() {
     const sb = window.supabaseClient;
     if (!sb) return null;
     log('Caricamento da Supabase...');
     try {
+      // Soglia: 60 giorni fa (abbastanza per calendario mensile + recuperi)
+      const oggi = new Date();
+      const soglia60g = new Date(oggi);
+      soglia60g.setDate(soglia60g.getDate() - 60);
+      const sogliaISO = soglia60g.toISOString().split('T')[0];
+
       const [
         { data: sS, error: e1 }, { data: sD, error: e2 }, { data: sC, error: e3 },
         { data: sL, error: e4 }, { data: sB, error: e5 },
@@ -496,7 +506,8 @@
         sb.from('studenti').select('*').order('nome'),
         sb.from('docenti').select('*').order('nome'),
         sb.from('corsi').select('*, corsi_docenti(docente_id)').order('nome'),
-        sb.from('lezioni').select('*').order('data', { ascending: false }),
+        // Lezioni: solo ultimi 60 giorni + future (non lo storico completo)
+        sb.from('lezioni').select('*').gte('data', sogliaISO).order('data', { ascending: false }),
         sb.from('brani').select('*').order('titolo'),
         sb.from('spese').select('*').order('data', { ascending: false }),
         sb.from('quote').select('*').order('anno').order('mese'),
