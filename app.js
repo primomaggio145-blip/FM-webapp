@@ -2158,7 +2158,7 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                           , !isAttivo && (
                             React.createElement('button', { onClick: ()=>{
                               setAnniScolastici(p=>p.map(a=>({...a,stato:a.id===as.id?"attivo":"archiviato"})));
-                              setConfig(p=>({...p,annoScolastico:as.label,annoInizioAttivo:as.annoInizio}));
+                              setDraft(p=>({...p,annoScolastico:as.label,annoInizioAttivo:as.annoInizio}));
                               setD("annoScolastico",as.label);
                               setD("annoInizioAttivo",as.annoInizio);
                               // Aggiorna subito il config globale senza aspettare Salva
