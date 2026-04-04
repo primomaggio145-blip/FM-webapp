@@ -2128,9 +2128,36 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
               /* Anni Scolastici */
               , React.createElement('section', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 1891}}
                 , React.createElement('div', { style: {fontSize:11,color:C.gold,letterSpacing:"0.1em",textTransform:"uppercase",
+                  marginBottom:12,display:"flex",alignItems:"center",gap:6}}
+                  , React.createElement('div', { style: {height:1,width:16,background:C.goldDim}}), "Soglie lezioni mensili"
+                )
+                , React.createElement('p', {style:{fontSize:12,color:C.textMuted,marginBottom:12,lineHeight:1.5}}
+                  , 'Definisci quante lezioni standard prevede il mese. Verranno generate notifiche per gli allievi che superano queste soglie (salvo eccezioni individuali).'
+                )
+                , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}
+                  , React.createElement(SField, {
+                      label: "Lezioni individuali / mese",
+                      type: "number",
+                      value: draft.sogliaLezioniIndividuali != null ? draft.sogliaLezioniIndividuali : 4,
+                      onChange: e => setD("sogliaLezioniIndividuali", Math.max(1, parseInt(e.target.value)||4)),
+                      placeholder: "4",
+                    })
+                  , React.createElement(SField, {
+                      label: "Lezioni collettive / mese",
+                      type: "number",
+                      value: draft.sogliaLezioniCollettive != null ? draft.sogliaLezioniCollettive : 4,
+                      onChange: e => setD("sogliaLezioniCollettive", Math.max(1, parseInt(e.target.value)||4)),
+                      placeholder: "4",
+                    })
+                )
+              )
+
+              /* Anni Scolastici */
+              , React.createElement('section', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 1891}}
+                , React.createElement('div', { style: {fontSize:11,color:C.gold,letterSpacing:"0.1em",textTransform:"uppercase",
                   marginBottom:12,display:"flex",alignItems:"center",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1892}}
                   , React.createElement('div', { style: {height:1,width:16,background:C.goldDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1894}}), "Storico anni scolastici"
-
+                  , React.createElement('div', { style: {height:1,width:16,background:C.goldDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1894}}), "Storico anni scolastici"
                 )
                 , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1897}}
                   /* Lista anni */
@@ -2508,7 +2535,7 @@ const CONFIG_DEFAULT = {
 
 
 // ─── NOTIFICATION BELL ────────────────────────────────────────────────────────
-const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB, notifiche:_notificheNB, onQuickAction:_onQANB }) => {
+const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB, notifiche:_notificheNB, onQuickAction:_onQANB, config:_configNB }) => {
   const ruoloNB = _ruoloNB || "admin";
   const [open, setOpen] = useState(false);
   const ref = React.useRef(null);
@@ -2665,7 +2692,56 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     }
   }
 
-  // 7. Notifiche da tabella `notifiche` Supabase (recuperi e altro)
+  // 7. Allievi con lezioni individuali superiori alla soglia mensile (solo ADMIN)
+  if (ruoloNB === "admin") {
+    const meseCurr  = oggi.getMonth() + 1;
+    const annoCurr  = oggi.getFullYear();
+    // Soglia globale da config (default 4), può essere sovrascritta per singolo allievo
+    const SOGLIA_IND_GLOB = (_configNB && _configNB.sogliaLezioniIndividuali != null) ? Number(_configNB.sogliaLezioniIndividuali) : 4;
+    const MESI_N = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+    // Mappa studente → soglia individuale effettiva (eccezione o globale)
+    const getSogliaStudente = (nomeStudente) => {
+      const st = (students||[]).find(s => (s.name||s.nome||'').toLowerCase() === (nomeStudente||'').toLowerCase());
+      if (st && st.sogliaIndividualeEcc != null) return Number(st.sogliaIndividualeEcc);
+      return SOGLIA_IND_GLOB;
+    };
+
+    // Conta lezioni individuali del mese per studente
+    const conteggioPerAllievo = {};
+    (lessons||[]).forEach(l => {
+      if (isColl(l) || l.tipo === 'prova' || l.tipo === 'sala_prove' || l.tipo === 'recupero') return;
+      if (l.attendance === 'recuperata') return;
+      if (!l.date) return;
+      const [ly,lm] = (l.date||'').split('-').map(Number);
+      if (ly !== annoCurr || lm !== meseCurr) return;
+      const key = l.student || String(l.studentId||'');
+      if (!key) return;
+      conteggioPerAllievo[key] = (conteggioPerAllievo[key]||0) + 1;
+    });
+
+    // Trova chi supera la propria soglia
+    const superanoSoglia = Object.entries(conteggioPerAllievo)
+      .filter(([nome, count]) => count > getSogliaStudente(nome))
+      .map(([nome, count]) => ({ nome, count, soglia: getSogliaStudente(nome) }))
+      .sort((a,b) => b.count - a.count);
+
+    if (superanoSoglia.length > 0) {
+      notifs.push({
+        id: 'lezioni_extra_mese',
+        tipo: 'warning',
+        icon: 'alert',
+        color: C.orange,
+        titolo: `${superanoSoglia.length} allievo${superanoSoglia.length>1?'i':''} oltre la soglia lezioni ind. di ${MESI_N[meseCurr-1]}`,
+        desc: superanoSoglia.slice(0,3).map(a => `${a.nome} (${a.count}/${a.soglia})`).join(' · ')
+          + (superanoSoglia.length > 3 ? ` +${superanoSoglia.length-3} altri` : ''),
+        action: () => { onNavigate('allievi'); setOpen(false); },
+        actionLabel: 'Vedi allievi',
+      });
+    }
+  }
+
+  // 8. Notifiche da tabella `notifiche` Supabase (recuperi e altro)
   var notificheArr = Array.isArray(_notificheNB) ? _notificheNB : [];
   // Filtra per il ruolo/utente corrente
   var myNotifiche = notificheArr.filter(function(n) {
@@ -3124,6 +3200,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   onQuickAction: onQuickAction,
                   ruolo: ruolo,
                   appUser: appUser,
+                  config: propConfig,
                 })
               /* Settings button rimosso dall'header — vedi Strumenti > Impostazioni */
               /* Ruolo badge */
@@ -4477,6 +4554,34 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
         , React.createElement(SectionDivider, { label: "Quota", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3001}})
         , React.createElement(Input, { label: "Quota mensile (€) *"   , type: "number", value: f.monthlyFee, onChange: e=>set("monthlyFee",e.target.value), error: errors.monthlyFee, placeholder: "100", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3002}})
         , React.createElement(Sel, { label: "Tipo quota" , value: f.feeType, onChange: e=>set("feeType",e.target.value), options: ["fisso","variabile"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3003}})
+
+        /* Eccezione soglia lezioni mensili */
+        , React.createElement(SectionDivider, { label: "Eccezione soglia lezioni" })
+        , React.createElement('div', { style: {gridColumn:"1/-1"} }
+          , React.createElement('div', {style:{background:`${C.gold}08`,border:`1px solid ${C.goldDim}`,borderRadius:10,padding:'12px 14px',marginBottom:10,fontSize:12,color:C.textMuted,lineHeight:1.5}}
+            , '⚙️ Lascia vuoto per usare le soglie globali delle Impostazioni. Compila solo se questo allievo ha un accordo diverso (es. 5 lezioni/mese).'
+          )
+        )
+        , React.createElement('div', null
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:6}}, 'Lezioni individuali / mese (eccezione)')
+          , React.createElement('input', {
+              type:'number', min:1, max:20,
+              value: f.sogliaIndividualeEcc != null ? f.sogliaIndividualeEcc : '',
+              placeholder: 'Es. 5 — lascia vuoto per default globale',
+              onChange: e => set('sogliaIndividualeEcc', e.target.value === '' ? null : Math.max(1, parseInt(e.target.value)||1)),
+              style:{width:'100%',boxSizing:'border-box',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:'9px 12px',fontFamily:"'Open Sans',sans-serif"}
+            })
+        )
+        , React.createElement('div', null
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:6}}, 'Lezioni collettive / mese (eccezione)')
+          , React.createElement('input', {
+              type:'number', min:1, max:20,
+              value: f.sogliaCollettivaEcc != null ? f.sogliaCollettivaEcc : '',
+              placeholder: 'Es. 2 — lascia vuoto per default globale',
+              onChange: e => set('sogliaCollettivaEcc', e.target.value === '' ? null : Math.max(1, parseInt(e.target.value)||1)),
+              style:{width:'100%',boxSizing:'border-box',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:'9px 12px',fontFamily:"'Open Sans',sans-serif"}
+            })
+        )
 
         , React.createElement('div', { style: {gridColumn:"1/-1",marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3005}}
           , React.createElement(Textarea, { label: "Note", value: f.note, onChange: e=>set("note",e.target.value), placeholder: "Note aggiuntive sull'allievo..."  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 3006}})
@@ -19420,8 +19525,45 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
         messaggio: richiesteAttesa.slice(0,4).map(function(r){ return r.allievo_nome||'—'; }).join(', '),
         created_at: todayStr+'T06:00:00', _isLive:true });
     }
+
+    // Allievi che superano la soglia lezioni individuali nel mese corrente (solo admin)
+    if (myRuolo === 'admin') {
+      const now2 = new Date();
+      const meseCurr = now2.getMonth() + 1;
+      const annoCurr = now2.getFullYear();
+      // Leggi soglia da config globale (window.__FM_DATA__.config) o default 4
+      const cfgGlob = window.__FM_DATA__ && window.__FM_DATA__.config;
+      const SOGLIA_IND_GLOB = (cfgGlob && cfgGlob.sogliaLezioniIndividuali != null) ? Number(cfgGlob.sogliaLezioniIndividuali) : 4;
+      const MESI_N = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+      const stArr = students || [];
+      const getSoglia = function(nomeStudente) {
+        const st = stArr.find(function(s){ return (s.name||s.nome||'').toLowerCase() === (nomeStudente||'').toLowerCase(); });
+        if (st && st.sogliaIndividualeEcc != null) return Number(st.sogliaIndividualeEcc);
+        return SOGLIA_IND_GLOB;
+      };
+      const conteggioPerAllievo = {};
+      allLessons.forEach(function(l) {
+        if (l.tipo === 'collettivo' || l.tipo === 'prova' || l.tipo === 'sala_prove' || l.tipo === 'recupero') return;
+        if (l.attendance === 'recuperata') return;
+        if (!l.date) return;
+        const parts = (l.date||'').split('-').map(Number);
+        if (parts[0] !== annoCurr || parts[1] !== meseCurr) return;
+        const key = l.student || String(l.studentId||'');
+        if (!key) return;
+        conteggioPerAllievo[key] = (conteggioPerAllievo[key]||0) + 1;
+      });
+      const superanoSoglia = Object.entries(conteggioPerAllievo)
+        .filter(function([nome, c]){ return c > getSoglia(nome); })
+        .map(function([nome, count]){ return nome + ' (' + count + '/' + getSoglia(nome) + ')'; });
+      if (superanoSoglia.length > 0) {
+        results.push({ id:'__live_lezioni_extra__', letto:false, destinatario_ruolo:'admin', tipo:'lezioni_extra',
+          titolo: superanoSoglia.length + ' allievo' + (superanoSoglia.length>1?'i':'') + ' oltre la soglia lezioni ind. di ' + MESI_N[meseCurr-1],
+          messaggio: superanoSoglia.slice(0,5).join(' · '),
+          created_at: todayStr+'T05:00:00', _isLive:true });
+      }
+    }
     return results;
-  }, [myRuolo, myNome, myDocenteTeacherKey, lessons, richieste]);
+  }, [myRuolo, myNome, myDocenteTeacherKey, lessons, richieste, students]);
 
   // Unione DB + live, ordinate per data
   const mieNotifiche = React.useMemo(function() {
