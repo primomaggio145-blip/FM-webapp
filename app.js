@@ -3769,6 +3769,99 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               )
             )
 
+            /* ── Report Lezioni Mese (solo ADMIN) ── */
+            , ruolo === "admin" && (() => {
+                const meseCurr = oggi.getMonth() + 1;
+                const annoCurr = oggi.getFullYear();
+                const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+                const SOGLIA_IND_GLOB = config.sogliaLezioniIndividuali != null ? Number(config.sogliaLezioniIndividuali) : 4;
+
+                // Conta lezioni individuali del mese per studente
+                const contInd = {};
+                (_lessons||[]).forEach(l => {
+                  if (isColl(l)||l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
+                  if (l.attendance==='recuperata') return;
+                  if (!l.date) return;
+                  const [ly,lm] = l.date.split('-').map(Number);
+                  if (ly!==annoCurr||lm!==meseCurr) return;
+                  const k = l.student||String(l.studentId||''); if(!k) return;
+                  contInd[k] = (contInd[k]||0)+1;
+                });
+
+                // Confronta con soglia (globale o eccezione per allievo)
+                const allieviAttivi = (ALLIEVI_LIVE||[]).filter(s=>s.status==='attivo'||s.stato==='attivo'||!s.status);
+                const report = allieviAttivi.map(s => {
+                  const nome = s.name||s.nome||'';
+                  const soglia = s.sogliaIndividualeEcc != null ? Number(s.sogliaIndividualeEcc) : SOGLIA_IND_GLOB;
+                  const count  = contInd[nome] || 0;
+                  const delta  = count - soglia;
+                  return { nome, count, soglia, delta };
+                }).filter(r => r.nome);
+
+                const superano = report.filter(r=>r.delta>0).sort((a,b)=>b.delta-a.delta);
+                const sottosoglia = report.filter(r=>r.delta<0).sort((a,b)=>a.delta-b.delta);
+                const inLinea    = report.filter(r=>r.delta===0);
+
+                return React.createElement('div', { style:{marginBottom:16} }
+                  , React.createElement('div', { style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'} }
+                    /* Header */
+                    , React.createElement('div', { style:{padding:'14px 18px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'} }
+                      , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8}}
+                        , React.createElement(Ic,{n:'chart',size:14,stroke:C.gold})
+                        , React.createElement('span',{style:{fontSize:12,fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted}}, `Report lezioni · ${MESI_FULL[meseCurr-1]} ${annoCurr}`)
+                      )
+                      , React.createElement('div',{style:{display:'flex',gap:8}}
+                        , superano.length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px solid ${C.orangeBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`+${superano.length} oltre`)
+                        , sottosoglia.length>0&&React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`${sottosoglia.length} sotto`)
+                      )
+                    )
+                    /* Body — tre colonne */
+                    , React.createElement('div', {style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',borderBottom:`1px solid ${C.border}`}}
+                      /* Oltre soglia */
+                      , React.createElement('div',{style:{padding:'12px 16px',borderRight:`1px solid ${C.border}`}}
+                        , React.createElement('div',{style:{fontSize:10,color:C.orange,textTransform:'uppercase',letterSpacing:'0.07em',fontWeight:700,marginBottom:8,display:'flex',alignItems:'center',gap:4}}
+                          , React.createElement(Ic,{n:'alert',size:11,stroke:C.orange}), ` Oltre soglia (${superano.length})`)
+                        , superano.length===0
+                          ? React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}},'Nessuno')
+                          : superano.map(r=>React.createElement('div',{key:r.nome,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:`1px solid ${C.border}55`}}
+                              , React.createElement('span',{style:{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'70%'}}, r.nome)
+                              , React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.orange,whiteSpace:'nowrap'}}, `${r.count}/${r.soglia} `, React.createElement('span',{style:{fontSize:10,color:C.orange}},`+${r.delta}`))
+                            ))
+                      )
+                      /* In linea */
+                      , React.createElement('div',{style:{padding:'12px 16px',borderRight:`1px solid ${C.border}`}}
+                        , React.createElement('div',{style:{fontSize:10,color:C.green,textTransform:'uppercase',letterSpacing:'0.07em',fontWeight:700,marginBottom:8,display:'flex',alignItems:'center',gap:4}}
+                          , React.createElement(Ic,{n:'check',size:11,stroke:C.green}), ` In linea (${inLinea.length})`)
+                        , inLinea.length===0
+                          ? React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}},'Nessuno')
+                          : inLinea.map(r=>React.createElement('div',{key:r.nome,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:`1px solid ${C.border}55`}}
+                              , React.createElement('span',{style:{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'70%'}}, r.nome)
+                              , React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.green}}, `${r.count}/${r.soglia}`)
+                            ))
+                      )
+                      /* Sotto soglia */
+                      , React.createElement('div',{style:{padding:'12px 16px'}}
+                        , React.createElement('div',{style:{fontSize:10,color:C.blue,textTransform:'uppercase',letterSpacing:'0.07em',fontWeight:700,marginBottom:8,display:'flex',alignItems:'center',gap:4}}
+                          , React.createElement(Ic,{n:'clock',size:11,stroke:C.blue}), ` Sotto soglia (${sottosoglia.length})`)
+                        , sottosoglia.length===0
+                          ? React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}},'Nessuno')
+                          : sottosoglia.map(r=>React.createElement('div',{key:r.nome,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'4px 0',borderBottom:`1px solid ${C.border}55`}}
+                              , React.createElement('span',{style:{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'70%'}}, r.nome)
+                              , React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.blue,whiteSpace:'nowrap'}}, `${r.count}/${r.soglia} `, React.createElement('span',{style:{fontSize:10,color:C.blue}},`${r.delta}`))
+                            ))
+                      )
+                    )
+                    /* Footer */
+                    , React.createElement('div',{style:{padding:'10px 18px',display:'flex',justifyContent:'space-between',alignItems:'center'}}
+                      , React.createElement('span',{style:{fontSize:11,color:C.textDim}}, `Soglia globale: ${SOGLIA_IND_GLOB} lez/mese · ${report.length} allievi attivi`)
+                      , React.createElement('button',{onClick:()=>onNavigate('allievi'),style:{background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.gold,fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:4}}
+                        , React.createElement(Ic,{n:'users',size:12,stroke:C.gold}), ' Gestisci allievi →'
+                      )
+                    )
+                  )
+                );
+              })()
+
             /* Footer */
             , React.createElement('div', { style: {paddingBottom:8,textAlign:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2383}}
               , React.createElement('span', { style: {fontSize:10,color:C.textDim,letterSpacing:"0.1em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2384}}
@@ -6024,6 +6117,126 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   return (
     React.createElement(React.Fragment, null
       , React.createElement('div', { style: {maxWidth:1200,margin:"0 auto",padding:"clamp(12px, 3vw, 32px)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3882}}
+
+        /* ── Report Lezioni Mensile (solo admin, solo in vista lista) ── */
+        , view==="list" && _ruoloAV==="admin" && (() => {
+            const now3 = new Date();
+            const meseCurr = now3.getMonth() + 1;
+            const annoCurr = now3.getFullYear();
+            const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+            const cfgRep = propConfig || {};
+            const SOGLIA_IND_G = cfgRep.sogliaLezioniIndividuali != null ? Number(cfgRep.sogliaLezioniIndividuali) : 4;
+            const [reportOpen, setReportOpen] = React.useState(false);
+            const [reportMese, setReportMese] = React.useState(meseCurr);
+            const [reportAnno, setReportAnno] = React.useState(annoCurr);
+            const [reportFiltro, setReportFiltro] = React.useState('tutti'); // tutti|oltre|sotto|inlinea
+
+            // Calcola conteggio lezioni individuali per il mese selezionato
+            const contInd = {};
+            (lessons||[]).forEach(l => {
+              if (isColl(l)||l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
+              if (l.attendance==='recuperata') return;
+              if (!l.date) return;
+              const [ly,lm] = l.date.split('-').map(Number);
+              if (ly!==reportAnno||lm!==reportMese) return;
+              const k = l.student||String(l.studentId||''); if(!k) return;
+              contInd[k] = (contInd[k]||0)+1;
+            });
+
+            const allieviAttivi = students.filter(s=>s.status==='attivo'||!s.status);
+            const report = allieviAttivi.map(s => {
+              const nome = s.name||s.nome||'';
+              const soglia = s.sogliaIndividualeEcc!=null ? Number(s.sogliaIndividualeEcc) : SOGLIA_IND_G;
+              const count  = contInd[nome]||0;
+              const delta  = count - soglia;
+              return { id:s.id, nome, count, soglia, delta };
+            }).filter(r=>r.nome).sort((a,b)=>b.delta-a.delta);
+
+            const superano   = report.filter(r=>r.delta>0);
+            const inLinea    = report.filter(r=>r.delta===0);
+            const sottosoglia= report.filter(r=>r.delta<0);
+
+            const filtrato = reportFiltro==='oltre' ? superano
+              : reportFiltro==='sotto' ? sottosoglia
+              : reportFiltro==='inlinea' ? inLinea : report;
+
+            const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+            return React.createElement('div', {style:{marginBottom:20}}
+              /* Header collassabile */
+              , React.createElement('div', {
+                  onClick:()=>setReportOpen(p=>!p),
+                  style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:reportOpen?'12px 12px 0 0':12,
+                    padding:'12px 18px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}
+                , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10}}
+                  , React.createElement(Ic,{n:'chart',size:15,stroke:C.gold})
+                  , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}}, `Report lezioni individuali · ${MESI_FULL[reportMese-1]} ${reportAnno}`)
+                  , superano.length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px solid ${C.orangeBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${superano.length} oltre`)
+                  , sottosoglia.length>0&&React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${sottosoglia.length} sotto`)
+                )
+                , React.createElement(Ic,{n: reportOpen?'chevron-up':'chevron-down', size:16,stroke:C.textMuted})
+              )
+
+              /* Corpo espandibile */
+              , reportOpen && React.createElement('div',{style:{background:C.surface,border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 12px 12px'}}
+                /* Controlli mese + filtri */
+                , React.createElement('div',{style:{padding:'12px 18px',borderBottom:`1px solid ${C.border}`,display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}
+                  , React.createElement('select',{value:reportMese,onChange:e=>setReportMese(Number(e.target.value)),
+                      style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+                    , MESI_SHORT.map((m,i)=>React.createElement('option',{key:i,value:i+1},m)))
+                  , React.createElement('select',{value:reportAnno,onChange:e=>setReportAnno(Number(e.target.value)),
+                      style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+                    , [annoCurr-1,annoCurr,annoCurr+1].map(y=>React.createElement('option',{key:y,value:y},y)))
+                  , React.createElement('div',{style:{display:'flex',gap:4,marginLeft:'auto'}},
+                    [
+                      {id:'tutti',    label:`Tutti (${report.length})`},
+                      {id:'oltre',    label:`🔴 Oltre (${superano.length})`},
+                      {id:'inlinea',  label:`🟢 In linea (${inLinea.length})`},
+                      {id:'sotto',    label:`🔵 Sotto (${sottosoglia.length})`},
+                    ].map(f=>React.createElement('button',{key:f.id,onClick:()=>setReportFiltro(f.id),
+                        style:{padding:'5px 12px',borderRadius:20,border:`1px solid ${reportFiltro===f.id?C.gold:C.border}`,
+                          background:reportFiltro===f.id?C.goldBg:'none',color:reportFiltro===f.id?C.gold:C.textMuted,
+                          cursor:'pointer',fontSize:11,fontWeight:reportFiltro===f.id?700:400,fontFamily:"'Open Sans',sans-serif"}}
+                      , f.label))
+                  )
+                )
+                /* Tabella */
+                , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
+                  , React.createElement('thead',null
+                    , React.createElement('tr',{style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
+                      , ['Allievo','Lezioni svolte','Soglia','Differenza','Stato'].map(h=>
+                          React.createElement('th',{key:h,style:{padding:'9px 16px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.07em',color:C.textMuted,fontWeight:600}},h))
+                    )
+                  )
+                  , React.createElement('tbody',null
+                    , filtrato.map((r,i)=>{
+                        const clr = r.delta>0?C.orange : r.delta<0?C.blue : C.green;
+                        const bg  = r.delta>0?C.orangeBg : r.delta<0?C.blueBg : C.greenBg;
+                        const bd  = r.delta>0?C.orangeBorder : r.delta<0?C.blueBorder : C.greenBorder;
+                        const lbl = r.delta>0?`+${r.delta} extra` : r.delta<0?`${r.delta} mancanti`:'✓ In linea';
+                        return React.createElement('tr',{key:r.id||r.nome,
+                            style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg,cursor:'pointer'},
+                            onClick:()=>{ const s=students.find(st=>(st.name||st.nome||'')===r.nome); if(s){ setSelected(s); setView('detail'); } }}
+                          , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:600,color:C.text}}, r.nome)
+                          , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,color:C.text,fontWeight:700}}, r.count)
+                          , React.createElement('td',{style:{padding:'10px 16px',fontSize:12,color:C.textMuted}}, r.soglia, r.soglia!==SOGLIA_IND_G&&React.createElement('span',{style:{fontSize:10,color:C.gold,marginLeft:6}},'(eccezione)'))
+                          , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:700,color:clr}}, r.delta>0?`+${r.delta}`:r.delta<0?r.delta:'0')
+                          , React.createElement('td',{style:{padding:'10px 16px'}}
+                              , React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bg,color:clr,border:`1px solid ${bd}`,borderRadius:20,padding:'3px 10px'}},lbl))
+                        );
+                      })
+                    , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:5,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
+                  )
+                )
+                /* Footer */
+                , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between'}}
+                  , `Soglia globale: ${SOGLIA_IND_G} lez/mese · ${report.length} allievi attivi`
+                  , `Clicca su un allievo per aprire il profilo`
+                )
+              )
+            );
+          })()
+
         , view==="list" && (
           React.createElement(StudentList, {
             students: students, courses: courses,
