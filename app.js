@@ -1848,6 +1848,10 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
         if (typeof valore === 'function') return;
         rows.push({ chiave, valore: valore == null ? '' : typeof valore === 'object' ? JSON.stringify(valore) : String(valore) });
       });
+      // Salva anche gli anni scolastici separatamente — non sono in newConfig
+      rows.push({ chiave: 'anniScolastici', valore: JSON.stringify(anniScolastici||[]) });
+      // Salva anche i panels (pannelli visibili + ordine KPI)
+      rows.push({ chiave: 'dashboardPanels', valore: JSON.stringify(panels||{}) });
       await fetch(`${SUPABASE_URL}/rest/v1/sito_config?chiave=neq.___x___`, {method:'DELETE', headers});
       const res = await fetch(`${SUPABASE_URL}/rest/v1/sito_config`, {
         method:'POST', headers:{...headers,'Prefer':'return=minimal'}, body:JSON.stringify(rows)
@@ -1928,7 +1932,6 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
               , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 1690}}
                 , React.createElement('div', { style: {fontSize:13,fontWeight:500,marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1691}}, "Pannelli visibili" )
                 , React.createElement('div', { style: {fontSize:12,color:C.textDim,marginBottom:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1692}}, "Seleziona quali sezioni mostrare nella tua dashboard. Le KPI card sono sempre visibili."
-
                 )
                 , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1695}}
                   , PANNELLI_DEF.map(p=>{
@@ -1951,18 +1954,63 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                         , p.sempre
                           ? React.createElement('span', { style: {fontSize:10,color:C.textDim,letterSpacing:"0.06em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1714}}, "FISSO")
                           : React.createElement(Toggle, { value: on, onChange: v=>onPanels(prev=>({...prev,[p.id]:v})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 1715}})
-                        
                       )
                     );
                   })
                 )
               )
 
+              /* ── Ordine KPI cards (solo admin) ── */
+              , isAdmin && React.createElement('div', null
+                , React.createElement('div', {style:{fontSize:13,fontWeight:500,marginBottom:4}}, 'Ordine KPI cards')
+                , React.createElement('div', {style:{fontSize:12,color:C.textDim,marginBottom:14}}, 'Trascina o usa le frecce per cambiare l\'ordine delle card nella dashboard.')
+                , (() => {
+                    const ALL_KPI_DEF = [
+                      {id:'allievi', icon:'users',    label:'Allievi attivi'},
+                      {id:'lezioni', icon:'calendar', label:'Lezioni oggi'},
+                      {id:'entrate', icon:'up',       label:'Entrate mese'},
+                      {id:'uscite',  icon:'down',     label:'Uscite mese'},
+                      {id:'saldo',   icon:'chart',    label:'Saldo anno'},
+                    ];
+                    const kpiOrder = (panels.kpiOrder && panels.kpiOrder.length > 0)
+                      ? panels.kpiOrder
+                      : ALL_KPI_DEF.map(k=>k.id);
+                    const ordered = kpiOrder
+                      .map(id => ALL_KPI_DEF.find(k=>k.id===id))
+                      .filter(Boolean)
+                      .concat(ALL_KPI_DEF.filter(k=>!kpiOrder.includes(k.id)));
+
+                    const moveKpi = (idx, dir) => {
+                      const newOrder = [...ordered.map(k=>k.id)];
+                      const target = idx + dir;
+                      if (target < 0 || target >= newOrder.length) return;
+                      [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
+                      onPanels(p => ({...p, kpiOrder: newOrder}));
+                    };
+
+                    return React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}}
+                      , ordered.map((k, idx) =>
+                          React.createElement('div', {key:k.id,
+                              style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',
+                                borderRadius:10,border:`1px solid ${C.border}`,background:C.bg}}
+                            , React.createElement('div',{style:{width:24,height:24,borderRadius:6,background:`${C.gold}18`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+                              , React.createElement(Ic,{n:k.icon,size:13,stroke:C.gold}))
+                            , React.createElement('span',{style:{flex:1,fontSize:13,color:C.text,fontWeight:500}}, k.label)
+                            , React.createElement('span',{style:{fontSize:11,color:C.textDim,marginRight:4}}, `#${idx+1}`)
+                            , React.createElement('button',{onClick:()=>moveKpi(idx,-1),disabled:idx===0,
+                                style:{padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'none',cursor:idx===0?'not-allowed':'pointer',color:idx===0?C.textDim:C.text,fontFamily:"'Open Sans',sans-serif",fontSize:13,opacity:idx===0?0.4:1}},'▲')
+                            , React.createElement('button',{onClick:()=>moveKpi(idx,+1),disabled:idx===ordered.length-1,
+                                style:{padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'none',cursor:idx===ordered.length-1?'not-allowed':'pointer',color:idx===ordered.length-1?C.textDim:C.text,fontFamily:"'Open Sans',sans-serif",fontSize:13,opacity:idx===ordered.length-1?0.4:1}},'▼')
+                          )
+                        )
+                    );
+                  })()
+              )
+
               /* Ruolo simulazione */
               , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 1724}}
                 , React.createElement('div', { style: {fontSize:13,fontWeight:500,marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1725}}, "Ruolo corrente" )
                 , React.createElement('div', { style: {fontSize:12,color:C.textDim,marginBottom:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1726}}, "Simula la vista per ruolo diverso. In produzione il ruolo sarà assegnato dall'amministratore."
-
                 )
                 , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 1729}}
                   , DASH_RUOLI.map(r=>(
@@ -3333,11 +3381,24 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       sub: "pagamenti registrati", hex: C.green, hideAmounts: !showAmounts})
                 )
               : React.createElement(React.Fragment, null
-                  , React.createElement(KpiCard, { icon: "users",    label: "Allievi attivi" ,  value: allieviAttivi, sub: `${_students.length} totali`, hex: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2189}})
-                  , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni oggi" ,    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2190}})
-                  , React.createElement(KpiCard, { icon: "up",       label: "Entrate mese" ,    value: fmt(entrMeseLiveLive), hex: C.green, trend: +8, hideAmounts: !showAmounts, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2191}})
-                  , React.createElement(KpiCard, { icon: "down",     label: "Uscite mese" ,     value: fmt(uscMeseLiveLive),  hex: C.red,   trend: +12, hideAmounts: !showAmounts, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2192}})
-                  , React.createElement(KpiCard, { icon: "chart",    label: `Saldo ${ANNO}`, value: fmt(saldoAnnoLiveLive), hex: saldoAnnoLiveLive>=0?C.green:C.red, hideAmounts: !showAmounts, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2193}})
+                  , (() => {
+                      // KPI cards configurabili — ordine salvato in panels.kpiOrder
+                      const ALL_KPI = [
+                        { id:'allievi',  icon:"users",    label:"Allievi attivi",  value: allieviAttivi, sub: `${_students.length} totali`, hex: C.gold },
+                        { id:'lezioni',  icon:"calendar", label:"Lezioni oggi",    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal },
+                        { id:'entrate',  icon:"up",       label:"Entrate mese",    value: fmt(entrMeseLiveLive), hex: C.green, trend:+8, hideAmounts:!showAmounts },
+                        { id:'uscite',   icon:"down",     label:"Uscite mese",     value: fmt(uscMeseLiveLive),  hex: C.red,   trend:+12, hideAmounts:!showAmounts },
+                        { id:'saldo',    icon:"chart",    label:`Saldo ${ANNO}`,   value: fmt(saldoAnnoLiveLive), hex: saldoAnnoLiveLive>=0?C.green:C.red, hideAmounts:!showAmounts },
+                      ];
+                      const kpiOrder = panels.kpiOrder && panels.kpiOrder.length > 0
+                        ? panels.kpiOrder
+                        : ALL_KPI.map(k=>k.id);
+                      const sorted = kpiOrder
+                        .map(id => ALL_KPI.find(k=>k.id===id))
+                        .filter(Boolean)
+                        .concat(ALL_KPI.filter(k=>!kpiOrder.includes(k.id)));
+                      return sorted.map(k => React.createElement(KpiCard, { key:k.id, icon:k.icon, label:k.label, value:k.value, sub:k.sub, hex:k.hex, trend:k.trend, hideAmounts:k.hideAmounts }));
+                    })()
                 )
             )
             )
@@ -17924,17 +17985,19 @@ function App() {
   useEffect(() => {
     // Hook che fm_sync.js chiama per iniettare aggiornamenti real-time nel React state
     window.__FM_RELOAD__ = function(data) {
-      if (data.students)  setSharedStudents(data.students);
-      if (data.courses)   setSharedCourses(data.courses);
-      if (data.docenti)   setSharedDocenti(data.docenti);
-      if (data.lessons)   setSharedLessons(data.lessons);
-      if (data.brani)     setSharedRepertorio(data.brani);
-      if (data.spese)     setSharedSpese(data.spese);
-      if (data.entrate)   setSharedEntrate(data.entrate);
-      if (data.concerti)  setSharedConcerti(data.concerti);
-      if (data.allegati)  setSharedAllegati(data.allegati);
-      if (data.richieste) setSharedRichieste(data.richieste);
-      if (data.config)    setSharedConfig(c => ({...CONFIG_DEFAULT, ...c, ...data.config}));
+      if (data.students)       setSharedStudents(data.students);
+      if (data.courses)        setSharedCourses(data.courses);
+      if (data.docenti)        setSharedDocenti(data.docenti);
+      if (data.lessons)        setSharedLessons(data.lessons);
+      if (data.brani)          setSharedRepertorio(data.brani);
+      if (data.spese)          setSharedSpese(data.spese);
+      if (data.entrate)        setSharedEntrate(data.entrate);
+      if (data.concerti)       setSharedConcerti(data.concerti);
+      if (data.allegati)       setSharedAllegati(data.allegati);
+      if (data.richieste)      setSharedRichieste(data.richieste);
+      if (data.config)         setSharedConfig(c => ({...CONFIG_DEFAULT, ...c, ...data.config}));
+      if (data.anniScolastici) setSharedAnniScolastici(data.anniScolastici);
+      if (data.dashboardPanels) setSharedPanels(p => ({...p, ...data.dashboardPanels}));
     };
 
     // ── Refresh completo da Supabase ─────────────────────────────────────────

@@ -529,9 +529,16 @@
         try { configFromDB[r.chiave] = JSON.parse(r.valore); }
         catch(e) { configFromDB[r.chiave] = r.valore; }
       });
+      // Estrai anniScolastici dal config e rimuovilo dalle chiavi config normali
+      const anniScolasticiDB = Array.isArray(configFromDB.anniScolastici) ? configFromDB.anniScolastici : null;
+      if (anniScolasticiDB) delete configFromDB.anniScolastici;
+      const dashboardPanelsDB = configFromDB.dashboardPanels && typeof configFromDB.dashboardPanels === 'object' ? configFromDB.dashboardPanels : null;
+      if (dashboardPanelsDB) delete configFromDB.dashboardPanels;
 
       const data = {
         config: Object.keys(configFromDB).length > 0 ? configFromDB : null,
+        anniScolastici: anniScolasticiDB,
+        dashboardPanels: dashboardPanelsDB,
         students: (sS || []).map(adaptStudente),
         docenti:  (sD || []).map(adaptDocente),
         courses:  (sC || []).map(adaptCorso),
