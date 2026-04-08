@@ -1852,20 +1852,33 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
       rows.push({ chiave: 'anniScolastici', valore: JSON.stringify(anniScolastici||[]) });
       // Salva anche i panels (pannelli visibili + ordine KPI)
       rows.push({ chiave: 'dashboardPanels', valore: JSON.stringify(panels||{}) });
-      await fetch(`${SUPABASE_URL}/rest/v1/sito_config?chiave=neq.___x___`, {method:'DELETE', headers});
+
+      console.log('[FM] handleSave — anniScolastici da salvare:', anniScolastici);
+      console.log('[FM] handleSave — righe totali:', rows.length);
+
+      // Usa UPSERT invece di DELETE+INSERT per evitare race conditions
+      // Prima cancella tutto, poi reinserisce (più affidabile di upsert per configurazioni)
+      const delRes = await fetch(`${SUPABASE_URL}/rest/v1/sito_config?chiave=neq.___x___`, {method:'DELETE', headers});
+      if (!delRes.ok) {
+        const delBody = await delRes.text();
+        console.warn('[FM] sito_config DELETE error:', delRes.status, delBody);
+      }
       const res = await fetch(`${SUPABASE_URL}/rest/v1/sito_config`, {
         method:'POST', headers:{...headers,'Prefer':'return=minimal'}, body:JSON.stringify(rows)
       });
       if (res.ok) {
-        // Popup conferma
+        console.log('[FM] sito_config salvato OK — anni scolastici:', anniScolastici.length);
         const el = document.createElement('div');
         el.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:999999;padding:14px 28px;border-radius:12px;font-family:"Open Sans",sans-serif;font-size:14px;font-weight:600;color:#fff;background:#16a34a;box-shadow:0 8px 32px rgba(0,0,0,0.35);white-space:nowrap;';
-        el.textContent = '✅  Impostazioni salvate!';
+        el.textContent = `✅  Impostazioni salvate! (${rows.length} righe)`;
         document.body.appendChild(el);
         setTimeout(() => el.remove(), 3000);
+        // Aggiorna subito sharedAnniScolastici in App (già aggiornato ma per sicurezza)
+        if (window.__FM_RELOAD__) window.__FM_RELOAD__({ anniScolastici, dashboardPanels: panels });
       } else {
         const body = await res.text();
         console.warn('[FM] SettingsDrawer save error:', res.status, body);
+        alert('Errore nel salvataggio: ' + body);
       }
     } catch(e) { console.warn('[FM] SettingsDrawer save catch:', e?.message); }
 
@@ -18119,6 +18132,12 @@ function App() {
           try { configFromDB[r.chiave] = JSON.parse(r.valore); }
           catch(e) { configFromDB[r.chiave] = r.valore; }
         });
+        // Estrai chiavi speciali da configFromDB (non sono campi config normali)
+        const anniScolasticiDB = Array.isArray(configFromDB.anniScolastici) ? configFromDB.anniScolastici : null;
+        if (anniScolasticiDB) delete configFromDB.anniScolastici;
+        const dashboardPanelsDB = (configFromDB.dashboardPanels && typeof configFromDB.dashboardPanels === 'object') ? configFromDB.dashboardPanels : null;
+        if (dashboardPanelsDB) delete configFromDB.dashboardPanels;
+
         if (window.__FM_RELOAD__) {
           const reloadData = {
             students: (sS||[]).map(r => {
@@ -18138,6 +18157,8 @@ function App() {
             concerti: (sEV||[]).map(r => ({ id:r.id, nome:r.nome||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:[], partecipanti:[], prenotazioni:[], biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0 })),
             allegati: (sAL||[]).map(adaptA),
             config:   Object.keys(configFromDB).length > 0 ? configFromDB : null,
+            anniScolastici:  anniScolasticiDB,
+            dashboardPanels: dashboardPanelsDB,
           };
           if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__(reloadData);
           window.__FM_RELOAD__(reloadData);
