@@ -1931,32 +1931,57 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
             React.createElement(React.Fragment, null
               , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 1690}}
                 , React.createElement('div', { style: {fontSize:13,fontWeight:500,marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1691}}, "Pannelli visibili" )
-                , React.createElement('div', { style: {fontSize:12,color:C.textDim,marginBottom:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1692}}, "Seleziona quali sezioni mostrare nella tua dashboard. Le KPI card sono sempre visibili."
+                , React.createElement('div', { style: {fontSize:12,color:C.textDim,marginBottom:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1692}}, "Attiva/disattiva e riordina i pannelli della dashboard con le frecce ▲▼."
                 )
                 , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1695}}
-                  , PANNELLI_DEF.map(p=>{
-                    const on = panels[p.id]!==false;
-                    return (
-                      React.createElement('div', { key: p.id,
-                        style: {display:"flex",alignItems:"center",gap:12,padding:"12px 14px",
-                          borderRadius:10,border:`1px solid ${on&&!p.sempre?C.goldDim:C.border}`,
-                          background:on&&!p.sempre?C.goldBg:C.bg,transition:"all 0.15s",
-                          opacity:p.sempre?0.6:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1699}}
-                        , React.createElement('div', { style: {width:32,height:32,borderRadius:8,
-                          background:on?`${C.gold}18`:C.surface,
-                          display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1704}}
-                          , React.createElement(Ic, { n: p.icon, size: 15, stroke: on?C.gold:C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1707}})
-                        )
-                        , React.createElement('div', { style: {flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1709}}
-                          , React.createElement('div', { style: {fontSize:13,fontWeight:500,color:on?C.text:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1710}}, p.label)
-                          , React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1711}}, p.desc)
-                        )
-                        , p.sempre
-                          ? React.createElement('span', { style: {fontSize:10,color:C.textDim,letterSpacing:"0.06em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1714}}, "FISSO")
-                          : React.createElement(Toggle, { value: on, onChange: v=>onPanels(prev=>({...prev,[p.id]:v})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 1715}})
-                      )
-                    );
-                  })
+                  , (() => {
+                      // Ricostruisci ordine pannelli da panels.panelOrder (se esiste)
+                      const order = (panels.panelOrder && panels.panelOrder.length > 0)
+                        ? panels.panelOrder
+                        : PANNELLI_DEF.map(p=>p.id);
+                      const ordered = order
+                        .map(id => PANNELLI_DEF.find(p=>p.id===id))
+                        .filter(Boolean)
+                        .concat(PANNELLI_DEF.filter(p=>!order.includes(p.id)));
+
+                      const movePanel = (idx, dir) => {
+                        const newOrder = ordered.map(p=>p.id);
+                        const target = idx + dir;
+                        // Non permettere di muovere i pannelli "sempre" fuori dalla posizione fissa
+                        if (target < 0 || target >= newOrder.length) return;
+                        [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
+                        onPanels(p => ({...p, panelOrder: newOrder}));
+                      };
+
+                      return ordered.map((p, idx) => {
+                        const on = panels[p.id]!==false;
+                        return React.createElement('div', { key: p.id,
+                          style: {display:"flex",alignItems:"center",gap:10,padding:"10px 12px",
+                            borderRadius:10,border:`1px solid ${on&&!p.sempre?C.goldDim:C.border}`,
+                            background:on&&!p.sempre?C.goldBg:C.bg,transition:"all 0.15s",
+                            opacity:p.sempre?0.75:1}}
+                          /* Frecce riordino */
+                          , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}
+                            , React.createElement('button',{onClick:()=>movePanel(idx,-1),disabled:idx===0,
+                                style:{padding:'1px 5px',borderRadius:4,border:`1px solid ${C.border}`,background:'none',cursor:idx===0?'not-allowed':'pointer',color:idx===0?C.textDim:C.textMuted,fontSize:10,lineHeight:1,opacity:idx===0?0.3:1}},'▲')
+                            , React.createElement('button',{onClick:()=>movePanel(idx,+1),disabled:idx===ordered.length-1,
+                                style:{padding:'1px 5px',borderRadius:4,border:`1px solid ${C.border}`,background:'none',cursor:idx===ordered.length-1?'not-allowed':'pointer',color:idx===ordered.length-1?C.textDim:C.textMuted,fontSize:10,lineHeight:1,opacity:idx===ordered.length-1?0.3:1}},'▼')
+                          )
+                          , React.createElement('div', { style: {width:28,height:28,borderRadius:8,
+                            background:on?`${C.gold}18`:C.surface,
+                            display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                            , React.createElement(Ic, { n: p.icon, size: 13, stroke: on?C.gold:C.textDim})
+                          )
+                          , React.createElement('div', { style: {flex:1}}
+                            , React.createElement('div', { style: {fontSize:13,fontWeight:500,color:on?C.text:C.textMuted}}, p.label)
+                            , React.createElement('div', { style: {fontSize:10,color:C.textDim,marginTop:1}}, p.desc)
+                          )
+                          , p.sempre
+                            ? React.createElement('span', { style: {fontSize:10,color:C.textDim,letterSpacing:"0.06em"}}, "FISSO")
+                            : React.createElement(Toggle, { value: on, onChange: v=>onPanels(prev=>({...prev,[p.id]:v}))})
+                        );
+                      });
+                    })()
                 )
               )
 
@@ -3293,6 +3318,18 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
           /* ── BODY ── */
           , React.createElement('div', { style: {flex:1,padding:"16px 20px",display:"flex",flexDirection:"column",gap:16,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2185}}
 
+            /* Helper ordine pannelli: legge panels.panelOrder e restituisce {order:N} */
+            , (() => {
+                const _panelOrder = (panels.panelOrder && panels.panelOrder.length > 0)
+                  ? panels.panelOrder
+                  : PANNELLI_DEF.map(p=>p.id);
+                window.__dash_panel_order__ = (id) => {
+                  const idx = _panelOrder.indexOf(id);
+                  return { order: idx >= 0 ? idx : 99 };
+                };
+                return null;
+              })()
+
             /* ── RIGA 1: KPI ── */
             , React.createElement('div', null
               /* Pulsante mostra/nascondi importi */
@@ -3405,7 +3442,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 
             /* ── RIGA 2: AZIONI RAPIDE (full width) ── */
             , isVisible("azioni") && ruolo==="docente" && (
-              React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+              React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",...(window.__dash_panel_order__&&window.__dash_panel_order__('azioni'))}}
                 , React.createElement('div', { style: {padding:"13px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
                   , React.createElement(Ic, { n: "plus", size: 14, stroke: C.gold})
                   , React.createElement('span', { style: {fontSize:12,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted}}, "Scorciatoie" )
@@ -3433,7 +3470,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               )
             )
             , isVisible("azioni") && ruolo==="admin" && (
-              React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2198}}
+              React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",...(window.__dash_panel_order__&&window.__dash_panel_order__('azioni'))}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2198}}
                 , React.createElement('div', { style: {padding:"13px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2199}}
                   , React.createElement(Ic, { n: "plus", size: 14, stroke: C.gold, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2200}})
                   , React.createElement('span', { style: {fontSize:12,fontWeight:500,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2201}}, "Azioni rapide" )
@@ -3475,7 +3512,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 
             /* ── RIGA 3: LEZIONI + GRAFICO ── */
             , (isVisible("lezioni")||isVisible("grafico")||isVisible("recuperi")) && (
-              React.createElement('div', { style: {display:"grid",gap:16,gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2234}}
+              React.createElement('div', { style: {display:"grid",gap:16,gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",...(window.__dash_panel_order__&&window.__dash_panel_order__('lezioni'))}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2234}}
 
                 /* Lezioni oggi */
                 , isVisible("lezioni") && (
@@ -3664,7 +3701,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 
             /* ── RIGA 4: PAGAMENTI + EVENTI ── */
             , (isVisible("pagamenti")||isVisible("eventi")) && (
-              React.createElement('div', { style: {display:"grid",gap:16,gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2307}}
+              React.createElement('div', { style: {display:"grid",gap:16,gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",...(window.__dash_panel_order__&&window.__dash_panel_order__('pagamenti'))}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2307}}
                 , isVisible("pagamenti") && (
                   React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2309}}
                     , React.createElement('div', { style: {padding:"14px 18px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2310}}
@@ -3783,7 +3820,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 
             /* ── RIGA 5: ALERT + ATTIVITÀ (solo admin/docente) ── */
             , (isVisible("alert")||isVisible("attivita")) && ruolo==="admin" && (
-              React.createElement('div', { style: {display:"grid",gap:16,gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2341}}
+              React.createElement('div', { style: {display:"grid",gap:16,gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",...(window.__dash_panel_order__&&window.__dash_panel_order__('alert'))}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2341}}
                 , isVisible("alert") && (
                   React.createElement('div', { className: "section", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2343}}
                     , React.createElement('div', { style: {padding:"14px 18px",borderBottom:`1px solid ${C.border}`,
@@ -6056,6 +6093,114 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 // APP ROOT
 // ════════════════════════════════════════════════════════════════════════════════
 
+// ─── REPORT LEZIONI MENSILE ───────────────────────────────────────────────────
+const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) => {
+  const now3 = new Date();
+  const meseCurr = now3.getMonth() + 1;
+  const annoCurr = now3.getFullYear();
+  const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+  const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const cfg = config || {};
+  const SOGLIA_IND_G = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
+
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportMese, setReportMese] = useState(meseCurr);
+  const [reportAnno, setReportAnno] = useState(annoCurr);
+  const [reportFiltro, setReportFiltro] = useState('tutti');
+
+  const contInd = {};
+  (lessons||[]).forEach(l => {
+    if (isColl(l)||l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
+    if (l.attendance==='recuperata') return;
+    if (!l.date) return;
+    const [ly,lm] = l.date.split('-').map(Number);
+    if (ly!==reportAnno||lm!==reportMese) return;
+    const k = l.student||String(l.studentId||''); if(!k) return;
+    contInd[k] = (contInd[k]||0)+1;
+  });
+
+  const allieviAttivi = (students||[]).filter(s=>s.status==='attivo'||!s.status);
+  const report = allieviAttivi.map(s => {
+    const nome = s.name||s.nome||'';
+    const soglia = s.sogliaIndividualeEcc!=null ? Number(s.sogliaIndividualeEcc) : SOGLIA_IND_G;
+    const count  = contInd[nome]||0;
+    const delta  = count - soglia;
+    return { id:s.id, nome, count, soglia, delta };
+  }).filter(r=>r.nome).sort((a,b)=>b.delta-a.delta);
+
+  const superano    = report.filter(r=>r.delta>0);
+  const inLinea     = report.filter(r=>r.delta===0);
+  const sottosoglia = report.filter(r=>r.delta<0);
+
+  const filtrato = reportFiltro==='oltre' ? superano
+    : reportFiltro==='sotto' ? sottosoglia
+    : reportFiltro==='inlinea' ? inLinea : report;
+
+  return React.createElement('div', {style:{marginBottom:20}}
+    , React.createElement('div', {
+        onClick:()=>setReportOpen(p=>!p),
+        style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:reportOpen?'12px 12px 0 0':12,
+          padding:'12px 18px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}
+      , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10}}
+        , React.createElement(Ic,{n:'chart',size:15,stroke:C.gold})
+        , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}}, `Report lezioni individuali · ${MESI_FULL[reportMese-1]} ${reportAnno}`)
+        , superano.length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px solid ${C.orangeBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${superano.length} oltre`)
+        , sottosoglia.length>0&&React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${sottosoglia.length} sotto`)
+      )
+      , React.createElement(Ic,{n:reportOpen?'chevron-up':'chevron-down',size:16,stroke:C.textMuted})
+    )
+    , reportOpen && React.createElement('div',{style:{background:C.surface,border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 12px 12px'}}
+      , React.createElement('div',{style:{padding:'12px 18px',borderBottom:`1px solid ${C.border}`,display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}
+        , React.createElement('select',{value:reportMese,onChange:e=>setReportMese(Number(e.target.value)),
+            style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+          , MESI_SHORT.map((m,i)=>React.createElement('option',{key:i,value:i+1},m)))
+        , React.createElement('select',{value:reportAnno,onChange:e=>setReportAnno(Number(e.target.value)),
+            style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+          , [annoCurr-1,annoCurr,annoCurr+1].map(y=>React.createElement('option',{key:y,value:y},y)))
+        , React.createElement('div',{style:{display:'flex',gap:4,marginLeft:'auto'}}
+          , [{id:'tutti',label:`Tutti (${report.length})`},{id:'oltre',label:`🔴 Oltre (${superano.length})`},{id:'inlinea',label:`🟢 In linea (${inLinea.length})`},{id:'sotto',label:`🔵 Sotto (${sottosoglia.length})`}]
+            .map(f=>React.createElement('button',{key:f.id,onClick:()=>setReportFiltro(f.id),
+                style:{padding:'5px 12px',borderRadius:20,border:`1px solid ${reportFiltro===f.id?C.gold:C.border}`,
+                  background:reportFiltro===f.id?C.goldBg:'none',color:reportFiltro===f.id?C.gold:C.textMuted,
+                  cursor:'pointer',fontSize:11,fontWeight:reportFiltro===f.id?700:400,fontFamily:"'Open Sans',sans-serif"}},f.label))
+        )
+      )
+      , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
+        , React.createElement('thead',null
+          , React.createElement('tr',{style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
+            , ['Allievo','Lezioni svolte','Soglia','Differenza','Stato'].map(h=>
+                React.createElement('th',{key:h,style:{padding:'9px 16px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.07em',color:C.textMuted,fontWeight:600}},h))
+          )
+        )
+        , React.createElement('tbody',null
+          , filtrato.map((r,i)=>{
+              const clr = r.delta>0?C.orange : r.delta<0?C.blue : C.green;
+              const bg  = r.delta>0?C.orangeBg : r.delta<0?C.blueBg : C.greenBg;
+              const bd  = r.delta>0?C.orangeBorder : r.delta<0?C.blueBorder : C.greenBorder;
+              const lbl = r.delta>0?`+${r.delta} extra` : r.delta<0?`${r.delta} mancanti`:'✓ In linea';
+              return React.createElement('tr',{key:r.id||r.nome,
+                  style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg,cursor:'pointer',transition:'background .1s'},
+                  onMouseEnter:e=>e.currentTarget.style.background=C.bg,
+                  onMouseLeave:e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg,
+                  onClick:()=>{ const s=(students||[]).find(st=>(st.name||st.nome||'')===r.nome); if(s&&onSelectAllievo) onSelectAllievo(s); }}
+                , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:600,color:C.text}}, r.nome)
+                , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,color:C.text,fontWeight:700}}, r.count)
+                , React.createElement('td',{style:{padding:'10px 16px',fontSize:12,color:C.textMuted}}, r.soglia, r.soglia!==SOGLIA_IND_G&&React.createElement('span',{style:{fontSize:10,color:C.gold,marginLeft:6}},'(eccezione)'))
+                , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:700,color:clr}}, r.delta>0?`+${r.delta}`:r.delta<0?r.delta:'0')
+                , React.createElement('td',{style:{padding:'10px 16px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bg,color:clr,border:`1px solid ${bd}`,borderRadius:20,padding:'3px 10px'}},lbl))
+              );
+            })
+          , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:5,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
+        )
+      )
+      , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between'}}
+        , `Soglia globale: ${SOGLIA_IND_G} lez/mese · ${report.length} allievi attivi`
+        , React.createElement('span',null,'Clicca su un allievo per aprire il profilo')
+      )
+    )
+  );
+};
+
 const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV }) => {
   const _ruoloAV = propUserRuoloAV || "admin";
   const _nomeAV  = (_appUserAV && _appUserAV.nome) || "";
@@ -6180,123 +6325,10 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       , React.createElement('div', { style: {maxWidth:1200,margin:"0 auto",padding:"clamp(12px, 3vw, 32px)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3882}}
 
         /* ── Report Lezioni Mensile (solo admin, solo in vista lista) ── */
-        , view==="list" && _ruoloAV==="admin" && (() => {
-            const now3 = new Date();
-            const meseCurr = now3.getMonth() + 1;
-            const annoCurr = now3.getFullYear();
-            const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
-            const cfgRep = propConfig || {};
-            const SOGLIA_IND_G = cfgRep.sogliaLezioniIndividuali != null ? Number(cfgRep.sogliaLezioniIndividuali) : 4;
-            const [reportOpen, setReportOpen] = React.useState(false);
-            const [reportMese, setReportMese] = React.useState(meseCurr);
-            const [reportAnno, setReportAnno] = React.useState(annoCurr);
-            const [reportFiltro, setReportFiltro] = React.useState('tutti'); // tutti|oltre|sotto|inlinea
-
-            // Calcola conteggio lezioni individuali per il mese selezionato
-            const contInd = {};
-            (lessons||[]).forEach(l => {
-              if (isColl(l)||l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
-              if (l.attendance==='recuperata') return;
-              if (!l.date) return;
-              const [ly,lm] = l.date.split('-').map(Number);
-              if (ly!==reportAnno||lm!==reportMese) return;
-              const k = l.student||String(l.studentId||''); if(!k) return;
-              contInd[k] = (contInd[k]||0)+1;
-            });
-
-            const allieviAttivi = students.filter(s=>s.status==='attivo'||!s.status);
-            const report = allieviAttivi.map(s => {
-              const nome = s.name||s.nome||'';
-              const soglia = s.sogliaIndividualeEcc!=null ? Number(s.sogliaIndividualeEcc) : SOGLIA_IND_G;
-              const count  = contInd[nome]||0;
-              const delta  = count - soglia;
-              return { id:s.id, nome, count, soglia, delta };
-            }).filter(r=>r.nome).sort((a,b)=>b.delta-a.delta);
-
-            const superano   = report.filter(r=>r.delta>0);
-            const inLinea    = report.filter(r=>r.delta===0);
-            const sottosoglia= report.filter(r=>r.delta<0);
-
-            const filtrato = reportFiltro==='oltre' ? superano
-              : reportFiltro==='sotto' ? sottosoglia
-              : reportFiltro==='inlinea' ? inLinea : report;
-
-            const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-
-            return React.createElement('div', {style:{marginBottom:20}}
-              /* Header collassabile */
-              , React.createElement('div', {
-                  onClick:()=>setReportOpen(p=>!p),
-                  style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:reportOpen?'12px 12px 0 0':12,
-                    padding:'12px 18px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}
-                , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10}}
-                  , React.createElement(Ic,{n:'chart',size:15,stroke:C.gold})
-                  , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}}, `Report lezioni individuali · ${MESI_FULL[reportMese-1]} ${reportAnno}`)
-                  , superano.length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px solid ${C.orangeBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${superano.length} oltre`)
-                  , sottosoglia.length>0&&React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${sottosoglia.length} sotto`)
-                )
-                , React.createElement(Ic,{n: reportOpen?'chevron-up':'chevron-down', size:16,stroke:C.textMuted})
-              )
-
-              /* Corpo espandibile */
-              , reportOpen && React.createElement('div',{style:{background:C.surface,border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 12px 12px'}}
-                /* Controlli mese + filtri */
-                , React.createElement('div',{style:{padding:'12px 18px',borderBottom:`1px solid ${C.border}`,display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}
-                  , React.createElement('select',{value:reportMese,onChange:e=>setReportMese(Number(e.target.value)),
-                      style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
-                    , MESI_SHORT.map((m,i)=>React.createElement('option',{key:i,value:i+1},m)))
-                  , React.createElement('select',{value:reportAnno,onChange:e=>setReportAnno(Number(e.target.value)),
-                      style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
-                    , [annoCurr-1,annoCurr,annoCurr+1].map(y=>React.createElement('option',{key:y,value:y},y)))
-                  , React.createElement('div',{style:{display:'flex',gap:4,marginLeft:'auto'}},
-                    [
-                      {id:'tutti',    label:`Tutti (${report.length})`},
-                      {id:'oltre',    label:`🔴 Oltre (${superano.length})`},
-                      {id:'inlinea',  label:`🟢 In linea (${inLinea.length})`},
-                      {id:'sotto',    label:`🔵 Sotto (${sottosoglia.length})`},
-                    ].map(f=>React.createElement('button',{key:f.id,onClick:()=>setReportFiltro(f.id),
-                        style:{padding:'5px 12px',borderRadius:20,border:`1px solid ${reportFiltro===f.id?C.gold:C.border}`,
-                          background:reportFiltro===f.id?C.goldBg:'none',color:reportFiltro===f.id?C.gold:C.textMuted,
-                          cursor:'pointer',fontSize:11,fontWeight:reportFiltro===f.id?700:400,fontFamily:"'Open Sans',sans-serif"}}
-                      , f.label))
-                  )
-                )
-                /* Tabella */
-                , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
-                  , React.createElement('thead',null
-                    , React.createElement('tr',{style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
-                      , ['Allievo','Lezioni svolte','Soglia','Differenza','Stato'].map(h=>
-                          React.createElement('th',{key:h,style:{padding:'9px 16px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.07em',color:C.textMuted,fontWeight:600}},h))
-                    )
-                  )
-                  , React.createElement('tbody',null
-                    , filtrato.map((r,i)=>{
-                        const clr = r.delta>0?C.orange : r.delta<0?C.blue : C.green;
-                        const bg  = r.delta>0?C.orangeBg : r.delta<0?C.blueBg : C.greenBg;
-                        const bd  = r.delta>0?C.orangeBorder : r.delta<0?C.blueBorder : C.greenBorder;
-                        const lbl = r.delta>0?`+${r.delta} extra` : r.delta<0?`${r.delta} mancanti`:'✓ In linea';
-                        return React.createElement('tr',{key:r.id||r.nome,
-                            style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg,cursor:'pointer'},
-                            onClick:()=>{ const s=students.find(st=>(st.name||st.nome||'')===r.nome); if(s){ setSelected(s); setView('detail'); } }}
-                          , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:600,color:C.text}}, r.nome)
-                          , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,color:C.text,fontWeight:700}}, r.count)
-                          , React.createElement('td',{style:{padding:'10px 16px',fontSize:12,color:C.textMuted}}, r.soglia, r.soglia!==SOGLIA_IND_G&&React.createElement('span',{style:{fontSize:10,color:C.gold,marginLeft:6}},'(eccezione)'))
-                          , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:700,color:clr}}, r.delta>0?`+${r.delta}`:r.delta<0?r.delta:'0')
-                          , React.createElement('td',{style:{padding:'10px 16px'}}
-                              , React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bg,color:clr,border:`1px solid ${bd}`,borderRadius:20,padding:'3px 10px'}},lbl))
-                        );
-                      })
-                    , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:5,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
-                  )
-                )
-                /* Footer */
-                , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between'}}
-                  , `Soglia globale: ${SOGLIA_IND_G} lez/mese · ${report.length} allievi attivi`
-                  , `Clicca su un allievo per aprire il profilo`
-                )
-              )
-            );
-          })()
+        , view==="list" && _ruoloAV==="admin" && React.createElement(ReportLezioniMensile, {
+            lessons, students, config: propConfig,
+            onSelectAllievo: (s) => { setSelected(s); setView('detail'); },
+          })
 
         , view==="list" && (
           React.createElement(StudentList, {
