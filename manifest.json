@@ -1,0 +1,39 @@
+{
+  "name": "Futuro Musica Gestionale",
+  "short_name": "Futuro Musica",
+  "description": "Sistema gestionale per la scuola di musica",
+  "start_url": "/FM-webapp/webapp.html",
+  "scope": "/FM-webapp/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f0f1a",
+  "theme_color": "#0f0f1a",
+  "lang": "it",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Calendario",
+      "url": "/FM-webapp/webapp.html#calendario",
+      "description": "Apri il calendario lezioni"
+    },
+    {
+      "name": "Dashboard",
+      "url": "/FM-webapp/webapp.html#dashboard",
+      "description": "Apri la dashboard"
+    }
+  ],
+  "categories": ["education", "productivity"]
+}
