@@ -17633,9 +17633,9 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
 // ═══════════════════════════════════════════════════════════════════════════════
 // Permessi navigazione per ruolo (sidebar): false = voce nascosta
 const ROLE_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true, impostazioni:true, schedaScuola:true, modulistica:true},
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false,contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true, impostazioni:true, schedaScuola:true, modulistica:true, notifiche:true, reminders:true},
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false, notifiche:true, reminders:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false,contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false, notifiche:true, reminders:false},
 };
 
 const NAV_ITEMS = [
