@@ -2229,10 +2229,16 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                 , React.createElement('div', { style: {fontSize:11,color:C.gold,letterSpacing:"0.1em",textTransform:"uppercase",
                   marginBottom:12,display:"flex",alignItems:"center",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1892}}
                   , React.createElement('div', { style: {height:1,width:16,background:C.goldDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1894}}), "Storico anni scolastici"
-                  , React.createElement('div', { style: {height:1,width:16,background:C.goldDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1894}}), "Storico anni scolastici"
                 )
                 , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1897}}
-                  /* Lista anni */
+                  /* Lista anni — se vuota mostra placeholder di caricamento */
+                  , anniScolastici.length === 0 && (
+                    React.createElement('div', {style:{padding:'14px 16px',background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,fontSize:12,color:C.textDim,fontStyle:'italic'}}
+                      , '⏳ Caricamento anni scolastici dal database...'
+                      , React.createElement('br',null)
+                      , React.createElement('span',{style:{fontSize:11,color:C.textMuted}}, 'Se persiste, premi ⟳ Aggiorna nella barra laterale')
+                    )
+                  )
                   , anniScolastici.slice().sort((a,b)=>b.annoInizio-a.annoInizio).map(as=>{
                     const isAttivo = as.stato==="attivo";
                     return (
@@ -2578,7 +2584,14 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
 // Anno scolastico attivo (annoInizio = anno di settembre)
 const annoScolasticoAttivo = oggi.getMonth()>=8 ? oggi.getFullYear() : oggi.getFullYear()-1;
 
-const INIT_ANNI_SCOLASTICI = []; // Caricato dal DB (tabella anni_scolastici) — non hardcoded
+// Anni scolastici: lista di fallback mostrata fino al caricamento dal DB (tabella anni_scolastici)
+// Viene sempre sovrascritta dai dati reali in __FM_RELOAD__ — aggiornare qui solo se cambiano i dati iniziali
+const INIT_ANNI_SCOLASTICI = [
+  { id:"as-2022", label:"2022/2023", annoInizio:2022, stato:"archiviato", note:"Anno regolare. Saggio: 10 giugno 2023." },
+  { id:"as-2023", label:"2023/2024", annoInizio:2023, stato:"archiviato", note:"Anno con masterclass internazionale. Saggio: 8 giugno 2024." },
+  { id:"as-2024", label:"2024/2025", annoInizio:2024, stato:"archiviato", note:"Anno corrente." },
+  { id:"as-2025", label:"2025/2026", annoInizio:2025, stato:"attivo",     note:"" },
+];
 
 const CONFIG_DEFAULT = {
   nomeScuola:"Accademia Musicale", tipoEnte:"Sistema gestionale",
