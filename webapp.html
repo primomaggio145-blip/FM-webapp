@@ -1,8 +1,31 @@
 <!DOCTYPE html><html lang="it">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <!-- ── RESPONSIVE MOBILE ── -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+
+  <!-- ── PWA / iOS HOME SCREEN ── -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Futuro Musica">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0f0f1a">
+  <meta name="application-name" content="Futuro Musica">
+
+  <!-- ── ICONE iOS ── -->
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
+
+  <!-- ── MANIFEST PWA ── -->
+  <link rel="manifest" href="manifest.json">
+
+  <!-- ── FAVICON ── -->
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+
   <title>Futuro Musica — Gestionale</title>
+
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <!-- 1. Supabase SDK -->
@@ -11,30 +34,82 @@
   <script src="supabase_integration.js"></script>
   <!-- 3. fm_sync: carica i dati da Supabase, poi carica app.js, poi monta React -->
   <script src="fm_sync.js"></script>
+
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    html,body,#root{height:100%;width:100%}
-    body{background:#f4f6fa}
-    #loading{
-      position:fixed;inset:0;
-      background:linear-gradient(160deg,#123a7a 0%,#1a4fa0 60%,#0d2d6b 100%);
-      display:flex;flex-direction:column;align-items:center;justify-content:center;
-      gap:16px;z-index:9999;padding:24px
+    /* ── Reset base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body, #root {
+      height: 100%;
+      height: 100dvh; /* dynamic viewport height — gestisce la barra Safari */
+      width: 100%;
     }
-    .logo{font-size:26px;font-weight:700;color:#fff;
-      font-family:'Oswald',sans-serif;letter-spacing:.12em;text-transform:uppercase}
-    .logo span{color:#e88080}
-    .spinner{width:32px;height:32px;border:2px solid rgba(255,255,255,.2);
-      border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
-    .sub{font-size:11px;color:rgba(255,255,255,.6);letter-spacing:.12em;text-transform:uppercase}
-    .err{color:#fca5a5;font-size:13px;background:rgba(0,0,0,.35);padding:16px;
-      max-width:90vw;width:100%;word-break:break-all;white-space:pre-wrap;max-height:60vh;overflow:auto}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    #sync-toast{
-      position:fixed;bottom:20px;right:16px;z-index:9001;
-      background:#f0fdf4;border:1px solid #bbf7d0;color:#15803d;
-      padding:8px 14px;font-family:'Open Sans',sans-serif;font-size:12px;font-weight:600;
-      opacity:0;transition:opacity .4s;pointer-events:none;
+
+    body {
+      background: #f4f6fa;
+      -webkit-text-size-adjust: 100%;        /* evita zoom testo automatico iOS */
+      -webkit-tap-highlight-color: transparent; /* rimuove flash azzurro al tap */
+      overscroll-behavior: none;             /* elimina bounce iOS */
+    }
+
+    /* ── Schermata di caricamento ── */
+    #loading {
+      position: fixed; inset: 0;
+      background: linear-gradient(160deg,#123a7a 0%,#1a4fa0 60%,#0d2d6b 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; z-index: 9999; padding: 24px;
+      /* Padding per safe area iPhone con notch */
+      padding-top: max(24px, env(safe-area-inset-top));
+      padding-bottom: max(24px, env(safe-area-inset-bottom));
+    }
+    .logo { font-size: 26px; font-weight: 700; color: #fff;
+      font-family: 'Oswald', sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+    .logo span { color: #e88080; }
+    .spinner { width: 32px; height: 32px; border: 2px solid rgba(255,255,255,.2);
+      border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
+    .sub { font-size: 11px; color: rgba(255,255,255,.6); letter-spacing: .12em; text-transform: uppercase; }
+    .err { color: #fca5a5; font-size: 13px; background: rgba(0,0,0,.35); padding: 16px;
+      max-width: 90vw; width: 100%; word-break: break-all; white-space: pre-wrap;
+      max-height: 60vh; overflow: auto; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Toast sync ── */
+    #sync-toast {
+      position: fixed; bottom: max(20px, env(safe-area-inset-bottom)); right: 16px;
+      z-index: 9001;
+      background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d;
+      padding: 8px 14px; font-family: 'Open Sans', sans-serif; font-size: 12px;
+      font-weight: 600; border-radius: 8px;
+      opacity: 0; transition: opacity .4s; pointer-events: none;
+    }
+
+    /* ── Scroll fluido iOS (momentum scrolling) ── */
+    * { -webkit-overflow-scrolling: touch; }
+
+    /* ── Input: font 16px evita zoom automatico Safari ── */
+    @media (max-width: 768px) {
+      input, select, textarea {
+        font-size: 16px !important;
+      }
+    }
+
+    /* ── Form 2 colonne → 1 colonna su schermi piccoli ── */
+    @media (max-width: 600px) {
+      .form-2col {
+        grid-template-columns: 1fr !important;
+      }
+    }
+
+    /* ── Status bar overlay per iPhone con notch/Dynamic Island ── */
+    body::before {
+      content: '';
+      display: block;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: env(safe-area-inset-top, 0px);
+      background: #0f0f1a;
+      z-index: 10000;
+      pointer-events: none;
     }
   </style>
 </head>
@@ -69,5 +144,20 @@
     fm_sync.js carica app.js dinamicamente DOPO aver caricato i dati da Supabase,
     garantendo che React usi sempre i dati reali e mai i dati demo.
   -->
+
+  <!-- ── Registrazione Service Worker per PWA ── -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/FM-webapp/service-worker.js', {
+          scope: '/FM-webapp/'
+        }).then(function(reg) {
+          console.log('[FM PWA] Service Worker registrato:', reg.scope);
+        }).catch(function(err) {
+          console.log('[FM PWA] Service Worker non disponibile:', err.message);
+        });
+      });
+    }
+  </script>
 </body>
 </html>
