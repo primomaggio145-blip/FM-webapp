@@ -1850,17 +1850,13 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
       if (cfgErr) console.warn('[FM] sito_config INSERT error:', cfgErr.message);
 
       // ── 2. Sincronizza tabella anni_scolastici ──────────────────────────────
-      // Per ogni anno in stato React: upsert nel DB
       if (anniScolastici && anniScolastici.length > 0) {
-        const anniRows = anniScolastici.map(a => ({
-          id:          a.id,
-          label:       a.label,
-          anno_inizio: a.annoInizio,
-          stato:       a.stato,
-          note:        a.note || null,
-        }));
-        const { error: anniErr } = await sb.from('anni_scolastici').upsert(anniRows, { onConflict: 'id' });
-        if (anniErr) console.warn('[FM] anni_scolastici UPSERT error:', anniErr.message);
+        for (const a of anniScolastici) {
+          await sb.from('anni_scolastici').upsert({
+            id: a.id, label: a.label,
+            anno_inizio: a.annoInizio, stato: a.stato, note: a.note || null,
+          }, { onConflict: 'id' });
+        }
       }
 
       const el = document.createElement('div');
@@ -2304,13 +2300,13 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                         // Scrivi nel DB prima di aggiornare React state
                         const sb = window.supabaseClient;
                         if (sb) {
-                          const { error } = await sb.from('anni_scolastici').insert({
+                          const { error } = await sb.from('anni_scolastici').upsert({
                             id: newAs.id, label: newAs.label,
                             anno_inizio: newAs.annoInizio, stato: newAs.stato, note: null,
-                          });
-                          if (error) { alert('Errore creazione anno: ' + error.message); return; }
+                          }, { onConflict: 'id', ignoreDuplicates: true });
+                          if (error && error.code !== '23505') { alert('Errore creazione anno: ' + error.message); return; }
                         }
-                        setAnniScolastici(p=>[...p, newAs]);
+                        setAnniScolastici(p => p.find(x=>x.id===newAs.id) ? p : [...p, newAs]);
                       },
                         style: {display:"flex",alignItems:"center",justifyContent:"center",gap:8,
                           padding:"10px 16px",borderRadius:10,cursor:"pointer",
