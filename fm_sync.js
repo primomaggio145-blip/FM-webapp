@@ -502,6 +502,7 @@
         { data: sEV, error: e8 }, { data: sAL, error: e9 },
         { data: sCFG },
         { data: sSALA, error: e10 },
+        { data: sANNI },
       ] = await Promise.all([
         sb.from('studenti').select('*').order('nome'),
         sb.from('docenti').select('*').order('nome'),
@@ -515,6 +516,7 @@
         sb.from('allegati').select('*').order('created_at', { ascending: false }),
         sb.from('sito_config').select('*'),
         sb.from('prenotazioni_sala').select('*').order('data').order('ora_inizio'),
+        sb.from('anni_scolastici').select('*').order('anno_inizio', { ascending: false }),
       ]);
 
       // Log errori
@@ -529,15 +531,24 @@
         try { configFromDB[r.chiave] = JSON.parse(r.valore); }
         catch(e) { configFromDB[r.chiave] = r.valore; }
       });
-      // Estrai anniScolastici dal config e rimuovilo dalle chiavi config normali
-      const anniScolasticiDB = Array.isArray(configFromDB.anniScolastici) ? configFromDB.anniScolastici : null;
-      if (anniScolasticiDB) delete configFromDB.anniScolastici;
+      // dashboardPanels from sito_config
       const dashboardPanelsDB = configFromDB.dashboardPanels && typeof configFromDB.dashboardPanels === 'object' ? configFromDB.dashboardPanels : null;
       if (dashboardPanelsDB) delete configFromDB.dashboardPanels;
+      // Remove legacy anniScolastici from sito_config if present (now stored in anni_scolastici table)
+      if (configFromDB.anniScolastici) delete configFromDB.anniScolastici;
+
+      // Adatta righe anni_scolastici → formato app
+      const anniScolasticiDB = (sANNI||[]).map(r => ({
+        id:         r.id,
+        label:      r.label,
+        annoInizio: r.anno_inizio,
+        stato:      r.stato,
+        note:       r.note || '',
+      }));
 
       const data = {
         config: Object.keys(configFromDB).length > 0 ? configFromDB : null,
-        anniScolastici: anniScolasticiDB,
+        anniScolastici: anniScolasticiDB.length > 0 ? anniScolasticiDB : null,
         dashboardPanels: dashboardPanelsDB,
         students: (sS || []).map(adaptStudente),
         docenti:  (sD || []).map(adaptDocente),

@@ -1797,14 +1797,15 @@ const AlertPanel = ({ allievi, lezioniOggi }) => {
 // ─── MODALE IMPOSTAZIONI ──────────────────────────────────────────────────────
 const PANNELLI_DEF = [
   {id:"kpi",       label:"KPI Cards",            desc:"Allievi, lezioni, entrate, uscite, saldo", icon:"chart",    sempre:true},
+  {id:"azioni",    label:"Azioni rapide",         desc:"Shortcut ai flussi principali",             icon:"plus"},
   {id:"lezioni",   label:"Lezioni di oggi",       desc:"Timeline con orari e stato",               icon:"calendar"},
   {id:"recuperi",  label:"Recuperi in sospeso",   desc:"Lezioni in recupero con scadenze",          icon:"clock"},
   {id:"grafico",   label:"Andamento finanziario", desc:"Grafico mensile entrate/uscite",            icon:"chart"},
   {id:"pagamenti", label:"Stato pagamenti",       desc:"Donut con distribuzione allievi",           icon:"users"},
   {id:"eventi",    label:"Prossimi eventi",       desc:"Elenco eventi in calendario",               icon:"flag"},
+  {id:"report",    label:"Report lezioni mese",   desc:"Allievi oltre/in linea/sotto soglia",       icon:"chart"},
   {id:"alert",     label:"Alert prioritari",      desc:"Morosi, lezioni da confermare",             icon:"alert"},
   {id:"attivita",  label:"Attività recente",      desc:"Feed ultimi movimenti",                     icon:"clock"},
-  {id:"azioni",    label:"Azioni rapide",         desc:"Shortcut ai flussi principali",             icon:"plus"},
 ];
 
 const DASH_RUOLI = [
@@ -1830,40 +1831,45 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
     const newConfig = {...draft, annoInizioAttivo: _nullishCoalesce(_optionalChain([annoAs, 'optionalAccess', _7 => _7.annoInizio]), () => ( draft.annoInizioAttivo))};
     onConfig(newConfig);
 
-    // Scrivi su Supabase usando il client autenticato (non fetch raw con anon key)
     try {
       const sb = window.supabaseClient;
       if (!sb) throw new Error('supabaseClient non disponibile');
 
+      // ── 1. Salva sito_config (impostazioni generali + panels) ──────────────
       const rows = [];
       Object.entries(newConfig).forEach(([chiave, valore]) => {
         if (typeof valore === 'function') return;
         rows.push({ chiave, valore: valore == null ? '' : typeof valore === 'object' ? JSON.stringify(valore) : String(valore) });
       });
-      rows.push({ chiave: 'anniScolastici', valore: JSON.stringify(anniScolastici||[]) });
       rows.push({ chiave: 'dashboardPanels', valore: JSON.stringify(panels||{}) });
+      // Rimuovi eventuali vecchie chiavi anni da sito_config
+      rows.push({ chiave: 'anniScolastici', valore: '[]' }); // legacy cleanup
 
-      console.log('[FM] handleSave — righe:', rows.length, '— anni:', anniScolastici.length);
+      await sb.from('sito_config').delete().neq('chiave', '___x___');
+      const { error: cfgErr } = await sb.from('sito_config').insert(rows);
+      if (cfgErr) console.warn('[FM] sito_config INSERT error:', cfgErr.message);
 
-      // DELETE tutte le righe esistenti
-      const { error: delErr } = await sb.from('sito_config').delete().neq('chiave', '___x___');
-      if (delErr) console.warn('[FM] sito_config DELETE error:', delErr.message);
-
-      // INSERT tutte le nuove righe
-      const { error: insErr } = await sb.from('sito_config').insert(rows);
-      if (insErr) {
-        console.warn('[FM] sito_config INSERT error:', insErr.message);
-        alert('Errore salvataggio: ' + insErr.message);
-      } else {
-        console.log('[FM] sito_config salvato OK');
-        const el = document.createElement('div');
-        el.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:999999;padding:14px 28px;border-radius:12px;font-family:"Open Sans",sans-serif;font-size:14px;font-weight:600;color:#fff;background:#16a34a;box-shadow:0 8px 32px rgba(0,0,0,0.35);white-space:nowrap;';
-        el.textContent = '✅  Impostazioni salvate!';
-        document.body.appendChild(el);
-        setTimeout(() => el.remove(), 3000);
-        // Aggiorna subito lo state senza aspettare il prossimo refresh
-        if (window.__FM_RELOAD__) window.__FM_RELOAD__({ anniScolastici, dashboardPanels: panels });
+      // ── 2. Sincronizza tabella anni_scolastici ──────────────────────────────
+      // Per ogni anno in stato React: upsert nel DB
+      if (anniScolastici && anniScolastici.length > 0) {
+        const anniRows = anniScolastici.map(a => ({
+          id:          a.id,
+          label:       a.label,
+          anno_inizio: a.annoInizio,
+          stato:       a.stato,
+          note:        a.note || null,
+        }));
+        const { error: anniErr } = await sb.from('anni_scolastici').upsert(anniRows, { onConflict: 'id' });
+        if (anniErr) console.warn('[FM] anni_scolastici UPSERT error:', anniErr.message);
       }
+
+      const el = document.createElement('div');
+      el.style.cssText = 'position:fixed;top:24px;left:50%;transform:translateX(-50%);z-index:999999;padding:14px 28px;border-radius:12px;font-family:"Open Sans",sans-serif;font-size:14px;font-weight:600;color:#fff;background:#16a34a;box-shadow:0 8px 32px rgba(0,0,0,0.35);white-space:nowrap;';
+      el.textContent = '✅  Impostazioni salvate!';
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+      if (window.__FM_RELOAD__) window.__FM_RELOAD__({ anniScolastici, dashboardPanels: panels });
+
     } catch(e) { console.warn('[FM] SettingsDrawer save catch:', e?.message); alert('Errore: ' + e?.message); }
 
     onClose();
@@ -2253,18 +2259,23 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                         , as.note && React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1918}}, as.note)
                         , React.createElement('div', { style: {display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1919}}
                           , !isAttivo && (
-                            React.createElement('button', { onClick: ()=>{
+                            React.createElement('button', { onClick: async ()=>{
+                              // Aggiorna React state
                               setAnniScolastici(p=>p.map(a=>({...a,stato:a.id===as.id?"attivo":"archiviato"})));
                               setDraft(p=>({...p,annoScolastico:as.label,annoInizioAttivo:as.annoInizio}));
                               setD("annoScolastico",as.label);
                               setD("annoInizioAttivo",as.annoInizio);
-                              // Aggiorna subito il config globale senza aspettare Salva
                               if (onConfig) onConfig(c=>({...c,annoScolastico:as.label,annoInizioAttivo:as.annoInizio}));
+                              // Scrivi subito nel DB — imposta questo attivo e tutti gli altri archiviati
+                              const sb = window.supabaseClient;
+                              if (sb) {
+                                await sb.from('anni_scolastici').update({ stato: 'archiviato' }).neq('id', as.id);
+                                await sb.from('anni_scolastici').update({ stato: 'attivo' }).eq('id', as.id);
+                              }
                             },
                               style: {fontSize:11,padding:"3px 10px",borderRadius:6,cursor:"pointer",
                                 background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,
                                 fontFamily:"'Open Sans',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1921}}, "Imposta attivo"
-
                             )
                           )
                           , React.createElement('button', { onClick: ()=>setAnniScolastici(p=>p.filter(a=>a.id!==as.id)),
@@ -2286,10 +2297,19 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                     const nextLabel = `${nextAnno}/${nextAnno+1}`;
                     const esiste = anniScolastici.some(a=>a.annoInizio===nextAnno);
                     return !esiste ? (
-                      React.createElement('button', { onClick: ()=>{
+                      React.createElement('button', { onClick: async ()=>{
                         const newAs = {
                           id:`as-${nextAnno}`, label:nextLabel, annoInizio:nextAnno, stato:"archiviato", note:""
                         };
+                        // Scrivi nel DB prima di aggiornare React state
+                        const sb = window.supabaseClient;
+                        if (sb) {
+                          const { error } = await sb.from('anni_scolastici').insert({
+                            id: newAs.id, label: newAs.label,
+                            anno_inizio: newAs.annoInizio, stato: newAs.stato, note: null,
+                          });
+                          if (error) { alert('Errore creazione anno: ' + error.message); return; }
+                        }
                         setAnniScolastici(p=>[...p, newAs]);
                       },
                         style: {display:"flex",alignItems:"center",justifyContent:"center",gap:8,
@@ -3967,12 +3987,14 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             )
 
             /* ── Report Lezioni Mese (solo ADMIN) ── */
-            , ruolo === "admin" && React.createElement(ReportLezioniCard, {
-                lessons: _lessons,
-                students: ALLIEVI_LIVE,
-                config,
-                onNavigate,
-              })
+            , ruolo === "admin" && isVisible("report") && React.createElement('div',{style:{...(window.__dash_panel_order__&&window.__dash_panel_order__('report'))}}
+              , React.createElement(ReportLezioniCard, {
+                  lessons: _lessons,
+                  students: ALLIEVI_LIVE,
+                  config,
+                  onNavigate,
+                })
+            )
 
             /* Footer */
             , React.createElement('div', { style: {paddingBottom:8,textAlign:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2383}}
@@ -18068,7 +18090,7 @@ function App() {
         const [
           { data: sS }, { data: sD }, { data: sC },
           { data: sB }, { data: sP }, { data: sQ }, { data: sEV },
-          { data: sAL }, { data: sSALA }, { data: sCFG },
+          { data: sAL }, { data: sSALA }, { data: sCFG }, { data: sANNI },
         ] = await Promise.all([
           sb.from('studenti').select('*').order('nome'),
           sb.from('docenti').select('*').order('nome'),
@@ -18080,6 +18102,7 @@ function App() {
           sb.from('allegati').select('*').order('created_at', { ascending: false }),
           sb.from('prenotazioni_sala').select('*').order('data').order('ora_inizio'),
           sb.from('sito_config').select('*'),
+          sb.from('anni_scolastici').select('*').order('anno_inizio', { ascending: false }),
         ]);
 
         // ── Lezioni: SOLO oggi + modificate nelle ultime 24h ────────────────
@@ -18134,8 +18157,10 @@ function App() {
           catch(e) { configFromDB[r.chiave] = r.valore; }
         });
         // Estrai chiavi speciali da configFromDB (non sono campi config normali)
-        const anniScolasticiDB = Array.isArray(configFromDB.anniScolastici) ? configFromDB.anniScolastici : null;
-        if (anniScolasticiDB) delete configFromDB.anniScolastici;
+        const anniScolasticiDB = (sANNI||[]).map(r => ({
+          id: r.id, label: r.label, annoInizio: r.anno_inizio, stato: r.stato, note: r.note||'',
+        }));
+        if (configFromDB.anniScolastici) delete configFromDB.anniScolastici;
         const dashboardPanelsDB = (configFromDB.dashboardPanels && typeof configFromDB.dashboardPanels === 'object') ? configFromDB.dashboardPanels : null;
         if (dashboardPanelsDB) delete configFromDB.dashboardPanels;
 
@@ -18158,7 +18183,7 @@ function App() {
             concerti: (sEV||[]).map(r => ({ id:r.id, nome:r.nome||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:[], partecipanti:[], prenotazioni:[], biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0 })),
             allegati: (sAL||[]).map(adaptA),
             config:   Object.keys(configFromDB).length > 0 ? configFromDB : null,
-            anniScolastici:  anniScolasticiDB,
+            anniScolastici:  anniScolasticiDB.length > 0 ? anniScolasticiDB : null,
             dashboardPanels: dashboardPanelsDB,
           };
           if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__(reloadData);
