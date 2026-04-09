@@ -2578,14 +2578,7 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
 // Anno scolastico attivo (annoInizio = anno di settembre)
 const annoScolasticoAttivo = oggi.getMonth()>=8 ? oggi.getFullYear() : oggi.getFullYear()-1;
 
-const INIT_ANNI_SCOLASTICI = [
-  { id:"as-2022", label:"2022/2023", annoInizio:2022, stato:"archiviato",
-    note:"Anno regolare. Saggio: 10 giugno 2023." },
-  { id:"as-2023", label:"2023/2024", annoInizio:2023, stato:"archiviato",
-    note:"Anno con masterclass internazionale. Saggio: 8 giugno 2024." },
-  { id:"as-2024", label:"2024/2025", annoInizio:2024, stato:"attivo",
-    note:"Anno corrente." },
-];
+const INIT_ANNI_SCOLASTICI = []; // Caricato dal DB (tabella anni_scolastici) — non hardcoded
 
 const CONFIG_DEFAULT = {
   nomeScuola:"Accademia Musicale", tipoEnte:"Sistema gestionale",
@@ -18059,8 +18052,8 @@ function App() {
       if (data.concerti)       setSharedConcerti(data.concerti);
       if (data.allegati)       setSharedAllegati(data.allegati);
       if (data.richieste)      setSharedRichieste(data.richieste);
-      if (data.config)         setSharedConfig(c => ({...CONFIG_DEFAULT, ...c, ...data.config}));
-      if (data.anniScolastici) setSharedAnniScolastici(data.anniScolastici);
+      if (data.config)          setSharedConfig(c => ({...CONFIG_DEFAULT, ...c, ...data.config}));
+      if (data.anniScolastici !== undefined) setSharedAnniScolastici(data.anniScolastici || []);
       if (data.dashboardPanels) setSharedPanels(p => ({...p, ...data.dashboardPanels}));
     };
 
@@ -18179,7 +18172,7 @@ function App() {
             concerti: (sEV||[]).map(r => ({ id:r.id, nome:r.nome||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:[], partecipanti:[], prenotazioni:[], biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0 })),
             allegati: (sAL||[]).map(adaptA),
             config:   Object.keys(configFromDB).length > 0 ? configFromDB : null,
-            anniScolastici:  anniScolasticiDB.length > 0 ? anniScolasticiDB : null,
+            anniScolastici:  anniScolasticiDB, // sempre passato, anche se []
             dashboardPanels: dashboardPanelsDB,
           };
           if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__(reloadData);

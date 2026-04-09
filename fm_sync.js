@@ -545,10 +545,11 @@
         stato:      r.stato,
         note:       r.note || '',
       }));
+      log('Anni scolastici DB: ' + anniScolasticiDB.length + ' — ' + anniScolasticiDB.map(a=>a.label+'('+a.stato+')').join(', '));
 
       const data = {
         config: Object.keys(configFromDB).length > 0 ? configFromDB : null,
-        anniScolastici: anniScolasticiDB.length > 0 ? anniScolasticiDB : null,
+        anniScolastici: anniScolasticiDB, // sempre passato, anche se []
         dashboardPanels: dashboardPanelsDB,
         students: (sS || []).map(adaptStudente),
         docenti:  (sD || []).map(adaptDocente),
