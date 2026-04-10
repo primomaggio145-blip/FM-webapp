@@ -3361,7 +3361,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 
           /* ── NAVBAR ── */
           , React.createElement('header', { style: {background:C.surface,borderBottom:`1px solid ${C.border}`,
-            padding:"0 28px",display:"flex",alignItems:"center",gap:0,flexShrink:0,height:56}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2122}}
+            padding:"0 28px",paddingTop:"env(safe-area-inset-top, 0px)",
+            display:"flex",alignItems:"center",gap:0,flexShrink:0,
+            minHeight:56,height:"calc(56px + env(safe-area-inset-top, 0px))"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2122}}
             , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10,height:"100%"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2124}}
               , React.createElement(LogoMark, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 2125}})
               , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 2126}}
@@ -17633,9 +17635,9 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
 // ═══════════════════════════════════════════════════════════════════════════════
 // Permessi navigazione per ruolo (sidebar): false = voce nascosta
 const ROLE_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true, impostazioni:true, schedaScuola:true, modulistica:true, notifiche:true, reminders:true},
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false, notifiche:true, reminders:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false,contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false,impostazioni:false,schedaScuola:false,modulistica:false, notifiche:true, reminders:false},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true},
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
 };
 
 const NAV_ITEMS = [

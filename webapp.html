@@ -100,17 +100,7 @@
       }
     }
 
-    /* ── Status bar overlay per iPhone con notch/Dynamic Island ── */
-    body::before {
-      content: '';
-      display: block;
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      height: env(safe-area-inset-top, 0px);
-      background: #0f0f1a;
-      z-index: 10000;
-      pointer-events: none;
-    }
+    /* safe area handled by the app header directly */
   </style>
 </head>
 <body>
