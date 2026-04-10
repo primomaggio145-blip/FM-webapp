@@ -39,78 +39,31 @@
     /* ── Reset base ── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    html, body, #root {
-      height: 100%;
-      height: 100dvh; /* dynamic viewport height — gestisce la barra Safari */
-      width: 100%;
-    }
+    html, body, #root { height: 100%; width: 100%; }
 
     body {
       background: #f4f6fa;
-      -webkit-text-size-adjust: 100%;        /* evita zoom testo automatico iOS */
-      -webkit-tap-highlight-color: transparent; /* rimuove flash azzurro al tap */
-      overscroll-behavior: none;             /* elimina bounce iOS */
+      /* FIX iOS: Padding per evitare tagli su notch e barra home */
+      padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      -webkit-text-size-adjust: 100%;
+      -webkit-tap-highlight-color: transparent;
     }
 
-    /* ── Schermata di caricamento ── */
-    #loading {
-      position: fixed; inset: 0;
-      background: linear-gradient(160deg,#123a7a 0%,#1a4fa0 60%,#0d2d6b 100%);
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 16px; z-index: 9999; padding: 24px;
-      /* Padding per safe area iPhone con notch */
-      padding-top: max(24px, env(safe-area-inset-top));
-      padding-bottom: max(24px, env(safe-area-inset-bottom));
-    }
-    .logo { font-size: 26px; font-weight: 700; color: #fff;
-      font-family: 'Oswald', sans-serif; letter-spacing: .12em; text-transform: uppercase; }
-    .logo span { color: #e88080; }
-    .spinner { width: 32px; height: 32px; border: 2px solid rgba(255,255,255,.2);
-      border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite; }
-    .sub { font-size: 11px; color: rgba(255,255,255,.6); letter-spacing: .12em; text-transform: uppercase; }
-    .err { color: #fca5a5; font-size: 13px; background: rgba(0,0,0,.35); padding: 16px;
-      max-width: 90vw; width: 100%; word-break: break-all; white-space: pre-wrap;
-      max-height: 60vh; overflow: auto; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    /* ── Toast sync ── */
-    #sync-toast {
-      position: fixed; bottom: max(20px, env(safe-area-inset-bottom)); right: 16px;
-      z-index: 9001;
-      background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d;
-      padding: 8px 14px; font-family: 'Open Sans', sans-serif; font-size: 12px;
-      font-weight: 600; border-radius: 8px;
-      opacity: 0; transition: opacity .4s; pointer-events: none;
+    /* FIX TABELLE: Forza lo scroll orizzontale se la tabella è troppo grande */
+    table {
+        display: block !important;
+        width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
     }
 
-    /* ── Scroll fluido iOS (momentum scrolling) ── */
-    * { -webkit-overflow-scrolling: touch; }
-
-    /* ── Input: font 16px evita zoom automatico Safari ── */
-    @media (max-width: 768px) {
-      input, select, textarea {
-        font-size: 16px !important;
-      }
+    /* CLASSI PER NASCONDERE/MOSTRARE TRA DESKTOP E PWA */
+    .pwa-only { display: none !important; }
+    @media (display-mode: standalone) {
+      .desktop-only { display: none !important; }
+      .pwa-only { display: block !important; }
     }
 
-    /* ── Form 2 colonne → 1 colonna su schermi piccoli ── */
-    @media (max-width: 600px) {
-      .form-2col {
-        grid-template-columns: 1fr !important;
-      }
-    }
-
-    /* ── Status bar overlay per iPhone con notch/Dynamic Island ── */
-    body::before {
-      content: '';
-      display: block;
-      position: fixed;
-      top: 0; left: 0; right: 0;
-      height: env(safe-area-inset-top, 0px);
-      background: #0f0f1a;
-      z-index: 10000;
-      pointer-events: none;
-    }
   </style>
 </head>
 <body>
@@ -152,12 +105,11 @@
         navigator.serviceWorker.register('/FM-webapp/service-worker.js', {
           scope: '/FM-webapp/'
         }).then(function(reg) {
-          console.log('[FM PWA] Service Worker registrato:', reg.scope);
-        }).catch(function(err) {
-          console.log('[FM PWA] Service Worker non disponibile:', err.message);
+          console.log('SW pronto');
         });
       });
     }
+
   </script>
 </body>
 </html>
