@@ -17636,8 +17636,19 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
 // Permessi navigazione per ruolo (sidebar): false = voce nascosta
 const ROLE_PERMS = {
   admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true},
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
   allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
+};
+
+// Rileva se l'app è aperta come PWA (standalone) — usato per menu più snello
+const IS_PWA = window.matchMedia('(display-mode: standalone)').matches
+            || window.navigator.standalone === true; // iOS Safari
+
+// Voci visibili in modalità PWA per ruolo (sottoinsieme snello)
+const PWA_PERMS = {
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
+  docente: {dashboard:true, allievi:false,docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
 };
 
 const NAV_ITEMS = [
@@ -17698,7 +17709,10 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
               const r = settingsDrawerOpen
                 ? "admin"
                 : (userRole === "admin" && currentRuolo ? currentRuolo : userRole);
-              const perms = ROLE_PERMS[r] || ROLE_PERMS["admin"];
+              // PWA: usa menu ridotto; desktop: menu completo
+              const perms = IS_PWA
+                ? (PWA_PERMS[r] || PWA_PERMS["admin"])
+                : (ROLE_PERMS[r] || ROLE_PERMS["admin"]);
               return perms[item.id] !== false;
             }).map(item => {
             const active = current === item.id;
@@ -17736,10 +17750,11 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
             );
           })
         )
-        /* ── Sezione strumenti — solo admin ── */
+        /* ── Sezione strumenti — solo admin, solo desktop ── */
         , (function(){
             const sideRuolo = _optionalChain([user, 'optionalAccess', _sx => _sx.ruolo]) || "admin";
             if(sideRuolo !== "admin") return null;
+            if(IS_PWA) return null; // nascosta in PWA — menu snello
             return React.createElement('div', { style: {padding:"6px 8px",borderTop:"1px solid rgba(255,255,255,0.12)",flexShrink:0} }
               , React.createElement('div', {style:{fontSize:9,color:"rgba(255,255,255,0.45)",letterSpacing:".15em",textTransform:"uppercase",padding:"6px 4px 4px"}}, "Strumenti")
               , React.createElement('button', {
