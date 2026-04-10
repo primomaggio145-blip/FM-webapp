@@ -5147,7 +5147,8 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const TABS = [
     {id:"info",       label:"Informazioni", icon:"user"},
     {id:"lezioni",    label:"Lezioni",      icon:"calendar"},
-    {id:"repertorio", label:"Repertorio",   icon:"music"},
+    // Repertorio: nascosto in PWA per snellire la navigazione
+    ...(IS_PWA ? [] : [{id:"repertorio", label:"Repertorio", icon:"music"}]),
     // Quote: visibile solo ad admin e allievo (non al docente)
     ...(sdRuolo !== "docente" ? [{id:"quote", label:"Quote", icon:"euro"}] : []),
   ];
@@ -16660,10 +16661,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     {id:"profilo",  label:"Profilo",  icon:"user"},
     {id:"allievi",  label:"Allievi",  icon:"users"},
     {id:"lezioni",  label:"Lezioni",  icon:"calendar"},
-    // Tab Compenso visibile sempre (docente vede solo sé stesso)
     {id:"compenso", label:"Compenso", icon:"euro"},
-    // Tab Impostazioni solo per il docente loggato
-    ...(ruoloDocView==="docente" ? [{id:"impostazioni", label:"Impostazioni", icon:"settings"}] : []),
+    // Tab Impostazioni: solo per il docente loggato, e solo in modalità desktop
+    ...(ruoloDocView==="docente" && !IS_PWA ? [{id:"impostazioni", label:"Impostazioni", icon:"settings"}] : []),
   ];
   const stip = stipendioMese(selected);
 
