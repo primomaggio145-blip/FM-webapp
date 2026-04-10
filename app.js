@@ -17690,7 +17690,13 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
   const ruoloHex = {admin:C.gold, docente:C.teal, allievo:C.blue}[_optionalChain([user, 'optionalAccess', _89 => _89.ruolo])] || C.gold;
   const ini = _optionalChain([user, 'optionalAccess', _90 => _90.nome]) ? user.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase() : "??";
   // Primary nav items shown in bottom bar (most used)
-  const BOTTOM_ITEMS = NAV_ITEMS.slice(0, 5);
+  const _userRoleSB  = (user && user.ruolo) || "admin";
+  const _effRoleSB   = (_userRoleSB === "admin" && currentRuolo) ? currentRuolo : _userRoleSB;
+  const _permsSB     = IS_PWA
+    ? (PWA_PERMS[_effRoleSB] || PWA_PERMS["admin"])
+    : (ROLE_PERMS[_effRoleSB] || ROLE_PERMS["admin"]);
+  const FILTERED_ITEMS = NAV_ITEMS.filter(item => _permsSB[item.id] !== false);
+  const BOTTOM_ITEMS   = FILTERED_ITEMS.slice(0, 5);
   return (
     React.createElement(React.Fragment, null
       /* ── Desktop sidebar ── */
@@ -17895,7 +17901,7 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
           );
         })
         /* "Altro" button for remaining items */
-        , React.createElement(MobileMoreMenu, { current: current, setView: setView, extraItems: NAV_ITEMS.slice(5), onLogout: onLogout, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10669}})
+        , React.createElement(MobileMoreMenu, { current: current, setView: setView, extraItems: FILTERED_ITEMS.slice(5), onLogout: onLogout, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10669}})
       )
     )
   );
