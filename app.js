@@ -443,6 +443,44 @@ const RefreshBtn = function() {
   }, React.createElement(Ic, {n:"refresh", size:15, stroke:"currentColor"}));
 };
 
+// Pulsante richiesta permesso notifiche push (solo in PWA, solo se non ancora concesso)
+const NotifPermBtn = function() {
+  const [perm, setPerm] = React.useState(
+    ('Notification' in window) ? Notification.permission : 'denied'
+  );
+  if (!IS_PWA || !('Notification' in window) || perm !== 'default') return null;
+  return React.createElement('button', {
+    onClick: function() {
+      Notification.requestPermission().then(function(p) {
+        setPerm(p);
+        if (p === 'granted') {
+          // Mostra una notifica di conferma
+          navigator.serviceWorker.ready.then(function(reg) {
+            reg.showNotification('✅ Notifiche attivate', {
+              body: 'Riceverai un avviso 1 ora prima di ogni lezione.',
+              icon: '/FM-webapp/icons/icon-192.png',
+            });
+          }).catch(function() {
+            new Notification('✅ Notifiche attivate', {
+              body: 'Riceverai un avviso 1 ora prima di ogni lezione.',
+            });
+          });
+        }
+      });
+    },
+    title: "Attiva notifiche push",
+    style: {
+      background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8,
+      padding: '6px 10px', cursor: 'pointer', display: 'flex', alignItems: 'center',
+      gap: 5, color: '#f97316', fontSize: 11, fontWeight: 600,
+      fontFamily: "'Open Sans',sans-serif", flexShrink: 0,
+    }
+  },
+    React.createElement(Ic, {n:'bell', size:13, stroke:'#f97316'}),
+    ' Attiva notifiche'
+  );
+};
+
 const Modal = ({ title, onClose, children, footer, wide=false }) => (
   React.createElement('div', { className: "modal-resp-outer", style: {position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"flex-end",
     justifyContent:"center",padding:"0"}, onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 407}}
@@ -2907,6 +2945,8 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
   });
 
   const count = notifs.length;
+  // Esponi il conteggio globalmente così handleLogout può leggerlo
+  window.__FM_NOTIF_COUNT__ = count;
 
   const TIPO_COLORS = {
     warning: { bg: '#fff7ed', border: '#fed7aa', dot: C.orange },
@@ -3387,6 +3427,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                 }
                 , React.createElement(Ic,{n:"refresh",size:15,stroke:"currentColor"})
               )
+              , React.createElement(NotifPermBtn)
               , React.createElement(NotificationBell, {
                   students: _students,
                   lessons: _lessons,
@@ -17659,8 +17700,8 @@ if (IS_PWA) sessionStorage.setItem('fm_pwa', '1');
 // Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
 const PWA_PERMS = {
   admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
-  docente: {dashboard:true, allievi:false,docenti:true, corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
+  docente: {dashboard:true, allievi:false,docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
 };
 
 const NAV_ITEMS = [
@@ -18403,8 +18444,109 @@ function App() {
         _pollNightCounter = 0;
       }
       window.__FM_POLL_TODAY__ && window.__FM_POLL_TODAY__();
+      // ── Reminder lezioni 1h prima ────────────────────────────────────────
+      window.__FM_CHECK_LESSON_REMINDER__ && window.__FM_CHECK_LESSON_REMINDER__();
     }, 60000);
     var _pollNightCounter = 0;
+
+    // ── Reminder lezioni: controlla ogni minuto se c'è una lezione tra 55-65 min ──
+    const _reminderSent = new Set(); // evita notifiche doppie per la stessa lezione
+    window.__FM_CHECK_LESSON_REMINDER__ = function() {
+      const nowMs  = Date.now();
+      const nowStr = new Date().toISOString().split('T')[0];
+      const lessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
+      const curUser = window.__currentUser__;
+      if (!curUser) return;
+
+      lessons.forEach(function(l) {
+        if (l.date !== nowStr) return;
+        if (l.tipo === 'sala_prove') return;
+        // Orario lezione in ms
+        const [hh, mm] = (l.hour||'00:00').split(':').map(Number);
+        const todayMid = new Date(); todayMid.setHours(0,0,0,0);
+        const lessonMs = todayMid.getTime() + hh*3600000 + mm*60000;
+        const diffMin  = (lessonMs - nowMs) / 60000;
+        // Finestra: tra 55 e 65 minuti prima
+        if (diffMin < 55 || diffMin > 65) return;
+        const key = l.id + '_' + nowStr;
+        if (_reminderSent.has(key)) return;
+
+        // Filtra per utente corrente
+        const ruolo = curUser.ruolo || 'admin';
+        if (ruolo === 'allievo') {
+          const myId   = curUser.allievoId;
+          const myNome = (curUser.nome||'').toLowerCase();
+          const match  = (myId && String(l.studentId) === String(myId))
+                      || (myNome && (l.student||'').toLowerCase().includes(myNome));
+          if (!match) return;
+        } else if (ruolo === 'docente') {
+          const myNome = (curUser.nome||'').toLowerCase();
+          if (!(l.teacher||'').toLowerCase().includes(myNome)) return;
+        }
+        // admin vede tutte
+
+        _reminderSent.add(key);
+        const titolo  = `⏰ Lezione tra 1 ora`;
+        const testo   = (l.tipo==='collettivo'
+          ? `${l.courseName||'Lezione collettiva'} alle ${l.hour}`
+          : `${l.instrument||'Lezione'} con ${l.teacher||''} alle ${l.hour}`);
+
+        // PWA: notifica push nativa
+        if (IS_PWA && 'Notification' in window) {
+          if (Notification.permission === 'granted') {
+            navigator.serviceWorker.ready.then(function(reg) {
+              reg.showNotification(titolo, {
+                body:    testo,
+                icon:    '/FM-webapp/icons/icon-192.png',
+                badge:   '/FM-webapp/icons/icon-192.png',
+                tag:     key,
+                vibrate: [200, 100, 200],
+              });
+            }).catch(function() {
+              new Notification(titolo, { body: testo, icon: '/FM-webapp/icons/icon-192.png' });
+            });
+          } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(function(p) {
+              if (p === 'granted') {
+                new Notification(titolo, { body: testo, icon: '/FM-webapp/icons/icon-192.png' });
+              }
+            });
+          }
+        } else {
+          // Desktop: banner a video stile Google Calendar
+          var banner = document.createElement('div');
+          banner.style.cssText = [
+            'position:fixed','top:20px','right:20px','z-index:99999',
+            'background:#fff','border:1px solid #e2e8f0','border-radius:12px',
+            'box-shadow:0 8px 32px rgba(0,0,0,0.18)','padding:16px 20px',
+            'display:flex','align-items:flex-start','gap:12px','max-width:320px',
+            'font-family:Open Sans,sans-serif','animation:slideIn 0.3s ease',
+          ].join(';');
+          banner.innerHTML = `
+            <div style="width:36px;height:36px;border-radius:10px;background:#fff7ed;
+              border:1px solid #fed7aa;display:flex;align-items:center;
+              justify-content:center;font-size:18px;flex-shrink:0">⏰</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:3px">
+                ${titolo}</div>
+              <div style="font-size:12px;color:#64748b;line-height:1.4">${testo}</div>
+              <button onclick="this.closest('[data-fm-reminder]').remove()"
+                style="margin-top:8px;font-size:11px;color:#f97316;background:none;
+                  border:none;cursor:pointer;padding:0;font-family:inherit;font-weight:600">
+                Chiudi
+              </button>
+            </div>
+            <button onclick="this.closest('[data-fm-reminder]').remove()"
+              style="background:none;border:none;cursor:pointer;color:#94a3b8;
+                font-size:18px;line-height:1;padding:0;flex-shrink:0">×</button>
+          `;
+          banner.setAttribute('data-fm-reminder', key);
+          document.body.appendChild(banner);
+          // Auto-chiudi dopo 30 secondi
+          setTimeout(function() { if (banner.parentNode) banner.remove(); }, 30000);
+        }
+      });
+    };
 
     // ── beforeunload: avvisa sempre quando l'utente prova a uscire ──────────
     const handleBeforeUnload = (e) => {
@@ -18536,9 +18678,11 @@ function App() {
     }
   };
 
-  // Logout con controllo notifiche non lette
+  // Logout con controllo notifiche non lette (include notifiche live calcolate in memoria)
   const handleLogout = async () => {
-    const unread = (sharedNotifiche||[]).filter(n=>!n.letto).length;
+    const unreadDB   = (sharedNotifiche||[]).filter(n=>!n.letto).length;
+    const unreadLive = window.__FM_NOTIF_COUNT__ || 0;
+    const unread     = Math.max(unreadDB, unreadLive);
     if (unread > 0) {
       const ok = window.confirm(`Hai ${unread} notific${unread===1?'a':'he'} non lett${unread===1?'a':'e'}.\nVuoi leggerle prima di uscire?`);
       if (ok) { setView("notifiche"); return; }
@@ -18547,6 +18691,7 @@ function App() {
     setUser(null); setSharedRuolo("admin"); setView("dashboard");
     setSchermata("login"); setPanKey(p=>p+1);
     try{window.__currentUserName__="";}catch(e){}
+    window.__FM_NOTIF_COUNT__ = 0;
   };
 
   return (
