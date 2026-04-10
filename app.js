@@ -17641,12 +17641,24 @@ const ROLE_PERMS = {
 };
 
 // Rileva se l'app è aperta come PWA (standalone) — usato per menu più snello
-const IS_PWA = window.matchMedia('(display-mode: standalone)').matches
-            || window.navigator.standalone === true; // iOS Safari
+// Rileva modalità PWA con più metodi:
+// 1. display-mode standalone (Chrome/Android installato)
+// 2. navigator.standalone (iOS Safari installato)
+// 3. Parametro URL ?pwa=1 (test manuale)
+// 4. SessionStorage (persiste durante la sessione PWA)
+const _isPwaMedia    = window.matchMedia('(display-mode: standalone)').matches;
+const _isPwaIOS      = window.navigator.standalone === true;
+const _isPwaParam    = new URLSearchParams(window.location.search).get('pwa') === '1';
+const _isPwaSession  = sessionStorage.getItem('fm_pwa') === '1';
+const IS_PWA = _isPwaMedia || _isPwaIOS || _isPwaParam || _isPwaSession;
+// Salva in sessione così rimane attivo anche navigando senza il parametro
+if (IS_PWA) sessionStorage.setItem('fm_pwa', '1');
 
-// Voci visibili in modalità PWA per ruolo (sottoinsieme snello)
+// ── Menu PWA (sottoinsieme snello per mobile) ────────────────────────────────
+// Modifica qui per personalizzare cosa appare nella versione PWA per ogni ruolo.
+// Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
 const PWA_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true, contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
   docente: {dashboard:true, allievi:false,docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
   allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
 };
