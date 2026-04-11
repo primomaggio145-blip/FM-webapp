@@ -17676,9 +17676,9 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
 // ═══════════════════════════════════════════════════════════════════════════════
 // Permessi navigazione per ruolo (sidebar): false = voce nascosta
 const ROLE_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true},
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true,  notifiche_settings:true},
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
 };
 
 // Rileva se l'app è aperta come PWA (standalone) — usato per menu più snello
@@ -17699,9 +17699,9 @@ if (IS_PWA) sessionStorage.setItem('fm_pwa', '1');
 // Modifica qui per personalizzare cosa appare nella versione PWA per ogni ruolo.
 // Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
 const PWA_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
-  docente: {dashboard:true, allievi:false,docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
+  docente: {dashboard:true, allievi:false,docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
 };
 
 const NAV_ITEMS = [
@@ -17724,7 +17724,8 @@ const NAV_ITEMS = [
   { id:"biblioteca",  label:"Manuali & Libri", icon:"courses"},
   { id:"utenti",      label:"Utenti",       icon:"shield"   },
   { id:"notifiche",   label:"Notifiche",    icon:"bell"     },
-  { id:"reminders",   label:"Reminders WA", icon:"phone"    },
+  { id:"reminders",          label:"Reminders WA",       icon:"phone"   },
+  { id:"notifiche_settings", label:"Config. Notifiche",  icon:"bell"    },
 ];
 
 const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction }) => {
@@ -17829,8 +17830,9 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
                 "Impostazioni"
               )
               , [
-                  {id:"schedaScuola", label:"Scheda scuola",  icon:"flag"},
-                  {id:"modulistica",  label:"Modulistica",    icon:"file"},
+                  {id:"schedaScuola",        label:"Scheda scuola",       icon:"flag"},
+                  {id:"modulistica",          label:"Modulistica",         icon:"file"},
+                  {id:"notifiche_settings",   label:"Config. Notifiche",   icon:"bell"},
                 ].map(item=>{
                   const active=current===item.id;
                   return React.createElement('button', {key:item.id, onClick:()=>setView(item.id),
@@ -18313,6 +18315,21 @@ function App() {
       }
     };
 
+    // ── Carica notifiche_config al boot (per il reminder checker) ────────────
+    (async function() {
+      try {
+        const sb = window.supabaseClient;
+        if (!sb) return;
+        const { data } = await sb.from('notifiche_config').select('*');
+        if (data && data.length > 0) {
+          const map = {};
+          data.forEach(r => { map[r.id] = { attivo: r.attivo !== false, anticipo_min: r.anticipo_min ?? 60 }; });
+          window.__FM_NOTIFICHE_CONFIG__ = map;
+          console.log('[FM] notifiche_config caricate:', Object.keys(map));
+        }
+      } catch(e) { console.warn('[FM] notifiche_config load error:', e?.message); }
+    })();
+
     // ── Polling leggero ogni 45s: solo dati del giorno + notifiche ────────────
     // Il refresh COMPLETO (tutti i record) rimane solo sul pulsante manuale ⟳
     let _polling = false;
@@ -18461,13 +18478,18 @@ function App() {
       lessons.forEach(function(l) {
         if (l.date !== nowStr) return;
         if (l.tipo === 'sala_prove') return;
-        // Orario lezione in ms
-        const [hh, mm] = (l.hour||'00:00').split(':').map(Number);
+        // Controlla se il tipo di notifica è abilitato
+        const cfgKey   = isColl(l) ? 'lezione_collettiva' : 'lezione_individuale';
+        const notifCfg = (window.__FM_NOTIFICHE_CONFIG__ || {})[cfgKey];
+        if (notifCfg && notifCfg.attivo === false) return;
+        const anticipoMin = (notifCfg && notifCfg.anticipo_min != null) ? notifCfg.anticipo_min : 60;
+        const marginLow   = anticipoMin - 5;
+        const marginHigh  = anticipoMin + 5;
         const todayMid = new Date(); todayMid.setHours(0,0,0,0);
         const lessonMs = todayMid.getTime() + hh*3600000 + mm*60000;
         const diffMin  = (lessonMs - nowMs) / 60000;
-        // Finestra: tra 55 e 65 minuti prima
-        if (diffMin < 55 || diffMin > 65) return;
+        // Finestra configurabile attorno all'anticipo scelto (±5 min)
+        if (diffMin < marginLow || diffMin > marginHigh) return;
         const key = l.id + '_' + nowStr;
         if (_reminderSent.has(key)) return;
 
@@ -18672,7 +18694,8 @@ function App() {
       case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo});
       case 'schedaScuola':return React.createElement(SchedaScuolaView, { config: sharedConfig});
       case 'modulistica': return React.createElement(ModulisticaView, {});
-      case 'notifiche':   return React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste});
+      case 'notifiche':          return React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste});
+      case 'notifiche_settings': return React.createElement(NotificheSettingsView, { ruolo: user?.ruolo||"admin" });
       case 'reminders':   return React.createElement(RemindersView, { ruolo: user?.ruolo||"admin" });
       default: return null;
     }
@@ -19352,6 +19375,217 @@ const ReminderWizard = ({ onClose, onSave }) => {
         )
       )
     )
+  );
+};
+
+// ─── NOTIFICHE IMPOSTAZIONI (Admin) ──────────────────────────────────────────
+// Configurazione notifiche in-app e push per ogni tipo di evento.
+// Salvato in tabella `notifiche_config` su Supabase (chiave per tipo).
+const NOTIFICHE_CONFIG_TYPES = [
+  {
+    id: 'lezione_individuale',
+    label: 'Lezioni individuali',
+    icon: 'user',
+    color: C.teal,
+    colorBg: C.tealBg,
+    colorBorder: C.tealBorder,
+    desc: 'Notifica 1 ora prima di ogni lezione individuale',
+    dest: 'Allievo + Admin',
+    defaultAnticipoMin: 60,
+  },
+  {
+    id: 'lezione_collettiva',
+    label: 'Lezioni collettive',
+    icon: 'users',
+    color: C.purple,
+    colorBg: C.purpleBg,
+    colorBorder: 'rgba(139,92,246,.3)',
+    desc: 'Notifica 1 ora prima di ogni lezione collettiva',
+    dest: 'Allievi iscritti + Admin',
+    defaultAnticipoMin: 60,
+  },
+  {
+    id: 'pagamento',
+    label: 'Pagamento quota',
+    icon: 'euro',
+    color: C.orange,
+    colorBg: C.orangeBg,
+    colorBorder: C.orangeBorder,
+    desc: 'Notifica in-app quando la quota mensile non è ancora pagata',
+    dest: 'Allievo + Admin',
+    defaultAnticipoMin: 0,
+  },
+  {
+    id: 'recupero',
+    label: 'Recuperi in scadenza',
+    icon: 'clock',
+    color: C.red,
+    colorBg: C.redBg,
+    colorBorder: C.redBorder,
+    desc: 'Notifica quando un recupero scade entro 3 giorni',
+    dest: 'Allievo + Admin',
+    defaultAnticipoMin: 0,
+  },
+];
+
+const NotificheSettingsView = ({ ruolo }) => {
+  if (ruolo !== 'admin') return null;
+
+  const [configs,  setConfigs]  = useState(() =>
+    NOTIFICHE_CONFIG_TYPES.reduce((a, t) => ({
+      ...a, [t.id]: { attivo: true, anticipo_min: t.defaultAnticipoMin }
+    }), {})
+  );
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState({});
+  const [toast,    setToast]    = useState(null);
+
+  const showToast = (ok, msg) => {
+    setToast({ ok, msg });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // Carica configurazioni da Supabase
+  React.useEffect(() => {
+    const sb = window.supabaseClient; if (!sb) { setLoading(false); return; }
+    sb.from('notifiche_config').select('*').then(({ data }) => {
+      if (data && data.length > 0) {
+        const map = {};
+        data.forEach(r => { map[r.id] = { attivo: r.attivo !== false, anticipo_min: r.anticipo_min ?? 60 }; });
+        setConfigs(p => ({ ...p, ...map }));
+      }
+      setLoading(false);
+    });
+  }, []);
+
+  const saveConfig = async (id, cfg) => {
+    setSaving(p => ({ ...p, [id]: true }));
+    const sb = window.supabaseClient;
+    if (sb) {
+      const { error } = await sb.from('notifiche_config').upsert(
+        { id, attivo: cfg.attivo, anticipo_min: cfg.anticipo_min, updated_at: new Date().toISOString() },
+        { onConflict: 'id' }
+      );
+      if (error) showToast(false, 'Errore: ' + error.message);
+      else showToast(true, 'Salvato');
+    }
+    setConfigs(p => ({ ...p, [id]: cfg }));
+    setSaving(p => ({ ...p, [id]: false }));
+    // Aggiorna il reminder checker in memoria
+    if (window.__FM_NOTIFICHE_CONFIG__) window.__FM_NOTIFICHE_CONFIG__[id] = cfg;
+    else window.__FM_NOTIFICHE_CONFIG__ = { [id]: cfg };
+  };
+
+  const toggleAttivo = (id) => {
+    const cfg = { ...configs[id], attivo: !configs[id].attivo };
+    saveConfig(id, cfg);
+  };
+
+  return React.createElement('div', { style: { padding: '28px 32px', maxWidth: 800, margin: '0 auto' } }
+
+    /* Header */
+    , React.createElement('div', { style: { marginBottom: 28 } }
+      , React.createElement('h1', { style: { fontFamily: "'Oswald',sans-serif", fontWeight: 600, fontSize: 26, letterSpacing: '0.02em', color: C.text, marginBottom: 6 } }, 'Impostazioni Notifiche')
+      , React.createElement('p', { style: { fontSize: 13, color: C.textMuted, lineHeight: 1.6 } }
+        , 'Configura quali notifiche vengono mostrate in-app e inviate come push (PWA). '
+        , 'Le notifiche disattivate non verranno mostrate ad alcun utente.'
+      )
+    )
+
+    /* Toast */
+    , toast && React.createElement('div', {
+        style: { position: 'fixed', top: 24, right: 24, zIndex: 9999, padding: '12px 20px',
+          borderRadius: 10, fontFamily: "'Open Sans',sans-serif", fontSize: 13, fontWeight: 600,
+          color: '#fff', background: toast.ok ? '#16a34a' : C.red,
+          boxShadow: '0 4px 20px rgba(0,0,0,.2)' }
+      }, toast.msg)
+
+    /* SQL setup hint */
+    , React.createElement('div', { style: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', marginBottom: 24, fontSize: 12, color: C.textMuted, lineHeight: 1.6 } }
+      , React.createElement('span', { style: { fontWeight: 700, color: C.text } }, '⚙️ Setup DB richiesto: ')
+      , 'Esegui su Supabase → SQL Editor:'
+      , React.createElement('pre', { style: { marginTop: 8, fontSize: 11, background: '#0f0f1a', color: '#a3e635', padding: '10px 14px', borderRadius: 8, overflowX: 'auto', fontFamily: 'monospace' } }
+        , `CREATE TABLE IF NOT EXISTS public.notifiche_config (
+  id text PRIMARY KEY,
+  attivo boolean DEFAULT true,
+  anticipo_min integer DEFAULT 60,
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE public.notifiche_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "admin_all" ON public.notifiche_config FOR ALL USING (true);`
+      )
+    )
+
+    /* Cards per tipo */
+    , loading
+      ? React.createElement('div', { style: { textAlign: 'center', padding: 40, color: C.textDim } }, '⏳ Caricamento...')
+      : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } }
+          , NOTIFICHE_CONFIG_TYPES.map(tipo => {
+              const cfg  = configs[tipo.id] || { attivo: true, anticipo_min: tipo.defaultAnticipoMin };
+              const isOn = cfg.attivo !== false;
+              const isSav = saving[tipo.id];
+
+              return React.createElement('div', { key: tipo.id,
+                  style: { background: C.surface, border: `1px solid ${isOn ? tipo.colorBorder : C.border}`,
+                    borderRadius: 14, overflow: 'hidden', opacity: isOn ? 1 : 0.85, transition: 'all .2s' } }
+
+                /* Card header */
+                , React.createElement('div', { style: { padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 } }
+                  , React.createElement('div', { style: { width: 42, height: 42, borderRadius: 10,
+                      background: isOn ? tipo.colorBg : C.bg, border: `1px solid ${isOn ? tipo.colorBorder : C.border}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } }
+                    , React.createElement(Ic, { n: tipo.icon, size: 18, stroke: isOn ? tipo.color : C.textMuted })
+                  )
+                  , React.createElement('div', { style: { flex: 1 } }
+                    , React.createElement('div', { style: { fontSize: 15, fontWeight: 700, color: C.text, display: 'flex', alignItems: 'center', gap: 8 } }
+                      , tipo.label
+                      , !isOn && React.createElement('span', { style: { fontSize: 10, background: C.redBg, color: C.red, border: `1px solid ${C.redBorder}`, borderRadius: 20, padding: '2px 8px', fontWeight: 600 } }, 'DISATTIVATA')
+                    )
+                    , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, marginTop: 2 } }, tipo.desc)
+                  )
+                  /* Badge destinatari */
+                  , React.createElement('span', { style: { fontSize: 11, background: tipo.colorBg, color: tipo.color,
+                      border: `1px solid ${tipo.colorBorder}`, borderRadius: 20, padding: '3px 10px',
+                      fontWeight: 600, marginRight: 8, whiteSpace: 'nowrap' } }, tipo.dest)
+                  /* Toggle */
+                  , React.createElement('button', {
+                      onClick: () => toggleAttivo(tipo.id),
+                      disabled: isSav,
+                      style: { width: 44, height: 24, borderRadius: 12, border: 'none', cursor: isSav ? 'wait' : 'pointer',
+                        background: isOn ? tipo.color : C.border, position: 'relative', transition: 'background .2s',
+                        flexShrink: 0, opacity: isSav ? .6 : 1 } }
+                    , React.createElement('div', { style: { position: 'absolute', top: 3, left: isOn ? 23 : 3,
+                        width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'left .2s',
+                        boxShadow: '0 1px 3px rgba(0,0,0,.2)' } })
+                  )
+                )
+
+                /* Configurazione anticipo (solo per lezioni) */
+                , (tipo.id === 'lezione_individuale' || tipo.id === 'lezione_collettiva') && isOn && (
+                  React.createElement('div', { style: { padding: '0 20px 16px', borderTop: `1px solid ${C.border}`, paddingTop: 14 } }
+                    , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 8 } }
+                      , '⏱ Anticipo notifica (minuti prima della lezione)'
+                    )
+                    , React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } }
+                      , [15, 30, 45, 60, 90, 120].map(min =>
+                          React.createElement('button', {
+                            key: min,
+                            onClick: () => saveConfig(tipo.id, { ...cfg, anticipo_min: min }),
+                            style: { padding: '6px 14px', borderRadius: 8,
+                              border: `1px solid ${cfg.anticipo_min === min ? tipo.color : C.border}`,
+                              background: cfg.anticipo_min === min ? tipo.colorBg : C.bg,
+                              color: cfg.anticipo_min === min ? tipo.color : C.textMuted,
+                              cursor: 'pointer', fontSize: 12, fontWeight: cfg.anticipo_min === min ? 700 : 400,
+                              fontFamily: "'Open Sans',sans-serif" } }
+                            , min === 60 ? '1h' : min === 90 ? '1h30' : min === 120 ? '2h' : `${min}m`
+                          )
+                        )
+                    )
+                  )
+                )
+              );
+            })
+        )
   );
 };
 
