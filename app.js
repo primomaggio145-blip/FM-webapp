@@ -18467,6 +18467,10 @@ function App() {
     var _pollNightCounter = 0;
 
     // ── Reminder lezioni: controlla ogni minuto se c'è una lezione tra 55-65 min ──
+    // Prima chiamata dopo 5 secondi (per dare tempo al DB di caricare le lezioni)
+    setTimeout(function() {
+      window.__FM_CHECK_LESSON_REMINDER__ && window.__FM_CHECK_LESSON_REMINDER__();
+    }, 5000);
     const _reminderSent = new Set(); // evita notifiche doppie per la stessa lezione
     window.__FM_CHECK_LESSON_REMINDER__ = function() {
       const nowMs  = Date.now();
@@ -18485,6 +18489,10 @@ function App() {
         const anticipoMin = (notifCfg && notifCfg.anticipo_min != null) ? notifCfg.anticipo_min : 60;
         const marginLow   = anticipoMin - 5;
         const marginHigh  = anticipoMin + 5;
+        // Orario lezione
+        const hhmmParts = (l.hour||'00:00').split(':').map(Number);
+        const hh = hhmmParts[0] || 0;
+        const mm = hhmmParts[1] || 0;
         const todayMid = new Date(); todayMid.setHours(0,0,0,0);
         const lessonMs = todayMid.getTime() + hh*3600000 + mm*60000;
         const diffMin  = (lessonMs - nowMs) / 60000;
