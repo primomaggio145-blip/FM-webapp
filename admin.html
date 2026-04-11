@@ -647,9 +647,15 @@
       <div class="sidebar-item" onclick="showPanel('concerti')">
         <span class="sidebar-item-icon">🎼</span> Concerti & Eventi
       </div>
+      <div class="sidebar-item" onclick="showPanel('attivita')">
+        <span class="sidebar-item-icon">🎭</span> Attività Interne
+      </div>
     </div>
     <div class="sidebar-section">
       <div class="sidebar-section-label">Impostazioni</div>
+      <div class="sidebar-item" onclick="showPanel('menu')">
+        <span class="sidebar-item-icon">🧭</span> Menu Navigazione
+      </div>
       <div class="sidebar-item" onclick="showPanel('contatti')">
         <span class="sidebar-item-icon">📍</span> Contatti & Orari
       </div>
@@ -983,6 +989,30 @@
       </div>
     </div>
 
+    <!-- ATTIVITÀ INTERNE -->
+    <div class="panel" id="panel-attivita">
+      <div class="panel-header">
+        <h2>Attività Interne</h2>
+        <p>Modifica titolo e descrizione di ogni voce nella sezione "Attività Interne" del sito. Puoi anche nascondere singole voci senza eliminare la sezione.</p>
+      </div>
+      <div id="attivita-standalone-list"></div>
+      <button class="btn-save" onclick="saveAttivitaStandalone()" style="margin-top:20px;padding:13px 36px;">
+        💾 Salva Attività
+      </button>
+    </div>
+
+    <!-- MENU NAVIGAZIONE -->
+    <div class="panel" id="panel-menu">
+      <div class="panel-header">
+        <h2>Menu Navigazione</h2>
+        <p>Scegli quali voci mostrare nel menu dell'header e nel menu mobile del sito. Le voci nascoste scompaiono dalla barra di navigazione ma le sezioni rimangono accessibili via link diretto.</p>
+      </div>
+      <div id="menu-nav-list"></div>
+      <button class="btn-save" onclick="saveMenuNav()" style="margin-top:20px;padding:13px 36px;">
+        💾 Salva Menu
+      </button>
+    </div>
+
   </div><!-- /main-content -->
 </div><!-- /admin-app -->
 
@@ -1085,6 +1115,7 @@ function initSupabase() {
       return false;
     }
     db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    window._sbClient = db; // esposto per saveMenuNav e saveAttivitaStandalone
     DB_READY = true;
     console.log('✅ Supabase connesso');
     return true;
@@ -1156,6 +1187,10 @@ const DEFAULT_DATA = {
     corsi_desc: 'Docenti qualificati e piani di studio personalizzati per studenti di ogni età e livello.',
     attivita_desc: "Molto più di una scuola: una comunità musicale viva dove crescere insieme.",
     stat_studenti: '150+', stat_docenti: '20+', stat_anni: '30', anno_fond: '1995'
+  },
+  nav: {
+    corsi: true, attivita: true, concerti: true,
+    complementari: true, social: true, contatti: true, 'area-riservata': true
   }
 };
 
@@ -1994,7 +2029,7 @@ function updateLastSave() {
 }
 
 // ─────────────── NAVIGATION ───────────────
-const panelTitles = { dashboard:'Dashboard', corsi:'Corsi Principali', complementari:'Corsi Complementari', concerti:'Concerti & Eventi', contatti:'Contatti & Orari', testi:'Testi del Sito', visibilita:'Ordine & Visibilità', social:'Social & Gallery' };
+const panelTitles = { dashboard:'Dashboard', corsi:'Corsi Principali', complementari:'Corsi Complementari', concerti:'Concerti & Eventi', contatti:'Contatti & Orari', testi:'Testi del Sito', visibilita:'Ordine & Visibilità', social:'Social & Gallery', attivita:'Attività Interne', menu:'Menu Navigazione' };
 function showPanel(id) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
@@ -2009,6 +2044,8 @@ function showPanel(id) {
   // Render pannello visibilità quando viene aperto
   if (id === 'visibilita') renderVisibilita();
   if (id === 'social') loadSocial();
+  if (id === 'attivita') renderAttivitaStandalone();
+  if (id === 'menu') renderMenuNav();
   updateStats();
 }
 
@@ -2271,6 +2308,132 @@ async function saveTesti() {
   await saveData();
 }
 
+// ─────────────── ATTIVITÀ STANDALONE ───────────────
+function renderAttivitaStandalone() {
+  if (!DATA.attivita || !DATA.attivita.length) {
+    DATA.attivita = [
+      { titolo:'Ensemble e Orchestra', desc:'Ensemble da camera, orchestra giovanile e band rock: suonare insieme è la vera essenza della musica.', visible:true },
+      { titolo:'Saggi di Fine Anno', desc:'Ogni anno uno spettacolo dedicato agli allievi: crescita sul palcoscenico e condivisione con le famiglie.', visible:true },
+      { titolo:'Open Day & Prove Libere', desc:'Giornate aperte alla comunità per conoscere la scuola e provare gli strumenti gratuitamente.', visible:true },
+      { titolo:'Workshop Tematici', desc:'Incontri intensivi su improvvisazione, teoria, home recording e molto altro ancora.', visible:true },
+      { titolo:'Coro Associativo', desc:"Il coro misto aperto a tutti i livelli: un'esperienza di armonia collettiva e musica corale.", visible:true },
+    ];
+  }
+  const container = document.getElementById('attivita-standalone-list');
+  if (!container) return;
+  let html = '<div style="display:flex;flex-direction:column;gap:14px;">';
+  DATA.attivita.forEach((a, i) => {
+    const vis = a.visible !== false;
+    html += `
+    <div style="background:#fff;border:1px solid ${vis?'#c7d7f0':'#f5c6c6'};border-left:4px solid ${vis?'#1a4fa0':'#e74c3c'};
+                border-radius:0;padding:16px 20px;display:flex;gap:14px;align-items:flex-start;
+                opacity:${vis?1:0.55};transition:all .2s;">
+      <div style="flex:1;min-width:0;">
+        <div style="margin-bottom:8px;">
+          <label style="font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#6b7280;display:block;margin-bottom:4px;">
+            Titolo voce ${i+1}
+          </label>
+          <input type="text" value="${a.titolo.replace(/"/g,'&quot;')}" placeholder="Titolo"
+            oninput="DATA.attivita[${i}].titolo=this.value"
+            style="width:100%;padding:9px 12px;border:1px solid #d1d5db;font-family:'Open Sans',sans-serif;font-size:14px;font-weight:600;outline:none;">
+        </div>
+        <div>
+          <label style="font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:#6b7280;display:block;margin-bottom:4px;">
+            Descrizione
+          </label>
+          <textarea rows="2" placeholder="Descrizione"
+            oninput="DATA.attivita[${i}].desc=this.value"
+            style="width:100%;padding:9px 12px;border:1px solid #d1d5db;font-family:'Open Sans',sans-serif;font-size:13px;resize:vertical;outline:none;">${a.desc}</textarea>
+        </div>
+      </div>
+      <button onclick="DATA.attivita[${i}].visible=!DATA.attivita[${i}].visible;renderAttivitaStandalone()"
+        title="${vis?'Nascondi':'Mostra'} questa voce"
+        style="flex-shrink:0;width:40px;height:40px;border:1.5px solid ${vis?'#1a4fa0':'#e74c3c'};
+               background:${vis?'#eef2fb':'#fef2f2'};color:${vis?'#1a4fa0':'#e74c3c'};
+               border-radius:6px;cursor:pointer;font-size:16px;margin-top:20px;">
+        ${vis?'👁':'🙈'}
+      </button>
+    </div>`;
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+async function saveAttivitaStandalone() {
+  // Salva in sito_attivita → aggiorna index.html in tempo reale
+  const db = window._sbClient;
+  if (!db) { showToast('DB non connesso', true); return; }
+  // Prima elimina tutte le righe esistenti, poi reinserisce
+  await db.from('sito_attivita').delete().neq('ordine', -99999);
+  const rows = DATA.attivita.map((a, i) => ({
+    titolo:     a.titolo,
+    descrizione: a.desc || a.descrizione || '',
+    visible:    a.visible !== false,
+    ordine:     i,
+  }));
+  const { error } = await db.from('sito_attivita').insert(rows);
+  if (error) { showToast('Errore: ' + error.message, true); return; }
+  await saveData();
+  showToast('Attività salvate! Il sito si aggiorna in tempo reale.');
+}
+
+// ─────────────── MENU NAVIGAZIONE ───────────────
+const NAV_VOCI = [
+  { key:'corsi',          label:'Corsi',          desc:'Link alla sezione Corsi Principali' },
+  { key:'attivita',       label:'Attività',        desc:'Link alla sezione Attività Interne' },
+  { key:'concerti',       label:'Concerti',        desc:'Link alla sezione Concerti & Eventi' },
+  { key:'complementari',  label:'Complementari',   desc:'Link alla sezione Corsi Complementari' },
+  { key:'social',         label:'Gallery',         desc:'Link alla sezione Social & Gallery' },
+  { key:'contatti',       label:'Contatti',        desc:'Link alla sezione Contatti' },
+  { key:'area-riservata', label:'Area Riservata',  desc:'Pulsante accesso area riservata (rosso)' },
+];
+
+function renderMenuNav() {
+  if (!DATA.nav) DATA.nav = {};
+  const container = document.getElementById('menu-nav-list');
+  if (!container) return;
+  let html = `
+  <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#1e40af;line-height:1.6;">
+    ℹ️ Le voci disattivate scompaiono dal menu dell'header e dal menu mobile del sito.
+    Dopo aver salvato, usa <strong>Ordine & Visibilità → Genera index.html</strong> per applicare le modifiche al sito.
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px;">`;
+  NAV_VOCI.forEach(voce => {
+    const vis = DATA.nav[voce.key] !== false;
+    html += `
+    <div style="background:#fff;border:1px solid ${vis?'#c7d7f0':'#f5c6c6'};border-left:4px solid ${vis?'#1a4fa0':'#e74c3c'};
+                border-radius:0;padding:14px 20px;display:flex;align-items:center;gap:16px;
+                opacity:${vis?1:0.6};transition:all .2s;">
+      <div style="flex:1;">
+        <div style="font-family:'Oswald',sans-serif;font-size:1rem;font-weight:700;color:${vis?'#123a7a':'#e74c3c'};
+                    text-transform:uppercase;letter-spacing:.04em;">${voce.label}</div>
+        <div style="font-size:12px;color:#9ca3af;margin-top:2px;">${voce.desc}</div>
+      </div>
+      <button onclick="DATA.nav['${voce.key}']=!((DATA.nav['${voce.key}']!==false));renderMenuNav()"
+        style="padding:8px 18px;border:1.5px solid ${vis?'#1a4fa0':'#e74c3c'};
+               background:${vis?'#eef2fb':'#fef2f2'};color:${vis?'#1a4fa0':'#e74c3c'};
+               border-radius:6px;cursor:pointer;font-size:13px;font-weight:700;font-family:'Oswald',sans-serif;
+               letter-spacing:.06em;text-transform:uppercase;transition:all .15s;white-space:nowrap;">
+        ${vis?'👁 Visibile':'🙈 Nascosta'}
+      </button>
+    </div>`;
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+async function saveMenuNav() {
+  // Salva nav_visibili in sito_config → aggiorna index.html in tempo reale
+  const db = window._sbClient;
+  if (!db) { showToast('DB non connesso', true); return; }
+  const nav = DATA.nav || {};
+  const { error } = await db.from('sito_config')
+    .upsert({ chiave: 'nav_visibili', valore: JSON.stringify(nav) }, { onConflict: 'chiave' });
+  if (error) { showToast('Errore: ' + error.message, true); return; }
+  await saveData(); // salva anche localmente
+  showToast('Menu salvato! Il sito si aggiorna in tempo reale.');
+}
+
 function updateStats() {
   const sc  = document.getElementById('stat-concerti');
   const sk  = document.getElementById('stat-corsi');
@@ -2397,6 +2560,40 @@ function generateSiteHTML() {
     </div>`;
   }).join('');
 
+  // Genera le voci del menu nav in base a DATA.nav
+  const nav = d.nav || {};
+  const navVociDef = [
+    { key:'corsi',          label:'Corsi',         section:'corsi' },
+    { key:'attivita',       label:'Attività',       section:'attivita' },
+    { key:'concerti',       label:'Concerti',       section:'concerti' },
+    { key:'complementari',  label:'Complementari',  section:'complementari' },
+    { key:'social',         label:'Gallery',        section:'social' },
+    { key:'contatti',       label:'Contatti',       section:'contatti' },
+  ];
+  const navLinksHTML = navVociDef
+    .filter(v => nav[v.key] !== false)
+    .map(v => `<li><a onclick="scrollToSection('${v.section}')">${v.label}</a></li>`)
+    .join('\n    ');
+  const navLinksMobileHTML = navVociDef
+    .filter(v => nav[v.key] !== false)
+    .map(v => `<a onclick="scrollToSection('${v.section}');closeMobileMenu()">${v.label}</a>`)
+    .join('\n  ');
+  const showAreaRiservata = nav['area-riservata'] !== false;
+  const navAreaHTML = showAreaRiservata
+    ? `<li><a class="btn-accedi" onclick="scrollToSection('area-riservata')">Area Riservata</a></li>`
+    : '';
+  const navAreaMobileHTML = showAreaRiservata
+    ? `<a onclick="scrollToSection('area-riservata');closeMobileMenu()">Area Riservata</a>`
+    : '';
+
+  // Genera le attività interne (solo quelle visibili)
+  const attivitaVisibili = (d.attivita || []).filter(a => a.visible !== false);
+  const attivitaHTML = attivitaVisibili.map((a, i) => `
+      <div class="attivita-item${i===0?' active':''}" onclick="setActiveAttivita(this)">
+        <span class="attivita-num">0${i+1}</span>
+        <div class="attivita-info"><h3>${a.titolo}</h3><p>${a.desc}</p></div>
+      </div>`).join('');
+
   // Read the logo from localStorage (saved when admin.html was first loaded)
   const logoSrc = LOGO_SRC; // from data element
 
@@ -2413,6 +2610,11 @@ function generateSiteHTML() {
     .replace('{{CORSI_GRID}}', corsiHTML)
     .replace('{{COMP_GRID}}', compHTML)
     .replace('{{CONCERTI_GRID}}', concertiHTML)
+    .replace('{{ATTIVITA_LIST}}', attivitaHTML)
+    .replace('{{NAV_LINKS}}', navLinksHTML)
+    .replace('{{NAV_AREA}}', navAreaHTML)
+    .replace('{{NAV_LINKS_MOBILE}}', navLinksMobileHTML)
+    .replace('{{NAV_AREA_MOBILE}}', navAreaMobileHTML)
     .replace('{{ADDR}}', `${c.addr1}<br>${c.city} (${c.prov})`)
     .replace('{{PHONE}}', c.phone)
     .replace('{{EMAIL}}', c.email)
