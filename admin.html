@@ -2,7 +2,9 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Admin — Futuro Musica</title>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
@@ -1288,6 +1290,7 @@ async function loadDataFromSupabase() {
   };
   try { DATA.sezioni = JSON.parse(cfg.sezioni_visibili || '{}'); } catch(e) { DATA.sezioni = {}; }
   try { DATA.ordine  = JSON.parse(cfg.sezioni_ordine  || '[]'); } catch(e) { DATA.ordine  = []; }
+  try { DATA.nav     = JSON.parse(cfg.nav_visibili    || '{}'); } catch(e) { DATA.nav  = {}; }
 
   // Attività
   DATA.attivita = (attivitaRes.data || []).map(r => ({
@@ -1379,6 +1382,7 @@ async function saveDataToSupabase() {
     { chiave: 'contatti_orari_note',valore: ct.orari_note || '' },
     { chiave: 'sezioni_visibili',   valore: JSON.stringify(DATA.sezioni || {}) },
     { chiave: 'sezioni_ordine',     valore: JSON.stringify(DATA.ordine || []) },
+    { chiave: 'nav_visibili',       valore: JSON.stringify(DATA.nav || {}) },
   ];
   for (const u of updates) {
     await db.from('sito_config').upsert({ ...u, updated_at: new Date().toISOString() }, { onConflict: 'chiave' });
@@ -2395,7 +2399,7 @@ function renderMenuNav() {
   let html = `
   <div style="background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;color:#1e40af;line-height:1.6;">
     ℹ️ Le voci disattivate scompaiono dal menu dell'header e dal menu mobile del sito.
-    Dopo aver salvato, usa <strong>Ordine & Visibilità → Genera index.html</strong> per applicare le modifiche al sito.
+    Le modifiche sono applicate in <strong>tempo reale</strong> a tutti gli utenti non appena salvi.
   </div>
   <div style="display:flex;flex-direction:column;gap:10px;">`;
   NAV_VOCI.forEach(voce => {
