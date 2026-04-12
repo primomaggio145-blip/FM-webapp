@@ -19508,6 +19508,92 @@ const NotificheSettingsView = ({ ruolo }) => {
           boxShadow: '0 4px 20px rgba(0,0,0,.2)' }
       }, toast.msg)
 
+    /* ── Sezione TEST notifica ─────────────────────────────────────── */
+    , React.createElement('div', { style: { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 24px', marginBottom: 24 } }
+      , React.createElement('div', { style: { fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6 } }, '🔔 Test notifica push')
+      , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, marginBottom: 16, lineHeight: 1.6 } }
+        , 'Invia subito una notifica di prova per verificare che il sistema funzioni, senza attendere l\'orario delle lezioni. '
+        , 'In modalità PWA arriva come notifica push nativa. Sul desktop appare il banner arancione.'
+      )
+      , React.createElement('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap' } }
+        /* Test banner desktop */
+        , React.createElement('button', {
+            onClick: () => {
+              // Mostra banner desktop direttamente
+              const existing = document.querySelector('[data-fm-reminder]');
+              if (existing) existing.remove();
+              const banner = document.createElement('div');
+              banner.style.cssText = [
+                'position:fixed','top:20px','right:20px','z-index:99999',
+                'background:#fff','border:1px solid #e2e8f0','border-radius:12px',
+                'box-shadow:0 8px 32px rgba(0,0,0,0.18)','padding:16px 20px',
+                'display:flex','align-items:flex-start','gap:12px','max-width:320px',
+                'font-family:Open Sans,sans-serif','animation:slideIn 0.3s ease',
+              ].join(';');
+              banner.innerHTML = `
+                <div style="width:36px;height:36px;border-radius:10px;background:#fff7ed;border:1px solid #fed7aa;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">⏰</div>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:3px">⏰ Lezione tra 1 ora [TEST]</div>
+                  <div style="font-size:12px;color:#64748b;line-height:1.4">Pianoforte con Prof. Bianchi alle 15:30</div>
+                  <button onclick="this.closest('[data-fm-reminder]').remove()" style="margin-top:8px;font-size:11px;color:#f97316;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;font-weight:600">Chiudi</button>
+                </div>
+                <button onclick="this.closest('[data-fm-reminder]').remove()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:18px;line-height:1;padding:0;flex-shrink:0">×</button>
+              `;
+              banner.setAttribute('data-fm-reminder', 'test');
+              document.body.appendChild(banner);
+              setTimeout(() => { if (banner.parentNode) banner.remove(); }, 30000);
+              showToast(true, '✅ Banner test mostrato!');
+            },
+            style: { padding: '10px 18px', borderRadius: 10, border: `1px solid ${C.border}`,
+              background: C.bg, color: C.text, cursor: 'pointer', fontSize: 13,
+              fontFamily: "'Open Sans',sans-serif", fontWeight: 600 }
+          }, '🖥️ Test banner desktop')
+
+        /* Test push PWA */
+        , React.createElement('button', {
+            onClick: async () => {
+              if (!('Notification' in window)) {
+                showToast(false, 'Notifiche non supportate da questo browser');
+                return;
+              }
+              if (Notification.permission === 'denied') {
+                showToast(false, 'Notifiche bloccate — abilitale nelle impostazioni del browser');
+                return;
+              }
+              const perm = Notification.permission === 'granted'
+                ? 'granted'
+                : await Notification.requestPermission();
+              if (perm !== 'granted') {
+                showToast(false, 'Permesso notifiche non concesso');
+                return;
+              }
+              // Invia via service worker se disponibile (PWA), altrimenti Notification diretta
+              const sendNotif = () => new Notification('⏰ Lezione tra 1 ora [TEST]', {
+                body: 'Pianoforte con Prof. Bianchi alle 15:30',
+                icon: '/FM-webapp/icons/icon-192.png',
+              });
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.ready.then(reg => {
+                  reg.showNotification('⏰ Lezione tra 1 ora [TEST]', {
+                    body: 'Pianoforte con Prof. Bianchi alle 15:30',
+                    icon: '/FM-webapp/icons/icon-192.png',
+                    badge: '/FM-webapp/icons/icon-192.png',
+                    tag: 'fm-test',
+                  });
+                }).catch(sendNotif);
+              } else {
+                sendNotif();
+              }
+              showToast(true, '✅ Notifica push inviata!');
+            },
+            style: { padding: '10px 18px', borderRadius: 10,
+              border: `1px solid ${C.orange}`, background: C.orangeBg,
+              color: C.orange, cursor: 'pointer', fontSize: 13,
+              fontFamily: "'Open Sans',sans-serif", fontWeight: 600 }
+          }, '📱 Test push notifica')
+      )
+    )
+
     /* SQL setup hint */
     , React.createElement('div', { style: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', marginBottom: 24, fontSize: 12, color: C.textMuted, lineHeight: 1.6 } }
       , React.createElement('span', { style: { fontWeight: 700, color: C.text } }, '⚙️ Setup DB richiesto: ')
