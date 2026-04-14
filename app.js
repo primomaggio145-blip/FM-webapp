@@ -17699,7 +17699,7 @@ if (IS_PWA) sessionStorage.setItem('fm_pwa', '1');
 // Modifica qui per personalizzare cosa appare nella versione PWA per ogni ruolo.
 // Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
 const PWA_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:true},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
   docente: {dashboard:true, allievi:false,docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
   allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
 };
@@ -20294,6 +20294,8 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
   const [marking, setMarking] = useState(false);
   const [allNotifiche, setAllNotifiche] = useState(null);
   const [loading, setLoading] = useState(false);
+  // Tiene traccia dei live ID già "letti" durante la sessione
+  const [dismissedLiveIds, setDismissedLiveIds] = useState(new Set());
 
   const myId      = appUser?.allievoId || appUser?.docenteId || null;
   const myNome    = appUser?.nome || '';
@@ -20433,8 +20435,10 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
   // Unione DB + live, ordinate per data
   const mieNotifiche = React.useMemo(function() {
     const db = allNotifiche !== null ? allNotifiche : _filterNotifiche(propNotifiche);
-    return [...liveNotifiche, ...db].sort(function(a,b){ return (b.created_at||'').localeCompare(a.created_at||''); });
-  }, [allNotifiche, propNotifiche, liveNotifiche]);
+    // Le live vengono filtrate: se l'ID è nei dismissed, vengono mostrate come lette
+    const live = liveNotifiche.map(n => dismissedLiveIds.has(n.id) ? {...n, letto:true} : n);
+    return [...live, ...db].sort(function(a,b){ return (b.created_at||'').localeCompare(a.created_at||''); });
+  }, [allNotifiche, propNotifiche, liveNotifiche, dismissedLiveIds]);
 
   const nonLette = mieNotifiche.filter(n => !n.letto);
   const mostrate = filter === 'non_lette' ? nonLette : mieNotifiche;
@@ -20442,11 +20446,21 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
   const markAllRead = async () => {
     if (!nonLette.length) return;
     setMarking(true);
+
+    // Separa notifiche live (no DB) da quelle reali del DB
+    const liveIds = nonLette.filter(n => n._isLive).map(n => n.id);
+    const dbIds   = nonLette.filter(n => !n._isLive && n.id).map(n => n.id);
+
+    // Marca le live come lette nello stato locale (non esistono su DB)
+    if (liveIds.length > 0) {
+      setDismissedLiveIds(prev => new Set([...prev, ...liveIds]));
+    }
+
+    // Marca le DB come lette su Supabase
     const sb = window.supabaseClient;
-    if (sb) {
-      const ids = nonLette.map(n=>n.id);
-      await sb.from('notifiche').update({letto:true}).in('id', ids);
-      const updater = p => (p||[]).map(n => ids.includes(n.id) ? {...n, letto:true} : n);
+    if (sb && dbIds.length > 0) {
+      await sb.from('notifiche').update({letto:true}).in('id', dbIds);
+      const updater = p => (p||[]).map(n => dbIds.includes(n.id) ? {...n, letto:true} : n);
       setAllNotifiche(updater);
       setNotifiche(updater);
     }
@@ -20455,6 +20469,11 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
 
   const markOneRead = async (n) => {
     if (n.letto) return;
+    if (n._isLive) {
+      // Notifica live: segna come letta solo in stato locale
+      setDismissedLiveIds(prev => new Set([...prev, n.id]));
+      return;
+    }
     const sb = window.supabaseClient;
     if (sb) await sb.from('notifiche').update({letto:true}).eq('id', n.id);
     const updater = p => (p||[]).map(x => x.id===n.id ? {...x, letto:true} : x);
