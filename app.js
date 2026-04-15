@@ -17728,7 +17728,7 @@ const NAV_ITEMS = [
   { id:"notifiche_settings", label:"Config. Notifiche",  icon:"bell"    },
 ];
 
-const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction }) => {
+const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction }) => {
   const ruoloHex = {admin:C.gold, docente:C.teal, allievo:C.blue}[_optionalChain([user, 'optionalAccess', _89 => _89.ruolo])] || C.gold;
   const ini = _optionalChain([user, 'optionalAccess', _90 => _90.nome]) ? user.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase() : "??";
   // Primary nav items shown in bottom bar (most used)
@@ -17908,14 +17908,32 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
               )
             )
           )
-          , React.createElement('button', { onClick: onLogout,
-            style: {width:"100%",padding:"7px 0",borderRadius:0,border:"1px solid rgba(255,255,255,0.25)",
-              background:"transparent",color:"rgba(255,255,255,0.7)",fontSize:12,cursor:"pointer",
-              display:"flex",alignItems:"center",justifyContent:"center",gap:6,
-              fontFamily:"'Open Sans',sans-serif",transition:"all 0.15s"},
-            onMouseEnter: e=>{e.currentTarget.style.borderColor="#8c1818";e.currentTarget.style.background="#8c1818";e.currentTarget.style.color="#fff";},
-            onMouseLeave: e=>{e.currentTarget.style.borderColor="rgba(255,255,255,0.25)";e.currentTarget.style.background="transparent";e.currentTarget.style.color="rgba(255,255,255,0.7)";}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10633}}, "Esci"
-
+          /* ── Due pulsanti uscita ── */
+          , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:4} }
+            /* Esci senza logout — azione principale */
+            , React.createElement('button', {
+                onClick: onEsciSenzaLogout,
+                title: "Chiude l'app ma mantiene la sessione attiva — al prossimo accesso entri direttamente",
+                style: {width:"100%",padding:"9px 0",borderRadius:0,border:"1px solid rgba(255,255,255,0.4)",
+                  background:"rgba(255,255,255,0.08)",color:"rgba(255,255,255,0.9)",fontSize:13,cursor:"pointer",
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:6,
+                  fontFamily:"'Open Sans',sans-serif",fontWeight:600,transition:"all 0.15s"},
+                onMouseEnter: e=>{e.currentTarget.style.background="rgba(255,255,255,0.18)";e.currentTarget.style.borderColor="rgba(255,255,255,0.7)";e.currentTarget.style.color="#fff";},
+                onMouseLeave: e=>{e.currentTarget.style.background="rgba(255,255,255,0.08)";e.currentTarget.style.borderColor="rgba(255,255,255,0.4)";e.currentTarget.style.color="rgba(255,255,255,0.9)";},
+              }, "✕ Esci"
+            )
+            /* Logout — azione secondaria */
+            , React.createElement('button', {
+                onClick: onLogout,
+                title: "Esci e disconnetti l'account",
+                style: {width:"100%",padding:"5px 0",borderRadius:0,border:"none",
+                  background:"transparent",color:"rgba(255,255,255,0.35)",fontSize:10,cursor:"pointer",
+                  display:"flex",alignItems:"center",justifyContent:"center",gap:4,
+                  fontFamily:"'Open Sans',sans-serif",transition:"all 0.15s", letterSpacing:"0.03em"},
+                onMouseEnter: e=>{e.currentTarget.style.color="#ff8080";},
+                onMouseLeave: e=>{e.currentTarget.style.color="rgba(255,255,255,0.35)";},
+              }, "↩ Logout"
+            )
           )
         )
       )
@@ -17944,13 +17962,13 @@ const Sidebar = ({ current, setView, user, onLogout, settingsDrawerOpen, onSetti
           );
         })
         /* "Altro" button for remaining items */
-        , React.createElement(MobileMoreMenu, { current: current, setView: setView, extraItems: FILTERED_ITEMS.slice(5), onLogout: onLogout, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10669}})
+        , React.createElement(MobileMoreMenu, { current: current, setView: setView, extraItems: FILTERED_ITEMS.slice(5), onLogout: onLogout, onEsciSenzaLogout: onEsciSenzaLogout, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10669}})
       )
     )
   );
 };
 
-const MobileMoreMenu = ({ current, setView, extraItems, onLogout }) => {
+const MobileMoreMenu = ({ current, setView, extraItems, onLogout, onEsciSenzaLogout }) => {
   const [open, setOpen] = useState(false);
   const activeExtra = extraItems.some(i => i.id === current);
   return (
@@ -17982,12 +18000,21 @@ const MobileMoreMenu = ({ current, setView, extraItems, onLogout }) => {
             );
           })
           , React.createElement('div', { style: {height:1,background:C.border,margin:"8px 0"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10706}})
-          , React.createElement('button', { onClick: onLogout,
+          /* Esci (azione principale — senza logout) */
+          , React.createElement('button', { onClick: ()=>{ setOpen(false); onEsciSenzaLogout && onEsciSenzaLogout(); },
             style: {width:"100%",display:"flex",alignItems:"center",gap:14,
               padding:"14px 20px",border:"none",background:"transparent",
-              cursor:"pointer",color:C.red,
-              fontFamily:"'Open Sans',sans-serif",fontSize:14,textAlign:"left"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10707}}
-            , React.createElement(Ic, { n: "x", size: 18, stroke: C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10712}}), "Esci"
+              cursor:"pointer",color:C.text,
+              fontFamily:"'Open Sans',sans-serif",fontSize:14,fontWeight:600,textAlign:"left"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10707}}
+            , React.createElement(Ic, { n: "x", size: 18, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10712}}), "✕ Esci"
+          )
+          /* Logout — azione secondaria */
+          , React.createElement('button', { onClick: ()=>{ setOpen(false); onLogout && onLogout(); },
+            style: {width:"100%",display:"flex",alignItems:"center",gap:14,
+              padding:"10px 20px",border:"none",background:"transparent",
+              cursor:"pointer",color:C.textMuted,
+              fontFamily:"'Open Sans',sans-serif",fontSize:12,textAlign:"left"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10713}}
+            , React.createElement(Ic, { n: "log-out", size: 16, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10714}}), "↩ Logout"
           )
         )
       )
@@ -18725,11 +18752,26 @@ function App() {
     window.__FM_NOTIF_COUNT__ = 0;
   };
 
+  // Esci senza fare signOut — la sessione rimane attiva per le notifiche PWA
+  // La prossima apertura dell'app riprende automaticamente la sessione
+  const handleEsciSenzaLogout = () => {
+    if (IS_PWA) {
+      // In PWA: minimizza tornando alla home dello smartphone
+      window.history.back();
+    } else {
+      // Su browser desktop: chiude il tab se possibile, altrimenti avvisa
+      const closed = window.close();
+      if (closed === false || closed === undefined) {
+        window.alert('Puoi chiudere questo tab manualmente (Ctrl+W / Cmd+W).\nLa sessione rimarrà attiva — al prossimo accesso entrerai direttamente.');
+      }
+    }
+  };
+
   return (
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
       , React.createElement('div', { style: {display:"flex",height:"100vh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , settingsDrawerOpen && React.createElement(SettingsDrawer, {
             open: settingsDrawerOpen,
             onClose: ()=>setSettingsDrawerOpen(false),
