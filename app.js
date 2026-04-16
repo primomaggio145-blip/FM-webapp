@@ -17776,7 +17776,7 @@ if (IS_PWA) sessionStorage.setItem('fm_pwa', '1');
 // Modifica qui per personalizzare cosa appare nella versione PWA per ogni ruolo.
 // Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
 const PWA_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:true},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
   docente: {dashboard:true, allievi:false,docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
   allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
 };
@@ -19717,22 +19717,23 @@ const NotificheSettingsView = ({ ruolo }) => {
               showToast(true, '⏳ Invio via server...');
               try {
                 const sb = window.supabaseClient;
-                const session = sb ? (await sb.auth.getSession())?.data?.session : null;
-                const token = session?.access_token ||
-                  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjE0NDAsImV4cCI6MjA4NzkzNzQ0MH0.ScXeqKD73hu1zMwVWppybmNRqCtKWnR9C_pfNMjwQio';
-                const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-push', {
-                  method: 'POST',
-                  headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ test: true }),
+                if (!sb) { showToast(false, 'Supabase non inizializzato'); return; }
+                // Usa functions.invoke — gestisce automaticamente auth e chiavi
+                const { data, error } = await sb.functions.invoke('send-push', {
+                  body: { test: true },
                 });
-                const json = await res.json();
-                if (json.ok) {
-                  showToast(true, `✅ Server push inviato a ${json.sent}/${json.total} dispositivi`);
+                if (error) throw error;
+                if (data?.ok) {
+                  if (data.total === 0 || data.message) {
+                    showToast(true, '⚠️ ' + (data.message || 'Nessun dispositivo registrato — attiva prima le notifiche dalla PWA'));
+                  } else {
+                    showToast(true, `✅ Push inviato a ${data.sent}/${data.total} dispositivi`);
+                  }
                 } else {
-                  showToast(false, 'Errore: ' + (json.error || 'risposta inattesa'));
+                  showToast(false, 'Errore: ' + (data?.error || 'risposta inattesa'));
                 }
               } catch(e) {
-                showToast(false, 'Errore connessione: ' + e.message);
+                showToast(false, 'Errore: ' + (e.message || String(e)));
               }
             },
             style: { padding: '10px 18px', borderRadius: 10,
