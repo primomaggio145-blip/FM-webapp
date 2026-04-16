@@ -19718,19 +19718,41 @@ const NotificheSettingsView = ({ ruolo }) => {
               try {
                 const sb = window.supabaseClient;
                 if (!sb) { showToast(false, 'Supabase non inizializzato'); return; }
-                // Usa functions.invoke — gestisce automaticamente auth e chiavi
-                const { data, error } = await sb.functions.invoke('send-push', {
-                  body: { test: true },
+
+                // Recupera il token della sessione corrente
+                const { data: { session } } = await sb.auth.getSession();
+                const token = session?.access_token;
+                if (!token) { showToast(false, 'Sessione non trovata — riloggati'); return; }
+
+                // Usa fetch diretto con il token della sessione
+                const SUPABASE_URL = 'https://ocsxrjommtrjelnbihfr.supabase.co';
+                const res = await fetch(`${SUPABASE_URL}/functions/v1/send-push`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ test: true }),
                 });
-                if (error) throw error;
-                if (data?.ok) {
-                  if (data.total === 0 || data.message) {
-                    showToast(true, '⚠️ ' + (data.message || 'Nessun dispositivo registrato — attiva prima le notifiche dalla PWA'));
+
+                if (res.status === 401) {
+                  showToast(false, '🔒 401 — La funzione richiede JWT. Vai su Supabase Dashboard → Edge Functions → send-push → disabilita "Enforce JWT Verification"');
+                  return;
+                }
+                if (res.status === 404) {
+                  showToast(false, '❌ Funzione non trovata — esegui: supabase functions deploy send-push --no-verify-jwt');
+                  return;
+                }
+
+                const json = await res.json();
+                if (json.ok) {
+                  if (json.total === 0 || json.message) {
+                    showToast(true, '⚠️ ' + (json.message || 'Nessun dispositivo registrato — attiva le notifiche dalla PWA'));
                   } else {
-                    showToast(true, `✅ Push inviato a ${data.sent}/${data.total} dispositivi`);
+                    showToast(true, `✅ Push inviato a ${json.sent}/${json.total} dispositivi`);
                   }
                 } else {
-                  showToast(false, 'Errore: ' + (data?.error || 'risposta inattesa'));
+                  showToast(false, 'Errore: ' + (json.error || 'risposta inattesa'));
                 }
               } catch(e) {
                 showToast(false, 'Errore: ' + (e.message || String(e)));
