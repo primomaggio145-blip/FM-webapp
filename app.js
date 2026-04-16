@@ -444,29 +444,106 @@ const RefreshBtn = function() {
 };
 
 // Pulsante richiesta permesso notifiche push (solo in PWA, solo se non ancora concesso)
+// ── Salva la push subscription su Supabase ──────────────────────────────────
+async function savePushSubscriptionToDB(subscription) {
+  const sb = window.supabaseClient;
+  if (!sb || !subscription) return;
+  const json = subscription.toJSON();
+  if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return;
+
+  // Recupera user_id e profilo corrente
+  let userId = null, ruolo = 'admin', nome = '';
+  try {
+    const { data: { user } } = await sb.auth.getUser();
+    if (user) {
+      userId = user.id;
+      const { data: profilo } = await sb.from('profili').select('ruolo, nome').eq('id', user.id).maybeSingle();
+      if (profilo) { ruolo = profilo.ruolo || 'admin'; nome = profilo.nome || ''; }
+    }
+  } catch(e) {}
+
+  try {
+    await sb.from('push_subscriptions').upsert({
+      user_id:  userId,
+      endpoint: json.endpoint,
+      p256dh:   json.keys.p256dh,
+      auth:     json.keys.auth,
+      ruolo,
+      nome,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'user_id,endpoint' });
+    console.log('[FM] Push subscription salvata su DB');
+  } catch(e) {
+    console.warn('[FM] Errore salvataggio push subscription:', e);
+  }
+}
+
+// ── Sottoscrivi ai push (richiede permesso + salva su DB) ────────────────────
+async function subscribeAndSavePush(vapidPublicKey) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    // Controlla se esiste già
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      // Crea nuova subscription
+      const applicationServerKey = urlBase64ToUint8Array(vapidPublicKey);
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+    }
+    await savePushSubscriptionToDB(sub);
+    return sub;
+  } catch(e) {
+    console.warn('[FM] Errore subscribe push:', e);
+    return null;
+  }
+}
+
+// Utility: converti VAPID public key da base64url a Uint8Array
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+}
+
+// VAPID public key (deve corrispondere a quella in .env dell'Edge Function)
+const VAPID_PUBLIC_KEY = 'BHTTzvpknRzvw9GeoWwbWn7izHORW3cDv1RiSaJSplmUBqd6J_4fdbmsjpqQVuQGReXOMlh-8rZk3SEF6ujifZ8';
+
 const NotifPermBtn = function() {
   const [perm, setPerm] = React.useState(
     ('Notification' in window) ? Notification.permission : 'denied'
   );
+
+  // Se il permesso è già granted ma non abbiamo ancora la subscription, salvala
+  React.useEffect(() => {
+    if (perm === 'granted' && IS_PWA) {
+      subscribeAndSavePush(VAPID_PUBLIC_KEY);
+    }
+  }, [perm]);
+
   if (!IS_PWA || !('Notification' in window) || perm !== 'default') return null;
+
   return React.createElement('button', {
-    onClick: function() {
-      Notification.requestPermission().then(function(p) {
-        setPerm(p);
-        if (p === 'granted') {
-          // Mostra una notifica di conferma
-          navigator.serviceWorker.ready.then(function(reg) {
-            reg.showNotification('✅ Notifiche attivate', {
-              body: 'Riceverai un avviso 1 ora prima di ogni lezione.',
-              icon: '/FM-webapp/icons/icon-192.png',
-            });
-          }).catch(function() {
-            new Notification('✅ Notifiche attivate', {
-              body: 'Riceverai un avviso 1 ora prima di ogni lezione.',
-            });
+    onClick: async function() {
+      const p = await Notification.requestPermission();
+      setPerm(p);
+      if (p === 'granted') {
+        const sub = await subscribeAndSavePush(VAPID_PUBLIC_KEY);
+        // Notifica di conferma
+        navigator.serviceWorker.ready.then(function(reg) {
+          reg.showNotification('✅ Notifiche attivate', {
+            body: 'Riceverai un avviso prima di ogni lezione, anche con l\'app chiusa.',
+            icon: '/FM-webapp/icons/icon-192.png',
           });
-        }
-      });
+        }).catch(function() {
+          new Notification('✅ Notifiche attivate', {
+            body: 'Riceverai un avviso prima di ogni lezione.',
+          });
+        });
+      }
     },
     title: "Attiva notifiche push",
     style: {
@@ -19633,6 +19710,36 @@ const NotificheSettingsView = ({ ruolo }) => {
               color: C.orange, cursor: 'pointer', fontSize: 13,
               fontFamily: "'Open Sans',sans-serif", fontWeight: 600 }
           }, '📱 Test push notifica')
+
+        /* Test push da server (Edge Function) */
+        , React.createElement('button', {
+            onClick: async () => {
+              showToast(true, '⏳ Invio via server...');
+              try {
+                const sb = window.supabaseClient;
+                const session = sb ? (await sb.auth.getSession())?.data?.session : null;
+                const token = session?.access_token ||
+                  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjE0NDAsImV4cCI6MjA4NzkzNzQ0MH0.ScXeqKD73hu1zMwVWppybmNRqCtKWnR9C_pfNMjwQio';
+                const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-push', {
+                  method: 'POST',
+                  headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ test: true }),
+                });
+                const json = await res.json();
+                if (json.ok) {
+                  showToast(true, `✅ Server push inviato a ${json.sent}/${json.total} dispositivi`);
+                } else {
+                  showToast(false, 'Errore: ' + (json.error || 'risposta inattesa'));
+                }
+              } catch(e) {
+                showToast(false, 'Errore connessione: ' + e.message);
+              }
+            },
+            style: { padding: '10px 18px', borderRadius: 10,
+              border: `1px solid #7c3aed`, background: '#f5f3ff',
+              color: '#7c3aed', cursor: 'pointer', fontSize: 13,
+              fontFamily: "'Open Sans',sans-serif", fontWeight: 600 }
+          }, '🌐 Test push da server')
       )
     )
 
