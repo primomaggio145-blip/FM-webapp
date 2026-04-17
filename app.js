@@ -17776,7 +17776,7 @@ if (IS_PWA) sessionStorage.setItem('fm_pwa', '1');
 // Modifica qui per personalizzare cosa appare nella versione PWA per ogni ruolo.
 // Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
 const PWA_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:true},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
   docente: {dashboard:true, allievi:false,docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
   allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
 };
@@ -19566,10 +19566,11 @@ const NotificheSettingsView = ({ ruolo }) => {
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState({});
   const [toast,    setToast]    = useState(null);
+  const [pushSubs, setPushSubs] = useState(null); // null = non caricato ancora
 
   const showToast = (ok, msg) => {
     setToast({ ok, msg });
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 4500);
   };
 
   // Carica configurazioni da Supabase
@@ -19764,6 +19765,67 @@ const NotificheSettingsView = ({ ruolo }) => {
               fontFamily: "'Open Sans',sans-serif", fontWeight: 600 }
           }, '🌐 Test push da server')
       )
+    )
+
+    /* ── Pannello dispositivi registrati ─────────────────────────────────── */
+    , React.createElement('div', { style: { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 24px', marginBottom: 24 } }
+      , React.createElement('div', { style: { display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 12 } }
+        , React.createElement('div', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, '📱 Dispositivi registrati per push')
+        , React.createElement('button', {
+            onClick: async () => {
+              const sb = window.supabaseClient; if (!sb) return;
+              const { data } = await sb.from('push_subscriptions')
+                .select('id, nome, ruolo, created_at, updated_at, endpoint')
+                .order('updated_at', { ascending: false });
+              setPushSubs(data || []);
+            },
+            style: { padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.border}`,
+              background: C.bg, color: C.textMuted, cursor: 'pointer', fontSize: 12,
+              fontFamily: "'Open Sans',sans-serif" }
+          }, pushSubs === null ? '🔄 Carica' : '🔄 Aggiorna')
+      )
+      , pushSubs === null
+        ? React.createElement('div', { style: { fontSize: 13, color: C.textMuted, fontStyle: 'italic' } },
+            'Clicca "Carica" per vedere i dispositivi che riceveranno le notifiche push.')
+        : pushSubs.length === 0
+          ? React.createElement('div', { style: { fontSize: 13, color: C.textMuted } },
+              '⚠️ Nessun dispositivo registrato. Apri la PWA sul telefono e premi "Attiva notifiche".')
+          : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } }
+              , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, marginBottom: 4 } },
+                  pushSubs.length + ' dispositiv' + (pushSubs.length === 1 ? 'o' : 'i') + ' registrat' + (pushSubs.length === 1 ? 'o' : 'i'))
+              , pushSubs.map((s, i) => {
+                  const ruoloLabel = { admin: '👑 Admin', docente: '🎓 Docente', allievo: '🎵 Allievo' }[s.ruolo] || s.ruolo;
+                  const updated = s.updated_at ? new Date(s.updated_at).toLocaleDateString('it-IT', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+                  const endpointShort = s.endpoint ? s.endpoint.split('/').pop()?.slice(0, 20) + '…' : '—';
+                  return React.createElement('div', { key: s.id || i,
+                      style: { display:'flex', alignItems:'center', justifyContent:'space-between',
+                        background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10,
+                        padding: '10px 14px', gap: 12 }
+                    }
+                    , React.createElement('div', { style: { flex: 1, minWidth: 0 } }
+                      , React.createElement('div', { style: { fontSize: 13, fontWeight: 600, color: C.text } },
+                          s.nome || '(senza nome)')
+                      , React.createElement('div', { style: { fontSize: 11, color: C.textMuted, marginTop: 2 } },
+                          ruoloLabel + ' · aggiornato ' + updated)
+                      , React.createElement('div', { style: { fontSize: 10, color: C.textDim, marginTop: 1, fontFamily: 'monospace' } },
+                          endpointShort)
+                    )
+                    , React.createElement('button', {
+                        onClick: async () => {
+                          if (!window.confirm(`Rimuovere il dispositivo di ${s.nome || '?'}?`)) return;
+                          const sb = window.supabaseClient;
+                          if (!sb) return;
+                          await sb.from('push_subscriptions').delete().eq('id', s.id);
+                          setPushSubs(p => (p || []).filter(x => x.id !== s.id));
+                          showToast(true, 'Dispositivo rimosso');
+                        },
+                        title: 'Rimuovi questo dispositivo',
+                        style: { padding: '5px 10px', borderRadius: 6, border: `1px solid ${C.border}`,
+                          background: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 11, flexShrink: 0 }
+                      }, '✕')
+                  );
+                })
+          )
     )
 
     /* SQL setup hint */
