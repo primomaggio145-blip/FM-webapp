@@ -19505,6 +19505,108 @@ const ReminderWizard = ({ onClose, onSave }) => {
   );
 };
 
+// ─── DIAGNOSTICA CRON (pannello dentro NotificheSettingsView) ────────────────
+const DiagnosticaPanel = ({ showToast }) => {
+  const [result, setResult] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+
+  const runCheck = async () => {
+    setLoading(true);
+    setResult(null);
+    try {
+      const sb = window.supabaseClient;
+      if (!sb) { showToast(false, 'Supabase non inizializzato'); setLoading(false); return; }
+      const { data: { session } } = await sb.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { showToast(false, 'Sessione non trovata'); setLoading(false); return; }
+      const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-push', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ check: true }),
+      });
+      const json = await res.json();
+      setResult(json);
+    } catch(e) {
+      setResult({ error: String(e) });
+    }
+    setLoading(false);
+  };
+
+  return React.createElement('div', { style: { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 24px', marginBottom: 24 } }
+    , React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: result ? 16 : 0 } }
+      , React.createElement('div', null
+        , React.createElement('div', { style: { fontSize: 15, fontWeight: 700, color: C.text } }, '🔍 Diagnostica cron')
+        , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, marginTop: 3 } },
+            'Mostra lo stato attuale: ora IT, lezioni di oggi, dispositivi, config anticipo. Non invia push.')
+      )
+      , React.createElement('button', {
+          onClick: runCheck, disabled: loading,
+          style: { padding: '8px 16px', borderRadius: 8, border: `1px solid ${C.border}`,
+            background: C.bg, color: C.text, cursor: loading ? 'wait' : 'pointer',
+            fontSize: 13, fontFamily: "'Open Sans',sans-serif", fontWeight: 600, flexShrink: 0 }
+        }, loading ? '⏳ Controllo...' : '🔍 Controlla ora')
+    )
+    , result && React.createElement('div', { style: { marginTop: 8 } }
+      , result.error
+        ? React.createElement('div', { style: { color: C.red, fontSize: 13 } }, '❌ Errore: ' + result.error)
+        : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } }
+
+          /* Ora IT e timezone */
+          , React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } }
+            , React.createElement('div', { style: { background: C.tealBg, border: `1px solid ${C.tealBorder}`, borderRadius: 8, padding: '8px 12px', fontSize: 13 } }
+              , React.createElement('span', { style: { color: C.textMuted, fontSize: 11 } }, 'ORA ITALIANA  ')
+              , React.createElement('strong', { style: { color: C.teal } }, result.oraIT + ' del ' + result.dateStr)
+            )
+            , React.createElement('div', { style: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', fontSize: 13 } }
+              , React.createElement('span', { style: { color: C.textMuted, fontSize: 11 } }, 'UTC+  ')
+              , React.createElement('strong', { style: { color: C.text } }, result.tzOffset)
+            )
+            , React.createElement('div', { style: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px', fontSize: 13 } }
+              , React.createElement('span', { style: { color: C.textMuted, fontSize: 11 } }, 'DISPOSITIVI  ')
+              , React.createElement('strong', { style: { color: C.text } }, result.dispositiviRegistrati)
+            )
+          )
+
+          /* Lezioni di oggi */
+          , React.createElement('div', null
+            , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 } },
+                `Lezioni oggi (${result.lezioniOggi})`)
+            , result.lezioniOggi === 0
+              ? React.createElement('div', { style: { fontSize: 13, color: C.red, padding: '8px 12px', background: C.redBg, borderRadius: 8, border: `1px solid ${C.redBorder}` } },
+                  '⚠️ Nessuna lezione trovata per oggi. Il cron non invierà nulla.')
+              : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } }
+                  , (result.lezioni || []).map((l, i) => {
+                    const notifCfgLocal = (result.notifiche_config || []).find(c =>
+                      c.id === ((l.tipo||'').toLowerCase().includes('collettiv') ? 'lezione_collettiva' : 'lezione_individuale')
+                    );
+                    const anticipo = notifCfgLocal?.anticipo_min ?? 60;
+                    const [lhh, lmm] = (l.ora || '00:00').split(':').map(Number);
+                    const lessonMin = lhh * 60 + lmm;
+                    const [, oraMin] = result.oraIT.split(':').map(Number);
+                    const [oraHH] = result.oraIT.split(':').map(Number);
+                    const nowMin = oraHH * 60 + oraMin;
+                    const diff = lessonMin - nowMin;
+                    const inRange = diff >= anticipo - 4 && diff <= anticipo + 4;
+                    return React.createElement('div', { key: i,
+                        style: { display: 'flex', gap: 8, alignItems: 'center', fontSize: 12,
+                          padding: '6px 10px', borderRadius: 6,
+                          background: inRange ? C.tealBg : C.bg,
+                          border: `1px solid ${inRange ? C.tealBorder : C.border}` }
+                      }
+                      , React.createElement('strong', null, l.ora)
+                      , React.createElement('span', { style: { color: C.textMuted } }, l.student || l.teacher || '—')
+                      , React.createElement('span', { style: { color: C.textMuted } }, l.tipo)
+                      , React.createElement('span', { style: { color: inRange ? C.teal : C.textMuted, fontWeight: inRange ? 700 : 400 } },
+                          inRange ? `✅ IN RANGE (tra ${diff}min, anticipo ${anticipo}min)` : `⏳ diff=${diff}min (anticipo ${anticipo}min)`)
+                    );
+                  })
+              )
+          )
+        )
+    )
+  );
+};
+
 // ─── NOTIFICHE IMPOSTAZIONI (Admin) ──────────────────────────────────────────
 // Configurazione notifiche in-app e push per ogni tipo di evento.
 // Salvato in tabella `notifiche_config` su Supabase (chiave per tipo).
@@ -19778,6 +19880,8 @@ const NotificheSettingsView = ({ ruolo }) => {
       )
     )
 
+    /* ── Diagnostica cron ─────────────────────────────────────────────── */
+    , React.createElement(DiagnosticaPanel, { showToast })
     /* ── Pannello dispositivi registrati ─────────────────────────────────── */
     , React.createElement('div', { style: { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14, padding: '20px 24px', marginBottom: 24 } }
       , React.createElement('div', { style: { display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: 12 } }
