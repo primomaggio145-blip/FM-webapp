@@ -16880,11 +16880,11 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
       /* Header card */
       , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,marginBottom:24,
         padding:"16px 20px",borderTop:`3px solid ${selected.colore}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10122}}
-        , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10124}}
-          , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10125}}
+        , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10124}}
+          , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:16,flex:"1 1 auto",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10125}}
             , React.createElement(Avatar, { initials: selected.nome.replace("Prof.ssa ","").replace("Prof. ","").split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(), hex: selected.colore, size: 56, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10126}})
-            , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10127}}
-              , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600,marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10128}}, selected.nome)
+            , React.createElement('div', {style:{minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10127}}
+              , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:"clamp(18px,5vw,26px)",fontWeight:600,marginBottom:4,wordBreak:"break-word"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10128}}, selected.nome)
               , React.createElement('div', { style: {fontSize:13,color:C.textMuted,marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10129}}, strumentiDocente(selected))
               , React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10130}}
                 , React.createElement('span', { style: {fontSize:11,background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,borderRadius:4,padding:"2px 8px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10131}}, selected.contratto)
@@ -16892,14 +16892,14 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               )
             )
           )
-          , React.createElement('div', { style: {display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10136}}
+          , React.createElement('div', { style: {display:"flex",gap:8,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10136}}
             , ruoloDocView==="docente" && React.createElement('button', {
                 onClick: ()=>setShowAmountsDoc(p=>!p),
                 title: showAmountsDoc ? "Nascondi importi" : "Mostra importi",
                 style:{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",
                   background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,
                   cursor:"pointer",fontFamily:"'Open Sans',sans-serif",fontSize:11,
-                  color:C.textMuted,transition:"all 0.15s"},
+                  color:C.textMuted,transition:"all 0.15s",whiteSpace:"nowrap"},
                 onMouseEnter:e=>{e.currentTarget.style.borderColor=selected.colore;e.currentTarget.style.color=selected.colore;},
                 onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}
               }
@@ -16911,7 +16911,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           )
         )
         /* KPI strip — dati mese selezionato */
-        , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginTop:20,paddingTop:20,borderTop:`1px solid ${C.border}`}, className: "stat-strip", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10142}}
+        , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginTop:20,paddingTop:20,borderTop:`1px solid ${C.border}`}, className: "stat-strip", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10142}}
           , [
             {label:"Allievi totali",  value:all.length,                          hex:selected.colore, money:false},
             {label:`Lez. ${MESI_LABEL_S[selMese.m-1]}`, value:lezSelAll.length, hex:C.textMuted, money:false},
@@ -16919,8 +16919,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             {label:"Tariffa/ora",     value:`€${selected.tariffaOra}`,           hex:C.gold, money:true},
             {label:`Compenso ${MESI_LABEL_S[selMese.m-1]}`, value:`€${stipSel.toLocaleString("it-IT")}`, hex:C.green, money:true},
           ].map(k=>(
-            React.createElement('div', { key: k.label, style: {background:C.bg,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10149}}
-              , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600,color:k.hex,lineHeight:1,
+            React.createElement('div', { key: k.label, style: {background:C.bg,borderRadius:10,padding:"12px 14px",border:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10149}}
+              , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:"clamp(20px,5vw,26px)",fontWeight:600,color:k.hex,lineHeight:1,
                   filter: k.money && !showAmountsDoc ? "blur(7px)" : "none",
                   transition:"filter 0.2s", userSelect: k.money && !showAmountsDoc ? "none" : "auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10150}}
                 , k.money && !showAmountsDoc ? "••••" : k.value
@@ -16931,14 +16931,18 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
         )
       )
 
-      /* Tabs */
-      , React.createElement('div', { style: {display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:22}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10158}}
+      /* Tabs — scrollabili orizzontalmente su mobile */
+      , React.createElement('div', { style: {display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:22,
+          overflowX:"auto",WebkitOverflowScrolling:"touch",
+          // Nasconde la scrollbar mantenendo la funzionalità
+          scrollbarWidth:"none",msOverflowStyle:"none"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10158}}
         , TABS.map(t=>(
           React.createElement('button', { key: t.id, onClick: ()=>setTab(t.id),
             style: {display:"flex",alignItems:"center",gap:6,padding:"10px 18px",background:"none",
               border:"none",borderBottom:`2px solid ${tab===t.id?selected.colore:"transparent"}`,
               color:tab===t.id?selected.colore:C.textMuted,cursor:"pointer",
-              fontFamily:"'Open Sans',sans-serif",fontSize:13,transition:"all 0.15s",marginBottom:-1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10160}}
+              fontFamily:"'Open Sans',sans-serif",fontSize:13,transition:"all 0.15s",marginBottom:-1,
+              flexShrink:0,whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10160}}
             , React.createElement(Ic, { n: t.icon, size: 13, stroke: tab===t.id?selected.colore:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10165}}), t.label
           )
         ))
@@ -19690,6 +19694,7 @@ const NotificheSettingsView = ({ ruolo }) => {
             attivo:      r.attivo !== false,
             anticipo_min: r.anticipo_min ?? 60,
             destinatari: Array.isArray(dest) ? dest : (tipo ? tipo.defaultDest : ['allievo','admin']),
+            giorno_mese: r.giorno_mese ?? 1,
           };
         });
         setConfigs(p => ({ ...p, ...map }));
@@ -19705,6 +19710,7 @@ const NotificheSettingsView = ({ ruolo }) => {
       const { error } = await sb.from('notifiche_config').upsert(
         { id, attivo: cfg.attivo, anticipo_min: cfg.anticipo_min,
           destinatari: cfg.destinatari || ['allievo','admin'],
+          giorno_mese: cfg.giorno_mese ?? 1,
           updated_at: new Date().toISOString() },
         { onConflict: 'id' }
       );
@@ -20074,6 +20080,67 @@ CREATE POLICY "admin_all" ON public.notifiche_config FOR ALL USING (true);`
                             )
                           )
                       )
+                    )
+                  )
+
+                  /* Giorno del mese (per pagamento e recupero) */
+                  , (tipo.id === 'pagamento' || tipo.id === 'recupero') && (
+                    React.createElement('div', null
+                      , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 8 } }
+                        , tipo.id === 'pagamento' ? '📅 Giorno del mese per l\'invio' : '📅 Controlla ogni giorno da questo giorno in poi'
+                      )
+                      , React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } }
+                        , [1, 2, 3, 4, 5, 8, 10, 15, 20, 25].map(d =>
+                            React.createElement('button', {
+                              key: d,
+                              onClick: () => saveConfig(tipo.id, { ...cfg, giorno_mese: d }),
+                              style: { padding: '6px 14px', borderRadius: 8,
+                                border: `1px solid ${(cfg.giorno_mese ?? 1) === d ? tipo.color : C.border}`,
+                                background: (cfg.giorno_mese ?? 1) === d ? tipo.colorBg : C.bg,
+                                color: (cfg.giorno_mese ?? 1) === d ? tipo.color : C.textMuted,
+                                cursor: 'pointer', fontSize: 12, fontWeight: (cfg.giorno_mese ?? 1) === d ? 700 : 400,
+                                fontFamily: "'Open Sans',sans-serif" } }
+                              , `${d}°`
+                            )
+                          )
+                      )
+                      , React.createElement('div', { style: { fontSize: 11, color: C.textMuted, marginTop: 6 } },
+                          tipo.id === 'pagamento'
+                            ? `La notifica viene inviata il giorno ${cfg.giorno_mese ?? 1}° di ogni mese agli utenti con quota non pagata.`
+                            : `I recuperi in scadenza vengono controllati e notificati ogni giorno a partire dal ${cfg.giorno_mese ?? 1}° del mese.`
+                      )
+                      /* Test button per questa notifica */
+                      , React.createElement('button', {
+                          onClick: async () => {
+                            showToast(true, '⏳ Invio test...');
+                            try {
+                              const sb = window.supabaseClient;
+                              if (!sb) { showToast(false, 'Supabase non inizializzato'); return; }
+                              const { data: { session } } = await sb.auth.getSession();
+                              const token = session?.access_token;
+                              if (!token) { showToast(false, 'Sessione non trovata'); return; }
+                              const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-push', {
+                                method: 'POST',
+                                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ test: true, tipo: tipo.id }),
+                              });
+                              if (res.status === 401) { showToast(false, '🔒 Edge Function non autorizzata — disabilita JWT verification'); return; }
+                              const json = await res.json();
+                              if (json.ok) {
+                                showToast(true, `✅ Test "${tipo.label}" inviato a ${json.sent}/${json.total} dispositivi`);
+                              } else {
+                                showToast(false, 'Errore: ' + (json.error || 'risposta inattesa'));
+                              }
+                            } catch(e) {
+                              showToast(false, 'Errore: ' + (e.message || String(e)));
+                            }
+                          },
+                          style: { marginTop: 8, padding: '7px 16px', borderRadius: 8,
+                            border: `1px solid ${tipo.color}`, background: tipo.colorBg,
+                            color: tipo.color, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                            fontFamily: "'Open Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 6 }
+                        }
+                        , '🧪 Test push "' + tipo.label + '"')
                     )
                   )
 
