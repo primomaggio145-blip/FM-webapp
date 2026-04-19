@@ -20,7 +20,7 @@ self.addEventListener('install', event => {
   );
 });
 
-// ── Activate: rimuove cache vecchie ─────────────────────────────────────────
+// ── Activate: rimuove cache vecchie e notifica l'app dell'aggiornamento ───────
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
@@ -28,6 +28,14 @@ self.addEventListener('activate', event => {
         keys.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k))
       ))
       .then(() => self.clients.claim())
+      .then(() => {
+        // Notifica tutte le tab aperte che c'è una nuova versione
+        self.clients.matchAll({ type: 'window' }).then(clients => {
+          clients.forEach(client => {
+            client.postMessage({ type: 'SW_UPDATED', version: CACHE_VERSION });
+          });
+        });
+      })
   );
 });
 

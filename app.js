@@ -116,7 +116,7 @@ const G = `
     /* spacing */
     .view-pad{padding:12px 12px!important;}
     .inner-pad{padding:12px 12px!important;}
-    .main-scroll{padding-bottom:72px!important;}
+    .main-scroll{padding-bottom:calc(60px + env(safe-area-inset-bottom, 0px) + 8px)!important;}
 
     /* table */
     .table-scroll{overflow-x:auto!important;-webkit-overflow-scrolling:touch!important;}
@@ -233,6 +233,10 @@ const G = `
   /* Safe area per iPhone/Android con barra di navigazione */
   .modal-resp { padding-bottom: env(safe-area-inset-bottom, 0px); }
   .modal-footer-safe { padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important; }
+  /* Su mobile PWA: spinge il contenuto fuori dalla zona della Dynamic Island/notch */
+  @media (max-width:767px) {
+    .main-scroll { padding-top: env(safe-area-inset-top, 0px) !important; }
+  }
   /* Nascondi pulsante Sito Web esterno */
   #sito-web-fab, .sito-web-btn, a[href*="futuro-musica"], a[href*="index.html"].fab { display:none!important; }
   `;
@@ -11357,7 +11361,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
           /* Stats ribbon */
           , React.createElement('div', { style: {background:C.surface, borderBottom:`1px solid ${C.border}`,
-            padding:"8px 16px", display:"flex", gap:16, flexShrink:0, overflowX:"auto", WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5966}}
+            padding:"8px clamp(8px,3vw,16px)", display:"flex", gap:"clamp(4px,2vw,16px)", flexShrink:0, overflowX:"auto", WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5966}}
             , [
               { label:"Oggi",                  count:todayLessons.length, sub:"lezioni",       hex:C.gold,   click: null },
               { label:"Questa settimana",       count:weekLessons.length,  sub:"lezioni",       hex:C.blue,   click: null },
@@ -11365,18 +11369,18 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             ].map(s => (
               React.createElement('div', { key: s.label,
                 onClick: s.click || undefined,
-                style: {display:"flex", alignItems:"center", gap:10, cursor: s.click ? "pointer" : "default",
-                  padding:"4px 8px", borderRadius:8, transition:"background .12s",
+                style: {display:"flex", alignItems:"center", gap:8, cursor: s.click ? "pointer" : "default",
+                  padding:"4px 6px", borderRadius:8, transition:"background .12s", flexShrink:0,
                   background: (s.label==="Presenza da segnare" && showPending) ? `${C.orange}15` : "transparent"},
                 onMouseEnter: s.click ? e=>{e.currentTarget.style.background=`${s.hex}15`;} : undefined,
                 onMouseLeave: s.click ? e=>{e.currentTarget.style.background=(s.label==="Presenza da segnare"&&showPending)?`${C.orange}15`:"transparent";} : undefined,
                 __self: this, __source: {fileName: _jsxFileName, lineNumber: 5973}}
-                , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif", fontSize:24, fontWeight:600, color:s.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5974}}, s.count)
-                , React.createElement('div', { style: {fontSize:11}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5975}}
-                  , React.createElement('div', { style: {color:s.hex, opacity:0.8, textTransform:"uppercase", letterSpacing:"0.06em", fontSize:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5976}}, s.label)
-                  , React.createElement('div', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5977}}, s.sub)
+                , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif", fontSize:"clamp(20px,5vw,24px)", fontWeight:600, color:s.hex, lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5974}}, s.count)
+                , React.createElement('div', { style: {fontSize:11, lineHeight:1.3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5975}}
+                  , React.createElement('div', { style: {color:s.hex, opacity:0.8, textTransform:"uppercase", letterSpacing:"0.04em", fontSize:9, whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5976}}, s.label)
+                  , React.createElement('div', { style: {color:C.textDim, fontSize:9, whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5977}}, s.sub)
                 )
-                , React.createElement('div', { style: {width:1, height:30, background:C.border, marginLeft:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5979}})
+                , React.createElement('div', { style: {width:1, height:28, background:C.border, marginLeft:"clamp(4px,2vw,12px)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5979}})
               )
             ))
           )
@@ -13572,26 +13576,25 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
             React.createElement(React.Fragment, null
               /* ── PAGE HEADER ── */
               , React.createElement('div', { style: {background:`linear-gradient(135deg,${C.surface} 0%,${C.bg} 100%)`,
-                borderBottom:`1px solid ${C.border}`,padding:"16px 20px",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7752}}
-                , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7754}}
-                  , React.createElement('div', { style: {animation:"fadeUp .4s ease both"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7755}}
-                    , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:300,letterSpacing:"0.02em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7756}}
+                borderBottom:`1px solid ${C.border}`,padding:"16px clamp(12px,3vw,20px)",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7752}}
+                , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7754}}
+                  , React.createElement('div', { style: {animation:"fadeUp .4s ease both",flex:"1 1 auto",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7755}}
+                    , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:"clamp(20px,5vw,28px)",fontWeight:300,letterSpacing:"0.02em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7756}}
                       , React.createElement('span', { style: {fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7757}}, "Repertorio"), " musicale"
                     )
                     , React.createElement('p', { style: {fontSize:13,color:C.textMuted,marginTop:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7759}}, "Catalogo brani, assegnazioni allievi e storico lezioni"
-
                     )
                   )
-                  , React.createElement('div', { style: {display:"flex",gap:12,animation:"fadeUp .4s ease .1s both"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7763}}
+                  , React.createElement('div', { style: {display:"flex",gap:8,animation:"fadeUp .4s ease .1s both",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7763}}
                     , [
                       {label:"Brani totali",  val:brani.length,                                    hex:C.gold},
                       {label:"Avanzati",      val:brani.filter(b=>b.difficulty==="Avanzato"||b.difficulty==="Professionale").length, hex:C.gold},
                       {label:"Lezioni totali",val:totLezioni,                                       hex:C.blue},
                     ].map(k=>(
-                      React.createElement('div', { key: k.label, style: {padding:"10px 16px",background:C.surface,
-                        border:`1px solid ${C.border}`,borderRadius:10,textAlign:"center",minWidth:80}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7770}}
-                        , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:24,fontWeight:600,color:k.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7772}}, k.val)
-                        , React.createElement('div', { style: {fontSize:10,color:C.textDim,letterSpacing:"0.07em",textTransform:"uppercase",marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7773}}, k.label)
+                      React.createElement('div', { key: k.label, style: {padding:"8px 12px",background:C.surface,
+                        border:`1px solid ${C.border}`,borderRadius:10,textAlign:"center",minWidth:60}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7770}}
+                        , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:"clamp(18px,4vw,24px)",fontWeight:600,color:k.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7772}}, k.val)
+                        , React.createElement('div', { style: {fontSize:9,color:C.textDim,letterSpacing:"0.07em",textTransform:"uppercase",marginTop:2,whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7773}}, k.label)
                       )
                     ))
                   )
@@ -17776,6 +17779,45 @@ const IS_PWA = _isPwaMedia || _isPwaIOS || _isPwaParam || _isPwaSession;
 // Salva in sessione così rimane attivo anche navigando senza il parametro
 if (IS_PWA) sessionStorage.setItem('fm_pwa', '1');
 
+// ── Aggiornamento SW: mostra banner quando il Service Worker si aggiorna ──────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', event => {
+    if (event.data?.type === 'SW_UPDATED') {
+      // Mostra banner di aggiornamento non invasivo
+      const existing = document.getElementById('__fm_update_banner__');
+      if (existing) return; // già mostrato
+      const banner = document.createElement('div');
+      banner.id = '__fm_update_banner__';
+      banner.style.cssText = [
+        'position:fixed','bottom:80px','left:50%','transform:translateX(-50%)',
+        'z-index:99998','background:#1a4fa0','color:#fff',
+        'padding:12px 20px','border-radius:12px',
+        'font-family:Open Sans,sans-serif','font-size:13px','font-weight:600',
+        'display:flex','align-items:center','gap:12px',
+        'box-shadow:0 4px 20px rgba(0,0,0,0.3)',
+        'white-space:nowrap','cursor:pointer',
+      ].join(';');
+      banner.innerHTML = `
+        <span>🔄 Nuova versione disponibile</span>
+        <button onclick="window.location.reload()" style="
+          background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);
+          color:#fff;padding:5px 12px;border-radius:8px;cursor:pointer;
+          font-family:inherit;font-size:12px;font-weight:700">
+          Aggiorna ora
+        </button>
+        <button onclick="document.getElementById('__fm_update_banner__')?.remove()" style="
+          background:none;border:none;color:rgba(255,255,255,0.6);
+          cursor:pointer;font-size:18px;padding:0;line-height:1">
+          ×
+        </button>
+      `;
+      document.body.appendChild(banner);
+      // Auto-rimozione dopo 30 secondi
+      setTimeout(() => banner.remove(), 30000);
+    }
+  });
+}
+
 // ── Menu PWA (sottoinsieme snello per mobile) ────────────────────────────────
 // Modifica qui per personalizzare cosa appare nella versione PWA per ogni ruolo.
 // Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
@@ -18025,7 +18067,9 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
         background:C.sidebar,borderTop:"2px solid #8c1818",
         display:"none", // hidden by default, shown by CSS on mobile
         justifyContent:"space-around",alignItems:"center",
-        height:60,padding:"0 4px",gap:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10646}}
+        height:"calc(60px + env(safe-area-inset-bottom, 0px))",
+        paddingBottom:"env(safe-area-inset-bottom, 0px)",
+        padding:"0 4px",paddingBottom:"env(safe-area-inset-bottom, 0px)",gap:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10646}}
         , BOTTOM_ITEMS.map(item => {
           const active = current === item.id;
           return (
@@ -18851,7 +18895,7 @@ function App() {
   return (
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
-      , React.createElement('div', { style: {display:"flex",height:"100vh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
+      , React.createElement('div', { style: {display:"flex",height:"100dvh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
         , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , settingsDrawerOpen && React.createElement(SettingsDrawer, {
             open: settingsDrawerOpen,
