@@ -7950,7 +7950,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
 };
 
 // ─── VISTA GIORNALIERA ────────────────────────────────────────────────────────
-const DayView = ({ date, lessons, onSelect }) => {
+const DayView = ({ date, lessons, onSelect, isMobile }) => {
   const dayLessons = lessons
     .filter(l => l.date === yyyymmdd(date))
     .sort((a, b) => a.hour.localeCompare(b.hour));
@@ -7964,7 +7964,7 @@ const DayView = ({ date, lessons, onSelect }) => {
   );
 
   return (
-    React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4782}}
+    React.createElement('div', { style: {display:"flex", flexDirection:"column", gap: isMobile ? 6 : 10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4782}}
       , dayLessons.map(l => {
         const hex = lessonHex(l);
         const dotHex = l.attendance ? attHex(l.attendance) : null;
@@ -7975,26 +7975,26 @@ const DayView = ({ date, lessons, onSelect }) => {
           const fine = (l.oraFine||"").slice(0,5);
           const pending = l.stato === "in_attesa";
           return React.createElement('div', { key:l.id, onClick:()=>onSelect(l),
-            style:{display:"flex",gap:16,padding:"16px 18px",
+            style:{display:"flex",gap: isMobile ? 8 : 16,padding: isMobile ? "10px 10px" : "16px 18px",
               background:pending?"#fffbeb":C.orange2Bg,
               border:`1px solid ${pending?"#fde68a":C.orange2Border}`,
               borderLeft:`4px solid ${pending?"#f59e0b":C.orange2}`,
               borderRadius:10,cursor:"pointer",transition:"all 0.15s"},
             onMouseEnter:e=>{e.currentTarget.style.filter="brightness(0.96)";},
             onMouseLeave:e=>{e.currentTarget.style.filter="none";}}
-            , React.createElement('div',{style:{width:52,flexShrink:0,textAlign:"center",paddingTop:4}}
-              , React.createElement(Ic,{n:"drum",size:26,stroke:pending?"#f59e0b":C.orange2})
-              , React.createElement('div',{style:{fontSize:10,color:pending?"#92400e":C.orange2,marginTop:3,fontWeight:600}},ora)
+            , React.createElement('div',{style:{width: isMobile ? 36 : 52,flexShrink:0,textAlign:"center",paddingTop:4}}
+              , React.createElement(Ic,{n:"drum",size: isMobile ? 20 : 26,stroke:pending?"#f59e0b":C.orange2})
+              , React.createElement('div',{style:{fontSize:9,color:pending?"#92400e":C.orange2,marginTop:3,fontWeight:600}},ora)
             )
             , React.createElement('div',{style:{flex:1,minWidth:0}}
               , React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}
-                , React.createElement('span',{style:{fontSize:15,fontWeight:600,color:pending?"#92400e":C.orange2}},"🤘 Sala Prove")
+                , React.createElement('span',{style:{fontSize: isMobile ? 13 : 15,fontWeight:600,color:pending?"#92400e":C.orange2}},"🤘 Sala Prove")
                 , React.createElement('span',{style:{fontSize:11,background:pending?"#fffbeb":C.orange2Bg,
                     color:pending?"#92400e":C.orange2,border:`1px solid ${pending?"#fde68a":C.orange2Border}`,
                     borderRadius:4,padding:"1px 7px",letterSpacing:"0.05em"}},
                   pending?"⏳ In attesa":"✓ Approvata")
               )
-              , React.createElement('div',{style:{fontSize:13,color:pending?"#92400e":C.orange2,fontWeight:600,marginBottom:2}}
+              , React.createElement('div',{style:{fontSize:12,color:pending?"#92400e":C.orange2,fontWeight:600,marginBottom:2}}
                 , ora, fine?" → "+fine:"")
               , React.createElement('div',{style:{fontSize:12,color:C.textMuted}}
                 , l.richiedente||l.student
@@ -8004,99 +8004,142 @@ const DayView = ({ date, lessons, onSelect }) => {
           );
         }
 
+        // Badge presenza (per mobile su riga separata, per desktop inline)
+        const attBadgeEl = l.tipo !== "sala_prove" && (l.attendance || l.inRecupero)
+          ? (() => {
+              const att = l.inRecupero && !l.attendance ? 'in_recupero' : l.attendance;
+              const s = ATT_STYLES[att];
+              const lbl = s ? s.label : att;
+              return React.createElement(Badge, { label: lbl, variant: attBadge(att) });
+            })()
+          : null;
+
         return (
           React.createElement('div', { key: l.id, onClick: () => onSelect(l),
-            style: {display:"flex", gap:16, padding:"16px 18px", background:C.surface,
+            style: {display:"flex", flexDirection: isMobile ? "column" : "row",
+              gap: isMobile ? 6 : 16,
+              padding: isMobile ? "10px 10px" : "16px 18px",
+              background:C.surface,
               border:`1px solid ${C.border}`, borderLeft:`4px solid ${hex}`,
               borderRadius:10, cursor:"pointer", transition:"all 0.15s"},
             onMouseEnter: e => { e.currentTarget.style.background = C.surfaceHover; },
             onMouseLeave: e => { e.currentTarget.style.background = C.surface; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4787}}
-            , React.createElement('div', { style: {width:52, flexShrink:0, textAlign:"center", paddingTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4793}}
-              , React.createElement('div', { style: {width:36, height:36, borderRadius:8, background:`${hex}18`, border:`1px solid ${hex}30`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 4px"}},
-                React.createElement(Ic, { n: isColl(l) ? "group" : isProva(l) ? "user" : "music", size:18, stroke:hex })
-              )
-              , React.createElement('div', { style: {fontSize:10, color:hex, fontWeight:600, lineHeight:1}}, (l.hour||"").slice(0,5))
-            )
-            , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4798}}
-              , l.tipo==="collettivo" ? (
-                React.createElement(React.Fragment, null
-                  , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4801}}
-                    , React.createElement('span', { style: {fontSize:15, fontWeight:600, color:hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4802}}, l.courseName)
-                    , React.createElement('span', { style: {fontSize:11, background:`${hex}15`, color:hex,
-                      border:`1px solid ${hex}40`, borderRadius:4, padding:"1px 7px",
-                      letterSpacing:"0.05em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4803}}, "Collettiva")
-                    , l.recurrence !== "Nessuna" && React.createElement(Ic, { n: "repeat", size: 12, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4806}})
+
+            /* MOBILE: riga ora + badge in cima, poi contenuto */
+            , isMobile ? (
+              React.createElement(React.Fragment, null
+                /* Riga superiore: ora + badge presenza */
+                , React.createElement('div', {style:{display:"flex", alignItems:"center", justifyContent:"space-between", gap:8}}
+                  , React.createElement('div', {style:{display:"flex", alignItems:"center", gap:8}}
+                    , React.createElement('div', {style:{width:28, height:28, borderRadius:6, background:`${hex}18`, border:`1px solid ${hex}30`, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}
+                      , React.createElement(Ic, {n: isColl(l) ? "group" : isProva(l) ? "user" : "music", size:14, stroke:hex})
+                    )
+                    , React.createElement('div', {style:{fontSize:12, color:hex, fontWeight:700}}, (l.hour||"").slice(0,5))
+                    , l.tipo==="collettivo"
+                      ? React.createElement('span',{style:{fontSize:11,background:`${hex}15`,color:hex,border:`1px solid ${hex}40`,borderRadius:4,padding:"1px 6px",letterSpacing:"0.04em"}},"Collettiva")
+                      : null
                   )
-                  , React.createElement('div', { style: {display:"flex", gap:12, fontSize:12, color:C.textMuted, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4808}}
-                    , l.teacher && React.createElement('span', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4809}}, l.teacher)
-                    , l.room    && React.createElement('span', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4810}}, "· " , l.room)
-                    , React.createElement('span', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4811}}, "· " , (l.students||[]).length, " allievi" )
-                  )
-                  , (l.students||[]).length > 0 && (
-                    React.createElement('div', { style: {display:"flex", gap:5, marginTop:6, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4814}}
-                      , (l.students||[]).map(s => (
-                        React.createElement('span', { key: s.id, style: {fontSize:10, padding:"1px 7px", borderRadius:10,
-                          background:`${insHex(s.instrument)}18`, color:insHex(s.instrument),
-                          border:`1px solid ${insHex(s.instrument)}40`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4816}}
-                          , s.name.split(" ")[0]
-                        )
-                      ))
+                  , attBadgeEl
+                )
+                /* Contenuto principale */
+                , React.createElement('div', {style:{minWidth:0}}
+                  , l.tipo==="collettivo" ? (
+                    React.createElement(React.Fragment, null
+                      , React.createElement('div',{style:{fontSize:14,fontWeight:600,color:hex,marginBottom:2}},l.courseName)
+                      , React.createElement('div',{style:{fontSize:12,color:C.textMuted,display:"flex",gap:8,flexWrap:"wrap"}}
+                        , l.teacher && React.createElement('span',null,l.teacher)
+                        , l.room && React.createElement('span',null,"· ",l.room)
+                        , React.createElement('span',null,"· ",(l.students||[]).length," allievi")
+                      )
+                    )
+                  ) : l.tipo==="prova" ? (
+                    React.createElement(React.Fragment, null
+                      , React.createElement('div',{style:{fontSize:14,fontWeight:600,color:C.teal,marginBottom:2}},l.contactName||"Lezione prova")
+                      , React.createElement('div',{style:{fontSize:12,color:C.textMuted}},l.instrument, l.teacher?" · "+l.teacher:"")
+                    )
+                  ) : (
+                    React.createElement(React.Fragment, null
+                      , React.createElement('div',{style:{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}
+                        , React.createElement('span',{style:{fontSize:14,fontWeight:600,color:C.text}},l.student)
+                        , React.createElement('span',{style:{fontSize:12,color:hex}},l.instrument)
+                        , l.recurrence !== "Nessuna" && React.createElement(Ic,{n:"repeat",size:11,stroke:C.textDim})
+                        , dotHex && React.createElement('div',{style:{width:6,height:6,borderRadius:"50%",background:dotHex,flexShrink:0}})
+                      )
+                      , React.createElement('div',{style:{fontSize:12,color:C.textMuted}},l.teacher)
+                      , l.topic && React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2,fontStyle:"italic"}},'"',l.topic,'"')
                     )
                   )
-                  , l.topic && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4824}}, "\"", l.topic, "\"")
-                )
-              ) : l.tipo==="prova" ? (
-                React.createElement(React.Fragment, null
-                  , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4828}}
-                    , React.createElement('span', { style: {fontSize:15, fontWeight:600, color:C.teal}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4829}}
-                      , l.contactName || "Lezione prova"
-                    )
-                    , React.createElement('span', { style: {fontSize:11, background:C.tealBg, color:C.teal,
-                      border:`1px solid ${C.tealBorder}`, borderRadius:4, padding:"1px 7px",
-                      letterSpacing:"0.05em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4832}}, "Prova")
-                    , l.iscritto
-                      ? React.createElement('span', { style: {fontSize:11, background:C.greenBg, color:C.green,
-                          border:`1px solid ${C.greenBorder}`, borderRadius:4, padding:"1px 7px",fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4836}}, "Iscritto ✓"
-
-                        )
-                      : React.createElement('span', { style: {fontSize:11, background:C.tealBg, color:C.teal,
-                          border:`1px solid ${C.tealBorder}`, borderRadius:4, padding:"1px 7px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4840}}, "Non iscritto"
-
-                        )
-                    
-                  )
-                  , React.createElement('div', { style: {display:"flex", gap:12, fontSize:12, color:C.textMuted, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4846}}
-                    , React.createElement('span', { style: {color:C.teal}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4847}}, l.instrument)
-                    , l.teacher && React.createElement('span', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4848}}, "· " , l.teacher)
-                    , l.room    && React.createElement('span', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4849}}, "· " , l.room)
-                    , l.phone   && React.createElement('span', { style: {color:C.teal}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4850}}, "· 📞 "  , l.phone)
-                  )
-                  , l.notes && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4852}}, l.notes)
-                )
-              ) : (
-                React.createElement(React.Fragment, null
-                  , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4856}}
-                    , React.createElement('span', { style: {fontSize:15, fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4857}}, l.student)
-                    , React.createElement('span', { style: {fontSize:12, color:hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4858}}, l.instrument)
-                    , l.recurrence !== "Nessuna" && React.createElement(Ic, { n: "repeat", size: 12, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4859}})
-                    , dotHex && React.createElement('div', { style: {width:7, height:7, borderRadius:"50%", background:dotHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4860}})
-                  )
-                  , React.createElement('div', { style: {display:"flex", gap:12, fontSize:12, color:C.textMuted, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4862}}
-                    , l.teacher && React.createElement('span', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4863}}, l.teacher)
-                    , l.room    && React.createElement('span', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4864}}, "· " , l.room)
-                  )
-                  , l.topic && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4866}}, "\"", l.topic, "\"")
                 )
               )
-            )
-            , l.tipo !== "sala_prove" && (l.attendance || l.inRecupero) && (
-              React.createElement('div', { style: {flexShrink:0, alignSelf:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4871}}
-                , (() => {
-                    const att = l.inRecupero && !l.attendance ? 'in_recupero' : l.attendance;
-                    const s = ATT_STYLES[att];
-                    const lbl = s ? s.label : att;
-                    return React.createElement(Badge, { label: lbl, variant: attBadge(att) });
-                  })()
+            ) : (
+              /* DESKTOP: layout orizzontale originale */
+              React.createElement(React.Fragment, null
+                , React.createElement('div', { style: {width:52, flexShrink:0, textAlign:"center", paddingTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4793}}
+                  , React.createElement('div', { style: {width:36, height:36, borderRadius:8, background:`${hex}18`, border:`1px solid ${hex}30`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 4px"}},
+                    React.createElement(Ic, { n: isColl(l) ? "group" : isProva(l) ? "user" : "music", size:18, stroke:hex })
+                  )
+                  , React.createElement('div', { style: {fontSize:10, color:hex, fontWeight:600, lineHeight:1}}, (l.hour||"").slice(0,5))
+                )
+                , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4798}}
+                  , l.tipo==="collettivo" ? (
+                    React.createElement(React.Fragment, null
+                      , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4801}}
+                        , React.createElement('span', { style: {fontSize:15, fontWeight:600, color:hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4802}}, l.courseName)
+                        , React.createElement('span', { style: {fontSize:11, background:`${hex}15`, color:hex, border:`1px solid ${hex}40`, borderRadius:4, padding:"1px 7px", letterSpacing:"0.05em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4803}}, "Collettiva")
+                        , l.recurrence !== "Nessuna" && React.createElement(Ic, { n: "repeat", size: 12, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4806}})
+                      )
+                      , React.createElement('div', { style: {display:"flex", gap:12, fontSize:12, color:C.textMuted, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4808}}
+                        , l.teacher && React.createElement('span', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4809}}, l.teacher)
+                        , l.room    && React.createElement('span', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4810}}, "· " , l.room)
+                        , React.createElement('span', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4811}}, "· " , (l.students||[]).length, " allievi" )
+                      )
+                      , (l.students||[]).length > 0 && (
+                        React.createElement('div', { style: {display:"flex", gap:5, marginTop:6, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4814}}
+                          , (l.students||[]).map(s => (
+                            React.createElement('span', { key: s.id, style: {fontSize:10, padding:"1px 7px", borderRadius:10, background:`${insHex(s.instrument)}18`, color:insHex(s.instrument), border:`1px solid ${insHex(s.instrument)}40`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4816}}
+                              , s.name.split(" ")[0]
+                            )
+                          ))
+                        )
+                      )
+                      , l.topic && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4824}}, "\"", l.topic, "\"")
+                    )
+                  ) : l.tipo==="prova" ? (
+                    React.createElement(React.Fragment, null
+                      , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4828}}
+                        , React.createElement('span', { style: {fontSize:15, fontWeight:600, color:C.teal}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4829}}
+                          , l.contactName || "Lezione prova"
+                        )
+                        , React.createElement('span', { style: {fontSize:11, background:C.tealBg, color:C.teal, border:`1px solid ${C.tealBorder}`, borderRadius:4, padding:"1px 7px", letterSpacing:"0.05em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4832}}, "Prova")
+                        , l.iscritto
+                          ? React.createElement('span', { style: {fontSize:11, background:C.greenBg, color:C.green, border:`1px solid ${C.greenBorder}`, borderRadius:4, padding:"1px 7px",fontWeight:600}}, "Iscritto ✓")
+                          : React.createElement('span', { style: {fontSize:11, background:C.tealBg, color:C.teal, border:`1px solid ${C.tealBorder}`, borderRadius:4, padding:"1px 7px"}}, "Non iscritto")
+                      )
+                      , React.createElement('div', { style: {display:"flex", gap:12, fontSize:12, color:C.textMuted, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4846}}
+                        , React.createElement('span', { style: {color:C.teal}}, l.instrument)
+                        , l.teacher && React.createElement('span', null, "· " , l.teacher)
+                        , l.room    && React.createElement('span', null, "· " , l.room)
+                        , l.phone   && React.createElement('span', { style: {color:C.teal}}, "· 📞 "  , l.phone)
+                      )
+                      , l.notes && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}}, l.notes)
+                    )
+                  ) : (
+                    React.createElement(React.Fragment, null
+                      , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap"}}
+                        , React.createElement('span', { style: {fontSize:15, fontWeight:600}}, l.student)
+                        , React.createElement('span', { style: {fontSize:12, color:hex}}, l.instrument)
+                        , l.recurrence !== "Nessuna" && React.createElement(Ic, { n: "repeat", size: 12, stroke: C.textDim})
+                        , dotHex && React.createElement('div', { style: {width:7, height:7, borderRadius:"50%", background:dotHex}})
+                      )
+                      , React.createElement('div', { style: {display:"flex", gap:12, fontSize:12, color:C.textMuted, flexWrap:"wrap"}}
+                        , l.teacher && React.createElement('span', null, l.teacher)
+                        , l.room    && React.createElement('span', null, "· " , l.room)
+                      )
+                      , l.topic && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}}, "\"", l.topic, "\"")
+                    )
+                  )
+                )
+                , attBadgeEl && React.createElement('div', {style:{flexShrink:0, alignSelf:"center"}}, attBadgeEl)
               )
             )
           )
@@ -11611,9 +11654,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           })()
 
           /* Contenuto */
-          , React.createElement('div', { style: {flex:1, padding:"0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
-            , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"hidden"}, className: "table-scroll", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
-              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding:20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
+          , React.createElement('div', { style: {flex:1, padding: isMobile ? "0 8px 8px" : "0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
+            , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"visible"}, className: "table-scroll", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
+              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, isMobile: isMobile, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
               , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
               , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
             )
@@ -17854,7 +17897,6 @@ const NAV_ITEMS = [
 const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction }) => {
   const ruoloHex = {admin:C.gold, docente:C.teal, allievo:C.blue}[_optionalChain([user, 'optionalAccess', _89 => _89.ruolo])] || C.gold;
   const ini = _optionalChain([user, 'optionalAccess', _90 => _90.nome]) ? user.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase() : "??";
-  // Primary nav items shown in bottom bar (most used)
   const _userRoleSB  = (user && user.ruolo) || "admin";
   const _effRoleSB   = (_userRoleSB === "admin" && currentRuolo) ? currentRuolo : _userRoleSB;
   const _permsSB     = IS_PWA
@@ -17862,6 +17904,30 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
     : (ROLE_PERMS[_effRoleSB] || ROLE_PERMS["admin"]);
   const FILTERED_ITEMS = NAV_ITEMS.filter(item => _permsSB[item.id] !== false);
   const BOTTOM_ITEMS   = FILTERED_ITEMS.slice(0, 5);
+
+  // Gruppi collassabili (solo admin desktop)
+  const SIDEBAR_GROUPS = [
+    { id:"scuola",  label:"Scuola",           icon:"graduation", items:["allievi","docenti","corsi","calendario"] },
+    { id:"arti",    label:"Concerti & Arti",  icon:"mic",        items:["concerti","repertorio"] },
+    { id:"config",  label:"Impostazioni",     icon:"settings",   items:["utenti","notifiche_settings","reminders","schedaScuola","modulistica"] },
+  ];
+  // Auto-apri il gruppo che contiene la voce attiva
+  const initOpen = () => {
+    const o = {};
+    SIDEBAR_GROUPS.forEach(g => { if(g.items.includes(current)) o[g.id] = true; });
+    if(settingsDrawerOpen) o["config"] = true;
+    return o;
+  };
+  const [openGroups, setOpenGroups] = useState(initOpen);
+  const toggleGroup = (id) => setOpenGroups(p => ({...p, [id]: !p[id]}));
+  // Quando cambia current o settingsDrawerOpen, apri il gruppo corrispondente
+  React.useEffect(() => {
+    SIDEBAR_GROUPS.forEach(g => {
+      if(g.items.includes(current)) setOpenGroups(p => ({...p, [g.id]: true}));
+    });
+    if(settingsDrawerOpen) setOpenGroups(p => ({...p, config: true}));
+  }, [current, settingsDrawerOpen]);
+
   return (
     React.createElement(React.Fragment, null
       /* ── Desktop sidebar ── */
@@ -17886,109 +17952,163 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
         )
         /* Navigation */
         , React.createElement('nav', { style: {flex:1,padding:"10px 8px",overflowY:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10602}}
-          , NAV_ITEMS.filter(item => {
-              // user.ruolo = ruolo reale del login; currentRuolo = simulazione (solo admin)
-              const userRole = _optionalChain([user, 'optionalAccess', _x => _x.ruolo]) || "admin";
-              const r = settingsDrawerOpen
-                ? "admin"
-                : (userRole === "admin" && currentRuolo ? currentRuolo : userRole);
-              // PWA: usa menu ridotto; desktop: menu completo
-              const perms = IS_PWA
-                ? (PWA_PERMS[r] || PWA_PERMS["admin"])
-                : (ROLE_PERMS[r] || ROLE_PERMS["admin"]);
-              return perms[item.id] !== false;
-            }).map(item => {
-            const active = current === item.id;
-            const userRole2 = (user&&user.ruolo)||'admin';
-            return (
-              React.createElement(React.Fragment, {key:item.id}
-                , React.createElement('button', { onClick: ()=>{ setView(item.id); if(item.subItems&&onQuickAction) setTimeout(()=>onQuickAction('showCalendario'),80); },
+          , (() => {
+              const sideRuolo = (user && user.ruolo) || "admin";
+              const effRole   = (sideRuolo === "admin" && currentRuolo) ? currentRuolo : sideRuolo;
+              const perms     = IS_PWA ? (PWA_PERMS[effRole]||PWA_PERMS["admin"]) : (ROLE_PERMS[effRole]||ROLE_PERMS["admin"]);
+              const isAdmin   = sideRuolo === "admin" && !IS_PWA;
+
+              // Helper: render a single nav button
+              const NavBtn = ({id, label, icon, indent=false}) => {
+                if(perms[id] === false) return null;
+                const active = current === id;
+                return React.createElement('button', {
+                  key: id,
+                  onClick: () => setView(id),
+                  style: {width:"100%",display:"flex",alignItems:"center",gap:10,
+                    padding: indent ? "7px 10px 7px 26px" : "9px 12px",
+                    borderRadius:0,border:"none",cursor:"pointer",
+                    background: active ? "rgba(255,255,255,0.15)" : "transparent",
+                    color: active ? "#ffffff" : indent ? "rgba(255,255,255,0.65)" : C.sidebarText,
+                    fontFamily:"'Open Sans',sans-serif",
+                    fontSize: indent ? 12 : 13,
+                    fontWeight: active ? 600 : 400,
+                    textAlign:"left",transition:"all 0.15s",marginBottom:1,
+                    borderLeft: active ? "3px solid #8c1818" : indent ? "3px solid rgba(255,255,255,0.1)" : "3px solid transparent"}},
+                  React.createElement(Ic, {n:icon, size: indent?12:15, stroke: active?"#ffffff": indent?"rgba(255,255,255,0.5)":C.sidebarText}),
+                  label
+                );
+              };
+
+              // Helper: render a collapsible group header
+              const GroupHdr = ({id, label, icon}) => {
+                const isOpen = !!openGroups[id];
+                const groupItems = (SIDEBAR_GROUPS.find(g=>g.id===id)||{}).items || [];
+                const hasActive  = groupItems.includes(current);
+                return React.createElement('button', {
+                  onClick: () => toggleGroup(id),
                   style: {width:"100%",display:"flex",alignItems:"center",gap:10,
                     padding:"9px 12px",borderRadius:0,border:"none",cursor:"pointer",
-                    background:active?"rgba(255,255,255,0.15)":"transparent",
-                    color:active?"#ffffff":C.sidebarText,
-                    fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:active?600:400,
+                    background: hasActive ? "rgba(255,255,255,0.08)" : "transparent",
+                    color: hasActive ? "#ffffff" : C.sidebarText,
+                    fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight: hasActive?600:400,
                     textAlign:"left",transition:"all 0.15s",marginBottom:1,
-                    borderLeft:active?"3px solid #8c1818":"3px solid transparent"}}
-                  , React.createElement(Ic, { n: item.icon, size: 15, stroke: active?"#ffffff":C.sidebarText})
-                  , item.label
-                )
-                , active && item.subItems && React.createElement('div', {style:{paddingLeft:18,paddingBottom:4}}
-                  , item.subItems
-                    .filter(s=>!s.adminOnly || userRole2==='admin')
-                    .map(s => React.createElement('button', {key:s.qaKey,
-                      onClick:()=>{ setView(item.id); if(onQuickAction) setTimeout(()=>onQuickAction(s.qaKey),120); },
-                      style:{width:'100%',display:'flex',alignItems:'center',gap:8,
-                        padding:'6px 10px',border:'none',borderRadius:0,cursor:'pointer',
-                        background:'transparent',
-                        color:'rgba(255,255,255,0.6)',
-                        fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:400,
-                        textAlign:'left',transition:'all .12s',
-                        borderLeft:'2px solid rgba(255,255,255,0.15)'}}
-                      , React.createElement(Ic,{n:s.icon,size:12,stroke:'rgba(255,255,255,0.5)'})
-                      , s.label
-                    ))
-                )
-              )
-            );
-          })
-        )
-        /* ── Sezione strumenti — solo admin, solo desktop ── */
-        , (function(){
-            const sideRuolo = _optionalChain([user, 'optionalAccess', _sx => _sx.ruolo]) || "admin";
-            if(sideRuolo !== "admin") return null;
-            if(IS_PWA) return null; // nascosta in PWA — menu snello
-            return React.createElement('div', { style: {padding:"6px 8px",borderTop:"1px solid rgba(255,255,255,0.12)",flexShrink:0} }
-              , React.createElement('div', {style:{fontSize:9,color:"rgba(255,255,255,0.45)",letterSpacing:".15em",textTransform:"uppercase",padding:"6px 4px 4px"}}, "Strumenti")
-              , React.createElement('button', {
-                  onClick: function(){ if(onSettingsOpen) onSettingsOpen(true); },
-                  style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
-                    borderRadius:0,border:"none",cursor:"pointer",
-                    background:settingsDrawerOpen?"rgba(255,255,255,0.15)":"transparent",
-                    color:settingsDrawerOpen?"#ffffff":C.sidebarText,
-                    fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:settingsDrawerOpen?600:400,
-                    textAlign:"left",transition:"all .15s",marginBottom:1,
-                    borderLeft:settingsDrawerOpen?"3px solid #8c1818":"3px solid transparent"}},
-                React.createElement(Ic,{n:"settings",size:14,stroke:settingsDrawerOpen?"#ffffff":C.sidebarText}),
-                "Impostazioni"
-              )
-              , [
-                  {id:"schedaScuola",        label:"Scheda scuola",       icon:"flag"},
-                  {id:"modulistica",          label:"Modulistica",         icon:"file"},
-                  {id:"notifiche_settings",   label:"Config. Notifiche",   icon:"bell"},
-                ].map(item=>{
-                  const active=current===item.id;
-                  return React.createElement('button', {key:item.id, onClick:()=>setView(item.id),
-                    style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
-                      borderRadius:0,border:"none",cursor:"pointer",
+                    borderLeft: hasActive ? "3px solid rgba(255,255,255,0.3)" : "3px solid transparent"}},
+                  React.createElement(Ic,{n:icon, size:15, stroke: hasActive?"#ffffff":C.sidebarText}),
+                  React.createElement('span',{style:{flex:1}}, label),
+                  React.createElement('span',{style:{fontSize:10,opacity:0.5,transition:"transform 0.2s",
+                    display:"inline-block",transform: isOpen?"rotate(90deg)":"rotate(0deg)"}}, "▶")
+                );
+              };
+
+              if(isAdmin) {
+                // ADMIN: gruppi collassabili
+                const DIRECT_ITEMS = ["dashboard","contabilita","notifiche","allegati","biblioteca"];
+                return React.createElement(React.Fragment, null
+                  /* Voci dirette */
+                  , DIRECT_ITEMS.map(id => {
+                      const it = NAV_ITEMS.find(x=>x.id===id);
+                      if(!it || perms[id]===false) return null;
+                      return NavBtn({id:it.id, label:it.label, icon:it.icon});
+                    })
+
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
+                  /* Gruppo SCUOLA */
+                  , GroupHdr({id:"scuola", label:"Scuola", icon:"graduation"})
+                  , openGroups.scuola && SIDEBAR_GROUPS[0].items.map(id => {
+                      const it = NAV_ITEMS.find(x=>x.id===id);
+                      if(!it || perms[id]===false) return null;
+                      return NavBtn({id:it.id, label:it.label, icon:it.icon, indent:true});
+                    })
+
+                  /* Gruppo CONCERTI & ARTI */
+                  , GroupHdr({id:"arti", label:"Concerti & Arti", icon:"mic"})
+                  , openGroups.arti && SIDEBAR_GROUPS[1].items.map(id => {
+                      const it = NAV_ITEMS.find(x=>x.id===id);
+                      if(!it || perms[id]===false) return null;
+                      return NavBtn({id:it.id, label:it.label, icon:it.icon, indent:true});
+                    })
+
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
+                  /* Gruppo IMPOSTAZIONI */
+                  , GroupHdr({id:"config", label:"Impostazioni", icon:"settings"})
+                  , openGroups.config && React.createElement(React.Fragment, null
+                      , NavBtn({id:"utenti",             label:"Utenti",              icon:"shield",   indent:true})
+                      , NavBtn({id:"notifiche_settings", label:"Config. Notifiche",   icon:"bell",     indent:true})
+                      , NavBtn({id:"reminders",          label:"Reminders WA",        icon:"phone",    indent:true})
+                      , NavBtn({id:"schedaScuola",        label:"Scheda scuola",       icon:"flag",     indent:true})
+                      , NavBtn({id:"modulistica",         label:"Modulistica",         icon:"file",     indent:true})
+                      /* Impostazioni drawer */
+                      , React.createElement('button', {
+                          onClick: ()=>{ if(onSettingsOpen) onSettingsOpen(true); },
+                          style:{width:"100%",display:"flex",alignItems:"center",gap:10,
+                            padding:"7px 10px 7px 26px",borderRadius:0,border:"none",cursor:"pointer",
+                            background:settingsDrawerOpen?"rgba(255,255,255,0.15)":"transparent",
+                            color:settingsDrawerOpen?"#ffffff":"rgba(255,255,255,0.65)",
+                            fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:settingsDrawerOpen?600:400,
+                            textAlign:"left",transition:"all .15s",marginBottom:1,
+                            borderLeft:settingsDrawerOpen?"3px solid #8c1818":"3px solid rgba(255,255,255,0.1)"}},
+                          React.createElement(Ic,{n:"settings",size:12,stroke:settingsDrawerOpen?"#ffffff":"rgba(255,255,255,0.5)"}),
+                          "Impostazioni generali"
+                        )
+                      /* Sito Web */
+                      , React.createElement('a', {
+                          href:"index.html", target:"_blank",
+                          style:{width:"100%",display:"flex",alignItems:"center",gap:10,
+                            padding:"7px 10px 7px 26px",borderRadius:0,border:"none",cursor:"pointer",
+                            background:"transparent",color:"rgba(255,255,255,0.65)",
+                            fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:400,
+                            textAlign:"left",textDecoration:"none",transition:"all .15s",
+                            borderLeft:"3px solid rgba(255,255,255,0.1)"},
+                          onMouseEnter:e=>{e.currentTarget.style.color="#fff";},
+                          onMouseLeave:e=>{e.currentTarget.style.color="rgba(255,255,255,0.65)";}}
+                        , React.createElement(Ic,{n:"globe",size:12,stroke:"rgba(255,255,255,0.5)"})
+                        , "Sito Web"
+                        , React.createElement('span',{style:{marginLeft:"auto",fontSize:9,opacity:0.5}},"↗")
+                      )
+                    )
+                );
+              }
+
+              // NON-ADMIN: lista piatta originale
+              return NAV_ITEMS.filter(item => perms[item.id] !== false).map(item => {
+                const active = current === item.id;
+                const userRole2 = (user&&user.ruolo)||'admin';
+                return React.createElement(React.Fragment, {key:item.id}
+                  , React.createElement('button', { onClick: ()=>{ setView(item.id); if(item.subItems&&onQuickAction) setTimeout(()=>onQuickAction('showCalendario'),80); },
+                    style: {width:"100%",display:"flex",alignItems:"center",gap:10,
+                      padding:"9px 12px",borderRadius:0,border:"none",cursor:"pointer",
                       background:active?"rgba(255,255,255,0.15)":"transparent",
                       color:active?"#ffffff":C.sidebarText,
-                      fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:active?600:400,
-                      textAlign:"left",transition:"all .15s",marginBottom:1,
+                      fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:active?600:400,
+                      textAlign:"left",transition:"all 0.15s",marginBottom:1,
                       borderLeft:active?"3px solid #8c1818":"3px solid transparent"}}
-                    , React.createElement(Ic,{n:item.icon,size:14,stroke:active?"#ffffff":C.sidebarText})
+                    , React.createElement(Ic, { n: item.icon, size: 15, stroke: active?"#ffffff":C.sidebarText})
                     , item.label
-                  );
-                })
-              , React.createElement('a', {
-                  href:"index.html", target:"_blank",
-                  style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
-                    borderRadius:0,border:"none",cursor:"pointer",
-                    background:"transparent",
-                    color:C.sidebarText,
-                    fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:400,
-                    textAlign:"left",textDecoration:"none",
-                    transition:"all .15s",marginBottom:1,
-                    borderLeft:"3px solid transparent"},
-                  onMouseEnter:e=>{e.currentTarget.style.background="rgba(255,255,255,0.1)";},
-                  onMouseLeave:e=>{e.currentTarget.style.background="transparent";},
-                }
-                , React.createElement(Ic,{n:"globe",size:14,stroke:C.sidebarText})
-                , "Sito Web"
-                , React.createElement('span', {style:{marginLeft:"auto",fontSize:9,opacity:0.5}}, "↗")
-              )
-            );
-          })()
+                  )
+                  , active && item.subItems && React.createElement('div', {style:{paddingLeft:18,paddingBottom:4}}
+                    , item.subItems
+                      .filter(s=>!s.adminOnly || userRole2==='admin')
+                      .map(s => React.createElement('button', {key:s.qaKey,
+                        onClick:()=>{ setView(item.id); if(onQuickAction) setTimeout(()=>onQuickAction(s.qaKey),120); },
+                        style:{width:'100%',display:'flex',alignItems:'center',gap:8,
+                          padding:'6px 10px',border:'none',borderRadius:0,cursor:'pointer',
+                          background:'transparent',color:'rgba(255,255,255,0.6)',
+                          fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:400,
+                          textAlign:'left',transition:'all .12s',
+                          borderLeft:'2px solid rgba(255,255,255,0.15)'}}
+                        , React.createElement(Ic,{n:s.icon,size:12,stroke:'rgba(255,255,255,0.5)'})
+                        , s.label
+                      ))
+                  )
+                );
+              });
+            })()
+        )
 
         /* ── Sezione strumenti — docente ── */
         , (function(){
