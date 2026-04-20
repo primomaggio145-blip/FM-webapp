@@ -17907,26 +17907,27 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
 
   // Gruppi collassabili (solo admin desktop)
   const SIDEBAR_GROUPS = [
-    { id:"scuola",  label:"Scuola",           icon:"graduation", items:["allievi","docenti","corsi","calendario"] },
-    { id:"arti",    label:"Concerti & Repertorio",  icon:"mic",        items:["concerti","repertorio","allegati","biblioteca"] },
-    { id:"config",  label:"Impostazioni",     icon:"settings",   items:["utenti","notifiche_settings","reminders","schedaScuola","modulistica"] },
+    { id:"scuola",   label:"Scuola",                icon:"graduation", items:["allievi","docenti","corsi","calendario"] },
+    { id:"risorse",  label:"Risorse & Libri",        icon:"book",       items:["allegati","repertorio","biblioteca"] },
+    { id:"notif",    label:"Notifiche & Reminders",  icon:"bell",       items:["notifiche","notifiche_settings","reminders"] },
+    { id:"config",   label:"Impostazioni",           icon:"settings",   items:["utenti","schedaScuola","modulistica","impostazioni"] },
   ];
   // Auto-apri il gruppo che contiene la voce attiva
   const initOpen = () => {
     const o = {};
     SIDEBAR_GROUPS.forEach(g => { if(g.items.includes(current)) o[g.id] = true; });
-    if(settingsDrawerOpen) o["config"] = true;
+    if(current === 'impostazioni') o["config"] = true;
     return o;
   };
   const [openGroups, setOpenGroups] = useState(initOpen);
   const toggleGroup = (id) => setOpenGroups(p => ({...p, [id]: !p[id]}));
-  // Quando cambia current o settingsDrawerOpen, apri il gruppo corrispondente
+  // Quando cambia current, apri il gruppo corrispondente
   React.useEffect(() => {
     SIDEBAR_GROUPS.forEach(g => {
       if(g.items.includes(current)) setOpenGroups(p => ({...p, [g.id]: true}));
     });
-    if(settingsDrawerOpen) setOpenGroups(p => ({...p, config: true}));
-  }, [current, settingsDrawerOpen]);
+    if(current === 'impostazioni') setOpenGroups(p => ({...p, config: true}));
+  }, [current]);
 
   return (
     React.createElement(React.Fragment, null
@@ -18003,29 +18004,25 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
 
               if(isAdmin) {
                 // ADMIN: gruppi collassabili
-                const DIRECT_ITEMS = ["dashboard","contabilita","notifiche"];
                 return React.createElement(React.Fragment, null
-                  /* Voci dirette */
-                  , DIRECT_ITEMS.map(id => {
-                      const it = NAV_ITEMS.find(x=>x.id===id);
-                      if(!it || perms[id]===false) return null;
-                      return NavBtn({id:it.id, label:it.label, icon:it.icon});
-                    })
+
+                  /* ── Dashboard (diretto) ── */
+                  , NavBtn({id:"dashboard", label:"Dashboard", icon:"grid"})
 
                   /* Separatore */
                   , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
 
-                  /* Gruppo SCUOLA */
+                  /* ── Gruppo SCUOLA ── */
                   , GroupHdr({id:"scuola", label:"Scuola", icon:"graduation"})
-                  , openGroups.scuola && SIDEBAR_GROUPS[0].items.map(id => {
+                  , openGroups.scuola && ["allievi","docenti","corsi","calendario"].map(id => {
                       const it = NAV_ITEMS.find(x=>x.id===id);
                       if(!it || perms[id]===false) return null;
                       return NavBtn({id:it.id, label:it.label, icon:it.icon, indent:true});
                     })
 
-                  /* Gruppo CONCERTI & Repertori */
-                  , GroupHdr({id:"arti", label:"Concerti & Repertorio", icon:"mic"})
-                  , openGroups.arti && SIDEBAR_GROUPS[1].items.map(id => {
+                  /* ── Gruppo RISORSE & LIBRI ── */
+                  , GroupHdr({id:"risorse", label:"Risorse & Libri", icon:"book"})
+                  , openGroups.risorse && ["allegati","repertorio","biblioteca"].map(id => {
                       const it = NAV_ITEMS.find(x=>x.id===id);
                       if(!it || perms[id]===false) return null;
                       return NavBtn({id:it.id, label:it.label, icon:it.icon, indent:true});
@@ -18034,29 +18031,37 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                   /* Separatore */
                   , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
 
-                  /* Gruppo IMPOSTAZIONI */
+                  /* ── Contabilità (diretto) ── */
+                  , NavBtn({id:"contabilita", label:"Contabilità", icon:"euro"})
+
+                  /* ── Concerti (diretto) ── */
+                  , NavBtn({id:"concerti", label:"Concerti", icon:"mic"})
+
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
+                  /* ── Gruppo NOTIFICHE & REMINDERS ── */
+                  , GroupHdr({id:"notif", label:"Notifiche & Reminders", icon:"bell"})
+                  , openGroups.notif && React.createElement(React.Fragment, null
+                      , NavBtn({id:"notifiche",         label:"Notifiche",         icon:"bell",  indent:true})
+                      , NavBtn({id:"notifiche_settings",label:"Config. Notifiche", icon:"settings", indent:true})
+                      , NavBtn({id:"reminders",          label:"Reminders WA",     icon:"phone", indent:true})
+                    )
+
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
+                  /* ── Gruppo IMPOSTAZIONI ── */
                   , GroupHdr({id:"config", label:"Impostazioni", icon:"settings"})
                   , openGroups.config && React.createElement(React.Fragment, null
-                      , NavBtn({id:"utenti",             label:"Utenti",              icon:"shield",   indent:true})
-                      , NavBtn({id:"notifiche_settings", label:"Config. Notifiche",   icon:"bell",     indent:true})
-                      , NavBtn({id:"reminders",          label:"Reminders WA",        icon:"phone",    indent:true})
-                      , NavBtn({id:"schedaScuola",        label:"Scheda scuola",       icon:"flag",     indent:true})
-                      , NavBtn({id:"modulistica",         label:"Modulistica",         icon:"file",     indent:true})
-                      /* Impostazioni drawer */
-                      , React.createElement('button', {
-                          onClick: ()=>{ if(onSettingsOpen) onSettingsOpen(true); },
-                          style:{width:"100%",display:"flex",alignItems:"center",gap:10,
-                            padding:"7px 10px 7px 26px",borderRadius:0,border:"none",cursor:"pointer",
-                            background:settingsDrawerOpen?"rgba(255,255,255,0.15)":"transparent",
-                            color:settingsDrawerOpen?"#ffffff":"rgba(255,255,255,0.65)",
-                            fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:settingsDrawerOpen?600:400,
-                            textAlign:"left",transition:"all .15s",marginBottom:1,
-                            borderLeft:settingsDrawerOpen?"3px solid #8c1818":"3px solid rgba(255,255,255,0.1)"}},
-                          React.createElement(Ic,{n:"settings",size:12,stroke:settingsDrawerOpen?"#ffffff":"rgba(255,255,255,0.5)"}),
-                          "Impostazioni generali"
-                        )
+                      /* Impostazioni generali → pagina full-screen */
+                      , NavBtn({id:"impostazioni", label:"Impostazioni generali", icon:"settings", indent:true})
+                      , NavBtn({id:"utenti",        label:"Utenti",               icon:"shield",   indent:true})
+                      , NavBtn({id:"schedaScuola",   label:"Scheda scuola",        icon:"flag",     indent:true})
+                      , NavBtn({id:"modulistica",    label:"Modulistica",          icon:"file",     indent:true})
                       /* Sito Web */
                       , React.createElement('a', {
+                          key:"sito-web",
                           href:"index.html", target:"_blank",
                           style:{width:"100%",display:"flex",alignItems:"center",gap:10,
                             padding:"7px 10px 7px 26px",borderRadius:0,border:"none",cursor:"pointer",
@@ -18971,7 +18976,7 @@ function App() {
       case 'biblioteca':  return React.createElement(BibliotecaView, { userRuolo: user?.ruolo||"admin", appUser: user});
       case 'concerti':    return React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti});
       case 'utenti':      return (user?.ruolo||"admin")==="admin" ? React.createElement(UtentiView, { students: sharedStudents, docenti: sharedDocenti}) : null;
-      case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo});
+      case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici});
       case 'schedaScuola':return React.createElement(SchedaScuolaView, { config: sharedConfig});
       case 'modulistica': return React.createElement(ModulisticaView, {});
       case 'notifiche':          return React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste});
@@ -19016,19 +19021,7 @@ function App() {
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
       , React.createElement('div', { style: {display:"flex",height:"100dvh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: settingsDrawerOpen, onSettingsOpen: setSettingsDrawerOpen, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
-        , settingsDrawerOpen && React.createElement(SettingsDrawer, {
-            open: settingsDrawerOpen,
-            onClose: ()=>setSettingsDrawerOpen(false),
-            anniScolastici: sharedAnniScolastici,
-            setAnniScolastici: setSharedAnniScolastici,
-            panels: sharedPanels,
-            onPanels: setSharedPanels,
-            config: sharedConfig,
-            onConfig: setSharedConfig,
-            ruolo: sharedRuolo,
-            onRuolo: setSharedRuolo,
-          })
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , React.createElement('div', { key: view, className: "main-scroll", style: {flex:1,overflow:"auto",background:C.bg,animation:"fadeIn 0.25s ease",
           paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 4px)",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10788}}
           , renderCurrentView()
