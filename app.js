@@ -17908,7 +17908,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
   // Gruppi collassabili (solo admin desktop)
   const SIDEBAR_GROUPS = [
     { id:"scuola",  label:"Scuola",           icon:"graduation", items:["allievi","docenti","corsi","calendario"] },
-    { id:"arti",    label:"Concerti & Repertori",  icon:"mic",        items:["concerti","repertorio","allegati","biblioteca"] },
+    { id:"arti",    label:"Concerti & Repertorio",  icon:"mic",        items:["concerti","repertorio","allegati","biblioteca"] },
     { id:"config",  label:"Impostazioni",     icon:"settings",   items:["utenti","notifiche_settings","reminders","schedaScuola","modulistica"] },
   ];
   // Auto-apri il gruppo che contiene la voce attiva
@@ -18024,7 +18024,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                     })
 
                   /* Gruppo CONCERTI & Repertori */
-                  , GroupHdr({id:"arti", label:"Concerti & Repertori", icon:"mic"})
+                  , GroupHdr({id:"arti", label:"Concerti & Repertorio", icon:"mic"})
                   , openGroups.arti && SIDEBAR_GROUPS[1].items.map(id => {
                       const it = NAV_ITEMS.find(x=>x.id===id);
                       if(!it || perms[id]===false) return null;
