@@ -7767,6 +7767,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
         /* ── Segna presenza ── */
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4636}}
           , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4637}}, "Segna presenza" )
+          /* Banner lezione recuperata — sola lettura */
           , lesson.attendance === 'recuperata'
             ? React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:C.tealBg,border:'1px solid '+C.tealBorder,borderRadius:8}}
                 , React.createElement(Ic,{n:'check',size:15,stroke:C.teal})
@@ -7776,14 +7777,14 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                 )
                 , React.createElement('span',{style:{fontSize:10,color:C.textDim,marginLeft:'auto'}},'(sola lettura)')
               )
-            : lesson.attendance === 'recupero'
-            ? React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:C.blueBg,border:'1px solid '+C.blueBorder,borderRadius:8}}
-                , React.createElement(Ic,{n:'calendar',size:15,stroke:C.blue})
-                , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.blue}},'Lezione di recupero')
-                , React.createElement('span',{style:{fontSize:10,color:C.textDim,marginLeft:'auto'}},'(sola lettura)')
-              )
             : React.createElement(React.Fragment, null
-                /* ── Banner recupero scaduto (solo admin) ── */
+                /* Banner informativo per lezione di recupero fissata — NON blocca i pulsanti */
+                , lesson.tipo === 'recupero' && (
+                  React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:C.blueBg,border:'1px solid '+C.blueBorder,borderRadius:8,marginBottom:10}}
+                    , React.createElement(Ic,{n:'calendar',size:14,stroke:C.blue})
+                    , React.createElement('div',{style:{fontSize:12,fontWeight:600,color:C.blue}},'Lezione di recupero · segna la presenza qui sotto')
+                  )
+                )
                 , isRecuperoScaduto && (
                   React.createElement('div', {style:{marginBottom:10,padding:'12px 14px',background:'rgba(220,38,38,0.08)',border:'1px solid rgba(220,38,38,0.3)',borderRadius:10,display:'flex',alignItems:'center',gap:10}}
                     , React.createElement(Ic,{n:'alert',size:16,stroke:C.red})
@@ -19191,14 +19192,20 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
 
     const oggi_s = new Date(); oggi_s.setHours(0,0,0,0);
     const domani  = new Date(oggi_s); domani.setDate(domani.getDate()+1);
-    // Per l'admin: può fissare recuperi fino a 60 giorni avanti (non solo fine mese)
     const maxData = new Date(oggi_s); maxData.setDate(maxData.getDate()+60);
 
     const giornoToIdx = { "domenica":0,"lunedi":1,"lunedì":1,"martedi":2,"martedì":2,"mercoledi":3,"mercoledì":3,"giovedi":4,"giovedì":4,"venerdi":5,"venerdì":5,"sabato":6 };
 
-    // Lezioni già presenti (per bloccare slot occupati)
     const allLessons = window.__FM_DATA__?.lessons || [];
     const occupati = new Set(allLessons.map(l => l.date+'_'+(l.hour||'').slice(0,5)));
+
+    // ── FIX DATA: usa date locali, NON toISOString() che usa UTC ──
+    const toLocalDateStr = (d) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const dd = String(d.getDate()).padStart(2,'0');
+      return `${y}-${m}-${dd}`;
+    };
 
     const risultato = [];
     for (const slot of disp) {
@@ -19207,7 +19214,7 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
       const cursor = new Date(domani);
       while (cursor <= maxData) {
         if (cursor.getDay() === dow) {
-          const dataStr = cursor.toISOString().split('T')[0];
+          const dataStr = toLocalDateStr(cursor); // FIX: era cursor.toISOString().split('T')[0]
           let cur = toMin(slot.oraInizio);
           const end = toMin(slot.oraFine);
           while (cur + durataMin <= end) {
@@ -19232,31 +19239,73 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
     setSaving(true);
     const sb = window.supabaseClient;
     if (sb) {
+      const nuovaId = uid();
+      const noteText = note || ('Recupero fissato dall\'admin · lezione del '+lesson.date);
+
+      // ── FIX ATTENDANCE: la nuova lezione non ha attendance pre-impostata,
+      //    così il docente/admin può segnare presenza normalmente ──
       const nuovaLez = {
         ...lesson,
-        id:              uid(),
+        id:              nuovaId,
         date:            slotSel.data,
         hour:            slotSel.oraInizio,
-        attendance:      'recupero',
-        tipo:            'recupero',
+        attendance:      null,        // FIX: era 'recupero' (bloccava la modifica)
+        tipo:            'recupero',  // tipo=recupero identifica la lezione come recupero
         inRecupero:      false,
         recuperoScadenza:null,
-        notes:           note || ('Recupero fissato dall\'admin · lezione del '+lesson.date),
+        notes:           noteText,
         recurrence:      'Nessuna',
       };
+
+      // 1. Inserisci la nuova lezione di recupero
       await sb.from('lezioni').insert({
-        id: nuovaLez.id, data: nuovaLez.date, ora: nuovaLez.hour+':00',
+        id: nuovaId, data: nuovaLez.date, ora: nuovaLez.hour+':00',
         student: nuovaLez.student, studente_id: nuovaLez.studentId||null,
         strumento: nuovaLez.instrument||nuovaLez.strumento||null,
         teacher: nuovaLez.teacher, room: nuovaLez.room||null,
-        attendance: 'recupero', tipo: 'recupero',
-        recurrence: 'Nessuna', notes: nuovaLez.notes,
+        attendance: null,           // FIX: non pre-impostare la presenza
+        tipo: 'recupero',
+        recurrence: 'Nessuna', notes: noteText,
         in_recupero: false, recupero_scadenza: null,
         durata: nuovaLez.durata||45,
         corso_id: nuovaLez.courseId||null, corso_nome: nuovaLez.courseName||null,
       });
-      // Segna la lezione originale come "in_recupero" risolta
+
+      // 2. Segna la lezione originale come risolta
       await sb.from('lezioni').update({ attendance:'in_recupero', in_recupero:true }).eq('id', lesson.id);
+
+      // ── FIX RICHIESTA: crea un record in richieste_recupero con stato='completata'
+      //    così appare in "Richieste di Recupero" con il tag "Confermata ufficialmente" ──
+      const allievoId = lesson.studentId || lesson.studente_id || null;
+      await sb.from('richieste_recupero').insert({
+        allievo_id:     allievoId ? String(allievoId) : null,
+        allievo_nome:   lesson.student || '',
+        docente:        lesson.teacher || '',
+        data_preferita: slotSel.data,
+        ora_recupero:   slotSel.oraInizio,
+        note:           noteText,
+        stato:          'completata',    // completata = "Confermata ufficialmente"
+        lezioni_ids:    JSON.stringify([lesson.id]),
+        created_at:     new Date().toISOString(),
+      });
+
+      // 3. Notifica all'allievo
+      if (allievoId) {
+        const MESI_N=['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+        const [dy,dm,dd2] = slotSel.data.split('-');
+        const dataLabel = `${dd2} ${MESI_N[+dm-1]} ${dy}`;
+        await sb.from('notifiche').insert({
+          destinatario_ruolo: 'allievo',
+          destinatario_id:    String(allievoId),
+          destinatario_nome:  lesson.student||'',
+          tipo:               'recupero_ufficiale',
+          titolo:             '✅ Recupero confermato ufficialmente',
+          messaggio:          `Il tuo recupero è stato fissato per ${dataLabel} ore ${slotSel.oraInizio}.` + (note ? ' Nota: '+note : ''),
+          letto:              false,
+          created_at:         new Date().toISOString(),
+        });
+      }
+
       setLessons(p => [...p, nuovaLez].map(l =>
         l.id===lesson.id ? {...l, attendance:'in_recupero', inRecupero:true} : l
       ));
