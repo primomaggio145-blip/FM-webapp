@@ -1027,7 +1027,7 @@ const PanelloSinistra = ()=>{
 };
 
 // ─── FORM LOGIN ───────────────────────────────────────────────────────────────
-const FormLogin = ({onSuccess,onRegistrazione,onRecupero})=>{
+const FormLogin = ({onSuccess,onRegistrazione,onRecupero,onBand})=>{
   const [email,    setEmail]    = useState("");
   const [password, setPassword] = useState("");
   const [loading,  setLoading]  = useState(false);
@@ -1123,7 +1123,18 @@ const FormLogin = ({onSuccess,onRegistrazione,onRecupero})=>{
         , React.createElement('span', { style: {fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 916}}, "Non hai un account? "    )
         , React.createElement('button', { onClick: onRegistrazione, style: {background:"none",border:"none",cursor:"pointer",
           fontSize:13,color:C.gold,fontFamily:"'Open Sans',sans-serif",fontWeight:500,textDecoration:"underline"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 917}}, "Richiedi accesso"
-
+        )
+      )
+      /* Link accesso rapido sala prove per band */
+      , React.createElement('div', { style: {textAlign:"center",paddingTop:0} }
+        , React.createElement('div', {style:{height:1,background:C.border,margin:"4px 0 12px"}})
+        , React.createElement('button', { onClick: onBand, style: {background:"none",border:`1px solid ${C.orange2Border}`,borderRadius:8,cursor:"pointer",
+          padding:"8px 16px",fontSize:12,color:C.orange2,fontFamily:"'Open Sans',sans-serif",fontWeight:600,
+          display:"inline-flex",alignItems:"center",gap:6,transition:"all .15s"},
+          onMouseEnter:e=>{e.currentTarget.style.background=C.orange2Bg;},
+          onMouseLeave:e=>{e.currentTarget.style.background="none";} }
+          , React.createElement(Ic,{n:"drum",size:13,stroke:C.orange2})
+          , "🎸 Prenota Sala Prove (band/ensemble)"
         )
       )
     )
@@ -1277,6 +1288,92 @@ const FormRegistrazione = ({onBack})=>{
     )
   );
 };
+
+// ─── FORM REGISTRAZIONE BAND / SALA PROVE ────────────────────────────────────
+const FormRegistrazioneBand = ({onBack})=>{
+  const [step, setStep] = useState(1);
+  const [f, setF] = useState({nome:"",email:"",nomeBand:"",telefono:"",messaggio:""});
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState({});
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+
+  const validate=()=>{
+    const e={};
+    if(!f.nome.trim()) e.nome="Nome obbligatorio";
+    if(!f.email.trim()||!/\S+@\S+\.\S+/.test(f.email)) e.email="Email non valida";
+    return e;
+  };
+
+  const handleInvia=()=>{
+    const e=validate(); if(Object.keys(e).length){setErr(e);return;}
+    setLoading(true);
+    (async()=>{
+      try {
+        if(window.FM_AUTH){
+          const msg=[f.nomeBand?"Band: "+f.nomeBand:"",f.telefono?"Tel: "+f.telefono:"",f.messaggio||""].filter(Boolean).join(" · ");
+          await window.FM_AUTH.inviaRichiesta({nome:f.nome.trim(),email:f.email.trim().toLowerCase(),ruolo:"band",messaggio:msg||"Richiesta accesso sala prove"});
+        }
+        setLoading(false); setStep(2);
+      } catch(ex){ setErr({form:ex.message||"Errore. Riprova."}); setLoading(false); }
+    })();
+  };
+
+  const inpS={width:"100%",padding:"10px 13px",border:"1px solid "+C.border,borderRadius:8,fontSize:13,color:C.text,background:C.bg,fontFamily:"'Open Sans',sans-serif",boxSizing:"border-box"};
+
+  if(step===2) return React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:22,alignItems:"center",textAlign:"center",paddingTop:20}}
+    ,React.createElement("div",{style:{width:64,height:64,borderRadius:"50%",background:"rgba(234,88,12,0.1)",border:"2px solid rgba(234,88,12,0.3)",display:"flex",alignItems:"center",justifyContent:"center"}},React.createElement(Ic,{n:"drum",size:28,stroke:C.orange2}))
+    ,React.createElement("h2",{style:{fontFamily:"'Oswald',sans-serif",fontSize:24,fontWeight:600}},"Richiesta inviata! 🎸")
+    ,React.createElement("p",{style:{fontSize:13,color:C.textMuted,lineHeight:1.7}},"Riceverai un email a ",React.createElement("strong",null,f.email)," quando il tuo account sarà attivato.")
+    ,React.createElement("div",{style:{background:"rgba(234,88,12,0.06)",border:"1px solid rgba(234,88,12,0.2)",borderRadius:10,padding:"12px 16px",fontSize:12,color:"#92400e",lineHeight:1.6,maxWidth:320,textAlign:"left"}}
+      ,"🥁 Con l'account Sala Prove potrai vedere la disponibilità e prenotare la sala.")
+    ,React.createElement("button",{onClick:onBack,style:{padding:"10px 24px",borderRadius:8,background:"transparent",border:"1px solid "+C.border,color:C.textMuted,cursor:"pointer",fontSize:13,fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",gap:6}},React.createElement(Ic,{n:"left",size:14,stroke:"currentColor"})," Torna al login")
+  );
+
+  return React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:16}}
+    ,React.createElement("div",null
+      ,React.createElement("button",{onClick:onBack,style:{display:"flex",alignItems:"center",gap:6,background:"none",border:"none",cursor:"pointer",color:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif",marginBottom:12,padding:0}},React.createElement(Ic,{n:"left",size:14,stroke:C.textMuted})," Torna al login")
+      ,React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:4}}
+        ,React.createElement("div",{style:{width:38,height:38,borderRadius:10,background:"rgba(234,88,12,0.1)",border:"1px solid rgba(234,88,12,0.2)",display:"flex",alignItems:"center",justifyContent:"center"}},React.createElement(Ic,{n:"drum",size:19,stroke:C.orange2}))
+        ,React.createElement("div",null
+          ,React.createElement("h1",{style:{fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,marginBottom:1}},"Prenota Sala Prove")
+          ,React.createElement("p",{style:{fontSize:12,color:C.textMuted}},"Registrati — l'accesso sarà approvato dall'admin")
+        )
+      )
+    )
+    ,err.form&&React.createElement("div",{style:{background:C.redBg,border:"1px solid "+C.redBorder,borderRadius:8,padding:"9px 12px",fontSize:12,color:C.red}},err.form)
+    ,React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:11}}
+      ,React.createElement("div",null
+        ,React.createElement("label",{style:{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:".06em",display:"block",marginBottom:4}},"Nome e cognome *")
+        ,React.createElement("input",{value:f.nome,onChange:e=>{set("nome",e.target.value);setErr(p=>({...p,nome:""}));},placeholder:"Es. Mario Rossi",style:inpS})
+        ,err.nome&&React.createElement("div",{style:{fontSize:11,color:C.red,marginTop:2}},err.nome)
+      )
+      ,React.createElement("div",null
+        ,React.createElement("label",{style:{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:".06em",display:"block",marginBottom:4}},"Email *")
+        ,React.createElement("input",{type:"email",value:f.email,onChange:e=>{set("email",e.target.value);setErr(p=>({...p,email:""}));},placeholder:"mario@esempio.it",style:inpS})
+        ,err.email&&React.createElement("div",{style:{fontSize:11,color:C.red,marginTop:2}},err.email)
+      )
+      ,React.createElement("div",{className:"form-2col"}
+        ,React.createElement("div",null
+          ,React.createElement("label",{style:{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:".06em",display:"block",marginBottom:4}},"Nome band")
+          ,React.createElement("input",{value:f.nomeBand,onChange:e=>set("nomeBand",e.target.value),placeholder:"Es. The Rockets",style:inpS})
+        )
+        ,React.createElement("div",null
+          ,React.createElement("label",{style:{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:".06em",display:"block",marginBottom:4}},"Telefono")
+          ,React.createElement("input",{type:"tel",value:f.telefono,onChange:e=>set("telefono",e.target.value),placeholder:"333 1234567",style:inpS})
+        )
+      )
+      ,React.createElement("div",null
+        ,React.createElement("label",{style:{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:".06em",display:"block",marginBottom:4}},"Note (opzionale)")
+        ,React.createElement("textarea",{value:f.messaggio,onChange:e=>set("messaggio",e.target.value),rows:2,placeholder:"Es. Prove settimanali, genere rock...",style:{...inpS,resize:"none"}})
+      )
+    )
+    ,React.createElement("div",{style:{background:"rgba(234,88,12,0.06)",border:"1px solid rgba(234,88,12,0.2)",borderRadius:10,padding:"9px 13px",fontSize:12,color:"#92400e",lineHeight:1.6}},"ℹ️ Dopo l'approvazione riceverai le credenziali via email. Potrai vedere la disponibilità e prenotare la sala.")
+    ,React.createElement("button",{onClick:handleInvia,disabled:loading,style:{width:"100%",padding:"12px 0",borderRadius:8,border:"none",background:loading?"rgba(234,88,12,0.5)":C.orange2,color:"#fff",fontSize:14,fontWeight:600,cursor:loading?"not-allowed":"pointer",fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}
+      ,loading?"Invio in corso…":React.createElement(React.Fragment,null,React.createElement(Ic,{n:"send",size:14,stroke:"#fff"})," Invia richiesta")
+    )
+  );
+};
+
 
 // ─── FORM RECUPERO PASSWORD ───────────────────────────────────────────────────
 const FormRecupero = ({onBack})=>{
@@ -1700,6 +1797,13 @@ const LessonTimeline = ({ lezioni, onLessonClick }) => {
                     padding:"1px 6px",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",flexShrink:0,
                     border:`1px solid ${C.orangeBorder}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1380}}, "Da confermare"
 
+                  )
+                )
+                , l.topic && (l.topic.startsWith('🔄') || l.topic.startsWith('Recupero')) && (
+                  React.createElement('span', { style: {fontSize:9,background:C.tealBg,color:C.teal,borderRadius:4,
+                    padding:"1px 6px",fontWeight:700,letterSpacing:"0.08em",flexShrink:0,
+                    border:`1px solid ${C.tealBorder}`}}
+                    , "🔄 Recupero"
                   )
                 )
               )
@@ -8060,6 +8164,16 @@ const DayView = ({ date, lessons, onSelect, isMobile }) => {
                     )
                   ) : (
                     React.createElement(React.Fragment, null
+                      /* Badge recupero in primo piano */
+                      , (l.topic && (l.topic.startsWith('🔄') || l.topic.startsWith('Recupero'))) && (
+                        React.createElement('div',{style:{display:"inline-flex",alignItems:"center",gap:4,
+                          background:C.tealBg,border:`1px solid ${C.tealBorder}`,
+                          borderRadius:6,padding:"2px 8px",fontSize:11,fontWeight:700,
+                          color:C.teal,marginBottom:4}}
+                          , React.createElement(Ic,{n:"repeat",size:11,stroke:C.teal})
+                          , l.topic
+                        )
+                      )
                       , React.createElement('div',{style:{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}
                         , React.createElement('span',{style:{fontSize:14,fontWeight:600,color:C.text}},l.student)
                         , React.createElement('span',{style:{fontSize:12,color:hex}},l.instrument)
@@ -8067,7 +8181,7 @@ const DayView = ({ date, lessons, onSelect, isMobile }) => {
                         , dotHex && React.createElement('div',{style:{width:6,height:6,borderRadius:"50%",background:dotHex,flexShrink:0}})
                       )
                       , React.createElement('div',{style:{fontSize:12,color:C.textMuted}},l.teacher)
-                      , l.topic && React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2,fontStyle:"italic"}},'"',l.topic,'"')
+                      , l.topic && !l.topic.startsWith('🔄') && !l.topic.startsWith('Recupero') && React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2,fontStyle:"italic"}},'"',l.topic,'"')
                     )
                   )
                 )
@@ -8126,6 +8240,16 @@ const DayView = ({ date, lessons, onSelect, isMobile }) => {
                     )
                   ) : (
                     React.createElement(React.Fragment, null
+                      /* Badge recupero in primo piano (desktop) */
+                      , (l.topic && (l.topic.startsWith('🔄') || l.topic.startsWith('Recupero'))) && (
+                        React.createElement('div', {style:{display:"inline-flex",alignItems:"center",gap:5,
+                          background:C.tealBg,border:`1px solid ${C.tealBorder}`,
+                          borderRadius:6,padding:"3px 10px",fontSize:12,fontWeight:700,
+                          color:C.teal,marginBottom:6}}
+                          , React.createElement(Ic,{n:"repeat",size:12,stroke:C.teal})
+                          , l.topic
+                        )
+                      )
                       , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap"}}
                         , React.createElement('span', { style: {fontSize:15, fontWeight:600}}, l.student)
                         , React.createElement('span', { style: {fontSize:12, color:hex}}, l.instrument)
@@ -8136,7 +8260,7 @@ const DayView = ({ date, lessons, onSelect, isMobile }) => {
                         , l.teacher && React.createElement('span', null, l.teacher)
                         , l.room    && React.createElement('span', null, "· " , l.room)
                       )
-                      , l.topic && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}}, "\"", l.topic, "\"")
+                      , l.topic && !l.topic.startsWith('🔄') && !l.topic.startsWith('Recupero') && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}}, "\"", l.topic, "\"")
                     )
                   )
                 )
@@ -9966,7 +10090,11 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
               , React.createElement('td',{style:{padding:'9px 12px',fontSize:12}}
                 , React.createElement('span',{style:{background:C.blueBg,color:C.blue,borderRadius:20,padding:'2px 7px',fontSize:11}},l.instrument||'—')
               )
-              , React.createElement('td',{style:{padding:'9px 12px',fontSize:12,color:C.textDim,maxWidth:160,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},l.topic||'—')
+              , React.createElement('td',{style:{padding:'9px 12px',fontSize:12,color:C.textDim,maxWidth:160}}
+                , (l.topic && (l.topic.startsWith('🔄') || l.topic.startsWith('Recupero')))
+                  ? React.createElement('span',{style:{background:C.tealBg,color:C.teal,border:`1px solid ${C.tealBorder}`,borderRadius:4,padding:'2px 7px',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}},l.topic)
+                  : React.createElement('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}},l.topic||'—')
+              )
               , React.createElement('td',{style:{padding:'9px 12px'}}
                 , att
                   ? React.createElement('span',{style:{background:s.bg,color:s.fg,border:`1px solid ${s.bd}`,borderRadius:20,padding:'2px 8px',fontSize:11,fontWeight:500}},s.label||att)
@@ -10058,6 +10186,38 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
       } else {
         const { data: ins, error } = await sb.from("prenotazioni_sala").insert(row).select().single();
         if (error) throw error;
+        // Notifica all'admin per nuove prenotazioni non-admin
+        if (ruoloR !== "admin") {
+          try {
+            await sb.from("notifiche").insert({
+              destinatario_ruolo: "admin",
+              tipo:               "sala_prove_richiesta",
+              titolo:             "🥁 Nuova richiesta sala prove",
+              messaggio:          `${richiedente} (${ruoloR}) ha richiesto la sala il ${spData} dalle ${spOraInizio} alle ${spOraFine}${spMotivo ? ' — ' + spMotivo : ''}`,
+              letto:              false,
+              created_at:         new Date().toISOString(),
+              meta:               JSON.stringify({ data: spData, ora_inizio: spOraInizio, ora_fine: spOraFine, richiedente, ruolo: ruoloR, telefono: spTelefono }),
+            });
+            // Push notification (se Edge Function attiva)
+            const session = await sb.auth.getSession();
+            const token = session?.data?.session?.access_token;
+            if (token) {
+              fetch("https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-push", {
+                method: "POST",
+                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  test: false,
+                  override: {
+                    title: "🥁 Nuova richiesta sala prove",
+                    body:  `${richiedente} · ${spData} ${spOraInizio}–${spOraFine}`,
+                    tag:   "fm-sala-prove",
+                    targetRuolo: "admin",
+                  }
+                }),
+              }).catch(() => null); // fire & forget
+            }
+          } catch(ne) { console.warn("[FM] notifica sala prove:", ne?.message); }
+        }
         onSave(adaptPrenotazioneSala(ins));
       }
     } catch(e) { setSpErr(e.message || "Errore salvataggio."); }
@@ -17804,9 +17964,11 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
 // ═══════════════════════════════════════════════════════════════════════════════
 // Permessi navigazione per ruolo (sidebar): false = voce nascosta
 const ROLE_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true,  notifiche_settings:true},
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true,  notifiche_settings:true,  sala_prove:true },
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
+  // Ruolo band: accede solo alla sala prove
+  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false,biblioteca:false,utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true },
 };
 
 // Rileva se l'app è aperta come PWA (standalone) — usato per menu più snello
@@ -17866,9 +18028,10 @@ if ('serviceWorker' in navigator) {
 // Modifica qui per personalizzare cosa appare nella versione PWA per ogni ruolo.
 // Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
 const PWA_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
-  docente: {dashboard:true, allievi:false,docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:true },
+  docente: {dashboard:true, allievi:false,docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
+  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true },
 };
 
 const NAV_ITEMS = [
@@ -17893,6 +18056,7 @@ const NAV_ITEMS = [
   { id:"notifiche",   label:"Notifiche",    icon:"bell"     },
   { id:"reminders",          label:"Reminders WA",       icon:"phone"   },
   { id:"notifiche_settings", label:"Config. Notifiche",  icon:"bell"    },
+  { id:"sala_prove",  label:"Sala Prove",   icon:"drum"     },
 ];
 
 const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction }) => {
@@ -17908,7 +18072,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
 
   // Gruppi collassabili (solo admin desktop)
   const SIDEBAR_GROUPS = [
-    { id:"scuola",   label:"Scuola",                icon:"graduation", items:["allievi","docenti","corsi","calendario"] },
+    { id:"scuola",   label:"Scuola",                icon:"graduation", items:["allievi","docenti","corsi","calendario","sala_prove"] },
     { id:"risorse",  label:"Risorse & Libri",        icon:"book",       items:["allegati","repertorio","biblioteca"] },
     { id:"notif",    label:"Notifiche & Reminders",  icon:"bell",       items:["notifiche","notifiche_settings","reminders"] },
     { id:"config",   label:"Impostazioni",           icon:"settings",   items:["utenti","schedaScuola","modulistica","impostazioni"] },
@@ -18015,7 +18179,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
 
                   /* ── Gruppo SCUOLA ── */
                   , GroupHdr({id:"scuola", label:"Scuola", icon:"graduation"})
-                  , openGroups.scuola && ["allievi","docenti","corsi","calendario"].map(id => {
+                  , openGroups.scuola && ["allievi","docenti","corsi","calendario","sala_prove"].map(id => {
                       const it = NAV_ITEMS.find(x=>x.id===id);
                       if(!it || perms[id]===false) return null;
                       return NavBtn({id:it.id, label:it.label, icon:it.icon, indent:true});
@@ -18278,6 +18442,219 @@ const MobileMoreMenu = ({ current, setView, extraItems, onLogout, onEsciSenzaLog
 // ═══════════════════════════════════════════════════════════════════════════════
 // APP ROOT
 // ═══════════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════════
+// SALA PROVE — VISTA STANDALONE (ruolo band + admin dedicato)
+// ═══════════════════════════════════════════════════════════════════════════════
+const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
+  const [prenotazioni,   setPrenotazioni]   = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [showForm,       setShowForm]       = useState(false);
+  const [editTarget,     setEditTarget]     = useState(null);
+  const [toast,          setToast]          = useState(null);
+  const isMobile = useIsMobile();
+
+  const showToast = (ok, msg) => {
+    setToast({ ok, msg });
+    setTimeout(() => setToast(null), 4000);
+  };
+
+  // Carica prenotazioni
+  const loadPrenotazioni = React.useCallback(async () => {
+    const sb = window.supabaseClient; if (!sb) { setLoading(false); return; }
+    try {
+      const { data, error } = await sb.from('prenotazioni_sala').select('*').order('data').order('ora_inizio');
+      if (error) throw error;
+      setPrenotazioni((data||[]).map(adaptPrenotazioneSala));
+    } catch(e) { console.warn('[FM] SalaProveStandalone load:', e?.message); }
+    setLoading(false);
+  }, []);
+
+  React.useEffect(() => { loadPrenotazioni(); }, []);
+
+  const oggi = yyyymmdd(new Date());
+  const isBand  = userRuolo === 'band';
+  const isAdmin = userRuolo === 'admin';
+
+  // Filtra per ruolo: band vede solo le proprie + quelle approvate future (per vedere disponibilità)
+  const tuttePrenotazioni = prenotazioni;
+  const miePrenotazioni   = isBand
+    ? prenotazioni.filter(p => p.userId === (appUser?.userId || appUser?.id))
+    : prenotazioni;
+
+  // Lezioni future per mostrare conflitti (solo admin)
+  const lessioniOggi = (lessons||[]).filter(l => l.date >= oggi && !['sala_prove'].includes(l.tipo));
+
+  // Giorni con slot occupati (approvate o in attesa) per mostrare disponibilità nel calendario
+  const giorniOccupati = new Map();
+  tuttePrenotazioni.filter(p => p.stato !== 'rifiutata' && p.data >= oggi).forEach(p => {
+    if (!giorniOccupati.has(p.data)) giorniOccupati.set(p.data, []);
+    giorniOccupati.get(p.data).push(p);
+  });
+
+  const MESI = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const GIORNI = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+  const fmtData = d => { if(!d) return '—'; const [y,m,dd]=d.split('-'); return `${dd} ${MESI[+m-1]} ${y}`; };
+
+  const statoStyle = s => ({
+    in_attesa:  { bg:'rgba(245,158,11,0.1)', fg:'#b45309', bd:'rgba(245,158,11,0.3)', label:'⏳ In attesa' },
+    approvata:  { bg:C.greenBg,   fg:C.green,   bd:C.greenBorder,   label:'✅ Approvata' },
+    rifiutata:  { bg:C.redBg,     fg:C.red,     bd:C.redBorder,     label:'❌ Rifiutata' },
+  }[s] || { bg:C.bg, fg:C.textMuted, bd:C.border, label:s });
+
+  const handleDelete = async (p) => {
+    if (!window.confirm(`Eliminare la prenotazione del ${fmtData(p.data)}?`)) return;
+    const sb = window.supabaseClient; if (!sb) return;
+    await sb.from('prenotazioni_sala').delete().eq('id', p.id);
+    setPrenotazioni(prev => prev.filter(x => x.id !== p.id));
+    showToast(true, 'Prenotazione eliminata');
+  };
+
+  const handleApprova = async (p, nuovoStato) => {
+    const sb = window.supabaseClient; if (!sb) return;
+    await sb.from('prenotazioni_sala').update({ stato: nuovoStato, updated_at: new Date().toISOString() }).eq('id', p.id);
+    setPrenotazioni(prev => prev.map(x => x.id === p.id ? { ...x, stato: nuovoStato } : x));
+    // Notifica al richiedente
+    if (p.userId) {
+      await sb.from('notifiche').insert({
+        destinatario_ruolo: 'band',
+        tipo:               nuovoStato === 'approvata' ? 'sala_prove_approvata' : 'sala_prove_rifiutata',
+        titolo:             nuovoStato === 'approvata' ? '✅ Sala prove confermata' : '❌ Sala prove non disponibile',
+        messaggio:          `La tua prenotazione del ${fmtData(p.data)} (${p.oraInizio}–${p.oraFine}) è stata ${nuovoStato === 'approvata' ? 'approvata' : 'rifiutata'}.`,
+        letto:              false,
+        created_at:         new Date().toISOString(),
+      }).catch(() => null);
+    }
+    showToast(true, nuovoStato === 'approvata' ? 'Prenotazione approvata ✅' : 'Prenotazione rifiutata');
+  };
+
+  const headerStyle = { padding: isMobile ? '16px 16px 0' : '28px 32px 0' };
+  const contentStyle = { padding: isMobile ? '12px 16px' : '20px 32px' };
+
+  return React.createElement('div', { style: { minHeight: '100%', background: C.bg } }
+
+    /* Header */
+    , React.createElement('div', { style: { ...headerStyle, background: C.surface, borderBottom: `1px solid ${C.border}`, paddingBottom: 16 } }
+      , React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' } }
+        , React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } }
+          , React.createElement('div', { style: { width: 44, height: 44, borderRadius: 12, background: C.orange2Bg, border: `1px solid ${C.orange2Border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' } }
+            , React.createElement(Ic, { n: 'drum', size: 22, stroke: C.orange2 })
+          )
+          , React.createElement('div', null
+            , React.createElement('h1', { style: { fontFamily: "'Oswald',sans-serif", fontSize: 'clamp(18px,4vw,24px)', fontWeight: 600, color: C.text, marginBottom: 2 } }, '🥁 Sala Prove')
+            , React.createElement('p', { style: { fontSize: 12, color: C.textMuted } }, isBand ? 'Prenota la sala · vedi le tue prenotazioni' : 'Gestione prenotazioni sala prove')
+          )
+        )
+        , React.createElement('button', {
+            onClick: () => { setEditTarget(null); setShowForm(true); },
+            style: { padding: '10px 20px', borderRadius: 8, border: 'none', background: C.orange2, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: "'Open Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 6 }
+          }
+          , React.createElement(Ic, { n: 'plus', size: 14, stroke: '#fff' })
+          , '+ Prenota'
+        )
+      )
+    )
+
+    /* Toast */
+    , toast && React.createElement('div', { style: { position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '12px 20px', borderRadius: 10, background: toast.ok ? '#16a34a' : C.red, color: '#fff', fontFamily: "'Open Sans',sans-serif", fontSize: 13, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,.2)' } }, toast.msg)
+
+    /* Contenuto */
+    , React.createElement('div', { style: contentStyle }
+
+      /* Info band */
+      , isBand && React.createElement('div', { style: { background: C.orange2Bg, border: `1px solid ${C.orange2Border}`, borderRadius: 10, padding: '12px 16px', fontSize: 12, color: '#92400e', lineHeight: 1.7, marginBottom: 20 } }
+        , '🎸 Puoi prenotare la sala compilando il modulo. Le prenotazioni vengono confermate dall\'amministratore. '
+        , React.createElement('br', null)
+        , '📞 Per urgenze contatta direttamente la scuola.'
+      )
+
+      /* Lista prenotazioni */
+      , loading
+        ? React.createElement('div', { style: { textAlign: 'center', padding: 40, color: C.textDim } }, '⏳ Caricamento...')
+        : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } }
+
+          /* Sezione MIEI prenotazioni (solo band) */
+          , isBand && React.createElement('div', null
+            , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10, fontWeight: 600 } }, 'Le tue prenotazioni')
+            , miePrenotazioni.length === 0
+              ? React.createElement('div', { style: { padding: '20px 0', color: C.textMuted, fontSize: 13, textAlign: 'center' } }, 'Nessuna prenotazione — usa + Prenota per aggiungerne una')
+              : miePrenotazioni.sort((a,b) => b.data.localeCompare(a.data)).map(p => {
+                  const st = statoStyle(p.stato);
+                  const isPast = p.data < oggi;
+                  return React.createElement('div', { key: p.id, style: { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', opacity: isPast ? .65 : 1, display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' } }
+                    , React.createElement('div', { style: { width: 44, height: 44, borderRadius: 8, background: C.orange2Bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } }
+                      , React.createElement('div', { style: { fontSize: 14, fontWeight: 700, color: C.orange2, lineHeight: 1 } }, p.data.split('-')[2])
+                      , React.createElement('div', { style: { fontSize: 9, color: C.orange2, textTransform: 'uppercase' } }, MESI[+p.data.split('-')[1]-1])
+                    )
+                    , React.createElement('div', { style: { flex: 1, minWidth: 0 } }
+                      , React.createElement('div', { style: { fontWeight: 600, fontSize: 14, color: C.text, marginBottom: 3 } }, fmtData(p.data), ' · ', GIORNI[new Date(p.data+'T00:00:00').getDay()])
+                      , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, marginBottom: 6 } }, '🕐 ', p.oraInizio, ' → ', p.oraFine, p.motivo ? ' · ' + p.motivo : '')
+                      , React.createElement('span', { style: { background: st.bg, color: st.fg, border: `1px solid ${st.bd}`, borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 600 } }, st.label)
+                    )
+                    , !isPast && p.stato === 'in_attesa' && React.createElement('button', {
+                        onClick: () => handleDelete(p),
+                        style: { padding: '5px 10px', borderRadius: 6, border: `1px solid ${C.redBorder}`, background: C.redBg, color: C.red, cursor: 'pointer', fontSize: 11, fontFamily: "'Open Sans',sans-serif" }
+                      }, '✕ Annulla')
+                  );
+                })
+          )
+
+          /* Sezione ADMIN: tutte le prenotazioni in attesa */
+          , isAdmin && React.createElement('div', null
+            , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10, fontWeight: 600 } }
+              , 'Prenotazioni future · ', tuttePrenotazioni.filter(p => p.data >= oggi).length, ' totali'
+            )
+            , tuttePrenotazioni.filter(p => p.data >= oggi).sort((a,b) => a.data.localeCompare(b.data) || a.oraInizio.localeCompare(b.oraInizio)).map(p => {
+                const st = statoStyle(p.stato);
+                return React.createElement('div', { key: p.id, style: { background: C.surface, border: `1px solid ${p.stato==='in_attesa'?'rgba(245,158,11,.4)':C.border}`, borderLeft: `4px solid ${p.stato==='in_attesa'?'#f59e0b':p.stato==='approvata'?C.green:C.red}`, borderRadius: 12, padding: '14px 18px', marginBottom: 10, display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' } }
+                  , React.createElement('div', { style: { width: 44, height: 44, borderRadius: 8, background: C.orange2Bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } }
+                    , React.createElement('div', { style: { fontSize: 14, fontWeight: 700, color: C.orange2, lineHeight: 1 } }, p.data.split('-')[2])
+                    , React.createElement('div', { style: { fontSize: 9, color: C.orange2, textTransform: 'uppercase' } }, MESI[+p.data.split('-')[1]-1])
+                  )
+                  , React.createElement('div', { style: { flex: 1, minWidth: 0 } }
+                    , React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 } }
+                      , React.createElement('span', { style: { fontWeight: 700, fontSize: 14, color: C.text } }, p.richiedente)
+                      , React.createElement('span', { style: { background: st.bg, color: st.fg, border: `1px solid ${st.bd}`, borderRadius: 20, padding: '1px 8px', fontSize: 11, fontWeight: 600 } }, st.label)
+                    )
+                    , React.createElement('div', { style: { fontSize: 12, color: C.textMuted } }, fmtData(p.data), ' · ', '🕐 ', p.oraInizio, ' → ', p.oraFine)
+                    , p.motivo && React.createElement('div', { style: { fontSize: 12, color: C.textDim, marginTop: 2, fontStyle: 'italic' } }, '"', p.motivo, '"')
+                    , p.telefono && React.createElement('div', { style: { fontSize: 12, color: C.textMuted, marginTop: 2 } }, '📞 ', p.telefono)
+                  )
+                  , p.stato === 'in_attesa' && React.createElement('div', { style: { display: 'flex', gap: 6, flexShrink: 0 } }
+                    , React.createElement('button', {
+                        onClick: () => handleApprova(p, 'approvata'),
+                        style: { padding: '6px 14px', borderRadius: 8, border: 'none', background: C.green, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'Open Sans',sans-serif" }
+                      }, '✓ Approva')
+                    , React.createElement('button', {
+                        onClick: () => handleApprova(p, 'rifiutata'),
+                        style: { padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.redBorder}`, background: C.redBg, color: C.red, cursor: 'pointer', fontSize: 12, fontFamily: "'Open Sans',sans-serif" }
+                      }, '✕ Rifiuta')
+                  )
+                );
+              })
+          )
+        )
+    )
+
+    /* Modal form prenotazione */
+    , showForm && React.createElement(Modal, { title: editTarget ? 'Modifica prenotazione' : 'Nuova prenotazione', onClose: () => { setShowForm(false); setEditTarget(null); } }
+      , React.createElement(SalaProveForm, {
+          initial:  editTarget,
+          role:     userRuolo,
+          appUser:  appUser,
+          onClose:  () => { setShowForm(false); setEditTarget(null); },
+          onSave:   (nuova) => {
+            setPrenotazioni(prev => editTarget
+              ? prev.map(x => x.id === nuova.id ? nuova : x)
+              : [...prev, nuova]
+            );
+            setShowForm(false); setEditTarget(null);
+            showToast(true, editTarget ? 'Prenotazione aggiornata ✅' : (userRuolo === 'admin' ? '✅ Sala prenotata' : '✅ Richiesta inviata — in attesa di approvazione'));
+          },
+        })
+    )
+  );
+};
+
 function App() {
   // ── TUTTI GLI HOOK IN CIMA — mai dopo un return condizionale ──
   const [user,           setUser]           = useState(null);
@@ -18899,7 +19276,7 @@ function App() {
               , schermata==="login" && (
                 React.createElement(FormLogin, {
                   onSuccess: u=>{
-                    setUser(u);setSharedRuolo(u.ruolo||"admin");setView("dashboard");
+                    setUser(u);setSharedRuolo(u.ruolo||"admin");setView(u.ruolo==="band"?"sala_prove":"dashboard");
                     try{window.__currentUserName__=u.nome||"";}catch(e){};
                     if(u.ruolo==="admin"&&window.FM_AUTH&&window.FM_AUTH.getRichieste){window.FM_AUTH.getRichieste().then(r=>setSharedRichieste(r||[])).catch(()=>{});}
                     // Carica notifiche non lette al login — filtrate per ruolo/utente
@@ -18929,11 +19306,13 @@ function App() {
                     }
                   },
                   onRegistrazione: ()=>cambiaSchermata("register"),
-                  onRecupero: ()=>cambiaSchermata("recover"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10752}}
+                  onRecupero: ()=>cambiaSchermata("recover"),
+                  onBand: ()=>cambiaSchermata("band"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10752}}
                 )
               )
               , schermata==="register" && React.createElement(FormRegistrazione, { onBack: ()=>cambiaSchermata("login"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10758}})
-              , schermata==="recover"   && React.createElement(FormRecupero, { onBack: ()=>cambiaSchermata("login"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10759}})
+              , schermata==="band"     && React.createElement(FormRegistrazioneBand, { onBack: ()=>cambiaSchermata("login") })
+              , schermata==="recover"  && React.createElement(FormRecupero, { onBack: ()=>cambiaSchermata("login"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10759}})
               , schermata==="setpassword" && React.createElement(FormSetPassword, {
                   onSuccess: async () => {
                     // Dopo aver impostato la password, carica il profilo e fa login
@@ -18983,6 +19362,7 @@ function App() {
       case 'notifiche':          return React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste});
       case 'notifiche_settings': return React.createElement(NotificheSettingsView, { ruolo: user?.ruolo||"admin" });
       case 'reminders':   return React.createElement(RemindersView, { ruolo: user?.ruolo||"admin" });
+      case 'sala_prove':  return React.createElement(SalaProveStandaloneView, { appUser: user, userRuolo: user?.ruolo||"band", lessons: sharedLessons });
       default: return null;
     }
   };
@@ -19240,42 +19620,54 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
     const sb = window.supabaseClient;
     if (sb) {
       const nuovaId = uid();
-      const noteText = note || ('Recupero fissato dall\'admin · lezione del '+lesson.date);
+      const MESI_N=['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+      const [oy,om,od] = (lesson.date||'').split('-');
+      const dataOrigLabel = od && om ? `${od} ${MESI_N[+om-1]} ${oy}` : lesson.date;
+      // topic visibile in primo piano: identifica la lezione come recupero anche nelle liste
+      const topicText = `🔄 Recupero del ${dataOrigLabel}`;
+      const noteText = note || (`Recupero fissato dall'admin · lezione del ${lesson.date}`);
 
-      // ── FIX ATTENDANCE: la nuova lezione non ha attendance pre-impostata,
-      //    così il docente/admin può segnare presenza normalmente ──
+      // tipo:'individuale' → la lezione entra nei conteggi normali come tutte le altre lezioni
+      // topic con emoji 🔄 → badge visivo nell'elenco
       const nuovaLez = {
         ...lesson,
         id:              nuovaId,
         date:            slotSel.data,
         hour:            slotSel.oraInizio,
-        attendance:      null,        // FIX: era 'recupero' (bloccava la modifica)
-        tipo:            'recupero',  // tipo=recupero identifica la lezione come recupero
+        attendance:      null,           // segnabile normalmente da docente/admin
+        tipo:            'individuale',  // FIX bug 2: conta nei totali lezioni
+        topic:           topicText,      // FIX bug 2: visibile in primo piano nella card
         inRecupero:      false,
         recuperoScadenza:null,
         notes:           noteText,
         recurrence:      'Nessuna',
       };
 
-      // 1. Inserisci la nuova lezione di recupero
+      // 1. Inserisci la nuova lezione
       await sb.from('lezioni').insert({
         id: nuovaId, data: nuovaLez.date, ora: nuovaLez.hour+':00',
         student: nuovaLez.student, studente_id: nuovaLez.studentId||null,
         strumento: nuovaLez.instrument||nuovaLez.strumento||null,
         teacher: nuovaLez.teacher, room: nuovaLez.room||null,
-        attendance: null,           // FIX: non pre-impostare la presenza
-        tipo: 'recupero',
+        attendance: null,
+        tipo: 'individuale',   // FIX: non 'recupero' — deve comparire nei conteggi
+        topic: topicText,      // FIX: identificazione visiva in primo piano
         recurrence: 'Nessuna', notes: noteText,
         in_recupero: false, recupero_scadenza: null,
         durata: nuovaLez.durata||45,
         corso_id: nuovaLez.courseId||null, corso_nome: nuovaLez.courseName||null,
       });
 
-      // 2. Segna la lezione originale come risolta
-      await sb.from('lezioni').update({ attendance:'in_recupero', in_recupero:true }).eq('id', lesson.id);
+      // 2. Segna la lezione ORIGINALE come "recuperata" → esce dalla lista "lezioni in recupero"
+      //    FIX bug 1: era 'in_recupero'/true → restava nella lista. Ora 'recuperata'/false → sparisce
+      await sb.from('lezioni').update({
+        attendance:        'recuperata',
+        in_recupero:       false,
+        recupero_scadenza: null,
+        notes_recupero:    `Recuperata il ${slotSel.data} ore ${slotSel.oraInizio}`,
+      }).eq('id', lesson.id);
 
-      // ── FIX RICHIESTA: crea un record in richieste_recupero con stato='completata'
-      //    così appare in "Richieste di Recupero" con il tag "Confermata ufficialmente" ──
+      // 3. Crea record in richieste_recupero con stato='completata'
       const allievoId = lesson.studentId || lesson.studente_id || null;
       await sb.from('richieste_recupero').insert({
         allievo_id:     allievoId ? String(allievoId) : null,
@@ -19284,14 +19676,13 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
         data_preferita: slotSel.data,
         ora_recupero:   slotSel.oraInizio,
         note:           noteText,
-        stato:          'completata',    // completata = "Confermata ufficialmente"
+        stato:          'completata',
         lezioni_ids:    JSON.stringify([lesson.id]),
         created_at:     new Date().toISOString(),
       });
 
-      // 3. Notifica all'allievo
+      // 4. Notifica all'allievo
       if (allievoId) {
-        const MESI_N=['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
         const [dy,dm,dd2] = slotSel.data.split('-');
         const dataLabel = `${dd2} ${MESI_N[+dm-1]} ${dy}`;
         await sb.from('notifiche').insert({
@@ -19306,8 +19697,13 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
         });
       }
 
+      // 5. Aggiorna lo state React:
+      //    - aggiunge la nuova lezione
+      //    - segna la lezione originale come "recuperata" (esce dalla lista recuperi)
       setLessons(p => [...p, nuovaLez].map(l =>
-        l.id===lesson.id ? {...l, attendance:'in_recupero', inRecupero:true} : l
+        l.id===lesson.id
+          ? {...l, attendance:'recuperata', inRecupero:false, recuperoScadenza:null}
+          : l
       ));
     }
     setSaving(false);
