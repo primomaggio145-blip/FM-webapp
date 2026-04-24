@@ -18457,6 +18457,132 @@ const MobileMoreMenu = ({ current, setView, extraItems, onLogout, onEsciSenzaLog
 // ═══════════════════════════════════════════════════════════════════════════════
 // APP ROOT
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── BAND WEEK CALENDAR ───────────────────────────────────────────────────────
+const BandWeekCalendar = ({ lessons, prenotazioni }) => {
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  const getMonday = (offset) => {
+    const d = new Date();
+    const day = d.getDay() || 7;
+    d.setDate(d.getDate() - day + 1 + offset * 7);
+    d.setHours(0,0,0,0);
+    return d;
+  };
+
+  const monday = getMonday(weekOffset);
+  const days = Array.from({length:7}, (_,i) => {
+    const d = new Date(monday); d.setDate(d.getDate() + i); return d;
+  });
+
+  const toLocalDateStr = d => {
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${dd}`;
+  };
+
+  const GIORNI_S = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+  const MESI_S   = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+  const s = days[0], e = days[6];
+  const weekLabel = s.getMonth()===e.getMonth()
+    ? `${s.getDate()}–${e.getDate()} ${MESI_S[s.getMonth()]} ${s.getFullYear()}`
+    : `${s.getDate()} ${MESI_S[s.getMonth()]} – ${e.getDate()} ${MESI_S[e.getMonth()]} ${e.getFullYear()}`;
+
+  const oggi = toLocalDateStr(new Date());
+
+  // Mappa data → eventi (batteria + prenotazioni)
+  const eventsByDay = {};
+  days.forEach(d => { eventsByDay[toLocalDateStr(d)] = []; });
+
+  // Lezioni di batteria → "Sala occupata" senza nome allievo
+  (lessons||[]).forEach(l => {
+    const dateStr = l.date || '';
+    if (!eventsByDay[dateStr]) return;
+    const str = (l.instrument || l.strumento || '').toLowerCase();
+    const isBatt = str.includes('batter') || str.includes('drum') || str.includes('percuss');
+    if (!isBatt) return;
+    const ora = (l.hour || l.ora || '').slice(0,5);
+    const durata = l.durata || 45;
+    const [hh,mm] = ora.split(':').map(Number);
+    const fineMin = hh*60+mm+durata;
+    const fine = String(Math.floor(fineMin/60)).padStart(2,'0')+':'+String(fineMin%60).padStart(2,'0');
+    eventsByDay[dateStr].push({ id:'lez_'+l.id, ora, fine, label:'🥁 Sala occupata', sub:'Lezione batteria', color:'#78350f', bg:'#fef3c7', bd:'#fcd34d' });
+  });
+
+  // Prenotazioni sala prove
+  (prenotazioni||[]).forEach(p => {
+    if (!eventsByDay[p.data] || p.stato==='rifiutata') return;
+    const approved = p.stato==='approvata';
+    eventsByDay[p.data].push({
+      id:'pren_'+p.id, ora:p.oraInizio, fine:p.oraFine,
+      label: approved ? '✅ Prenotata' : '⏳ In attesa',
+      sub:   p.richiedente||'Sala prove',
+      color: approved ? C.orange2 : '#92400e',
+      bg:    approved ? C.orange2Bg : 'rgba(245,158,11,0.08)',
+      bd:    approved ? C.orange2Border : 'rgba(245,158,11,0.3)',
+    });
+  });
+
+  Object.keys(eventsByDay).forEach(d => {
+    eventsByDay[d].sort((a,b) => (a.ora||'').localeCompare(b.ora||''));
+  });
+
+  const btnStyle = { width:32,height:32,borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center' };
+
+  return React.createElement('div', { style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginBottom:8} }
+    /* Header */
+    , React.createElement('div', { style:{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'} }
+      , React.createElement('div', { style:{fontSize:14,fontWeight:700,color:C.text} }, '📅 Disponibilità sala — settimana')
+      , React.createElement('div', { style:{display:'flex',alignItems:'center',gap:8} }
+        , React.createElement('button', { onClick:()=>setWeekOffset(p=>p-1), style:btnStyle }, '‹')
+        , React.createElement('span', { style:{fontSize:12,color:C.textMuted,minWidth:160,textAlign:'center'} }, weekLabel)
+        , React.createElement('button', { onClick:()=>setWeekOffset(p=>p+1), style:btnStyle }, '›')
+        , weekOffset!==0 && React.createElement('button', { onClick:()=>setWeekOffset(0), style:{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11,fontFamily:"'Open Sans',sans-serif"} }, 'Oggi')
+      )
+    )
+    /* Griglia giorni */
+    , React.createElement('div', { style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)'} }
+      , days.map((d,i) => {
+          const dateStr = toLocalDateStr(d);
+          const isOggi  = dateStr===oggi;
+          const isWeekend = i>=5;
+          const events  = eventsByDay[dateStr]||[];
+          return React.createElement('div', { key:dateStr, style:{borderRight:i<6?`1px solid ${C.border}`:'none',background:isOggi?`${C.teal}10`:'transparent',minHeight:90} }
+            /* Header giorno */
+            , React.createElement('div', { style:{padding:'6px 4px',textAlign:'center',borderBottom:`1px solid ${C.border}`,background:isOggi?C.tealBg:'transparent'} }
+              , React.createElement('div', { style:{fontSize:9,color:isOggi?C.teal:C.textMuted,fontWeight:600,textTransform:'uppercase',letterSpacing:'.05em'} }, GIORNI_S[i])
+              , React.createElement('div', { style:{fontSize:isOggi?15:13,fontWeight:isOggi?700:400,color:isOggi?C.teal:isWeekend?C.textDim:C.text} }, d.getDate())
+            )
+            /* Events */
+            , React.createElement('div', { style:{padding:'3px'} }
+              , events.length===0
+                ? React.createElement('div', { style:{padding:'6px 3px',textAlign:'center',fontSize:9,color:C.textDim} }, isWeekend?'—':'✓ libera')
+                : events.map(ev => (
+                    React.createElement('div', { key:ev.id, style:{background:ev.bg,border:`1px solid ${ev.bd}`,borderRadius:4,padding:'3px 5px',marginBottom:2} }
+                      , React.createElement('div', { style:{fontSize:10,fontWeight:700,color:ev.color,lineHeight:1.3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'} }, ev.label)
+                      , React.createElement('div', { style:{fontSize:9,color:ev.color,opacity:.8} }, ev.ora, ev.fine?'–'+ev.fine:'')
+                    )
+                  ))
+            )
+          );
+        })
+    )
+    /* Legenda */
+    , React.createElement('div', { style:{padding:'6px 14px',borderTop:`1px solid ${C.border}`,display:'flex',gap:14,flexWrap:'wrap'} }
+      , [
+          {bg:'#fef3c7',bd:'#fcd34d',  label:'🥁 Lezione batteria (sala occupata)'},
+          {bg:C.orange2Bg,bd:C.orange2Border,label:'✅ Prenotata'},
+          {bg:'rgba(245,158,11,0.08)',bd:'rgba(245,158,11,0.3)',label:'⏳ In attesa'},
+        ].map((l,i) => (
+          React.createElement('div', { key:i, style:{display:'flex',alignItems:'center',gap:5,fontSize:10,color:C.textMuted} }
+            , React.createElement('div', { style:{width:10,height:10,borderRadius:2,background:l.bg,border:`1px solid ${l.bd}`,flexShrink:0} })
+            , l.label
+          )
+        ))
+    )
+  );
+};
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // SALA PROVE — VISTA STANDALONE (ruolo band + admin dedicato)
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -18597,12 +18723,15 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
     , React.createElement('div', { style: { padding: `20px ${pad}` } }
 
       /* Info band */
-      , isBand && React.createElement('div', { style: { background:C.orange2Bg, border:`1px solid ${C.orange2Border}`, borderRadius:10, padding:'12px 16px', fontSize:12, color:'#92400e', lineHeight:1.7, marginBottom:20 } }
+      , isBand && React.createElement('div', { style: { background:C.orange2Bg, border:`1px solid ${C.orange2Border}`, borderRadius:10, padding:'12px 16px', fontSize:12, color:'#92400e', lineHeight:1.7, marginBottom:16 } }
         , '🎸 Compila la richiesta e attendi la conferma dell\'admin. Per domande usa il pulsante "Contatta admin".'
       )
 
+      /* Calendario settimanale disponibilità sala */
+      , isBand && React.createElement(BandWeekCalendar, { lessons, prenotazioni })
+
       /* Lista mie prenotazioni (band) */
-      , isBand && React.createElement('div', null
+      , isBand && React.createElement('div', { style: { marginTop: 20 } }
         , React.createElement('div', { style: { fontSize:12, color:C.textMuted, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:10, fontWeight:600 } }, 'Le tue prenotazioni')
         , loading
           ? React.createElement('div', { style: { padding:32, textAlign:'center', color:C.textDim } }, '⏳ Caricamento...')
@@ -21469,13 +21598,18 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
   const matchNotifica = function(n) {
     // 1. Filtra per ruolo — deve corrispondere esattamente
     if (!n.destinatario_ruolo || n.destinatario_ruolo !== myRuolo) return false;
-    // 2. Per admin: vede solo le notifiche destinate ad admin
+    // 2. Band: vede solo notifiche relative alla sala prove
+    if (myRuolo === 'band') {
+      const tipiSala = ['sala_prove_richiesta','sala_prove_approvata','sala_prove_rifiutata','messaggio_band'];
+      return tipiSala.includes(n.tipo) || (n.titolo||'').toLowerCase().includes('sala');
+    }
+    // 3. Per admin: vede solo le notifiche destinate ad admin
     if (myRuolo === 'admin') return true;
-    // 3. Notifica broadcast (nessun destinatario specifico) → visibile a tutto il ruolo
+    // 4. Notifica broadcast (nessun destinatario specifico) → visibile a tutto il ruolo
     if (!n.destinatario_id && !n.destinatario_nome) return true;
-    // 4. Match per ID specifico
+    // 5. Match per ID specifico
     if (myId && n.destinatario_id && String(n.destinatario_id) === String(myId)) return true;
-    // 5. Match per nome (docente: confronto con teacherKey e nome)
+    // 6. Match per nome (docente: confronto con teacherKey e nome)
     const destNome = (n.destinatario_nome||'').toLowerCase().trim();
     const mieiNomi = [myNome, myDocenteTeacherKey].filter(Boolean).map(s=>s.toLowerCase().trim());
     return mieiNomi.some(function(mn) {
@@ -21509,7 +21643,8 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
 
   // Genera notifiche "live" dagli stessi dati della campanella (lezioni senza presenza, recuperi scaduti, richieste)
   const liveNotifiche = React.useMemo(function() {
-    if (myRuolo === 'allievo') return [];
+    // Band e allievo: nessuna notifica live (solo notifiche DB esplicite)
+    if (myRuolo === 'band' || myRuolo === 'allievo') return [];
     const oggi = new Date(); oggi.setHours(0,0,0,0);
     const todayStr = oggi.toISOString().split('T')[0];
     const results = [];
