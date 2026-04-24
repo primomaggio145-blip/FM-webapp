@@ -10186,35 +10186,46 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
       } else {
         const { data: ins, error } = await sb.from("prenotazioni_sala").insert(row).select().single();
         if (error) throw error;
-        // Notifica all'admin per nuove prenotazioni non-admin
+        // Notifica per nuove prenotazioni non-admin
         if (ruoloR !== "admin") {
           try {
-            await sb.from("notifiche").insert({
-              destinatario_ruolo: "admin",
-              tipo:               "sala_prove_richiesta",
-              titolo:             "🥁 Nuova richiesta sala prove",
-              messaggio:          `${richiedente} (${ruoloR}) ha richiesto la sala il ${spData} dalle ${spOraInizio} alle ${spOraFine}${spMotivo ? ' — ' + spMotivo : ''}`,
-              letto:              false,
-              created_at:         new Date().toISOString(),
-              meta:               JSON.stringify({ data: spData, ora_inizio: spOraInizio, ora_fine: spOraFine, richiedente, ruolo: ruoloR, telefono: spTelefono }),
-            });
-            // Push notification (se Edge Function attiva)
+            // Leggi i destinatari configurati per sala_prove (fallback: solo admin)
+            const cfgSala = (window.__FM_NOTIFICHE_CONFIG__ || {})["sala_prove"];
+            const destinatari = (cfgSala && Array.isArray(cfgSala.destinatari))
+              ? cfgSala.destinatari
+              : ["admin"];
+
+            // Notifica in-app per ogni ruolo destinatario
+            for (const dest of destinatari) {
+              await sb.from("notifiche").insert({
+                destinatario_ruolo: dest,
+                tipo:               "sala_prove_richiesta",
+                titolo:             "🥁 Nuova richiesta sala prove",
+                messaggio:          `${richiedente} ha richiesto la sala il ${spData} dalle ${spOraInizio} alle ${spOraFine}${spMotivo ? ' — ' + spMotivo : ''}`,
+                letto:              false,
+                created_at:         new Date().toISOString(),
+                meta:               JSON.stringify({ data: spData, ora_inizio: spOraInizio, ora_fine: spOraFine, richiedente, ruolo: ruoloR, telefono: spTelefono }),
+              });
+            }
+
+            // Push notification — solo ai ruoli configurati
             const session = await sb.auth.getSession();
             const token = session?.data?.session?.access_token;
-            if (token) {
-              fetch("https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-push", {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  test: false,
-                  override: {
-                    title: "🥁 Nuova richiesta sala prove",
-                    body:  `${richiedente} · ${spData} ${spOraInizio}–${spOraFine}`,
-                    tag:   "fm-sala-prove",
-                    targetRuolo: "admin",
-                  }
-                }),
-              }).catch(() => null); // fire & forget
+            if (token && destinatari.length > 0) {
+              for (const dest of destinatari) {
+                fetch("https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-push", {
+                  method: "POST",
+                  headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    override: {
+                      title:       "🥁 Nuova richiesta sala prove",
+                      body:        `${richiedente} · ${spData} ${spOraInizio}–${spOraFine}`,
+                      tag:         "fm-sala-prove",
+                      targetRuolo: dest,
+                    }
+                  }),
+                }).catch(() => null);
+              }
             }
           } catch(ne) { console.warn("[FM] notifica sala prove:", ne?.message); }
         }
@@ -15318,11 +15329,12 @@ const fmt_data = d => new Date(d+"T00:00:00").toLocaleDateString("it-IT",{day:"2
 const fmt_ts   = d => new Date(d).toLocaleDateString("it-IT",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
 
 const RUOLI = [
-  {id:"admin",   label:"Amministratore", hex:C.gold, bg:C.goldBg, bd:C.goldDim,    desc:"Accesso completo al sistema e alle impostazioni"},
-  {id:"docente", label:"Docente",        hex:C.teal, bg:C.tealBg, bd:C.tealBorder, desc:"Proprie lezioni, allievi assegnati, repertorio"},
-  {id:"allievo", label:"Allievo",        hex:C.blue, bg:C.blueBg, bd:C.blueBorder, desc:"Dashboard personale, calendario e concerti propri"},
+  {id:"admin",   label:"Amministratore", hex:C.gold,    bg:C.goldBg,    bd:C.goldDim,      desc:"Accesso completo al sistema e alle impostazioni"},
+  {id:"docente", label:"Docente",        hex:C.teal,    bg:C.tealBg,    bd:C.tealBorder,   desc:"Proprie lezioni, allievi assegnati, repertorio"},
+  {id:"allievo", label:"Allievo",        hex:C.blue,    bg:C.blueBg,    bd:C.blueBorder,   desc:"Dashboard personale, calendario e concerti propri"},
+  {id:"band",    label:"Sala Prove",     hex:C.orange2, bg:C.orange2Bg, bd:C.orange2Border,desc:"Solo prenotazione sala prove"},
 ];
-const ruoloById = id => RUOLI.find(r=>r.id===id)||RUOLI[1];
+const ruoloById = id => RUOLI.find(r=>r.id===id) || {id, label:id, hex:C.textMuted, bg:C.bg, bd:C.border, desc:''};
 
 const MODULI = [
   {id:"dashboard",   label:"Dashboard",      icon:"grid"},
@@ -18072,7 +18084,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
 
   // Gruppi collassabili (solo admin desktop)
   const SIDEBAR_GROUPS = [
-    { id:"scuola",   label:"Scuola",                icon:"graduation", items:["allievi","docenti","corsi","calendario","sala_prove"] },
+    { id:"scuola",   label:"Scuola",                icon:"graduation", items:["allievi","docenti","corsi","calendario"] },
     { id:"risorse",  label:"Risorse & Libri",        icon:"book",       items:["allegati","repertorio","biblioteca"] },
     { id:"notif",    label:"Notifiche & Reminders",  icon:"bell",       items:["notifiche","notifiche_settings","reminders"] },
     { id:"config",   label:"Impostazioni",           icon:"settings",   items:["utenti","schedaScuola","modulistica","impostazioni"] },
@@ -18179,7 +18191,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
 
                   /* ── Gruppo SCUOLA ── */
                   , GroupHdr({id:"scuola", label:"Scuola", icon:"graduation"})
-                  , openGroups.scuola && ["allievi","docenti","corsi","calendario","sala_prove"].map(id => {
+                  , openGroups.scuola && ["allievi","docenti","corsi","calendario"].map(id => {
                       const it = NAV_ITEMS.find(x=>x.id===id);
                       if(!it || perms[id]===false) return null;
                       return NavBtn({id:it.id, label:it.label, icon:it.icon, indent:true});
@@ -18201,6 +18213,9 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
 
                   /* ── Concerti (diretto) ── */
                   , NavBtn({id:"concerti", label:"Concerti", icon:"mic"})
+
+                  /* ── Sala Prove (diretto, sotto Concerti) ── */
+                  , NavBtn({id:"sala_prove", label:"Sala Prove", icon:"drum"})
 
                   /* Separatore */
                   , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
@@ -18449,8 +18464,11 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
   const [prenotazioni,   setPrenotazioni]   = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [showForm,       setShowForm]       = useState(false);
+  const [showContatto,   setShowContatto]   = useState(false);
   const [editTarget,     setEditTarget]     = useState(null);
   const [toast,          setToast]          = useState(null);
+  const [msgContatto,    setMsgContatto]    = useState('');
+  const [sendingMsg,     setSendingMsg]     = useState(false);
   const isMobile = useIsMobile();
 
   const showToast = (ok, msg) => {
@@ -18458,7 +18476,6 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
     setTimeout(() => setToast(null), 4000);
   };
 
-  // Carica prenotazioni
   const loadPrenotazioni = React.useCallback(async () => {
     const sb = window.supabaseClient; if (!sb) { setLoading(false); return; }
     try {
@@ -18471,25 +18488,38 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
 
   React.useEffect(() => { loadPrenotazioni(); }, []);
 
+  const handleSendContatto = async () => {
+    if (!msgContatto.trim()) return;
+    setSendingMsg(true);
+    try {
+      const sb = window.supabaseClient;
+      if (sb) {
+        await sb.from('notifiche').insert({
+          destinatario_ruolo: 'admin',
+          tipo:               'messaggio_band',
+          titolo:             `💬 Messaggio da ${appUser?.nome || 'Band'}`,
+          messaggio:          msgContatto.trim(),
+          letto:              false,
+          created_at:         new Date().toISOString(),
+          meta:               JSON.stringify({ mittente: appUser?.nome, email: appUser?.email }),
+        });
+      }
+      setMsgContatto('');
+      setShowContatto(false);
+      showToast(true, '✅ Messaggio inviato all\'amministrazione');
+    } catch(e) {
+      showToast(false, 'Errore invio: ' + (e.message||'riprova'));
+    }
+    setSendingMsg(false);
+  };
+
   const oggi = yyyymmdd(new Date());
   const isBand  = userRuolo === 'band';
   const isAdmin = userRuolo === 'admin';
 
-  // Filtra per ruolo: band vede solo le proprie + quelle approvate future (per vedere disponibilità)
-  const tuttePrenotazioni = prenotazioni;
-  const miePrenotazioni   = isBand
+  const miePrenotazioni = isBand
     ? prenotazioni.filter(p => p.userId === (appUser?.userId || appUser?.id))
     : prenotazioni;
-
-  // Lezioni future per mostrare conflitti (solo admin)
-  const lessioniOggi = (lessons||[]).filter(l => l.date >= oggi && !['sala_prove'].includes(l.tipo));
-
-  // Giorni con slot occupati (approvate o in attesa) per mostrare disponibilità nel calendario
-  const giorniOccupati = new Map();
-  tuttePrenotazioni.filter(p => p.stato !== 'rifiutata' && p.data >= oggi).forEach(p => {
-    if (!giorniOccupati.has(p.data)) giorniOccupati.set(p.data, []);
-    giorniOccupati.get(p.data).push(p);
-  });
 
   const MESI = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
   const GIORNI = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
@@ -18513,7 +18543,6 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
     const sb = window.supabaseClient; if (!sb) return;
     await sb.from('prenotazioni_sala').update({ stato: nuovoStato, updated_at: new Date().toISOString() }).eq('id', p.id);
     setPrenotazioni(prev => prev.map(x => x.id === p.id ? { ...x, stato: nuovoStato } : x));
-    // Notifica al richiedente
     if (p.userId) {
       await sb.from('notifiche').insert({
         destinatario_ruolo: 'band',
@@ -18527,130 +18556,149 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
     showToast(true, nuovoStato === 'approvata' ? 'Prenotazione approvata ✅' : 'Prenotazione rifiutata');
   };
 
-  const headerStyle = { padding: isMobile ? '16px 16px 0' : '28px 32px 0' };
-  const contentStyle = { padding: isMobile ? '12px 16px' : '20px 32px' };
+  const pad = isMobile ? '16px' : '32px';
 
   return React.createElement('div', { style: { minHeight: '100%', background: C.bg } }
 
     /* Header */
-    , React.createElement('div', { style: { ...headerStyle, background: C.surface, borderBottom: `1px solid ${C.border}`, paddingBottom: 16 } }
-      , React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' } }
-        , React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12 } }
-          , React.createElement('div', { style: { width: 44, height: 44, borderRadius: 12, background: C.orange2Bg, border: `1px solid ${C.orange2Border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' } }
-            , React.createElement(Ic, { n: 'drum', size: 22, stroke: C.orange2 })
+    , React.createElement('div', { style: { padding: `16px ${pad} 0`, background: C.surface, borderBottom: `1px solid ${C.border}`, paddingBottom: 16 } }
+      , React.createElement('div', { style: { display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap' } }
+        , React.createElement('div', { style: { display:'flex', alignItems:'center', gap:12 } }
+          , React.createElement('div', { style: { width:44,height:44,borderRadius:12,background:C.orange2Bg,border:`1px solid ${C.orange2Border}`,display:'flex',alignItems:'center',justifyContent:'center' } }
+            , React.createElement(Ic, { n:'drum', size:22, stroke:C.orange2 })
           )
           , React.createElement('div', null
-            , React.createElement('h1', { style: { fontFamily: "'Oswald',sans-serif", fontSize: 'clamp(18px,4vw,24px)', fontWeight: 600, color: C.text, marginBottom: 2 } }, '🥁 Sala Prove')
-            , React.createElement('p', { style: { fontSize: 12, color: C.textMuted } }, isBand ? 'Prenota la sala · vedi le tue prenotazioni' : 'Gestione prenotazioni sala prove')
+            , React.createElement('h1', { style: { fontFamily:"'Oswald',sans-serif", fontSize:'clamp(18px,4vw,24px)', fontWeight:600, color:C.text, marginBottom:2 } }, '🥁 Sala Prove')
+            , React.createElement('p', { style: { fontSize:12, color:C.textMuted } }, isBand ? 'Prenota la sala e gestisci le tue prenotazioni' : 'Gestione prenotazioni sala prove')
           )
         )
-        , React.createElement('button', {
-            onClick: () => { setEditTarget(null); setShowForm(true); },
-            style: { padding: '10px 20px', borderRadius: 8, border: 'none', background: C.orange2, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: "'Open Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 6 }
-          }
-          , React.createElement(Ic, { n: 'plus', size: 14, stroke: '#fff' })
-          , '+ Prenota'
+        , React.createElement('div', { style: { display:'flex', gap:8 } }
+          , isBand && React.createElement('button', {
+              onClick: () => setShowContatto(true),
+              style: { padding:'9px 16px', borderRadius:8, border:`1px solid ${C.border}`, background:C.bg, color:C.textMuted, cursor:'pointer', fontSize:13, fontFamily:"'Open Sans',sans-serif", display:'flex', alignItems:'center', gap:6 }
+            }
+            , React.createElement(Ic, { n:'mail', size:14, stroke:C.textMuted })
+            , 'Contatta admin'
+          )
+          , React.createElement('button', {
+              onClick: () => { setEditTarget(null); setShowForm(true); },
+              style: { padding:'9px 18px', borderRadius:8, border:'none', background:C.orange2, color:'#fff', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:"'Open Sans',sans-serif", display:'flex', alignItems:'center', gap:6 }
+            }
+            , React.createElement(Ic, { n:'plus', size:14, stroke:'#fff' }), '+ Prenota'
+          )
         )
       )
     )
 
     /* Toast */
-    , toast && React.createElement('div', { style: { position: 'fixed', top: 20, right: 20, zIndex: 9999, padding: '12px 20px', borderRadius: 10, background: toast.ok ? '#16a34a' : C.red, color: '#fff', fontFamily: "'Open Sans',sans-serif", fontSize: 13, fontWeight: 600, boxShadow: '0 4px 20px rgba(0,0,0,.2)' } }, toast.msg)
+    , toast && React.createElement('div', { style: { position:'fixed', top:20, right:20, zIndex:9999, padding:'12px 20px', borderRadius:10, background:toast.ok?'#16a34a':C.red, color:'#fff', fontFamily:"'Open Sans',sans-serif", fontSize:13, fontWeight:600, boxShadow:'0 4px 20px rgba(0,0,0,.2)' } }, toast.msg)
 
     /* Contenuto */
-    , React.createElement('div', { style: contentStyle }
+    , React.createElement('div', { style: { padding: `20px ${pad}` } }
 
       /* Info band */
-      , isBand && React.createElement('div', { style: { background: C.orange2Bg, border: `1px solid ${C.orange2Border}`, borderRadius: 10, padding: '12px 16px', fontSize: 12, color: '#92400e', lineHeight: 1.7, marginBottom: 20 } }
-        , '🎸 Puoi prenotare la sala compilando il modulo. Le prenotazioni vengono confermate dall\'amministratore. '
-        , React.createElement('br', null)
-        , '📞 Per urgenze contatta direttamente la scuola.'
+      , isBand && React.createElement('div', { style: { background:C.orange2Bg, border:`1px solid ${C.orange2Border}`, borderRadius:10, padding:'12px 16px', fontSize:12, color:'#92400e', lineHeight:1.7, marginBottom:20 } }
+        , '🎸 Compila la richiesta e attendi la conferma dell\'admin. Per domande usa il pulsante "Contatta admin".'
       )
 
-      /* Lista prenotazioni */
-      , loading
-        ? React.createElement('div', { style: { textAlign: 'center', padding: 40, color: C.textDim } }, '⏳ Caricamento...')
-        : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 16 } }
-
-          /* Sezione MIEI prenotazioni (solo band) */
-          , isBand && React.createElement('div', null
-            , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10, fontWeight: 600 } }, 'Le tue prenotazioni')
-            , miePrenotazioni.length === 0
-              ? React.createElement('div', { style: { padding: '20px 0', color: C.textMuted, fontSize: 13, textAlign: 'center' } }, 'Nessuna prenotazione — usa + Prenota per aggiungerne una')
-              : miePrenotazioni.sort((a,b) => b.data.localeCompare(a.data)).map(p => {
-                  const st = statoStyle(p.stato);
-                  const isPast = p.data < oggi;
-                  return React.createElement('div', { key: p.id, style: { background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', opacity: isPast ? .65 : 1, display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' } }
-                    , React.createElement('div', { style: { width: 44, height: 44, borderRadius: 8, background: C.orange2Bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } }
-                      , React.createElement('div', { style: { fontSize: 14, fontWeight: 700, color: C.orange2, lineHeight: 1 } }, p.data.split('-')[2])
-                      , React.createElement('div', { style: { fontSize: 9, color: C.orange2, textTransform: 'uppercase' } }, MESI[+p.data.split('-')[1]-1])
-                    )
-                    , React.createElement('div', { style: { flex: 1, minWidth: 0 } }
-                      , React.createElement('div', { style: { fontWeight: 600, fontSize: 14, color: C.text, marginBottom: 3 } }, fmtData(p.data), ' · ', GIORNI[new Date(p.data+'T00:00:00').getDay()])
-                      , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, marginBottom: 6 } }, '🕐 ', p.oraInizio, ' → ', p.oraFine, p.motivo ? ' · ' + p.motivo : '')
-                      , React.createElement('span', { style: { background: st.bg, color: st.fg, border: `1px solid ${st.bd}`, borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 600 } }, st.label)
-                    )
-                    , !isPast && p.stato === 'in_attesa' && React.createElement('button', {
-                        onClick: () => handleDelete(p),
-                        style: { padding: '5px 10px', borderRadius: 6, border: `1px solid ${C.redBorder}`, background: C.redBg, color: C.red, cursor: 'pointer', fontSize: 11, fontFamily: "'Open Sans',sans-serif" }
-                      }, '✕ Annulla')
-                  );
-                })
-          )
-
-          /* Sezione ADMIN: tutte le prenotazioni in attesa */
-          , isAdmin && React.createElement('div', null
-            , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10, fontWeight: 600 } }
-              , 'Prenotazioni future · ', tuttePrenotazioni.filter(p => p.data >= oggi).length, ' totali'
-            )
-            , tuttePrenotazioni.filter(p => p.data >= oggi).sort((a,b) => a.data.localeCompare(b.data) || a.oraInizio.localeCompare(b.oraInizio)).map(p => {
+      /* Lista mie prenotazioni (band) */
+      , isBand && React.createElement('div', null
+        , React.createElement('div', { style: { fontSize:12, color:C.textMuted, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:10, fontWeight:600 } }, 'Le tue prenotazioni')
+        , loading
+          ? React.createElement('div', { style: { padding:32, textAlign:'center', color:C.textDim } }, '⏳ Caricamento...')
+          : miePrenotazioni.length === 0
+            ? React.createElement('div', { style: { padding:'24px 0', color:C.textMuted, fontSize:13, textAlign:'center' } }, 'Nessuna prenotazione — usa + Prenota per aggiungerne una')
+            : miePrenotazioni.sort((a,b) => b.data.localeCompare(a.data)).map(p => {
                 const st = statoStyle(p.stato);
-                return React.createElement('div', { key: p.id, style: { background: C.surface, border: `1px solid ${p.stato==='in_attesa'?'rgba(245,158,11,.4)':C.border}`, borderLeft: `4px solid ${p.stato==='in_attesa'?'#f59e0b':p.stato==='approvata'?C.green:C.red}`, borderRadius: 12, padding: '14px 18px', marginBottom: 10, display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' } }
-                  , React.createElement('div', { style: { width: 44, height: 44, borderRadius: 8, background: C.orange2Bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flexShrink: 0 } }
-                    , React.createElement('div', { style: { fontSize: 14, fontWeight: 700, color: C.orange2, lineHeight: 1 } }, p.data.split('-')[2])
-                    , React.createElement('div', { style: { fontSize: 9, color: C.orange2, textTransform: 'uppercase' } }, MESI[+p.data.split('-')[1]-1])
+                const isPast = p.data < oggi;
+                return React.createElement('div', { key:p.id, style: { background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:'14px 18px', opacity:isPast?.65:1, display:'flex', alignItems:'flex-start', gap:14, flexWrap:'wrap', marginBottom:10 } }
+                  , React.createElement('div', { style: { width:44,height:44,borderRadius:8,background:C.orange2Bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0 } }
+                    , React.createElement('div', { style: { fontSize:14,fontWeight:700,color:C.orange2,lineHeight:1 } }, p.data.split('-')[2])
+                    , React.createElement('div', { style: { fontSize:9,color:C.orange2,textTransform:'uppercase' } }, MESI[+p.data.split('-')[1]-1])
                   )
-                  , React.createElement('div', { style: { flex: 1, minWidth: 0 } }
-                    , React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 3 } }
-                      , React.createElement('span', { style: { fontWeight: 700, fontSize: 14, color: C.text } }, p.richiedente)
-                      , React.createElement('span', { style: { background: st.bg, color: st.fg, border: `1px solid ${st.bd}`, borderRadius: 20, padding: '1px 8px', fontSize: 11, fontWeight: 600 } }, st.label)
-                    )
-                    , React.createElement('div', { style: { fontSize: 12, color: C.textMuted } }, fmtData(p.data), ' · ', '🕐 ', p.oraInizio, ' → ', p.oraFine)
-                    , p.motivo && React.createElement('div', { style: { fontSize: 12, color: C.textDim, marginTop: 2, fontStyle: 'italic' } }, '"', p.motivo, '"')
-                    , p.telefono && React.createElement('div', { style: { fontSize: 12, color: C.textMuted, marginTop: 2 } }, '📞 ', p.telefono)
+                  , React.createElement('div', { style: { flex:1, minWidth:0 } }
+                    , React.createElement('div', { style: { fontWeight:600, fontSize:14, color:C.text, marginBottom:3 } }, fmtData(p.data), ' · ', GIORNI[new Date(p.data+'T00:00:00').getDay()])
+                    , React.createElement('div', { style: { fontSize:12, color:C.textMuted, marginBottom:6 } }, '🕐 ', p.oraInizio, ' → ', p.oraFine, p.motivo ? ' · '+p.motivo : '')
+                    , React.createElement('span', { style: { background:st.bg, color:st.fg, border:`1px solid ${st.bd}`, borderRadius:20, padding:'2px 10px', fontSize:11, fontWeight:600 } }, st.label)
                   )
-                  , p.stato === 'in_attesa' && React.createElement('div', { style: { display: 'flex', gap: 6, flexShrink: 0 } }
-                    , React.createElement('button', {
-                        onClick: () => handleApprova(p, 'approvata'),
-                        style: { padding: '6px 14px', borderRadius: 8, border: 'none', background: C.green, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'Open Sans',sans-serif" }
-                      }, '✓ Approva')
-                    , React.createElement('button', {
-                        onClick: () => handleApprova(p, 'rifiutata'),
-                        style: { padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.redBorder}`, background: C.redBg, color: C.red, cursor: 'pointer', fontSize: 12, fontFamily: "'Open Sans',sans-serif" }
-                      }, '✕ Rifiuta')
-                  )
+                  , !isPast && p.stato === 'in_attesa' && React.createElement('button', {
+                      onClick: () => handleDelete(p),
+                      style: { padding:'5px 10px', borderRadius:6, border:`1px solid ${C.redBorder}`, background:C.redBg, color:C.red, cursor:'pointer', fontSize:11, fontFamily:"'Open Sans',sans-serif" }
+                    }, '✕ Annulla')
                 );
               })
-          )
+      )
+
+      /* Lista admin: tutte le prenotazioni future */
+      , isAdmin && React.createElement('div', null
+        , React.createElement('div', { style: { fontSize:12, color:C.textMuted, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:10, fontWeight:600 } }
+          , 'Prenotazioni future · ', prenotazioni.filter(p => p.data >= oggi).length, ' totali'
         )
+        , loading
+          ? React.createElement('div', { style: { padding:32, textAlign:'center', color:C.textDim } }, '⏳ Caricamento...')
+          : prenotazioni.filter(p => p.data >= oggi).sort((a,b) => a.data.localeCompare(b.data)||a.oraInizio.localeCompare(b.oraInizio)).map(p => {
+              const st = statoStyle(p.stato);
+              return React.createElement('div', { key:p.id, style: { background:C.surface, border:`1px solid ${p.stato==='in_attesa'?'rgba(245,158,11,.4)':C.border}`, borderLeft:`4px solid ${p.stato==='in_attesa'?'#f59e0b':p.stato==='approvata'?C.green:C.red}`, borderRadius:12, padding:'14px 18px', marginBottom:10, display:'flex', alignItems:'flex-start', gap:14, flexWrap:'wrap' } }
+                , React.createElement('div', { style: { width:44,height:44,borderRadius:8,background:C.orange2Bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0 } }
+                  , React.createElement('div', { style: { fontSize:14,fontWeight:700,color:C.orange2,lineHeight:1 } }, p.data.split('-')[2])
+                  , React.createElement('div', { style: { fontSize:9,color:C.orange2,textTransform:'uppercase' } }, MESI[+p.data.split('-')[1]-1])
+                )
+                , React.createElement('div', { style: { flex:1, minWidth:0 } }
+                  , React.createElement('div', { style: { display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:3 } }
+                    , React.createElement('span', { style: { fontWeight:700, fontSize:14, color:C.text } }, p.richiedente)
+                    , React.createElement('span', { style: { background:st.bg, color:st.fg, border:`1px solid ${st.bd}`, borderRadius:20, padding:'1px 8px', fontSize:11, fontWeight:600 } }, st.label)
+                  )
+                  , React.createElement('div', { style: { fontSize:12, color:C.textMuted } }, fmtData(p.data), ' · 🕐 ', p.oraInizio, ' → ', p.oraFine)
+                  , p.motivo && React.createElement('div', { style: { fontSize:12, color:C.textDim, marginTop:2, fontStyle:'italic' } }, '"', p.motivo, '"')
+                  , p.telefono && React.createElement('div', { style: { fontSize:12, color:C.textMuted, marginTop:2 } }, '📞 ', p.telefono)
+                )
+                , p.stato === 'in_attesa' && React.createElement('div', { style: { display:'flex', gap:6, flexShrink:0 } }
+                  , React.createElement('button', { onClick:()=>handleApprova(p,'approvata'), style:{ padding:'6px 14px',borderRadius:8,border:'none',background:C.green,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif" } }, '✓ Approva')
+                  , React.createElement('button', { onClick:()=>handleApprova(p,'rifiutata'), style:{ padding:'6px 14px',borderRadius:8,border:`1px solid ${C.redBorder}`,background:C.redBg,color:C.red,cursor:'pointer',fontSize:12,fontFamily:"'Open Sans',sans-serif" } }, '✕ Rifiuta')
+                )
+              );
+            })
+      )
     )
 
     /* Modal form prenotazione */
-    , showForm && React.createElement(Modal, { title: editTarget ? 'Modifica prenotazione' : 'Nuova prenotazione', onClose: () => { setShowForm(false); setEditTarget(null); } }
+    , showForm && React.createElement(Modal, { title: editTarget ? 'Modifica prenotazione' : 'Nuova prenotazione', onClose:()=>{ setShowForm(false); setEditTarget(null); } }
       , React.createElement(SalaProveForm, {
-          initial:  editTarget,
-          role:     userRuolo,
-          appUser:  appUser,
-          onClose:  () => { setShowForm(false); setEditTarget(null); },
-          onSave:   (nuova) => {
-            setPrenotazioni(prev => editTarget
-              ? prev.map(x => x.id === nuova.id ? nuova : x)
-              : [...prev, nuova]
-            );
+          initial: editTarget, role: userRuolo, appUser: appUser,
+          onClose: ()=>{ setShowForm(false); setEditTarget(null); },
+          onSave: (nuova) => {
+            setPrenotazioni(prev => editTarget ? prev.map(x=>x.id===nuova.id?nuova:x) : [...prev,nuova]);
             setShowForm(false); setEditTarget(null);
-            showToast(true, editTarget ? 'Prenotazione aggiornata ✅' : (userRuolo === 'admin' ? '✅ Sala prenotata' : '✅ Richiesta inviata — in attesa di approvazione'));
+            showToast(true, editTarget ? 'Prenotazione aggiornata ✅' : (userRuolo==='admin' ? '✅ Sala prenotata' : '✅ Richiesta inviata — in attesa di approvazione'));
           },
         })
+    )
+
+    /* Modal contatta admin */
+    , showContatto && React.createElement('div', { onClick:()=>setShowContatto(false), style:{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,.6)',backdropFilter:'blur(3px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16} }
+      , React.createElement('div', { onClick:e=>e.stopPropagation(), style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:420,padding:24,boxShadow:'0 20px 60px rgba(0,0,0,.4)',fontFamily:"'Open Sans',sans-serif"} }
+        , React.createElement('div', { style:{display:'flex',alignItems:'center',gap:10,marginBottom:16} }
+          , React.createElement('div', { style:{width:36,height:36,borderRadius:10,background:C.tealBg,border:`1px solid ${C.tealBorder}`,display:'flex',alignItems:'center',justifyContent:'center'} }
+            , React.createElement(Ic,{n:'mail',size:18,stroke:C.teal})
+          )
+          , React.createElement('div', null
+            , React.createElement('div', { style:{fontSize:15,fontWeight:700,color:C.text} }, '💬 Contatta l\'amministrazione')
+            , React.createElement('div', { style:{fontSize:12,color:C.textMuted} }, 'Il messaggio arriverà come notifica all\'admin')
+          )
+          , React.createElement('button', { onClick:()=>setShowContatto(false), style:{marginLeft:'auto',background:'none',border:'none',cursor:'pointer',color:C.textMuted,fontSize:20} }, '×')
+        )
+        , React.createElement('textarea', {
+            value: msgContatto,
+            onChange: e=>setMsgContatto(e.target.value),
+            rows: 5,
+            placeholder: 'Es. Vorremmo prenotare la sala ogni settimana, è possibile? Abbiamo bisogno di un amplificatore...',
+            style: { width:'100%', boxSizing:'border-box', background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:13, padding:'10px 12px', fontFamily:"'Open Sans',sans-serif", resize:'vertical' }
+          })
+        , React.createElement('div', { style:{display:'flex',gap:10,justifyContent:'flex-end',marginTop:14} }
+          , React.createElement('button', { onClick:()=>setShowContatto(false), style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:'none',color:C.textMuted,cursor:'pointer',fontSize:13} }, 'Annulla')
+          , React.createElement('button', { onClick:handleSendContatto, disabled:!msgContatto.trim()||sendingMsg, style:{padding:'9px 18px',borderRadius:8,border:'none',background:msgContatto.trim()?C.teal:C.surface,color:msgContatto.trim()?'#fff':C.textMuted,cursor:msgContatto.trim()?'pointer':'not-allowed',fontSize:13,fontWeight:600} }, sendingMsg?'Invio…':'Invia messaggio')
+        )
+      )
     )
   );
 };
@@ -20261,6 +20309,17 @@ const NOTIFICHE_CONFIG_TYPES = [
     defaultAnticipoMin: 0,
     defaultDest: ['allievo', 'docente', 'admin'],
   },
+  {
+    id: 'sala_prove',
+    label: 'Sala Prove',
+    icon: 'drum',
+    color: C.orange2,
+    colorBg: C.orange2Bg,
+    colorBorder: C.orange2Border,
+    desc: 'Notifica push quando arriva una nuova richiesta di prenotazione sala prove',
+    defaultAnticipoMin: 0,
+    defaultDest: ['band', 'admin'],
+  },
 ];
 
 const NotificheSettingsView = ({ ruolo }) => {
@@ -20615,6 +20674,7 @@ CREATE POLICY "admin_all" ON public.notifiche_config FOR ALL USING (true);`
                 { id: 'allievo',  label: '🎵 Allievo'  },
                 { id: 'docente',  label: '🎓 Docente'  },
                 { id: 'admin',    label: '👑 Admin'     },
+                { id: 'band',     label: '🥁 Band'      },
               ];
 
               const toggleRuolo = (ruoloId) => {
