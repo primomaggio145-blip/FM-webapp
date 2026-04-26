@@ -18801,6 +18801,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
 
       /* Lista admin: tutte le prenotazioni future */
       , isAdmin && React.createElement('div', null
+        , React.createElement(BandWeekCalendar, { lessons, prenotazioni })
         , React.createElement('div', { style: { fontSize:12, color:C.textMuted, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:10, fontWeight:600 } }
           , 'Prenotazioni future · ', prenotazioni.filter(p => p.data >= oggi).length, ' totali'
         )
