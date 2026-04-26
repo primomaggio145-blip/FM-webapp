@@ -10298,29 +10298,26 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
 };
 
 // ── Vista admin: gestione richieste sala prove ────────────────────────────────
-const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
+const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser, lessons }) => {
   const isMobile = useIsMobile();
-  // ── Panel: "calendario" | "richieste" (admin only)
   const [svPanel,      setSvPanel]      = useState("calendario");
-  const [svCalMode,    setSvCalMode]    = useState("week");   // "week" | "month"
+  const [svCalMode,    setSvCalMode]    = useState("week");
   const [svCurDate,    setSvCurDate]    = useState(new Date());
   const [svFilterStato,setSvFilterStato]= useState("tutti");
   const [svNoteAdmin,  setSvNoteAdmin]  = useState({});
   const [svLoading,    setSvLoading]    = useState({});
   const [svModal,      setSvModal]      = useState(null);
-  const [svSelPren,    setSvSelPren]    = useState(null); // prenotazione selezionata per modifica
+  const [svSelPren,    setSvSelPren]    = useState(null);
 
-  // ── helpers date IT ─────────────────────────────────────────────
   const DAYS_IT   = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom"];
   const MONTHS_IT = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
                      "Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const spStartOfWeek = (d) => { const dt=new Date(d); const dow=dt.getDay(); dt.setDate(dt.getDate()-((dow===0?7:dow)-1)); dt.setHours(0,0,0,0); return dt; };
   const spAddDays = (d,n) => { const dt=new Date(d); dt.setDate(dt.getDate()+n); return dt; };
 
-  // ── Solo prenotazioni approvate nel calendario ──────────────────
-  const approved = prenotazioni.filter(p=>p.stato==="approvata");
+  const approved   = prenotazioni.filter(p=>p.stato==="approvata");
+  const allVisible = prenotazioni.filter(p=>p.stato!=="rifiutata");
 
-  // ── navigate ────────────────────────────────────────────────────
   const navigate = (dir) => {
     const d = new Date(svCurDate);
     if (svCalMode==="week")  d.setDate(d.getDate()+dir*7);
@@ -10328,102 +10325,150 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser }) => {
     setSvCurDate(d);
   };
 
-  // ── label navigazione ───────────────────────────────────────────
   const navLabel = React.useMemo(()=>{
     if(svCalMode==="month") return `${MONTHS_IT[svCurDate.getMonth()]} ${svCurDate.getFullYear()}`;
     const ws=spStartOfWeek(svCurDate), we=spAddDays(ws,6);
     return `${ws.getDate()} ${MONTHS_IT[ws.getMonth()].slice(0,3)} – ${we.getDate()} ${MONTHS_IT[we.getMonth()].slice(0,3)} ${we.getFullYear()}`;
   },[svCalMode,svCurDate]);
 
-  // ── VISTA SETTIMANALE ───────────────────────────────────────────
+  // ── VISTA SETTIMANALE TIME-GRID ────────────────────────────────────────────
+  // Fasce orarie: 9-13 | [CHIUSO 13-16] | 16-23
+  const MORNING_SLOTS = [9,10,11,12];
+  const EVENING_SLOTS = [16,17,18,19,20,21,22];
+  const HOUR_H = 44; // px per ora
+  const fmtHHMM = t => t ? t.slice(0,5) : "";
+  const toMin = t => { if(!t) return 0; const [h,m]=(t).split(":").map(Number); return h*60+(m||0); };
+
   const WeekCalSala = () => {
-    const ws = spStartOfWeek(svCurDate);
+    const ws   = spStartOfWeek(svCurDate);
     const days = Array.from({length:7},(_,i)=>spAddDays(ws,i));
-    const HOUR_H = 36; // px per ora
-    const START_H = 8, END_H = 22;
-    const totalHours = END_H - START_H; // 15 righe (8..22)
-    const hours = Array.from({length:totalHours},(_,i)=>i+START_H);
-    const fmtHHMM = (t) => t ? t.slice(0,5) : "";
+    const todayStr = yyyymmdd(new Date());
+
+    // Calcola eventi per ogni cella (prenotazioni + lezioni batteria)
+    const getEvents = (ds, h) => {
+      const events = [];
+      // Prenotazioni sala
+      allVisible.filter(p => {
+        if (p.data !== ds) return false;
+        const startH = parseInt((p.oraInizio||"00:00").split(":")[0]);
+        return startH === h;
+      }).forEach(p => {
+        const sh = toMin(p.oraInizio), eh = toMin(p.oraFine);
+        const dur = (eh - sh) / 60;
+        events.push({
+          id: 'p_'+p.id,
+          top: (toMin(p.oraInizio)%60/60)*HOUR_H,
+          height: Math.max(dur*HOUR_H - 2, HOUR_H*0.5),
+          bg:     p.stato==='approvata' ? C.orange2Bg   : 'rgba(245,158,11,0.08)',
+          bd:     p.stato==='approvata' ? C.orange2Border: 'rgba(245,158,11,0.3)',
+          accent: p.stato==='approvata' ? C.orange2      : '#f59e0b',
+          label:  fmtHHMM(p.oraInizio)+'–'+fmtHHMM(p.oraFine),
+          sub:    p.richiedente,
+          tag:    p.stato==='approvata' ? '✅' : '⏳',
+        });
+      });
+      // Lezioni batteria → sala occupata
+      (lessons||[]).filter(l => {
+        if ((l.date||l.data) !== ds) return false;
+        const str = (l.instrument||l.strumento||'').toLowerCase();
+        const isBatt = str.includes('batter')||str.includes('drum')||str.includes('percuss');
+        if (!isBatt) return false;
+        const lh = parseInt((l.hour||l.ora||'00:00').split(':')[0]);
+        return lh === h;
+      }).forEach(l => {
+        const ora = l.hour||l.ora||'00:00';
+        const durata = l.durata || 45;
+        const startMin = toMin(ora);
+        const endMin = startMin + durata;
+        const endStr = String(Math.floor(endMin/60)).padStart(2,'0')+':'+String(endMin%60).padStart(2,'0');
+        events.push({
+          id: 'b_'+l.id,
+          top: (startMin%60/60)*HOUR_H,
+          height: Math.max((durata/60)*HOUR_H - 2, HOUR_H*0.5),
+          bg: '#fef3c7', bd: '#fcd34d', accent: '#d97706',
+          label: ora.slice(0,5)+'–'+endStr,
+          sub:   '🥁 Lezione batteria',
+          tag:   '🔒',
+        });
+      });
+      return events;
+    };
+
+    const ColHeader = ({d, i}) => {
+      const isToday = yyyymmdd(d)===todayStr;
+      return React.createElement('div', { style:{padding:"6px 4px",textAlign:"center",
+        background:isToday?C.goldBg:C.surface, borderBottom:`1px solid ${C.border}`,
+        borderLeft:`1px solid ${C.border}`, fontSize:11, fontWeight:isToday?700:500,
+        color:isToday?C.gold:C.text, position:'sticky', top:0, zIndex:2} }
+        , React.createElement('div',null, DAYS_IT[i])
+        , React.createElement('div',{style:{fontSize:14,fontWeight:700}}, d.getDate())
+      );
+    };
+
+    const TimeCell = ({ds, h, isToday}) => {
+      const events = getEvents(ds, h);
+      return React.createElement('div', { style:{
+        borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`,
+        height:HOUR_H, background:isToday?'#fffbf0':C.surface, position:'relative'} }
+        , events.map(ev => (
+          React.createElement('div', { key:ev.id, style:{
+            position:'absolute', top:ev.top+1, left:2, right:2, height:ev.height,
+            background:ev.bg, border:`1px solid ${ev.bd}`, borderLeft:`3px solid ${ev.accent}`,
+            borderRadius:4, padding:'2px 5px', fontSize:9, color:ev.accent, fontWeight:600,
+            overflow:'hidden', zIndex:1, display:'flex', flexDirection:'column', gap:1} }
+            , React.createElement('div',{style:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:700}}, ev.tag,' ',ev.label)
+            , ev.height>18 && React.createElement('div',{style:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',opacity:.85}}, ev.sub)
+          ))
+      )
+    );
+  };
+
+    const ClosedRow = () => (
+      React.createElement(React.Fragment, null
+        , React.createElement('div', {style:{padding:'3px 6px',fontSize:9,color:C.textDim,textAlign:'right',
+            background:'#f8f4f0',borderTop:`1px solid ${C.border}`,height:24,
+            display:'flex',alignItems:'center',justifyContent:'flex-end',fontStyle:'italic'}}, '13–16')
+        , days.map((_,i) => (
+          React.createElement('div', { key:i, style:{borderTop:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,
+            height:24,background:'repeating-linear-gradient(135deg,#f8f4f0 0px,#f8f4f0 4px,#f1ece8 4px,#f1ece8 8px)',
+            position:'relative'} }
+            , React.createElement('div',{style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',
+              fontSize:9,color:'#b8a898',fontWeight:600,letterSpacing:'.05em'}},'CHIUSO')
+          )
+        ))
+      )
+    );
 
     return (
-      React.createElement('div', { style:{overflowX:"auto"} }
-        , React.createElement('div', { style:{display:"grid", gridTemplateColumns:`52px repeat(7,1fr)`, minWidth:520} }
-          /* intestazione giorni */
-          , React.createElement('div', {style:{background:C.surface,borderBottom:`1px solid ${C.border}`}})
-          , days.map((d,i) => {
-            const isToday = yyyymmdd(d)===yyyymmdd(new Date());
-            return React.createElement('div', { key:i,
-              style:{padding:"6px 4px",textAlign:"center",background:isToday?C.goldBg:C.surface,
-                borderBottom:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,
-                fontSize:11,fontWeight:isToday?700:500,color:isToday?C.gold:C.text} }
-              , React.createElement('div',null,DAYS_IT[i])
-              , React.createElement('div',{style:{fontSize:14,fontWeight:700}},d.getDate())
-            );
-          })
-          /* colonna ore + celle giornaliere con position:relative */
-          , hours.map(h => {
-            const hStr = String(h).padStart(2,"0")+":00";
-            const isLastRow = h === END_H - 1;
-            return React.createElement(React.Fragment, {key:h}
-              /* etichetta ora */
-              , React.createElement('div', { style:{padding:"2px 6px",fontSize:10,color:C.textDim,
-                  borderTop:`1px solid ${C.border}`,
-                  borderBottom: isLastRow?`1px solid ${C.border}`:"none",
-                  textAlign:"right",height:HOUR_H,
-                  background:C.bg,flexShrink:0,display:"flex",alignItems:"flex-start",paddingTop:4} }, hStr)
-              /* celle per ogni giorno */
-              , days.map((d,i) => {
-                const ds = yyyymmdd(d);
-                const isToday = ds===yyyymmdd(new Date());
-                // Trova prenotazioni che INIZIANO a quest'ora (renderizziamo il blocco solo alla riga iniziale)
-                const startingHere = approved.filter(p => {
-                  if(p.data!==ds) return false;
-                  const startH = parseInt((p.oraInizio||"00:00").split(":")[0]);
-                  return startH === h;
-                });
-                return React.createElement('div', { key:i,
-                  style:{borderTop:`1px solid ${C.border}`,
-                    borderBottom: isLastRow?`1px solid ${C.border}`:"none",
-                    borderLeft:`1px solid ${C.border}`,
-                    height:HOUR_H,
-                    background:isToday?"#fffbf0":C.surface,
-                    position:"relative"} }
-                  , startingHere.map(p => {
-                    const startH = parseInt((p.oraInizio||"00:00").split(":")[0]);
-                    const startM = parseInt((p.oraInizio||"00:00").split(":")[1]||"0");
-                    const endH   = parseInt((p.oraFine||"00:00").split(":")[0]);
-                    const endM   = parseInt((p.oraFine||"00:00").split(":")[1]||"0");
-                    const durationHours = (endH + endM/60) - (startH + startM/60);
-                    const blockHeight = Math.max(durationHours * HOUR_H - 2, HOUR_H - 2);
-                    const topOffset = (startM / 60) * HOUR_H;
-                    return React.createElement('div', { key:p.id,
-                      style:{
-                        position:"absolute",
-                        top: topOffset + 1,
-                        left:2, right:2,
-                        height: blockHeight,
-                        background:C.orange2Bg,
-                        border:`1px solid ${C.orange2Border}`,
-                        borderLeft:`3px solid ${C.orange2}`,
-                        borderRadius:4,
-                        padding:"3px 5px",
-                        fontSize:9,color:C.orange2,fontWeight:600,
-                        overflow:"hidden",
-                        zIndex:1,
-                        display:"flex",flexDirection:"column",justifyContent:"flex-start",gap:1
-                      } }
-                      , React.createElement('div',{style:{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",fontWeight:700}}
-                        , fmtHHMM(p.oraInizio),"–",fmtHHMM(p.oraFine))
-                      , blockHeight > 20 && React.createElement('div',{style:{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",opacity:0.85}}
-                        , p.richiedente)
-                      , blockHeight > 36 && p.telefono && React.createElement('div',{style:{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",opacity:0.7}}
-                        , p.telefono)
-                    );
-                  })
-                );
-              })
-            );
-          })
+      React.createElement('div', {style:{overflowX:'auto',overflowY:'auto',maxHeight:'70vh'}}
+        , React.createElement('div', {style:{display:'grid',gridTemplateColumns:`44px repeat(7,1fr)`,minWidth:560}}
+
+          /* Intestazione */
+          , React.createElement('div', {style:{background:C.surface,borderBottom:`1px solid ${C.border}`,position:'sticky',top:0,zIndex:3}})
+          , days.map((d,i) => React.createElement(ColHeader, {key:i,d,i}))
+
+          /* Slot mattina: 9–13 */
+          , MORNING_SLOTS.map(h => (
+            React.createElement(React.Fragment, {key:'m'+h}
+              , React.createElement('div', {style:{padding:'2px 6px',fontSize:9,color:C.textDim,textAlign:'right',
+                  borderTop:`1px solid ${C.border}`,height:HOUR_H,background:C.bg,
+                  display:'flex',alignItems:'flex-start',paddingTop:4}}, String(h).padStart(2,'0')+':00')
+              , days.map((d,i) => React.createElement(TimeCell, {key:i, ds:yyyymmdd(d), h, isToday:yyyymmdd(d)===todayStr}))
+            )
+          ))
+
+          /* Fascia chiusa 13–16 */
+          , React.createElement(ClosedRow, null)
+
+          /* Slot sera: 16–23 */
+          , EVENING_SLOTS.map(h => (
+            React.createElement(React.Fragment, {key:'e'+h}
+              , React.createElement('div', {style:{padding:'2px 6px',fontSize:9,color:C.textDim,textAlign:'right',
+                  borderTop:`1px solid ${C.border}`,height:HOUR_H,background:C.bg,
+                  display:'flex',alignItems:'flex-start',paddingTop:4}}, String(h).padStart(2,'0')+':00')
+              , days.map((d,i) => React.createElement(TimeCell, {key:i, ds:yyyymmdd(d), h, isToday:yyyymmdd(d)===todayStr}))
+            )
+          ))
         )
       )
     );
@@ -11675,6 +11720,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           /* ── SALA PROVE ─────────────────────────────────────── */
           , appView==='sala_prove' && React.createElement(SalaProveView, {
               prenotazioni: prenotazioniSala,
+              lessons:      visibleLessons,
               onUpdate: (updated) => setPrenotazioniSala(p => {
                 const exists = p.some(x => x.id === updated.id);
                 return exists ? p.map(x => x.id===updated.id ? updated : x) : [...p, updated];
@@ -18458,132 +18504,131 @@ const MobileMoreMenu = ({ current, setView, extraItems, onLogout, onEsciSenzaLog
 // APP ROOT
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// ─── BAND WEEK CALENDAR ───────────────────────────────────────────────────────
+// ─── BAND WEEK CALENDAR — stessa time-grid dell'admin ─────────────────────────
 const BandWeekCalendar = ({ lessons, prenotazioni }) => {
   const [weekOffset, setWeekOffset] = useState(0);
 
   const getMonday = (offset) => {
-    const d = new Date();
-    const day = d.getDay() || 7;
-    d.setDate(d.getDate() - day + 1 + offset * 7);
-    d.setHours(0,0,0,0);
-    return d;
+    const d = new Date(), day = d.getDay()||7;
+    d.setDate(d.getDate()-day+1+offset*7); d.setHours(0,0,0,0); return d;
   };
-
   const monday = getMonday(weekOffset);
-  const days = Array.from({length:7}, (_,i) => {
-    const d = new Date(monday); d.setDate(d.getDate() + i); return d;
-  });
+  const days   = Array.from({length:7},(_,i)=>{ const d=new Date(monday); d.setDate(d.getDate()+i); return d; });
+  const toLocalDateStr = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const toMin = t => { if(!t) return 0; const [h,m]=(t).split(':').map(Number); return h*60+(m||0); };
 
-  const toLocalDateStr = d => {
-    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-    return `${y}-${m}-${dd}`;
-  };
+  const GIORNI_S  = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+  const MESI_S    = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const HOUR_H    = 44;
+  const MORNING   = [9,10,11,12];
+  const EVENING   = [16,17,18,19,20,21,22];
+  const oggi      = toLocalDateStr(new Date());
 
-  const GIORNI_S = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
-  const MESI_S   = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
-
-  const s = days[0], e = days[6];
+  const s=days[0], e=days[6];
   const weekLabel = s.getMonth()===e.getMonth()
     ? `${s.getDate()}–${e.getDate()} ${MESI_S[s.getMonth()]} ${s.getFullYear()}`
     : `${s.getDate()} ${MESI_S[s.getMonth()]} – ${e.getDate()} ${MESI_S[e.getMonth()]} ${e.getFullYear()}`;
 
-  const oggi = toLocalDateStr(new Date());
-
-  // Mappa data → eventi (batteria + prenotazioni)
-  const eventsByDay = {};
-  days.forEach(d => { eventsByDay[toLocalDateStr(d)] = []; });
-
-  // Lezioni di batteria → "Sala occupata" senza nome allievo
-  (lessons||[]).forEach(l => {
-    const dateStr = l.date || '';
-    if (!eventsByDay[dateStr]) return;
-    const str = (l.instrument || l.strumento || '').toLowerCase();
-    const isBatt = str.includes('batter') || str.includes('drum') || str.includes('percuss');
-    if (!isBatt) return;
-    const ora = (l.hour || l.ora || '').slice(0,5);
-    const durata = l.durata || 45;
-    const [hh,mm] = ora.split(':').map(Number);
-    const fineMin = hh*60+mm+durata;
-    const fine = String(Math.floor(fineMin/60)).padStart(2,'0')+':'+String(fineMin%60).padStart(2,'0');
-    eventsByDay[dateStr].push({ id:'lez_'+l.id, ora, fine, label:'🥁 Sala occupata', sub:'Lezione batteria', color:'#78350f', bg:'#fef3c7', bd:'#fcd34d' });
-  });
-
-  // Prenotazioni sala prove
-  (prenotazioni||[]).forEach(p => {
-    if (!eventsByDay[p.data] || p.stato==='rifiutata') return;
-    const approved = p.stato==='approvata';
-    eventsByDay[p.data].push({
-      id:'pren_'+p.id, ora:p.oraInizio, fine:p.oraFine,
-      label: approved ? '✅ Prenotata' : '⏳ In attesa',
-      sub:   p.richiedente||'Sala prove',
-      color: approved ? C.orange2 : '#92400e',
-      bg:    approved ? C.orange2Bg : 'rgba(245,158,11,0.08)',
-      bd:    approved ? C.orange2Border : 'rgba(245,158,11,0.3)',
+  const getEvents = (ds, h) => {
+    const evts = [];
+    // Prenotazioni (tutte tranne rifiutate)
+    (prenotazioni||[]).filter(p => {
+      if (p.data!==ds||p.stato==='rifiutata') return false;
+      return parseInt((p.oraInizio||'00').split(':')[0])===h;
+    }).forEach(p => {
+      const dur = (toMin(p.oraFine)-toMin(p.oraInizio))/60;
+      evts.push({ id:'p'+p.id, top:(toMin(p.oraInizio)%60/60)*HOUR_H, height:Math.max(dur*HOUR_H-2,18),
+        bg:p.stato==='approvata'?C.orange2Bg:'rgba(245,158,11,0.08)',
+        bd:p.stato==='approvata'?C.orange2Border:'rgba(245,158,11,0.3)',
+        accent:p.stato==='approvata'?C.orange2:'#f59e0b',
+        label:(p.oraInizio||'').slice(0,5)+'–'+(p.oraFine||'').slice(0,5),
+        tag:p.stato==='approvata'?'✅':'⏳' });
     });
-  });
+    // Batteria → sala occupata (senza nome allievo)
+    (lessons||[]).filter(l => {
+      const ds2 = l.date||l.data||'';
+      if (ds2!==ds) return false;
+      const str=(l.instrument||l.strumento||'').toLowerCase();
+      return (str.includes('batter')||str.includes('drum')||str.includes('percuss')) &&
+             parseInt((l.hour||l.ora||'00').split(':')[0])===h;
+    }).forEach(l => {
+      const ora=l.hour||l.ora||'00:00', dur=l.durata||45;
+      const sm=toMin(ora), em=sm+dur;
+      evts.push({ id:'b'+l.id, top:(sm%60/60)*HOUR_H, height:Math.max((dur/60)*HOUR_H-2,18),
+        bg:'#fef3c7', bd:'#fcd34d', accent:'#d97706',
+        label:ora.slice(0,5)+'–'+String(Math.floor(em/60)).padStart(2,'0')+':'+String(em%60).padStart(2,'0'),
+        tag:'🔒' });
+    });
+    return evts;
+  };
 
-  Object.keys(eventsByDay).forEach(d => {
-    eventsByDay[d].sort((a,b) => (a.ora||'').localeCompare(b.ora||''));
-  });
+  const btnStyle = {width:30,height:30,borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'};
 
-  const btnStyle = { width:32,height:32,borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center' };
+  const TimeCell = ({ds,h}) => {
+    const isToday = ds===oggi;
+    const evts = getEvents(ds,h);
+    return React.createElement('div',{style:{borderTop:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,height:HOUR_H,background:isToday?'#fffbf0':C.surface,position:'relative'}}
+      ,evts.map(ev=>React.createElement('div',{key:ev.id,style:{position:'absolute',top:ev.top+1,left:2,right:2,height:ev.height,background:ev.bg,border:`1px solid ${ev.bd}`,borderLeft:`3px solid ${ev.accent}`,borderRadius:4,padding:'2px 4px',fontSize:9,color:ev.accent,fontWeight:600,overflow:'hidden',zIndex:1,display:'flex',flexDirection:'column',gap:1}}
+        ,React.createElement('div',{style:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:700}},ev.tag,' ',ev.label)
+      ))
+    );
+  };
 
-  return React.createElement('div', { style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginBottom:8} }
-    /* Header */
-    , React.createElement('div', { style:{padding:'12px 16px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'} }
-      , React.createElement('div', { style:{fontSize:14,fontWeight:700,color:C.text} }, '📅 Disponibilità sala — settimana')
-      , React.createElement('div', { style:{display:'flex',alignItems:'center',gap:8} }
-        , React.createElement('button', { onClick:()=>setWeekOffset(p=>p-1), style:btnStyle }, '‹')
-        , React.createElement('span', { style:{fontSize:12,color:C.textMuted,minWidth:160,textAlign:'center'} }, weekLabel)
-        , React.createElement('button', { onClick:()=>setWeekOffset(p=>p+1), style:btnStyle }, '›')
-        , weekOffset!==0 && React.createElement('button', { onClick:()=>setWeekOffset(0), style:{padding:'4px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11,fontFamily:"'Open Sans',sans-serif"} }, 'Oggi')
+  const ClosedRow = () => React.createElement(React.Fragment,null
+    ,React.createElement('div',{style:{padding:'2px 4px',fontSize:9,color:'#b8a898',textAlign:'right',background:'#f8f4f0',borderTop:`1px solid ${C.border}`,height:22,display:'flex',alignItems:'center',justifyContent:'flex-end',fontStyle:'italic'}},'13–16')
+    ,days.map((_,i)=>React.createElement('div',{key:i,style:{borderTop:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,height:22,background:'repeating-linear-gradient(135deg,#f8f4f0 0px,#f8f4f0 4px,#f1ece8 4px,#f1ece8 8px)',position:'relative'}}
+      ,React.createElement('div',{style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,color:'#b8a898',fontWeight:600,letterSpacing:'.05em'}},'CHIUSO')
+    ))
+  );
+
+  return React.createElement('div',{style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden',marginBottom:8}}
+    /* Header nav */
+    ,React.createElement('div',{style:{padding:'10px 14px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}
+      ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:C.text}},'📅 Disponibilità sala — settimana')
+      ,React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}}
+        ,React.createElement('button',{onClick:()=>setWeekOffset(p=>p-1),style:btnStyle},'‹')
+        ,React.createElement('span',{style:{fontSize:11,color:C.textMuted,minWidth:150,textAlign:'center'}},weekLabel)
+        ,React.createElement('button',{onClick:()=>setWeekOffset(p=>p+1),style:btnStyle},'›')
+        ,weekOffset!==0&&React.createElement('button',{onClick:()=>setWeekOffset(0),style:{padding:'3px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:10,fontFamily:"'Open Sans',sans-serif"}},'Oggi')
       )
     )
-    /* Griglia giorni */
-    , React.createElement('div', { style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)'} }
-      , days.map((d,i) => {
-          const dateStr = toLocalDateStr(d);
-          const isOggi  = dateStr===oggi;
-          const isWeekend = i>=5;
-          const events  = eventsByDay[dateStr]||[];
-          return React.createElement('div', { key:dateStr, style:{borderRight:i<6?`1px solid ${C.border}`:'none',background:isOggi?`${C.teal}10`:'transparent',minHeight:90} }
-            /* Header giorno */
-            , React.createElement('div', { style:{padding:'6px 4px',textAlign:'center',borderBottom:`1px solid ${C.border}`,background:isOggi?C.tealBg:'transparent'} }
-              , React.createElement('div', { style:{fontSize:9,color:isOggi?C.teal:C.textMuted,fontWeight:600,textTransform:'uppercase',letterSpacing:'.05em'} }, GIORNI_S[i])
-              , React.createElement('div', { style:{fontSize:isOggi?15:13,fontWeight:isOggi?700:400,color:isOggi?C.teal:isWeekend?C.textDim:C.text} }, d.getDate())
-            )
-            /* Events */
-            , React.createElement('div', { style:{padding:'3px'} }
-              , events.length===0
-                ? React.createElement('div', { style:{padding:'6px 3px',textAlign:'center',fontSize:9,color:C.textDim} }, isWeekend?'—':'✓ libera')
-                : events.map(ev => (
-                    React.createElement('div', { key:ev.id, style:{background:ev.bg,border:`1px solid ${ev.bd}`,borderRadius:4,padding:'3px 5px',marginBottom:2} }
-                      , React.createElement('div', { style:{fontSize:10,fontWeight:700,color:ev.color,lineHeight:1.3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'} }, ev.label)
-                      , React.createElement('div', { style:{fontSize:9,color:ev.color,opacity:.8} }, ev.ora, ev.fine?'–'+ev.fine:'')
-                    )
-                  ))
-            )
+    /* Griglia time */
+    ,React.createElement('div',{style:{overflowX:'auto',overflowY:'auto',maxHeight:'55vh'}}
+      ,React.createElement('div',{style:{display:'grid',gridTemplateColumns:`36px repeat(7,1fr)`,minWidth:480}}
+        /* Header giorni */
+        ,React.createElement('div',{style:{background:C.surface,borderBottom:`1px solid ${C.border}`}})
+        ,days.map((d,i)=>{
+          const isToday=toLocalDateStr(d)===oggi;
+          return React.createElement('div',{key:i,style:{padding:'5px 3px',textAlign:'center',background:isToday?C.tealBg:C.surface,borderBottom:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,fontSize:10,fontWeight:isToday?700:500,color:isToday?C.teal:C.text}}
+            ,React.createElement('div',null,GIORNI_S[i])
+            ,React.createElement('div',{style:{fontSize:13,fontWeight:700}},d.getDate())
           );
         })
+        /* Mattina 9-13 */
+        ,MORNING.map(h=>React.createElement(React.Fragment,{key:'m'+h}
+          ,React.createElement('div',{style:{padding:'2px 4px',fontSize:9,color:C.textDim,textAlign:'right',borderTop:`1px solid ${C.border}`,height:HOUR_H,background:C.bg,display:'flex',alignItems:'flex-start',paddingTop:3}},String(h).padStart(2,'0')+':00')
+          ,days.map((d,i)=>React.createElement(TimeCell,{key:i,ds:toLocalDateStr(d),h}))
+        ))
+        /* Chiuso 13-16 */
+        ,React.createElement(ClosedRow,null)
+        /* Sera 16-23 */
+        ,EVENING.map(h=>React.createElement(React.Fragment,{key:'e'+h}
+          ,React.createElement('div',{style:{padding:'2px 4px',fontSize:9,color:C.textDim,textAlign:'right',borderTop:`1px solid ${C.border}`,height:HOUR_H,background:C.bg,display:'flex',alignItems:'flex-start',paddingTop:3}},String(h).padStart(2,'0')+':00')
+          ,days.map((d,i)=>React.createElement(TimeCell,{key:i,ds:toLocalDateStr(d),h}))
+        ))
+      )
     )
     /* Legenda */
-    , React.createElement('div', { style:{padding:'6px 14px',borderTop:`1px solid ${C.border}`,display:'flex',gap:14,flexWrap:'wrap'} }
-      , [
-          {bg:'#fef3c7',bd:'#fcd34d',  label:'🥁 Lezione batteria (sala occupata)'},
-          {bg:C.orange2Bg,bd:C.orange2Border,label:'✅ Prenotata'},
-          {bg:'rgba(245,158,11,0.08)',bd:'rgba(245,158,11,0.3)',label:'⏳ In attesa'},
-        ].map((l,i) => (
-          React.createElement('div', { key:i, style:{display:'flex',alignItems:'center',gap:5,fontSize:10,color:C.textMuted} }
-            , React.createElement('div', { style:{width:10,height:10,borderRadius:2,background:l.bg,border:`1px solid ${l.bd}`,flexShrink:0} })
-            , l.label
-          )
-        ))
+    ,React.createElement('div',{style:{padding:'6px 12px',borderTop:`1px solid ${C.border}`,display:'flex',gap:12,flexWrap:'wrap'}}
+      ,[{bg:'#fef3c7',bd:'#fcd34d',t:'🔒 Sala occupata (batteria)'},{bg:C.orange2Bg,bd:C.orange2Border,t:'✅ Prenotata'},{bg:'rgba(245,158,11,0.08)',bd:'rgba(245,158,11,0.3)',t:'⏳ In attesa'}]
+       .map((l,i)=>React.createElement('div',{key:i,style:{display:'flex',alignItems:'center',gap:4,fontSize:10,color:C.textMuted}}
+         ,React.createElement('div',{style:{width:10,height:10,borderRadius:2,background:l.bg,border:`1px solid ${l.bd}`,flexShrink:0}})
+         ,l.t
+       ))
     )
   );
 };
 
-// ═══════════════════════════════════════════════════════════════════════════════
 // SALA PROVE — VISTA STANDALONE (ruolo band + admin dedicato)
 // ═══════════════════════════════════════════════════════════════════════════════
 const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
@@ -18722,12 +18767,41 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
     /* Contenuto */
     , React.createElement('div', { style: { padding: `20px ${pad}` } }
 
+      /* ── DASHBOARD band ────────────────────────────────────────── */
+      , isBand && (() => {
+          const mie   = prenotazioni.filter(p => p.userId===(appUser?.userId||appUser?.id));
+          const attesa   = mie.filter(p=>p.stato==='in_attesa'   && p.data >= oggi);
+          const approvate= mie.filter(p=>p.stato==='approvata'   && p.data >= oggi);
+          const passate  = mie.filter(p=>p.data < oggi);
+          const prossima = approvate.sort((a,b)=>a.data.localeCompare(b.data))[0];
+          return React.createElement('div', { style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10,marginBottom:16} }
+            /* card prossima prenotazione */
+            , React.createElement('div', { style:{background:C.surface,border:`1px solid ${C.orange2Border}`,borderRadius:12,padding:'14px 16px',gridColumn:'span 2'} }
+              , React.createElement('div',{style:{fontSize:10,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}},'📅 Prossima prenotazione confermata')
+              , prossima
+                ? React.createElement('div',null
+                    ,React.createElement('div',{style:{fontSize:18,fontWeight:700,color:C.orange2,fontFamily:"'Oswald',sans-serif"}}
+                      , fmtData(prossima.data))
+                    ,React.createElement('div',{style:{fontSize:13,color:C.textMuted,marginTop:2}},'🕐 ',prossima.oraInizio,'–',prossima.oraFine)
+                  )
+                : React.createElement('div',{style:{fontSize:13,color:C.textDim,fontStyle:'italic'}},'Nessuna prenotazione confermata')
+            )
+            , [{label:'In attesa',val:attesa.length,hex:'#92400e',bg:'rgba(245,158,11,0.08)',icon:'⏳'},
+               {label:'Approvate',val:approvate.length,hex:C.green,bg:C.greenBg,icon:'✅'},
+               {label:'Passate',val:passate.length,hex:C.textDim,bg:C.bg,icon:'📋'}]
+              .map(k=>React.createElement('div',{key:k.label,style:{background:k.bg,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px'}}
+                ,React.createElement('div',{style:{fontSize:10,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}
+                  ,k.icon,' ',k.label)
+                ,React.createElement('div',{style:{fontSize:22,fontWeight:700,color:k.hex,fontFamily:"'Oswald',sans-serif"}},k.val)
+              ))
+          );
+        })()
+
       /* Info band */
       , isBand && React.createElement('div', { style: { background:C.orange2Bg, border:`1px solid ${C.orange2Border}`, borderRadius:10, padding:'12px 16px', fontSize:12, color:'#92400e', lineHeight:1.7, marginBottom:16 } }
         , '🎸 Compila la richiesta e attendi la conferma dell\'admin. Per domande usa il pulsante "Contatta admin".'
       )
 
-      /* Calendario settimanale disponibilità sala */
       , isBand && React.createElement(BandWeekCalendar, { lessons, prenotazioni })
 
       /* Lista mie prenotazioni (band) */
