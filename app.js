@@ -10599,42 +10599,7 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser, lesson
 
       /* ── CALENDARIO OCCUPAZIONI ───────────────────────────────── */
       , svPanel==="calendario" && React.createElement('div', { style:{flex:1,overflow:"auto",padding:"16px 20px"} }
-        /* toolbar navigazione */
-        , React.createElement('div', { style:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"} }
-          , React.createElement('button', { onClick:()=>navigate(-1), style:{background:C.surface,border:`1px solid ${C.border}`,
-              borderRadius:8,padding:"6px 10px",cursor:"pointer",display:"flex"} }
-            , React.createElement(Ic,{n:"left",size:15,stroke:C.textMuted}))
-          , React.createElement('button', { onClick:()=>navigate(1), style:{background:C.surface,border:`1px solid ${C.border}`,
-              borderRadius:8,padding:"6px 10px",cursor:"pointer",display:"flex"} }
-            , React.createElement(Ic,{n:"right",size:15,stroke:C.textMuted}))
-          , React.createElement('button', { onClick:()=>setSvCurDate(new Date()), style:{background:C.surface,
-              border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",cursor:"pointer",
-              fontSize:12,fontFamily:"'Open Sans',sans-serif",display:"flex",alignItems:"center",gap:5} }
-            , React.createElement(Ic,{n:"today",size:13,stroke:C.textMuted}), "Oggi")
-          , React.createElement('span', { style:{fontFamily:"'Oswald',sans-serif",fontSize:17,fontWeight:600,
-              color:C.text} }, navLabel)
-          , React.createElement('div', { style:{marginLeft:"auto",display:"flex",background:C.surface,
-              border:`1px solid ${C.border}`,borderRadius:8,overflow:"hidden"} }
-            , [["week","Settimana","week"],["month","Mese","cal"]].map(([v,lbl,icon])=>
-              React.createElement('button',{key:v,onClick:()=>setSvCalMode(v),
-                style:{padding:"6px 12px",border:"none",fontSize:12,fontFamily:"'Open Sans',sans-serif",
-                  cursor:"pointer",background:svCalMode===v?C.orange2Bg:"transparent",
-                  color:svCalMode===v?C.orange2:C.textMuted,
-                  borderRight:`1px solid ${C.border}`,transition:"all .15s",
-                  display:"flex",alignItems:"center",gap:4}}
-                , React.createElement(Ic,{n:icon,size:13,stroke:svCalMode===v?C.orange2:C.textMuted}), lbl)
-            )
-          )
-        )
-        /* info legenda */
-        , React.createElement('div', { style:{display:"flex",alignItems:"center",gap:8,marginBottom:12,fontSize:11,color:C.textMuted} }
-          , React.createElement('div', { style:{width:12,height:12,borderRadius:2,background:C.orange2Bg,
-              border:`1px solid ${C.orange2}`,flexShrink:0} })
-          , "Occupato (prenotazione approvata)"
-          , approved.length===0 && React.createElement('span',{style:{marginLeft:8,color:C.green,fontWeight:600}},"Sala libera!")
-        )
-        /* calendario */
-        , svCalMode==="week" ? React.createElement(WeekCalSala) : React.createElement(MonthCalSala)
+        , React.createElement(BandWeekCalendar, { lessons: lessons, prenotazioni: prenotazioni })
       )
 
       /* ── RICHIESTE (admin only) ───────────────────────────────── */
@@ -18715,14 +18680,16 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
     await sb.from('prenotazioni_sala').update({ stato: nuovoStato, updated_at: new Date().toISOString() }).eq('id', p.id);
     setPrenotazioni(prev => prev.map(x => x.id === p.id ? { ...x, stato: nuovoStato } : x));
     if (p.userId) {
-      await sb.from('notifiche').insert({
-        destinatario_ruolo: 'band',
-        tipo:               nuovoStato === 'approvata' ? 'sala_prove_approvata' : 'sala_prove_rifiutata',
-        titolo:             nuovoStato === 'approvata' ? '✅ Sala prove confermata' : '❌ Sala prove non disponibile',
-        messaggio:          `La tua prenotazione del ${fmtData(p.data)} (${p.oraInizio}–${p.oraFine}) è stata ${nuovoStato === 'approvata' ? 'approvata' : 'rifiutata'}.`,
-        letto:              false,
-        created_at:         new Date().toISOString(),
-      }).catch(() => null);
+      try {
+        await sb.from('notifiche').insert({
+          destinatario_ruolo: 'band',
+          tipo:               nuovoStato === 'approvata' ? 'sala_prove_approvata' : 'sala_prove_rifiutata',
+          titolo:             nuovoStato === 'approvata' ? '✅ Sala prove confermata' : '❌ Sala prove non disponibile',
+          messaggio:          `La tua prenotazione del ${fmtData(p.data)} (${p.oraInizio}–${p.oraFine}) è stata ${nuovoStato === 'approvata' ? 'approvata' : 'rifiutata'}.`,
+          letto:              false,
+          created_at:         new Date().toISOString(),
+        });
+      } catch(e) { console.warn('[FM] notifica approvazione sala:', e?.message); }
     }
     showToast(true, nuovoStato === 'approvata' ? 'Prenotazione approvata ✅' : 'Prenotazione rifiutata');
   };
