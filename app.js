@@ -355,6 +355,52 @@ const age = (dataN) => { if(!dataN) return "—"; const d=new Date(dataN); const
 const fmtDate = (s) => { if(!s) return "—"; const d=new Date(s+"T00:00:00"); return d.toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"}); };
 const yyyymmdd = (d) => { const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), dd=String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${dd}`; };
 
+// ── Festività italiane ───────────────────────────────────────────────────────
+// Calcola la Pasqua (algoritmo di Gauss) e tutte le festività fisse + mobili
+const getItalianHolidays = (year) => {
+  // Pasqua (algoritmo anonimo gregoriano)
+  const a = year % 19, b = Math.floor(year/100), c = year % 100;
+  const d = Math.floor(b/4), e = b % 4, f = Math.floor((b+8)/25);
+  const g = Math.floor((b-f+1)/3), h = (19*a+b-d-g+15) % 30;
+  const i = Math.floor(c/4), k = c % 4;
+  const l = (32+2*e+2*i-h-k) % 7;
+  const m2 = Math.floor((a+11*h+22*l)/451);
+  const month = Math.floor((h+l-7*m2+114)/31);
+  const day   = ((h+l-7*m2+114) % 31) + 1;
+  const easter = new Date(year, month-1, day);
+
+  const pad = n => String(n).padStart(2,'0');
+  const fmt = (y,m,d2) => `${y}-${pad(m)}-${pad(d2)}`;
+  const addDays = (date, n) => { const d2=new Date(date); d2.setDate(d2.getDate()+n); return d2; };
+
+  const easterStr    = fmt(easter.getFullYear(), easter.getMonth()+1, easter.getDate());
+  const easterMonday = addDays(easter, 1);
+  const easterMonStr = fmt(easterMonday.getFullYear(), easterMonday.getMonth()+1, easterMonday.getDate());
+
+  return {
+    [fmt(year,1,1)]:  { label:"Capodanno",                emoji:"🎆" },
+    [fmt(year,1,6)]:  { label:"Epifania",                  emoji:"⭐" },
+    [easterStr]:      { label:"Pasqua",                    emoji:"🐣" },
+    [easterMonStr]:   { label:"Pasquetta",                 emoji:"🐣" },
+    [fmt(year,4,25)]: { label:"Liberazione",               emoji:"🇮🇹" },
+    [fmt(year,5,1)]:  { label:"Festa del Lavoro",          emoji:"🔨" },
+    [fmt(year,6,2)]:  { label:"Repubblica",                emoji:"🇮🇹" },
+    [fmt(year,8,15)]: { label:"Ferragosto",                emoji:"☀️" },
+    [fmt(year,11,1)]: { label:"Ognissanti",                emoji:"🕯️" },
+    [fmt(year,12,8)]: { label:"Immacolata",                emoji:"✝️" },
+    [fmt(year,12,25)]:{ label:"Natale",                    emoji:"🎄" },
+    [fmt(year,12,26)]:{ label:"Santo Stefano",             emoji:"🎄" },
+  };
+};
+// Cache per non ricalcolare ogni render
+const _holidayCache = {};
+const getHoliday = (dateStr) => {
+  if (!dateStr) return null;
+  const year = parseInt(dateStr.slice(0,4));
+  if (!_holidayCache[year]) _holidayCache[year] = getItalianHolidays(year);
+  return _holidayCache[year][dateStr] || null;
+};
+
 const Badge = ({ label, color="gold", stato, variant }) => {
   const lbl = label || stato;
   const col = color !== "gold" ? color : variant ? variant :
@@ -6834,7 +6880,7 @@ const safeInsertRecurringLesson = async (lesson, setLessons) => {
     strumento:        lesson.instrument || lesson.strumento || null,
     teacher:          lesson.teacher    || null,
     room:             lesson.room       || null,
-    topic:            lesson.topic      || null,
+    topic:            null,            // azzerato: ogni lezione ricorrente ha il proprio argomento
     attendance:       null,
     recurrence:       lesson.recurrence || 'Nessuna',
     notes:            null,
@@ -8060,16 +8106,33 @@ const DayView = ({ date, lessons, onSelect, isMobile }) => {
     .filter(l => l.date === yyyymmdd(date))
     .sort((a, b) => a.hour.localeCompare(b.hour));
 
+  const holiday = getHoliday(yyyymmdd(date));
+  const HolidayBanner = holiday
+    ? React.createElement('div', { style:{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',
+        background:'rgba(220,38,38,0.06)',border:'1px solid rgba(220,38,38,0.25)',
+        borderRadius:10,marginBottom:isMobile?6:10} }
+        , React.createElement('span',{style:{fontSize:20}}, holiday.emoji)
+        , React.createElement('div',null
+          , React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#b91c1c'}}, 'Festività nazionale — ', holiday.label)
+          , React.createElement('div',{style:{fontSize:11,color:'#ef4444',marginTop:1}}, 'Giorno festivo · nessuna lezione raccomandata')
+        )
+      )
+    : null;
+
   if(dayLessons.length === 0) return (
-    React.createElement('div', { style: {textAlign:"center", padding:"64px 0", color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4774}}
-      , React.createElement(Ic, { n: "cal", size: 32, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4775}})
-      , React.createElement('p', { style: {marginTop:12, fontSize:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4776}}, "Nessuna lezione programmata"  )
-      , React.createElement('p', { style: {fontSize:12, marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4777}}, "Usa il + per aggiungerne una"     )
+    React.createElement('div', { style: {padding: isMobile ? 8 : 0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4774}}
+      , HolidayBanner
+      , React.createElement('div', { style: {textAlign:"center", padding:"48px 0", color:C.textDim} }
+        , React.createElement(Ic, { n: "cal", size: 32, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4775}})
+        , React.createElement('p', { style: {marginTop:12, fontSize:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4776}}, "Nessuna lezione programmata"  )
+        , React.createElement('p', { style: {fontSize:12, marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4777}}, "Usa il + per aggiungerne una"     )
+      )
     )
   );
 
   return (
     React.createElement('div', { style: {display:"flex", flexDirection:"column", gap: isMobile ? 6 : 10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4782}}
+      , HolidayBanner
       , dayLessons.map(l => {
         const hex = lessonHex(l);
         const dotHex = l.attendance ? attHex(l.attendance) : null;
@@ -8356,19 +8419,23 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
           , days.map((d, i) => {
             const isToday = isSameDay(d, today);
             const isSab   = d.getDay() === 6;
+            const holiday = getHoliday(yyyymmdd(d));
             return React.createElement('div', { key:i,
-              style:{padding:"8px 4px", textAlign:"center",
+              style:{padding:"6px 4px", textAlign:"center",
                 borderLeft:`1px solid ${C.border}`, minWidth:0, overflow:"hidden",
-                background: isSab ? "#f9f5f0" : undefined}}
+                background: holiday ? 'rgba(220,38,38,0.05)' : isSab ? "#f9f5f0" : undefined}}
               , React.createElement('div',{style:{fontSize:11,
-                  color: isSab ? "#b45309" : C.textMuted,
+                  color: holiday ? '#b91c1c' : isSab ? "#b45309" : C.textMuted,
                   letterSpacing:"0.06em",textTransform:"uppercase"}},DAYS_SHORT[i])
               , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",
-                  fontSize:20,fontWeight:600,marginTop:2,
-                  color:isToday?C.gold: isSab ? "#b45309" : C.text,
+                  fontSize:20,fontWeight:600,marginTop:1,
+                  color: holiday ? '#b91c1c' : isToday?C.gold: isSab ? "#b45309" : C.text,
                   background:isToday?`${C.gold}15`:undefined,
                   borderRadius:isToday?6:undefined,
                   padding:isToday?"1px 6px":undefined}},d.getDate())
+              , holiday && React.createElement('div',{style:{fontSize:8,color:'#b91c1c',fontWeight:600,
+                  marginTop:1,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},
+                  holiday.emoji,' ',holiday.label)
             );
           })
         )
@@ -8558,17 +8625,18 @@ const MonthView = ({ year, month, lessons, onSelect, onDayClick }) => {
           const dayLessons = lessons.filter(l => l.date === dayStr);
           const isToday = isSameDay(d, today);
           const isSab  = d.getDay() === 6;
+          const holiday = getHoliday(dayStr);
           return (
             React.createElement('div', { key: idx, onClick: () => onDayClick(d),
               style: {minHeight:"clamp(60px, 10vw, 90px)", borderBottom:`1px solid ${C.border}20`,
                 borderRight:`1px solid ${C.border}20`, padding:4, cursor:"pointer", transition:"background 0.1s",
-                background: isSab ? "repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(180,83,9,0.03) 8px,rgba(180,83,9,0.03) 16px)" : undefined,
-                backgroundColor: isSab ? "rgba(253,244,231,0.7)" : undefined},
+                background: holiday ? 'rgba(220,38,38,0.04)' : isSab ? "repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(180,83,9,0.03) 8px,rgba(180,83,9,0.03) 16px)" : undefined,
+                backgroundColor: holiday ? 'rgba(220,38,38,0.04)' : isSab ? "rgba(253,244,231,0.7)" : undefined},
               onMouseEnter: e => { e.currentTarget.style.background = C.surfaceHover; },
-              onMouseLeave: e => { e.currentTarget.style.background = isSab ? "rgba(253,244,231,0.7)" : "transparent"; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4961}}
-              , React.createElement('div', { style: {display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4966}}
+              onMouseLeave: e => { e.currentTarget.style.background = holiday ? 'rgba(220,38,38,0.04)' : isSab ? "rgba(253,244,231,0.7)" : "transparent"; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4961}}
+              , React.createElement('div', { style: {display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4966}}
                 , React.createElement('span', { style: {fontSize:12, fontWeight:500,
-                  color: isToday ? C.gold : isSab ? "#b45309" : C.text,
+                  color: holiday ? '#b91c1c' : isToday ? C.gold : isSab ? "#b45309" : C.text,
                   background: isToday ? `${C.gold}15` : undefined,
                   borderRadius: isToday ? 4 : undefined,
                   padding: isToday ? "1px 5px" : undefined}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4967}}
@@ -8576,6 +8644,8 @@ const MonthView = ({ year, month, lessons, onSelect, onDayClick }) => {
                 )
                 , dayLessons.length > 0 && React.createElement('span', { style: {fontSize:10, color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4974}}, dayLessons.length)
               )
+              , holiday && React.createElement('div',{style:{fontSize:9,color:'#b91c1c',fontWeight:600,marginBottom:2,lineHeight:1.2}},
+                  holiday.emoji,' ',holiday.label)
               , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4976}}
                 , dayLessons.slice(0,3).map(l => (
                   React.createElement(LessonPill, { key: l.id, lesson: l, onClick: e => { e.stopPropagation(); onSelect(l); }, compact: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4978}})
@@ -9744,11 +9814,11 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
         corso_id:   corsoId,
         corso_nome: corsoNome,
         room:       roomOrig,
-        topic:      'Recupero del ' + dLOrigine,
-        attendance: 'recupero',
+        topic:      null,    // argomento libero — il docente lo compila a lezione
+        attendance: null,    // segnabile normalmente
         tipo:       'individuale',
         recurrence: 'Nessuna',
-        notes:      'Lezione di recupero creata automaticamente. Richiesta #'+(selRich.id||''),
+        notes:      '🔄 Recupero del ' + dLOrigine + ' — Richiesta #'+(selRich.id||''),
         in_recupero: false,
         recupero_scadenza: null,
       };
@@ -11327,6 +11397,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               attendance:       "",
               notes:            "",
               exercises:        "",
+              topic:            "",    // azzera argomento per ogni nuova lezione ricorrente
               inRecupero:       false,
               recuperoScadenza: null,
               tipo:             dataNormFull.tipo === 'recupero' ? 'individuale' : (dataNormFull.tipo || 'individuale'),
@@ -11446,6 +11517,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               attendance:       "",
               notes:            "",
               exercises:        "",
+              topic:            "",    // azzera argomento per ogni nuova lezione ricorrente
               inRecupero:       false,
               recuperoScadenza: null,
               tipo:             lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
@@ -18564,9 +18636,14 @@ const BandWeekCalendar = ({ lessons, prenotazioni }) => {
         ,React.createElement('div',{style:{background:C.surface,borderBottom:`1px solid ${C.border}`}})
         ,days.map((d,i)=>{
           const isToday=toLocalDateStr(d)===oggi;
-          return React.createElement('div',{key:i,style:{padding:'5px 3px',textAlign:'center',background:isToday?C.tealBg:C.surface,borderBottom:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,fontSize:10,fontWeight:isToday?700:500,color:isToday?C.teal:C.text}}
+          const holiday=getHoliday(toLocalDateStr(d));
+          return React.createElement('div',{key:i,style:{padding:'5px 3px',textAlign:'center',
+            background:holiday?'rgba(220,38,38,0.06)':isToday?C.tealBg:C.surface,
+            borderBottom:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,
+            fontSize:10,fontWeight:isToday?700:500,color:holiday?'#b91c1c':isToday?C.teal:C.text}}
             ,React.createElement('div',null,GIORNI_S[i])
             ,React.createElement('div',{style:{fontSize:13,fontWeight:700}},d.getDate())
+            ,holiday&&React.createElement('div',{style:{fontSize:8,color:'#b91c1c',fontWeight:600,lineHeight:1.2,marginTop:1}},holiday.emoji,' ',holiday.label)
           );
         })
         /* Mattina 9-13 */
@@ -19842,9 +19919,8 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
       const MESI_N=['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
       const [oy,om,od] = (lesson.date||'').split('-');
       const dataOrigLabel = od && om ? `${od} ${MESI_N[+om-1]} ${oy}` : lesson.date;
-      // topic visibile in primo piano: identifica la lezione come recupero anche nelle liste
-      const topicText = `🔄 Recupero del ${dataOrigLabel}`;
-      const noteText = note || (`Recupero fissato dall'admin · lezione del ${lesson.date}`);
+      // Nota recupero nel campo NOTE, argomento libero per il docente
+      const noteText = `🔄 Recupero del ${dataOrigLabel}` + (note ? ` — ${note}` : '');
 
       // tipo:'individuale' → la lezione entra nei conteggi normali come tutte le altre lezioni
       // topic con emoji 🔄 → badge visivo nell'elenco
@@ -19853,12 +19929,12 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
         id:              nuovaId,
         date:            slotSel.data,
         hour:            slotSel.oraInizio,
-        attendance:      null,           // segnabile normalmente da docente/admin
-        tipo:            'individuale',  // FIX bug 2: conta nei totali lezioni
-        topic:           topicText,      // FIX bug 2: visibile in primo piano nella card
+        attendance:      null,
+        tipo:            'individuale',
+        topic:           '',           // campo argomento libero per il docente
+        notes:           noteText,     // nota recupero nel campo NOTE
         inRecupero:      false,
         recuperoScadenza:null,
-        notes:           noteText,
         recurrence:      'Nessuna',
       };
 
@@ -19869,9 +19945,9 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
         strumento: nuovaLez.instrument||nuovaLez.strumento||null,
         teacher: nuovaLez.teacher, room: nuovaLez.room||null,
         attendance: null,
-        tipo: 'individuale',   // FIX: non 'recupero' — deve comparire nei conteggi
-        topic: topicText,      // FIX: identificazione visiva in primo piano
-        recurrence: 'Nessuna', notes: noteText,
+        tipo: 'individuale',
+        topic: null,       // argomento libero — il docente lo compilerà
+        recurrence: 'Nessuna', notes: noteText,  // nota recupero nel campo NOTE
         in_recupero: false, recupero_scadenza: null,
         durata: nuovaLez.durata||45,
         corso_id: nuovaLez.courseId||null, corso_nome: nuovaLez.courseName||null,
