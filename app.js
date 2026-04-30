@@ -401,6 +401,34 @@ const getHoliday = (dateStr) => {
   return _holidayCache[year][dateStr] || null;
 };
 
+// Verifica se una data è chiusa (festività o chiusura personalizzata)
+// Ritorna null se aperta, oppure { tipo, label, emoji, color, bg, bd }
+const isGiornoChiuso = (dateStr, config) => {
+  if (!dateStr || !config) return null;
+  // 1. Chiusure personalizzate [{da, a, etichetta}]
+  const chiusure = Array.isArray(config.giorniChiusi) ? config.giorniChiusi : [];
+  for (const c of chiusure) {
+    if (!c.da) continue;
+    const fine = c.a || c.da;
+    if (dateStr >= c.da && dateStr <= fine) {
+      return { tipo:'chiusura', label: c.etichetta||'Scuola chiusa', emoji:'🔒', color:'#374151', bg:'rgba(55,65,81,0.07)', bd:'rgba(55,65,81,0.25)' };
+    }
+  }
+  // 2. Festività nazionale marcata come chiusa
+  const holiday = getHoliday(dateStr);
+  if (holiday) {
+    const festivitaConfig = config.festivitaConfig || {};
+    // Default chiuso; se esplicitamente false = scuola aperta quella festività
+    if (festivitaConfig[dateStr] !== false) {
+      return { tipo:'festività', label: holiday.label, emoji: holiday.emoji, color:'#b91c1c', bg:'rgba(220,38,38,0.06)', bd:'rgba(220,38,38,0.22)' };
+    }
+  }
+  return null;
+};
+
+// Pattern CSS per giorno chiuso (righe oblique)
+const CHIUSO_PATTERN = 'repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(0,0,0,0.04) 5px,rgba(0,0,0,0.04) 10px)';
+
 const Badge = ({ label, color="gold", stato, variant }) => {
   const lbl = label || stato;
   const col = color !== "gold" ? color : variant ? variant :
@@ -2873,6 +2901,10 @@ const CONFIG_DEFAULT = {
   inizioAnno:`${ANNO}-09-01`, fineAnno:`${ANNO+1}-06-30`, dataSaggio:`${ANNO+1}-06-07`,
   mesiAttivi:[0,1,2,3,4,8,9,10,11],
   progressivoRicevute:29,
+  // Chiusure personalizzate: array di {da, a, etichetta}
+  giorniChiusi: [],
+  // Festività nazionali: oggetto {data: true/false} (true=chiuso, false=aperto)
+  festivitaConfig: {},
   ricevutaStyle: {
     accentColor: "#1a4fa0",
     fontTitle: "Oswald",
@@ -8101,20 +8133,22 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
 };
 
 // ─── VISTA GIORNALIERA ────────────────────────────────────────────────────────
-const DayView = ({ date, lessons, onSelect, isMobile }) => {
+const DayView = ({ date, lessons, onSelect, isMobile, config }) => {
   const dayLessons = lessons
     .filter(l => l.date === yyyymmdd(date))
     .sort((a, b) => a.hour.localeCompare(b.hour));
 
   const holiday = getHoliday(yyyymmdd(date));
-  const HolidayBanner = holiday
+  const chiuso  = isGiornoChiuso(yyyymmdd(date), config);
+
+  const HolidayBanner = chiuso
     ? React.createElement('div', { style:{display:'flex',alignItems:'center',gap:10,padding:'10px 16px',
-        background:'rgba(220,38,38,0.06)',border:'1px solid rgba(220,38,38,0.25)',
+        background:chiuso.bg,border:`1px solid ${chiuso.bd}`,
         borderRadius:10,marginBottom:isMobile?6:10} }
-        , React.createElement('span',{style:{fontSize:20}}, holiday.emoji)
+        , React.createElement('span',{style:{fontSize:20}}, chiuso.emoji)
         , React.createElement('div',null
-          , React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#b91c1c'}}, 'Festività nazionale — ', holiday.label)
-          , React.createElement('div',{style:{fontSize:11,color:'#ef4444',marginTop:1}}, 'Giorno festivo · nessuna lezione raccomandata')
+          , React.createElement('div',{style:{fontSize:13,fontWeight:700,color:chiuso.color}}, chiuso.emoji,' ', chiuso.label, chiuso.tipo==='festività'?' — Festività nazionale':'')
+          , React.createElement('div',{style:{fontSize:11,color:chiuso.color,opacity:.8,marginTop:1}}, chiuso.tipo==='chiusura'?'Scuola chiusa':'Giorno festivo · nessuna lezione raccomandata')
         )
       )
     : null;
@@ -8338,7 +8372,7 @@ const DayView = ({ date, lessons, onSelect, isMobile }) => {
 };
 
 // ─── VISTA SETTIMANALE ────────────────────────────────────────────────────────
-const WeekView = ({ weekStart, lessons, onSelect }) => {
+const WeekView = ({ weekStart, lessons, onSelect, config }) => {
   // Solo Lun–Sab (6 giorni, no domenica)
   const days      = Array.from({length:6}, (_, i) => addDays(weekStart, i));
   const HOUR_H    = 64;   // px per 1 ora
@@ -8420,20 +8454,25 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
             const isToday = isSameDay(d, today);
             const isSab   = d.getDay() === 6;
             const holiday = getHoliday(yyyymmdd(d));
+            const chiuso  = isGiornoChiuso(yyyymmdd(d), config);
             return React.createElement('div', { key:i,
               style:{padding:"6px 4px", textAlign:"center",
                 borderLeft:`1px solid ${C.border}`, minWidth:0, overflow:"hidden",
-                background: holiday ? 'rgba(220,38,38,0.05)' : isSab ? "#f9f5f0" : undefined}}
+                background: chiuso ? chiuso.bg : isSab ? "#f9f5f0" : undefined,
+                backgroundImage: chiuso ? CHIUSO_PATTERN : undefined}}
               , React.createElement('div',{style:{fontSize:11,
-                  color: holiday ? '#b91c1c' : isSab ? "#b45309" : C.textMuted,
+                  color: chiuso ? chiuso.color : isSab ? "#b45309" : C.textMuted,
                   letterSpacing:"0.06em",textTransform:"uppercase"}},DAYS_SHORT[i])
               , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",
                   fontSize:20,fontWeight:600,marginTop:1,
-                  color: holiday ? '#b91c1c' : isToday?C.gold: isSab ? "#b45309" : C.text,
+                  color: chiuso ? chiuso.color : isToday?C.gold: isSab ? "#b45309" : C.text,
                   background:isToday?`${C.gold}15`:undefined,
                   borderRadius:isToday?6:undefined,
                   padding:isToday?"1px 6px":undefined}},d.getDate())
-              , holiday && React.createElement('div',{style:{fontSize:8,color:'#b91c1c',fontWeight:600,
+              , chiuso && React.createElement('div',{style:{fontSize:8,color:chiuso.color,fontWeight:600,
+                  marginTop:1,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},
+                  chiuso.emoji,' ',chiuso.label)
+              , !chiuso && holiday && React.createElement('div',{style:{fontSize:8,color:'#b91c1c',fontWeight:600,
                   marginTop:1,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},
                   holiday.emoji,' ',holiday.label)
             );
@@ -8583,7 +8622,7 @@ const WeekView = ({ weekStart, lessons, onSelect }) => {
 };
 
 // ─── VISTA MENSILE ────────────────────────────────────────────────────────────
-const MonthView = ({ year, month, lessons, onSelect, onDayClick }) => {
+const MonthView = ({ year, month, lessons, onSelect, onDayClick, config }) => {
   const firstDay  = new Date(year, month, 1);
   // getDay() 0=Dom,1=Lun...6=Sab → in una settimana Lun–Sab (6 giorni)
   // startDow: quanti slot vuoti prima del primo giorno (0=Lun, 5=Sab, Dom non esiste)
@@ -8625,18 +8664,20 @@ const MonthView = ({ year, month, lessons, onSelect, onDayClick }) => {
           const dayLessons = lessons.filter(l => l.date === dayStr);
           const isToday = isSameDay(d, today);
           const isSab  = d.getDay() === 6;
+          const chiuso = isGiornoChiuso(dayStr, config);
           const holiday = getHoliday(dayStr);
+          const bgBase  = chiuso ? chiuso.bg : isSab ? "rgba(253,244,231,0.7)" : undefined;
+          const bgImg   = chiuso ? CHIUSO_PATTERN : isSab ? "repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(180,83,9,0.03) 8px,rgba(180,83,9,0.03) 16px)" : undefined;
           return (
             React.createElement('div', { key: idx, onClick: () => onDayClick(d),
               style: {minHeight:"clamp(60px, 10vw, 90px)", borderBottom:`1px solid ${C.border}20`,
                 borderRight:`1px solid ${C.border}20`, padding:4, cursor:"pointer", transition:"background 0.1s",
-                background: holiday ? 'rgba(220,38,38,0.04)' : isSab ? "repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(180,83,9,0.03) 8px,rgba(180,83,9,0.03) 16px)" : undefined,
-                backgroundColor: holiday ? 'rgba(220,38,38,0.04)' : isSab ? "rgba(253,244,231,0.7)" : undefined},
-              onMouseEnter: e => { e.currentTarget.style.background = C.surfaceHover; },
-              onMouseLeave: e => { e.currentTarget.style.background = holiday ? 'rgba(220,38,38,0.04)' : isSab ? "rgba(253,244,231,0.7)" : "transparent"; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4961}}
+                background: bgBase, backgroundImage: bgImg},
+              onMouseEnter: e => { e.currentTarget.style.background = C.surfaceHover; e.currentTarget.style.backgroundImage='none'; },
+              onMouseLeave: e => { e.currentTarget.style.background = bgBase||'transparent'; e.currentTarget.style.backgroundImage = bgImg||'none'; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4961}}
               , React.createElement('div', { style: {display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4966}}
                 , React.createElement('span', { style: {fontSize:12, fontWeight:500,
-                  color: holiday ? '#b91c1c' : isToday ? C.gold : isSab ? "#b45309" : C.text,
+                  color: chiuso ? chiuso.color : isToday ? C.gold : isSab ? "#b45309" : C.text,
                   background: isToday ? `${C.gold}15` : undefined,
                   borderRadius: isToday ? 4 : undefined,
                   padding: isToday ? "1px 5px" : undefined}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4967}}
@@ -8644,8 +8685,8 @@ const MonthView = ({ year, month, lessons, onSelect, onDayClick }) => {
                 )
                 , dayLessons.length > 0 && React.createElement('span', { style: {fontSize:10, color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4974}}, dayLessons.length)
               )
-              , holiday && React.createElement('div',{style:{fontSize:9,color:'#b91c1c',fontWeight:600,marginBottom:2,lineHeight:1.2}},
-                  holiday.emoji,' ',holiday.label)
+              , chiuso && React.createElement('div',{style:{fontSize:9,color:chiuso.color,fontWeight:700,marginBottom:2,lineHeight:1.2}}, chiuso.emoji,' ',chiuso.label)
+              , !chiuso && holiday && React.createElement('div',{style:{fontSize:9,color:'#b91c1c',fontWeight:600,marginBottom:2,lineHeight:1.2}}, holiday.emoji,' ',holiday.label)
               , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4976}}
                 , dayLessons.slice(0,3).map(l => (
                   React.createElement(LessonPill, { key: l.id, lesson: l, onClick: e => { e.stopPropagation(); onSelect(l); }, compact: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4978}})
@@ -11040,7 +11081,7 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
   );
 };
 
-const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV }) => {
+const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV, config:calConfig }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
   const propStudents = _propStudentsRaw || [];
@@ -11911,9 +11952,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           /* Contenuto */
           , React.createElement('div', { style: {flex:1, padding: isMobile ? "0 8px 8px" : "0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
             , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"visible"}, className: "table-scroll", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
-              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, isMobile: isMobile, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
-              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
-              , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
+              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, isMobile: isMobile, config: calConfig, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
+              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, config: calConfig, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
+              , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, config: calConfig, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
             )
           )
           )
@@ -19645,7 +19686,7 @@ function App() {
       case 'allievi':     return React.createElement(AllieviView, { students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
       case 'docenti':     return React.createElement(DocentiView, { students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user, annoInizioAttivo: sharedConfig.annoInizioAttivo, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null)});
       case 'corsi':       return React.createElement(CorsiView, { courses: sharedCourses, setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user});
-      case 'calendario':  return React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'calendario':  return React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, config: sharedConfig});
       case 'contabilita': return React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
       case 'repertorio':  return React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
       case 'allegati':    return React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user});
@@ -22329,10 +22370,76 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         " — le voci del menu cambieranno di conseguenza."
       )
     )
+
+    /* ── Chiusure personalizzate ──────────────────────────────────────────── */
+    , React.createElement(ImpSection, {title:"Chiusure e festività", icon:"cal"}
+      // Festività nazionali con toggle aperto/chiuso
+      , React.createElement('div', {style:{marginBottom:20}}
+        , React.createElement('div', {style:{fontSize:13,fontWeight:600,color:C.text,marginBottom:10}}, '🇮🇹 Festività nazionali')
+        , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:12}},
+            'Per default la scuola è chiusa in tutte le festività. Disattiva per segnare che fate lezione.')
+        , React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8}}
+          , Object.entries(getItalianHolidays(new Date().getFullYear())).sort((a,b)=>a[0].localeCompare(b[0])).map(([dateStr, h]) => {
+              const isAperta = (draft.festivitaConfig||{})[dateStr] === false;
+              return React.createElement('div', {key:dateStr, style:{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',borderRadius:8,background:isAperta?C.greenBg:C.redBg,border:`1px solid ${isAperta?C.greenBorder:C.redBorder}`}}
+                , React.createElement('span',{style:{fontSize:16}}, h.emoji)
+                , React.createElement('div',{style:{flex:1}}
+                  , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:isAperta?C.green:'#b91c1c'}}, h.label)
+                  , React.createElement('div',{style:{fontSize:11,color:C.textMuted}}, dateStr.split('-').reverse().join('/'))
+                )
+                , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8}}
+                  , React.createElement('span',{style:{fontSize:11,color:isAperta?C.green:'#b91c1c',fontWeight:600}}, isAperta?'APERTO':'CHIUSO')
+                  , React.createElement('button', {
+                      onClick: () => {
+                        const fc = {...(draft.festivitaConfig||{})};
+                        if (isAperta) { delete fc[dateStr]; } else { fc[dateStr] = false; }
+                        setD('festivitaConfig', fc);
+                      },
+                      style:{width:40,height:22,borderRadius:11,border:'none',cursor:'pointer',position:'relative',
+                        background:isAperta?C.green:'#d1d5db',transition:'background .2s'}
+                    }
+                    , React.createElement('div',{style:{position:'absolute',top:3,left:isAperta?22:3,width:16,height:16,borderRadius:'50%',background:'#fff',transition:'left .2s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}})
+                  )
+                )
+              );
+            })
+        )
+      )
+      // Chiusure personalizzate (periodi arbitrari)
+      , React.createElement('div', null
+        , React.createElement('div', {style:{fontSize:13,fontWeight:600,color:C.text,marginBottom:10}}, '🔒 Chiusure personalizzate')
+        , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:12}},
+            'Aggiungi periodi di chiusura (es. vacanze natalizie, estive). I giorni appariranno con sfondo grigio striato nel calendario.')
+        , (draft.giorniChiusi||[]).map((c, i) => (
+            React.createElement('div', {key:i, style:{display:'flex',alignItems:'center',gap:8,marginBottom:8,padding:'10px 12px',borderRadius:8,background:C.bg,border:`1px solid ${C.border}`}}
+              , React.createElement('div', {style:{flex:1,display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8,alignItems:'center'}}
+                , React.createElement('div',null
+                  , React.createElement('div',{style:{fontSize:10,color:C.textMuted,marginBottom:3,textTransform:'uppercase',letterSpacing:'.05em'}},'Dal')
+                  , React.createElement('input',{type:'date',value:c.da||'',onChange:e=>{const nc=[...(draft.giorniChiusi||[])];nc[i]={...nc[i],da:e.target.value};setD('giorniChiusi',nc);},style:{width:'100%',padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}})
+                )
+                , React.createElement('div',null
+                  , React.createElement('div',{style:{fontSize:10,color:C.textMuted,marginBottom:3,textTransform:'uppercase',letterSpacing:'.05em'}},'Al')
+                  , React.createElement('input',{type:'date',value:c.a||'',onChange:e=>{const nc=[...(draft.giorniChiusi||[])];nc[i]={...nc[i],a:e.target.value};setD('giorniChiusi',nc);},style:{width:'100%',padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}})
+                )
+                , React.createElement('div',null
+                  , React.createElement('div',{style:{fontSize:10,color:C.textMuted,marginBottom:3,textTransform:'uppercase',letterSpacing:'.05em'}},'Etichetta')
+                  , React.createElement('input',{type:'text',value:c.etichetta||'',placeholder:'Es. Vacanze natalizie',onChange:e=>{const nc=[...(draft.giorniChiusi||[])];nc[i]={...nc[i],etichetta:e.target.value};setD('giorniChiusi',nc);},style:{width:'100%',padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}})
+                )
+              )
+              , React.createElement('button',{onClick:()=>{const nc=(draft.giorniChiusi||[]).filter((_,j)=>j!==i);setD('giorniChiusi',nc);},style:{padding:'5px 10px',borderRadius:6,border:`1px solid ${C.redBorder}`,background:C.redBg,color:C.red,cursor:'pointer',fontSize:12,flexShrink:0}},'✕')
+            )
+          ))
+        , React.createElement('button', {
+            onClick: () => setD('giorniChiusi', [...(draft.giorniChiusi||[]), {da:'',a:'',etichetta:''}]),
+            style:{marginTop:8,padding:'7px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:12,fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:6}
+          }
+          , React.createElement(Ic,{n:'plus',size:13,stroke:C.textMuted}), '+ Aggiungi periodo di chiusura'
+        )
+      )
+    )
+
   );
 };
-
-// ─── SCHEDA SCUOLA VIEW ────────────────────────────────────────────────────────
 const SchedaScuolaView = ({ config }) => {
   const cfg = config || CONFIG_DEFAULT;
   const handlePrint = () => {
