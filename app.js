@@ -8507,6 +8507,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config }) => {
             const colMap = buildColumns(dayLessons);
             const isToday = isSameDay(d, today);
             const isSab   = d.getDay() === 6;
+            const chiuso  = isGiornoChiuso(ds, config);
             // Offset in px da cui inizia il sabato pomeriggio
             const sabPomTopPx = (SAB_AFTERNOON_START - H_START) * HOUR_H;
             const sabPomH     = TOTAL_H - sabPomTopPx;
@@ -8524,8 +8525,26 @@ const WeekView = ({ weekStart, lessons, onSelect, config }) => {
                     borderTop:`1px solid ${C.border}20`}})
               )
 
+              /* Overlay giorno chiuso (festività o chiusura personalizzata) — copre tutta la colonna */
+              , chiuso && React.createElement('div', {
+                  style:{
+                    position:"absolute", top:0, left:0, right:0, bottom:0,
+                    background: chiuso.tipo==='festività'
+                      ? "repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(220,38,38,0.06) 6px,rgba(220,38,38,0.06) 12px)"
+                      : "repeating-linear-gradient(135deg,transparent,transparent 6px,rgba(55,65,81,0.06) 6px,rgba(55,65,81,0.06) 12px)",
+                    backgroundColor: chiuso.tipo==='festività' ? "rgba(254,242,242,0.6)" : "rgba(243,244,246,0.6)",
+                    zIndex:1, pointerEvents:"none"
+                  }}
+                , React.createElement('div',{style:{
+                    fontSize:9, color:chiuso.color, fontWeight:700,
+                    letterSpacing:"0.06em", textTransform:"uppercase",
+                    padding:"4px 5px", opacity:0.9, lineHeight:1.3,
+                    display:"flex", alignItems:"center", gap:3
+                  }}, chiuso.emoji, " ", chiuso.label)
+              )
+
               /* Overlay sabato pomeriggio (dalle 13:00 in poi) */
-              , isSab && React.createElement('div', {
+              , isSab && !chiuso && React.createElement('div', {
                   style:{
                     position:"absolute",
                     top: sabPomTopPx, left:0, right:0,
