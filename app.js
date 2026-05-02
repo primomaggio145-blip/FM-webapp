@@ -11504,7 +11504,21 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         setTimeout(() => window.__FM_SHOW_CAMBIO_ORA__({ lesson: { ...lessonRef, recurrence: 'Nessuna' } }), 120);
       }
     };
-    const handleDelete     = ()          => { setLessons(p => p.filter(l => l.id !== _optionalChain([selLesson, 'optionalAccess', _54 => _54.id]))); closeModal(); };
+    const handleDelete = async () => {
+      const id = _optionalChain([selLesson, 'optionalAccess', _54 => _54.id]);
+      if (!id) { closeModal(); return; }
+      // Rimuovi dallo state React immediatamente
+      setLessons(p => p.filter(l => l.id !== id));
+      closeModal();
+      // Cancella dal DB
+      try {
+        const sb = window.supabaseClient;
+        if (sb) {
+          const { error } = await sb.from('lezioni').delete().eq('id', id);
+          if (error) console.warn('[FM] handleDelete lezione error:', error.message);
+        }
+      } catch(e) { console.warn('[FM] handleDelete exception:', e?.message); }
+    };
     const handleAttendance = (id, val) => {
       setLessons(prev => {
         const lesson = prev.find(l => l.id === id);
