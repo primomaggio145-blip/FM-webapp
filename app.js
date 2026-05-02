@@ -10526,32 +10526,44 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser, lesson
 
     const ColHeader = ({d, i}) => {
       const isToday = yyyymmdd(d)===todayStr;
+      const chiuso  = isGiornoChiuso(yyyymmdd(d), window.__FM_CONFIG__||null);
       return React.createElement('div', { style:{padding:"6px 4px",textAlign:"center",
-        background:isToday?C.goldBg:C.surface, borderBottom:`1px solid ${C.border}`,
+        background: chiuso ? chiuso.bg : isToday?C.goldBg:C.surface,
+        borderBottom:`1px solid ${C.border}`,
         borderLeft:`1px solid ${C.border}`, fontSize:11, fontWeight:isToday?700:500,
-        color:isToday?C.gold:C.text, position:'sticky', top:0, zIndex:2} }
+        color: chiuso ? chiuso.color : isToday?C.gold:C.text,
+        position:'sticky', top:0, zIndex:2} }
         , React.createElement('div',null, DAYS_IT[i])
         , React.createElement('div',{style:{fontSize:14,fontWeight:700}}, d.getDate())
+        , chiuso && React.createElement('div',{style:{fontSize:8,fontWeight:700,lineHeight:1.2,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, chiuso.emoji,' ',chiuso.label)
       );
     };
 
     const TimeCell = ({ds, h, isToday}) => {
       const events = getEvents(ds, h);
-      return React.createElement('div', { style:{
+      const chiuso = isGiornoChiuso(ds, window.__FM_CONFIG__||null);
+      const children = [];
+      if (chiuso) children.push(React.createElement('div', {key:'overlay', style:{
+          position:'absolute', inset:0,
+          background: chiuso.tipo==='festività'
+            ? 'repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(220,38,38,0.07) 5px,rgba(220,38,38,0.07) 10px)'
+            : 'repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(55,65,81,0.07) 5px,rgba(55,65,81,0.07) 10px)',
+          backgroundColor: chiuso.tipo==='festività' ? 'rgba(254,242,242,0.55)' : 'rgba(243,244,246,0.55)',
+          zIndex:0, pointerEvents:'none'}}));
+      events.forEach(ev => children.push(React.createElement('div', {key:ev.id, style:{
+          position:'absolute', top:ev.top+1, left:2, right:2, height:ev.height,
+          background:ev.bg, border:`1px solid ${ev.bd}`, borderLeft:`3px solid ${ev.accent}`,
+          borderRadius:4, padding:'2px 5px', fontSize:9, color:ev.accent, fontWeight:600,
+          overflow:'hidden', zIndex:2, display:'flex', flexDirection:'column', gap:1}}
+        , React.createElement('div',{style:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:700}}, ev.tag,' ',ev.label)
+        , ev.height>18 && React.createElement('div',{style:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',opacity:.85}}, ev.sub)
+      )));
+      return React.createElement('div', {style:{
         borderTop:`1px solid ${C.border}`, borderLeft:`1px solid ${C.border}`,
-        height:HOUR_H, background:isToday?'#fffbf0':C.surface, position:'relative'} }
-        , events.map(ev => (
-          React.createElement('div', { key:ev.id, style:{
-            position:'absolute', top:ev.top+1, left:2, right:2, height:ev.height,
-            background:ev.bg, border:`1px solid ${ev.bd}`, borderLeft:`3px solid ${ev.accent}`,
-            borderRadius:4, padding:'2px 5px', fontSize:9, color:ev.accent, fontWeight:600,
-            overflow:'hidden', zIndex:1, display:'flex', flexDirection:'column', gap:1} }
-            , React.createElement('div',{style:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:700}}, ev.tag,' ',ev.label)
-            , ev.height>18 && React.createElement('div',{style:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',opacity:.85}}, ev.sub)
-          ))
-      )
-    );
-  };
+        height:HOUR_H, background:isToday?'#fffbf0':C.surface, position:'relative'}},
+        ...children
+      );
+    };
 
     const ClosedRow = () => (
       React.createElement(React.Fragment, null
@@ -18664,8 +18676,17 @@ const BandWeekCalendar = ({ lessons, prenotazioni }) => {
   const TimeCell = ({ds,h}) => {
     const isToday = ds===oggi;
     const evts = getEvents(ds,h);
+    const chiuso = isGiornoChiuso(ds, window.__FM_CONFIG__||null);
     return React.createElement('div',{style:{borderTop:`1px solid ${C.border}`,borderLeft:`1px solid ${C.border}`,height:HOUR_H,background:isToday?'#fffbf0':C.surface,position:'relative'}}
-      ,evts.map(ev=>React.createElement('div',{key:ev.id,style:{position:'absolute',top:ev.top+1,left:2,right:2,height:ev.height,background:ev.bg,border:`1px solid ${ev.bd}`,borderLeft:`3px solid ${ev.accent}`,borderRadius:4,padding:'2px 4px',fontSize:9,color:ev.accent,fontWeight:600,overflow:'hidden',zIndex:1,display:'flex',flexDirection:'column',gap:1}}
+      , chiuso && React.createElement('div',{style:{
+          position:'absolute',inset:0,
+          background: chiuso.tipo==='festività'
+            ? 'repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(220,38,38,0.07) 5px,rgba(220,38,38,0.07) 10px)'
+            : 'repeating-linear-gradient(135deg,transparent,transparent 5px,rgba(55,65,81,0.07) 5px,rgba(55,65,81,0.07) 10px)',
+          backgroundColor: chiuso.tipo==='festività' ? 'rgba(254,242,242,0.55)' : 'rgba(243,244,246,0.55)',
+          zIndex:0, pointerEvents:'none'
+        }})
+      ,evts.map(ev=>React.createElement('div',{key:ev.id,style:{position:'absolute',top:ev.top+1,left:2,right:2,height:ev.height,background:ev.bg,border:`1px solid ${ev.bd}`,borderLeft:`3px solid ${ev.accent}`,borderRadius:4,padding:'2px 4px',fontSize:9,color:ev.accent,fontWeight:600,overflow:'hidden',zIndex:2,display:'flex',flexDirection:'column',gap:1}}
         ,React.createElement('div',{style:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:700}},ev.tag,' ',ev.label)
       ))
     );
@@ -19028,6 +19049,8 @@ function App() {
   const [sharedRichieste,      setSharedRichieste]      = useState([]);
   const [sharedNotifiche,      setSharedNotifiche]      = useState([]);
   const [sharedConfig,         setSharedConfig]         = useState(_d.config ? {...CONFIG_DEFAULT, ..._d.config} : CONFIG_DEFAULT);
+  // Esponi config globalmente per componenti che non ricevono la prop (es. WeekCalSala)
+  React.useEffect(() => { window.__FM_CONFIG__ = sharedConfig; }, [sharedConfig]);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
   const [sharedSpese,          setSharedSpese]          = useState(_d.spese      || INIT_SPESE);
   const [sharedAnniScolastici, setSharedAnniScolastici] = useState(INIT_ANNI_SCOLASTICI);
@@ -22455,10 +22478,12 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
           , React.createElement(Ic,{n:'plus',size:13,stroke:C.textMuted}), '+ Aggiungi periodo di chiusura'
         )
       )
-    )
+    )   /* end React.createElement(ImpSection,...) */
 
   );
 };
+
+// ─── SCHEDA SCUOLA VIEW ────────────────────────────────────────────────────────
 const SchedaScuolaView = ({ config }) => {
   const cfg = config || CONFIG_DEFAULT;
   const handlePrint = () => {
