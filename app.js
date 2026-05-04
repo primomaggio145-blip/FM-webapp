@@ -18145,11 +18145,11 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
 // ═══════════════════════════════════════════════════════════════════════════════
 // Permessi navigazione per ruolo (sidebar): false = voce nascosta
 const ROLE_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true,  notifiche_settings:true,  sala_prove:true },
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true,  notifiche_settings:true,  sala_prove:true,  messaggi:true  },
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, messaggi:true  },
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:true,  calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, messaggi:true  },
   // Ruolo band: accede solo alla sala prove
-  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false,biblioteca:false,utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true },
+  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false,biblioteca:false,utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true,  messaggi:false },
 };
 
 // Rileva se l'app è aperta come PWA (standalone) — usato per menu più snello
@@ -18233,6 +18233,7 @@ const NAV_ITEMS = [
   { id:"repertorio",  label:"Repertorio",   icon:"music"    },
   { id:"allegati",    label:"Allegati",     icon:"paperclip"},
   { id:"biblioteca",  label:"Manuali & Libri", icon:"courses"},
+  { id:"messaggi",    label:"Messaggi",     icon:"mail"     },
   { id:"utenti",      label:"Utenti",       icon:"shield"   },
   { id:"notifiche",   label:"Notifiche",    icon:"bell"     },
   { id:"reminders",          label:"Reminders WA",       icon:"phone"   },
@@ -18392,6 +18393,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                   /* ── Gruppo NOTIFICHE & REMINDERS ── */
                   , GroupHdr({id:"notif", label:"Notifiche & Reminders", icon:"bell"})
                   , openGroups.notif && React.createElement(React.Fragment, null
+                      , NavBtn({id:"messaggi",          label:"Messaggi",           icon:"mail",  indent:true})
                       , NavBtn({id:"notifiche",         label:"Notifiche",         icon:"bell",  indent:true})
                       , NavBtn({id:"notifiche_settings",label:"Config. Notifiche", icon:"settings", indent:true})
                       , NavBtn({id:"reminders",          label:"Reminders WA",     icon:"phone", indent:true})
@@ -19041,6 +19043,290 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
           , React.createElement('button', { onClick:()=>setShowContatto(false), style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:'none',color:C.textMuted,cursor:'pointer',fontSize:13} }, 'Annulla')
           , React.createElement('button', { onClick:handleSendContatto, disabled:!msgContatto.trim()||sendingMsg, style:{padding:'9px 18px',borderRadius:8,border:'none',background:msgContatto.trim()?C.teal:C.surface,color:msgContatto.trim()?'#fff':C.textMuted,cursor:msgContatto.trim()?'pointer':'not-allowed',fontSize:13,fontWeight:600} }, sendingMsg?'Invio…':'Invia messaggio')
         )
+      )
+    )
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// MESSAGGI VIEW
+// ═══════════════════════════════════════════════════════════════════════════════
+const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
+  const [messaggi,    setMessaggi]    = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [tab,         setTab]         = useState('ricevuti'); // 'ricevuti' | 'inviati'
+  const [showCompose, setShowCompose] = useState(false);
+  const [toast,       setToast]       = useState(null);
+  const isMobile = useIsMobile();
+
+  const showToast = (ok, msg) => { setToast({ok,msg}); setTimeout(()=>setToast(null),4000); };
+
+  // Carica messaggi
+  const loadMessaggi = React.useCallback(async () => {
+    const sb = window.supabaseClient; if (!sb) { setLoading(false); return; }
+    try {
+      const myId = appUser?.userId || appUser?.id;
+      // Ricevuti
+      const { data: ricevuti } = await sb.from('messaggi')
+        .select('*').eq('destinatario_id', myId).order('created_at', {ascending:false}).limit(100);
+      // Inviati
+      const { data: inviati } = await sb.from('messaggi')
+        .select('*').eq('mittente_id', myId).order('created_at', {ascending:false}).limit(100);
+      setMessaggi([...(ricevuti||[]), ...(inviati||[])]);
+    } catch(e) { console.warn('[FM] loadMessaggi:', e?.message); }
+    setLoading(false);
+  }, [appUser]);
+
+  React.useEffect(() => { loadMessaggi(); }, []);
+
+  const myId = appUser?.userId || appUser?.id;
+  const ricevuti = messaggi.filter(m => m.destinatario_id===myId);
+  const inviati  = messaggi.filter(m => m.mittente_id===myId);
+  const nonLetti = ricevuti.filter(m => !m.letto).length;
+
+  const fmtDate = d => {
+    if (!d) return '';
+    const dt = new Date(d);
+    const oggi = new Date(); oggi.setHours(0,0,0,0);
+    const ieri = new Date(oggi); ieri.setDate(ieri.getDate()-1);
+    if (dt >= oggi) return dt.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+    if (dt >= ieri) return 'Ieri '+dt.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
+    return dt.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit'});
+  };
+
+  const segnaLetto = async (id) => {
+    const sb = window.supabaseClient; if (!sb) return;
+    await sb.from('messaggi').update({letto:true,letto_at:new Date().toISOString()}).eq('id',id);
+    setMessaggi(p => p.map(m => m.id===id ? {...m,letto:true} : m));
+  };
+
+  const lista = tab==='ricevuti' ? ricevuti : inviati;
+
+  return React.createElement('div', {style:{minHeight:'100%',background:C.bg}}
+    /* Header */
+    , React.createElement('div', {style:{padding:isMobile?'16px 16px 0':'24px 32px 0',background:C.surface,borderBottom:`1px solid ${C.border}`,paddingBottom:0}}
+      , React.createElement('div', {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12,flexWrap:'wrap',gap:8}}
+        , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:12}}
+          , React.createElement('div', {style:{width:40,height:40,borderRadius:10,background:C.tealBg,border:`1px solid ${C.tealBorder}`,display:'flex',alignItems:'center',justifyContent:'center'}}
+            , React.createElement(Ic,{n:'mail',size:20,stroke:C.teal})
+          )
+          , React.createElement('div', null
+            , React.createElement('h1',{style:{fontFamily:"'Oswald',sans-serif",fontSize:'clamp(18px,4vw,22px)',fontWeight:600,color:C.text,marginBottom:2}},'💬 Messaggi')
+            , React.createElement('p',{style:{fontSize:12,color:C.textMuted}}, nonLetti>0 ? `${nonLetti} non lett${nonLetti===1?'o':'i'}` : 'Nessun messaggio da leggere')
+          )
+        )
+        , React.createElement('button', {
+            onClick: ()=>setShowCompose(true),
+            style:{padding:'9px 18px',borderRadius:8,border:'none',background:C.teal,color:'#fff',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:6}
+          }
+          , React.createElement(Ic,{n:'plus',size:14,stroke:'#fff'}), '✉️ Nuovo messaggio'
+        )
+      )
+      /* Tabs */
+      , React.createElement('div', {style:{display:'flex',gap:0}}
+        , [['ricevuti','📥 Ricevuti', ricevuti.length],['inviati','📤 Inviati', inviati.length]].map(([id,lbl,cnt]) =>
+            React.createElement('button', {key:id, onClick:()=>setTab(id),
+              style:{padding:'10px 20px',border:'none',background:'transparent',cursor:'pointer',
+                fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:tab===id?700:400,
+                color:tab===id?C.teal:C.textMuted,borderBottom:`2px solid ${tab===id?C.teal:'transparent'}`,
+                marginBottom:-1,display:'flex',alignItems:'center',gap:6}}
+              , lbl
+              , React.createElement('span',{style:{fontSize:11,background:tab===id?C.tealBg:C.bg,color:tab===id?C.teal:C.textDim,borderRadius:10,padding:'1px 7px',border:`1px solid ${tab===id?C.tealBorder:C.border}`}},cnt)
+            )
+          )
+      )
+    )
+
+    /* Toast */
+    , toast && React.createElement('div',{style:{position:'fixed',top:20,right:20,zIndex:9999,padding:'12px 20px',borderRadius:10,background:toast.ok?'#16a34a':C.red,color:'#fff',fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:600,boxShadow:'0 4px 20px rgba(0,0,0,.2)'}}, toast.msg)
+
+    /* Lista messaggi */
+    , React.createElement('div', {style:{padding:isMobile?'12px 16px':'20px 32px'}}
+      , loading
+        ? React.createElement('div',{style:{textAlign:'center',padding:40,color:C.textDim}},'⏳ Caricamento...')
+        : lista.length===0
+          ? React.createElement('div',{style:{textAlign:'center',padding:'48px 0',color:C.textDim}}
+              , React.createElement(Ic,{n:'mail',size:32,stroke:C.textDim})
+              , React.createElement('p',{style:{marginTop:12,fontSize:14}}, tab==='ricevuti'?'Nessun messaggio ricevuto':'Nessun messaggio inviato')
+            )
+          : React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
+              , lista.map(m => {
+                  const isRicevuto = tab==='ricevuti';
+                  const nonLetto = isRicevuto && !m.letto;
+                  return React.createElement('div', {key:m.id,
+                      onClick: ()=>{ if(nonLetto) segnaLetto(m.id); },
+                      style:{background:nonLetto?`${C.teal}08`:C.surface,border:`1px solid ${nonLetto?C.tealBorder:C.border}`,
+                        borderRadius:12,padding:'14px 18px',cursor:nonLetto?'pointer':'default',
+                        display:'flex',gap:14,alignItems:'flex-start',transition:'background .15s'}}
+                    , React.createElement('div',{style:{width:36,height:36,borderRadius:8,background:nonLetto?C.tealBg:C.bg,border:`1px solid ${nonLetto?C.tealBorder:C.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+                      , React.createElement(Ic,{n:nonLetto?'mail':'mail',size:16,stroke:nonLetto?C.teal:C.textMuted})
+                    )
+                    , React.createElement('div',{style:{flex:1,minWidth:0}}
+                      , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,justifyContent:'space-between',marginBottom:3}}
+                        , React.createElement('span',{style:{fontSize:13,fontWeight:nonLetto?700:600,color:C.text}},
+                            isRicevuto ? m.mittente_nome : `→ ${m.destinatario_nome||m.destinatario_ruolo}`)
+                        , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}}
+                          , nonLetto && React.createElement('div',{style:{width:7,height:7,borderRadius:'50%',background:C.teal,flexShrink:0}})
+                          , React.createElement('span',{style:{fontSize:11,color:C.textDim,whiteSpace:'nowrap'}},fmtDate(m.created_at))
+                        )
+                      )
+                      , React.createElement('div',{style:{fontSize:12,fontWeight:nonLetto?600:500,color:C.text,marginBottom:3}},m.oggetto||'(senza oggetto)')
+                      , React.createElement('div',{style:{fontSize:12,color:C.textMuted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},m.testo)
+                      , React.createElement('div',{style:{display:'flex',gap:6,marginTop:5}}
+                        , m.inviato_push && React.createElement('span',{style:{fontSize:10,background:C.tealBg,color:C.teal,border:`1px solid ${C.tealBorder}`,borderRadius:4,padding:'1px 6px'}},'📱 Push')
+                        , m.inviato_wa && React.createElement('span',{style:{fontSize:10,background:'#dcfce7',color:'#16a34a',border:'1px solid #bbf7d0',borderRadius:4,padding:'1px 6px'}},'💬 WA')
+                        , m.inviato_email && React.createElement('span',{style:{fontSize:10,background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:4,padding:'1px 6px'}},'📧 Email')
+                      )
+                    )
+                  );
+                })
+            )
+    )
+
+    /* Modal Compose */
+    , showCompose && React.createElement(ComposeModal, {
+        appUser, ruolo, students, docenti,
+        onClose: ()=>setShowCompose(false),
+        onSent: (nuovi) => {
+          setMessaggi(p=>[...nuovi,...p]);
+          setShowCompose(false);
+          setTab('inviati');
+          showToast(true, `✅ Messaggio inviato a ${nuovi.length} destinatar${nuovi.length===1?'io':'i'}`);
+        }
+      })
+  );
+};
+
+// ── Modal Compose Message ─────────────────────────────────────────────────────
+const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) => {
+  const [oggetto,   setOggetto]   = useState('');
+  const [testo,     setTesto]     = useState('');
+  const [destSel,   setDestSel]   = useState([]);   // [{id, nome, ruolo, email, telefono}]
+  const [canali,    setCanali]    = useState({app:true, push:true, email:false, whatsapp:false});
+  const [sending,   setSending]   = useState(false);
+  const [search,    setSearch]    = useState('');
+  const isAdmin = ruolo === 'admin';
+
+  // Destinatari disponibili
+  const DEST_FISSI = !isAdmin ? [
+    {id:'__admin__', nome:'Amministrazione', ruolo:'admin', email:'', telefono:''}
+  ] : [];
+
+  const DEST_LISTA = isAdmin ? [
+    ...( (students||[]).map(s=>({id:String(s.id||s.userId||''), nome:s.nome||s.name||'', ruolo:'allievo', email:s.email||'', telefono:s.telefono||s.phone||''})) ),
+    ...( (docenti||[]).map(d=>({id:String(d.id||d.userId||''), nome:d.nome||'', ruolo:'docente', email:d.email||'', telefono:d.phone||d.telefono||''})) ),
+  ] : DEST_FISSI;
+
+  const filtered = search
+    ? DEST_LISTA.filter(d => d.nome.toLowerCase().includes(search.toLowerCase()) || d.ruolo.toLowerCase().includes(search.toLowerCase()))
+    : DEST_LISTA;
+
+  const toggleDest = (d) => {
+    if (d.id==='__admin__') { setDestSel([d]); return; }
+    setDestSel(p => p.some(x=>x.id===d.id) ? p.filter(x=>x.id!==d.id) : [...p,d]);
+  };
+
+  const selectAll = (ruolo) => {
+    const tutti = DEST_LISTA.filter(d=>d.ruolo===ruolo);
+    const yaPresenti = tutti.filter(d=>destSel.some(x=>x.id===d.id));
+    if (yaPresenti.length===tutti.length) { setDestSel(p=>p.filter(d=>d.ruolo!==ruolo)); }
+    else { setDestSel(p=>[...p.filter(d=>d.ruolo!==ruolo),...tutti]); }
+  };
+
+  const handleSend = async () => {
+    if (!oggetto.trim()||!testo.trim()||!destSel.length) return;
+    setSending(true);
+    try {
+      const sb = window.supabaseClient;
+      const { data:{session} } = await sb.auth.getSession();
+      const token = session?.access_token;
+      const mittente_id   = appUser?.userId||appUser?.id;
+      const mittente_nome = appUser?.nome||'';
+      const mittente_ruolo = ruolo;
+
+      const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-message', {
+        method:'POST',
+        headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+        body: JSON.stringify({ mittente_id, mittente_nome, mittente_ruolo, oggetto: oggetto.trim(), testo: testo.trim(), destinatari: destSel, canali }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        // Crea oggetti messaggio locali per aggiornare UI senza reload
+        const now = new Date().toISOString();
+        const nuovi = destSel.map(d=>({ id:crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo, destinatario_id:d.id, destinatario_nome:d.nome, destinatario_ruolo:d.ruolo, oggetto:oggetto.trim(), testo:testo.trim(), letto:false, created_at:now, inviato_push:canali.push, inviato_wa:canali.whatsapp, inviato_email:canali.email }));
+        onSent(nuovi);
+      } else { alert('Errore: '+(json.error||'risposta inattesa')); }
+    } catch(e) { alert('Errore invio: '+e.message); }
+    setSending(false);
+  };
+
+  const RUOLO_COLORS = {admin:{c:C.gold,bg:C.goldBg},docente:{c:C.teal,bg:C.tealBg},allievo:{c:C.blue,bg:C.blueBg}};
+
+  return React.createElement('div', {onClick:onClose, style:{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,.6)',backdropFilter:'blur(3px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}
+    , React.createElement('div', {onClick:e=>e.stopPropagation(), style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:580,maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,.4)',fontFamily:"'Open Sans',sans-serif"}}
+      /* Header */
+      , React.createElement('div',{style:{padding:'16px 20px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:10}}
+        , React.createElement(Ic,{n:'mail',size:18,stroke:C.teal})
+        , React.createElement('div',{style:{fontSize:15,fontWeight:700,color:C.text,flex:1}},'✉️ Nuovo messaggio')
+        , React.createElement('button',{onClick:onClose,style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted,fontSize:20,lineHeight:1}},'×')
+      )
+      /* Body scrollable */
+      , React.createElement('div',{style:{flex:1,overflowY:'auto',padding:'16px 20px',display:'flex',flexDirection:'column',gap:14}}
+        /* Destinatari */
+        , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:6}},'A:')
+          , isAdmin && React.createElement('div',{style:{display:'flex',gap:6,marginBottom:8}}
+              , ['allievo','docente'].map(r=>React.createElement('button',{key:r,onClick:()=>selectAll(r),style:{padding:'4px 12px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11}},'Tutti i '+r+'i'))
+            )
+          , isAdmin && React.createElement('input',{type:'text',placeholder:'Cerca destinatario...',value:search,onChange:e=>setSearch(e.target.value),style:{width:'100%',boxSizing:'border-box',padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,marginBottom:6}})
+          /* Lista destinatari selezionabili */
+          , React.createElement('div',{style:{maxHeight:150,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,background:C.bg}}
+              , filtered.map(d=>{
+                  const sel = destSel.some(x=>x.id===d.id);
+                  const rc = RUOLO_COLORS[d.ruolo]||RUOLO_COLORS.allievo;
+                  return React.createElement('div',{key:d.id,onClick:()=>toggleDest(d),style:{display:'flex',alignItems:'center',gap:10,padding:'8px 12px',cursor:'pointer',background:sel?`${rc.c}08`:'transparent',borderBottom:`1px solid ${C.border}10`}}
+                    , React.createElement('div',{style:{width:16,height:16,borderRadius:4,border:`1.5px solid ${sel?rc.c:C.border}`,background:sel?rc.c:'transparent',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}
+                      , sel&&React.createElement('div',{style:{color:'#fff',fontSize:10,fontWeight:700}},'✓')
+                    )
+                    , React.createElement('span',{style:{fontSize:13,color:C.text,flex:1}},d.nome)
+                    , React.createElement('span',{style:{fontSize:10,background:rc.bg,color:rc.c,borderRadius:4,padding:'1px 6px'}},d.ruolo)
+                  );
+                })
+            )
+          /* Badge destinatari selezionati */
+          , destSel.length>0 && React.createElement('div',{style:{display:'flex',gap:5,flexWrap:'wrap',marginTop:6}}
+              , destSel.map(d=>React.createElement('span',{key:d.id,style:{fontSize:11,background:C.tealBg,color:C.teal,border:`1px solid ${C.tealBorder}`,borderRadius:20,padding:'2px 10px',display:'flex',alignItems:'center',gap:4}}
+                  ,d.nome
+                  ,React.createElement('button',{onClick:()=>toggleDest(d),style:{background:'none',border:'none',cursor:'pointer',color:C.teal,fontSize:13,lineHeight:1,padding:0}},'×')
+                ))
+            )
+        )
+        /* Oggetto */
+        , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:4}},'Oggetto')
+          , React.createElement('input',{type:'text',value:oggetto,onChange:e=>setOggetto(e.target.value),placeholder:'Oggetto del messaggio',style:{width:'100%',boxSizing:'border-box',padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13}})
+        )
+        /* Testo */
+        , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:4}},'Messaggio')
+          , React.createElement('textarea',{value:testo,onChange:e=>setTesto(e.target.value),rows:5,placeholder:'Scrivi il tuo messaggio...',style:{width:'100%',boxSizing:'border-box',padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,resize:'vertical',fontFamily:"'Open Sans',sans-serif"}})
+        )
+        /* Canali */
+        , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:8}},'Invia tramite')
+          , React.createElement('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}}
+              , [['app','📱 App',true],['push','🔔 Push',true],['whatsapp','💬 WhatsApp',false],['email','📧 Email',false]].map(([k,lbl])=>{
+                  const on = canali[k];
+                  return React.createElement('button',{key:k,onClick:()=>setCanali(p=>({...p,[k]:!p[k]})),style:{padding:'6px 14px',borderRadius:20,border:`1.5px solid ${on?C.teal:C.border}`,background:on?C.tealBg:C.bg,color:on?C.teal:C.textMuted,cursor:'pointer',fontSize:12,fontWeight:on?600:400}},lbl);
+                })
+            )
+          , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:6}},'App e Push sempre attivi. WhatsApp e Email richiedono configurazione aggiuntiva.')
+        )
+      )
+      /* Footer */
+      , React.createElement('div',{style:{padding:'14px 20px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'flex-end',gap:10}}
+        , React.createElement('button',{onClick:onClose,style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:'none',color:C.textMuted,cursor:'pointer',fontSize:13}},'Annulla')
+        , React.createElement('button',{onClick:handleSend,disabled:!oggetto.trim()||!testo.trim()||!destSel.length||sending,style:{padding:'9px 20px',borderRadius:8,border:'none',background:(!oggetto.trim()||!testo.trim()||!destSel.length)?C.surface:C.teal,color:(!oggetto.trim()||!testo.trim()||!destSel.length)?C.textMuted:'#fff',cursor:(!oggetto.trim()||!testo.trim()||!destSel.length)?'not-allowed':'pointer',fontSize:13,fontWeight:600}},sending?'⏳ Invio...':destSel.length?`📨 Invia a ${destSel.length}`:'📨 Invia')
       )
     )
   );
@@ -19752,6 +20038,7 @@ function App() {
       case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici});
       case 'schedaScuola':return React.createElement(SchedaScuolaView, { config: sharedConfig});
       case 'modulistica': return React.createElement(ModulisticaView, {});
+      case 'messaggi':            return React.createElement(MessaggiView, { appUser: user, ruolo: user?.ruolo||'admin', students: sharedStudents, docenti: sharedDocenti });
       case 'notifiche':          return React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste});
       case 'notifiche_settings': return React.createElement(NotificheSettingsView, { ruolo: user?.ruolo||"admin" });
       case 'reminders':   return React.createElement(RemindersView, { ruolo: user?.ruolo||"admin" });
