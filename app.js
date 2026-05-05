@@ -19053,6 +19053,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
   const [messaggi,    setMessaggi]    = useState([]);
+  const [myAuthId,    setMyAuthId]    = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [tab,         setTab]         = useState('ricevuti'); // 'ricevuti' | 'inviati'
   const [showCompose, setShowCompose] = useState(false);
@@ -19065,22 +19066,49 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
   const loadMessaggi = React.useCallback(async () => {
     const sb = window.supabaseClient; if (!sb) { setLoading(false); return; }
     try {
-      const myId = appUser?.userId || appUser?.id;
-      // Ricevuti
-      const { data: ricevuti } = await sb.from('messaggi')
-        .select('*').eq('destinatario_id', myId).order('created_at', {ascending:false}).limit(100);
+      // Usa l'UUID reale di auth (non quello dei profili) — deve corrispondere alla RLS
+      const { data: { user: authUser } } = await sb.auth.getUser();
+      const myId = authUser?.id;
+      if (!myId) { setLoading(false); return; }
+
+      // Ricevuti: messaggi dove sono il destinatario specifico O broadcast al mio ruolo
+      const { data: ricevuti, error: errR } = await sb.from('messaggi')
+        .select('*')
+        .eq('destinatario_id', myId)
+        .order('created_at', {ascending:false})
+        .limit(100);
+      if (errR) console.warn('[FM] messaggi ricevuti error:', errR.message);
+
+      // Broadcast al mio ruolo (destinatario_id IS NULL, destinatario_ruolo = mio ruolo)
+      const { data: broadcast } = await sb.from('messaggi')
+        .select('*')
+        .is('destinatario_id', null)
+        .eq('destinatario_ruolo', ruolo)
+        .order('created_at', {ascending:false})
+        .limit(50);
+
       // Inviati
-      const { data: inviati } = await sb.from('messaggi')
-        .select('*').eq('mittente_id', myId).order('created_at', {ascending:false}).limit(100);
-      setMessaggi([...(ricevuti||[]), ...(inviati||[])]);
+      const { data: inviati, error: errI } = await sb.from('messaggi')
+        .select('*')
+        .eq('mittente_id', myId)
+        .order('created_at', {ascending:false})
+        .limit(100);
+      if (errI) console.warn('[FM] messaggi inviati error:', errI.message);
+
+      const tutti = [...(ricevuti||[]), ...(broadcast||[]), ...(inviati||[])];
+      // Deduplica per id
+      const dedup = Object.values(tutti.reduce((a, m) => { a[m.id]=m; return a; }, {}));
+      setMessaggi(dedup);
+      // Salva myId per usarlo nel filtro
+      setMyAuthId(myId);
     } catch(e) { console.warn('[FM] loadMessaggi:', e?.message); }
     setLoading(false);
-  }, [appUser]);
+  }, [appUser, ruolo]);
 
   React.useEffect(() => { loadMessaggi(); }, []);
 
-  const myId = appUser?.userId || appUser?.id;
-  const ricevuti = messaggi.filter(m => m.destinatario_id===myId);
+  const myId = myAuthId || appUser?.userId || appUser?.id;
+  const ricevuti = messaggi.filter(m => m.destinatario_id===myId || (!m.destinatario_id && m.destinatario_ruolo===ruolo));
   const inviati  = messaggi.filter(m => m.mittente_id===myId);
   const nonLetti = ricevuti.filter(m => !m.letto).length;
 
@@ -19096,8 +19124,9 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
 
   const segnaLetto = async (id) => {
     const sb = window.supabaseClient; if (!sb) return;
-    await sb.from('messaggi').update({letto:true,letto_at:new Date().toISOString()}).eq('id',id);
-    setMessaggi(p => p.map(m => m.id===id ? {...m,letto:true} : m));
+    const { error } = await sb.from('messaggi').update({letto:true, letto_at:new Date().toISOString()}).eq('id',id);
+    if (error) console.warn('[FM] segnaLetto error:', error.message);
+    else setMessaggi(p => p.map(m => m.id===id ? {...m,letto:true} : m));
   };
 
   const lista = tab==='ricevuti' ? ricevuti : inviati;
@@ -19238,22 +19267,40 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) =>
     setSending(true);
     try {
       const sb = window.supabaseClient;
-      const { data:{session} } = await sb.auth.getSession();
+      const { data:{ session } } = await sb.auth.getSession();
+      const { data:{ user: authUser } } = await sb.auth.getUser();
       const token = session?.access_token;
-      const mittente_id   = appUser?.userId||appUser?.id;
+      const mittente_id   = authUser?.id;
       const mittente_nome = appUser?.nome||'';
       const mittente_ruolo = ruolo;
+
+      // Risolvi __admin__ con il vero UUID admin dal DB
+      let destinatariReali = [...destSel];
+      const adminIdx = destinatariReali.findIndex(d=>d.id==='__admin__');
+      if (adminIdx !== -1) {
+        const { data: adminProfili } = await sb.from('profili').select('id,nome').eq('ruolo','admin').limit(1);
+        if (adminProfili?.length) {
+          destinatariReali[adminIdx] = {...destinatariReali[adminIdx], id: adminProfili[0].id, nome: adminProfili[0].nome||'Amministrazione'};
+        } else {
+          // Fallback: manda senza destinatario_id (broadcast admin)
+          destinatariReali[adminIdx] = {...destinatariReali[adminIdx], id: null};
+        }
+      }
 
       const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-message', {
         method:'POST',
         headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
-        body: JSON.stringify({ mittente_id, mittente_nome, mittente_ruolo, oggetto: oggetto.trim(), testo: testo.trim(), destinatari: destSel, canali }),
+        body: JSON.stringify({ mittente_id, mittente_nome, mittente_ruolo, oggetto: oggetto.trim(), testo: testo.trim(), destinatari: destinatariReali, canali }),
       });
       const json = await res.json();
       if (json.ok) {
-        // Crea oggetti messaggio locali per aggiornare UI senza reload
         const now = new Date().toISOString();
-        const nuovi = destSel.map(d=>({ id:crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo, destinatario_id:d.id, destinatario_nome:d.nome, destinatario_ruolo:d.ruolo, oggetto:oggetto.trim(), testo:testo.trim(), letto:false, created_at:now, inviato_push:canali.push, inviato_wa:canali.whatsapp, inviato_email:canali.email }));
+        const nuovi = destinatariReali.map(d=>({
+          id: crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo,
+          destinatario_id:d.id, destinatario_nome:d.nome, destinatario_ruolo:d.ruolo,
+          oggetto:oggetto.trim(), testo:testo.trim(), letto:false, created_at:now,
+          inviato_push:canali.push, inviato_wa:canali.whatsapp, inviato_email:canali.email
+        }));
         onSent(nuovi);
       } else { alert('Errore: '+(json.error||'risposta inattesa')); }
     } catch(e) { alert('Errore invio: '+e.message); }
