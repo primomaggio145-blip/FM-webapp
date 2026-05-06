@@ -19066,41 +19066,19 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
   const loadMessaggi = React.useCallback(async () => {
     const sb = window.supabaseClient; if (!sb) { setLoading(false); return; }
     try {
-      // Usa l'UUID reale di auth (non quello dei profili) — deve corrispondere alla RLS
-      const { data: { user: authUser } } = await sb.auth.getUser();
-      const myId = authUser?.id;
+      const { data:{ session } } = await sb.auth.getSession();
+      const myId = session?.user?.id;
       if (!myId) { setLoading(false); return; }
+      setMyAuthId(myId);
 
-      // Ricevuti: messaggi dove sono il destinatario specifico O broadcast al mio ruolo
-      const { data: ricevuti, error: errR } = await sb.from('messaggi')
-        .select('*')
-        .eq('destinatario_id', myId)
-        .order('created_at', {ascending:false})
-        .limit(100);
-      if (errR) console.warn('[FM] messaggi ricevuti error:', errR.message);
-
-      // Broadcast al mio ruolo (destinatario_id IS NULL, destinatario_ruolo = mio ruolo)
-      const { data: broadcast } = await sb.from('messaggi')
-        .select('*')
-        .is('destinatario_id', null)
-        .eq('destinatario_ruolo', ruolo)
-        .order('created_at', {ascending:false})
-        .limit(50);
-
-      // Inviati
-      const { data: inviati, error: errI } = await sb.from('messaggi')
-        .select('*')
-        .eq('mittente_id', myId)
-        .order('created_at', {ascending:false})
-        .limit(100);
-      if (errI) console.warn('[FM] messaggi inviati error:', errI.message);
-
+      const [{ data: ricevuti }, { data: broadcast }, { data: inviati }] = await Promise.all([
+        sb.from('messaggi').select('*').eq('destinatario_id', myId).order('created_at', {ascending:false}).limit(100),
+        sb.from('messaggi').select('*').is('destinatario_id', null).eq('destinatario_ruolo', ruolo).order('created_at', {ascending:false}).limit(50),
+        sb.from('messaggi').select('*').eq('mittente_id', myId).order('created_at', {ascending:false}).limit(100),
+      ]);
       const tutti = [...(ricevuti||[]), ...(broadcast||[]), ...(inviati||[])];
-      // Deduplica per id
       const dedup = Object.values(tutti.reduce((a, m) => { a[m.id]=m; return a; }, {}));
       setMessaggi(dedup);
-      // Salva myId per usarlo nel filtro
-      setMyAuthId(myId);
     } catch(e) { console.warn('[FM] loadMessaggi:', e?.message); }
     setLoading(false);
   }, [appUser, ruolo]);
@@ -19268,41 +19246,47 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) =>
     try {
       const sb = window.supabaseClient;
       const { data:{ session } } = await sb.auth.getSession();
-      const { data:{ user: authUser } } = await sb.auth.getUser();
       const token = session?.access_token;
-      const mittente_id   = authUser?.id;
-      const mittente_nome = appUser?.nome||'';
+      if (!token) { alert('Sessione scaduta — riloggati'); setSending(false); return; }
+
+      const mittente_id    = session.user.id;  // UUID reale auth
+      const mittente_nome  = appUser?.nome||session.user.email||'';
       const mittente_ruolo = ruolo;
 
-      // Risolvi __admin__ con il vero UUID admin dal DB
-      let destinatariReali = [...destSel];
-      const adminIdx = destinatariReali.findIndex(d=>d.id==='__admin__');
-      if (adminIdx !== -1) {
-        const { data: adminProfili } = await sb.from('profili').select('id,nome').eq('ruolo','admin').limit(1);
-        if (adminProfili?.length) {
-          destinatariReali[adminIdx] = {...destinatariReali[adminIdx], id: adminProfili[0].id, nome: adminProfili[0].nome||'Amministrazione'};
-        } else {
-          // Fallback: manda senza destinatario_id (broadcast admin)
-          destinatariReali[adminIdx] = {...destinatariReali[adminIdx], id: null};
+      // Risolvi __admin__: cerca UUID reale dell'admin in auth.users via profili
+      let destinatariReali = await Promise.all(destSel.map(async d => {
+        if (d.id !== '__admin__') return d;
+        // Cerca il profilo admin: profili.id = auth.users.id
+        const { data: adminP } = await sb.from('profili')
+          .select('id, nome').eq('ruolo','admin').limit(1);
+        if (adminP?.length) {
+          return { ...d, id: adminP[0].id, nome: adminP[0].nome||'Amministrazione' };
         }
-      }
+        return { ...d, id: null }; // broadcast admin senza ID specifico
+      }));
 
       const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-message', {
         method:'POST',
         headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
-        body: JSON.stringify({ mittente_id, mittente_nome, mittente_ruolo, oggetto: oggetto.trim(), testo: testo.trim(), destinatari: destinatariReali, canali }),
+        body: JSON.stringify({
+          mittente_id, mittente_nome, mittente_ruolo,
+          oggetto: oggetto.trim(), testo: testo.trim(),
+          destinatari: destinatariReali, canali
+        }),
       });
-      const json = await res.json();
-      if (json.ok) {
-        const now = new Date().toISOString();
-        const nuovi = destinatariReali.map(d=>({
-          id: crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo,
-          destinatario_id:d.id, destinatario_nome:d.nome, destinatario_ruolo:d.ruolo,
-          oggetto:oggetto.trim(), testo:testo.trim(), letto:false, created_at:now,
-          inviato_push:canali.push, inviato_wa:canali.whatsapp, inviato_email:canali.email
-        }));
-        onSent(nuovi);
-      } else { alert('Errore: '+(json.error||'risposta inattesa')); }
+      const json = await res.json().catch(()=>({ok:false,error:'Risposta non valida'}));
+      if (!res.ok || !json.ok) {
+        alert('Errore: '+(json.error||`HTTP ${res.status}`));
+        setSending(false); return;
+      }
+      const now = new Date().toISOString();
+      const nuovi = destinatariReali.map(d=>({
+        id: crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo,
+        destinatario_id:d.id, destinatario_nome:d.nome, destinatario_ruolo:d.ruolo,
+        oggetto:oggetto.trim(), testo:testo.trim(), letto:false, created_at:now,
+        inviato_push:canali.push, inviato_wa:canali.whatsapp, inviato_email:canali.email
+      }));
+      onSent(nuovi);
     } catch(e) { alert('Errore invio: '+e.message); }
     setSending(false);
   };
