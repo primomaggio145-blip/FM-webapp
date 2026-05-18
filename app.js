@@ -6944,6 +6944,27 @@ const safeInsertRecurringLesson = async (lesson, setLessons) => {
   }
 };
 const lessonHex   = l => isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaProve(l) ? C.orange2 : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
+
+// ── Google Calendar auto-sync ─────────────────────────────────────────────────
+// Chiama la Edge Function gcal-sync per create/update/delete in background
+const gcalSyncLesson = async (action, lesson) => {
+  try {
+    const sb = window.supabaseClient; if (!sb) return;
+    const { data:{session} } = await sb.auth.getSession();
+    if (!session?.user?.id) return;
+    // Controlla se l'utente ha GCal connesso
+    const { data: tokenRow } = await sb.from('google_calendar_tokens')
+      .select('sync_enabled').eq('user_id', session.user.id).maybeSingle();
+    if (!tokenRow?.sync_enabled) return;
+    // Fire & forget
+    fetch(GCAL_EDGE, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, user_id: session.user.id, lesson, lezione_id: lesson?.id }),
+    }).catch(() => null);
+  } catch(e) { /* silenzioso */ }
+};
+const GCAL_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/gcal-sync';
 const studentInLesson = (l, name, studentId) => {
   if (isColl(l)) {
     const arr = l.students || [];
@@ -11315,6 +11336,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       }
 
       closeModal();
+      // GCal: crea evento
+      gcalSyncLesson('sync_one', { ...data, id: lessonId });
     };
     const handleEdit = (data) => {
       // BLOCCO: lezioni recuperate non possono essere modificate
@@ -11484,6 +11507,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             setNextLessonCreated(nextDate);
             // Insert sicuro su Supabase (con guard + check DB)
             safeInsertRecurringLesson(nextLesson, setLessons);
+            gcalSyncLesson('sync_one', nextLesson);
           }
         }
       }
@@ -11503,14 +11527,14 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         setLessons(p => p.map(l => l.id === data.id ? { ...l, recurrence: 'Nessuna' } : l));
         setTimeout(() => window.__FM_SHOW_CAMBIO_ORA__({ lesson: { ...lessonRef, recurrence: 'Nessuna' } }), 120);
       }
+      // GCal: aggiorna evento (solo se non cambio_ora — quello aggiorna dopo)
+      if (!openCambioOra) gcalSyncLesson('sync_one', data);
     };
     const handleDelete = async () => {
       const id = _optionalChain([selLesson, 'optionalAccess', _54 => _54.id]);
       if (!id) { closeModal(); return; }
-      // Rimuovi dallo state React immediatamente
       setLessons(p => p.filter(l => l.id !== id));
       closeModal();
-      // Cancella dal DB
       try {
         const sb = window.supabaseClient;
         if (sb) {
@@ -11518,6 +11542,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           if (error) console.warn('[FM] handleDelete lezione error:', error.message);
         }
       } catch(e) { console.warn('[FM] handleDelete exception:', e?.message); }
+      // GCal: rimuovi evento
+      gcalSyncLesson('delete_one', { id });
     };
     const handleAttendance = (id, val) => {
       setLessons(prev => {
@@ -11609,6 +11635,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               tipo:             lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
             };
             safeInsertRecurringLesson(nextLesson, setLessons);
+            gcalSyncLesson('sync_one', nextLesson);
             setNextLessonCreated(nextDate);
             if (isCambioOra) {
               shouldOpenCambioOra = true;
