@@ -743,14 +743,29 @@
   }
 
   function loadAppThen(callback) {
-    const script = document.createElement('script');
-    script.src   = './app.js';
-    script.onload  = callback;
-    script.onerror = () => {
-      document.getElementById('spinner').style.display = 'none';
-      setStatus('ERRORE: app.js non trovato (404)');
-    };
-    document.body.appendChild(script);
+    // Carica i moduli in sequenza — ogni file espone i propri componenti globalmente
+    const MODULES = [
+      './app-core.js',
+      './app-dashboard.js',
+      './app-calendario.js',
+      './app-views-a.js',
+      './app-views-b.js',
+      './app-root.js',
+    ];
+    let idx = 0;
+    function loadNext() {
+      if (idx >= MODULES.length) { callback(); return; }
+      const src = MODULES[idx++];
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = loadNext;
+      script.onerror = () => {
+        document.getElementById('spinner').style.display = 'none';
+        setStatus('ERRORE: ' + src + ' non trovato (404)');
+      };
+      document.body.appendChild(script);
+    }
+    loadNext();
   }
 
   boot();
