@@ -1,6 +1,791 @@
 (function() {
   try {
 var _jsxFileName = ""; function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; }// React hooks are available globally via window.React when loaded via CDN
+function App() {
+  // ── TUTTI GLI HOOK IN CIMA — mai dopo un return condizionale ──
+  const [user,           setUser]           = useState(null);
+  const [view,           setView]           = useState("dashboard");
+  const [panKey,         setPanKey]         = useState(0);
+  const [schermata,      setSchermata]      = useState("login");
+  const _d = window.__FM_DATA__ || {};
+  const [sharedStudents,       setSharedStudents]       = useState(_d.students   || INIT_STUDENTS);
+  const [sharedCourses,        setSharedCourses]        = useState(_d.courses    || []);
+  const [sharedDocenti,        setSharedDocenti]        = useState(_d.docenti    || INIT_DOCENTI_EXT);
+  const [sharedLessons,        setSharedLessons]        = useState(_d.lessons    || INIT_LESSONS);
+  const [sharedRepertorio,     setSharedRepertorio]     = useState(_d.brani      || INIT_BRANI);
+  const [sharedConcerti,       setSharedConcerti]       = useState(_d.concerti   || INIT_CONCERTI);
+  const [sharedAllegati,       setSharedAllegati]       = useState(_d.allegati   || []);
+  const [sharedRichieste,      setSharedRichieste]      = useState([]);
+  const [sharedNotifiche,      setSharedNotifiche]      = useState([]);
+  const [sharedConfig,         setSharedConfig]         = useState(_d.config ? {...CONFIG_DEFAULT, ..._d.config} : CONFIG_DEFAULT);
+  // Esponi config globalmente per componenti che non ricevono la prop (es. WeekCalSala)
+  React.useEffect(() => { window.__FM_CONFIG__ = sharedConfig; }, [sharedConfig]);
+  const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
+  const [sharedSpese,          setSharedSpese]          = useState(_d.spese      || INIT_SPESE);
+  const [sharedAnniScolastici, setSharedAnniScolastici] = useState(INIT_ANNI_SCOLASTICI);
+  const [sharedEntrate,         setSharedEntrate]         = useState(_d.entrate  || INIT_ENTRATE_QUOTE);
+  // ── Stato globale per pannelli dashboard e ruolo simulazione ──
+  const [sharedPanels,  setSharedPanels]  = useState({});
+  const [sharedRuolo,   setSharedRuolo]   = useState("admin");
+  const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
+
+  const [globalModal,        setGlobalModal]        = useState(null); // overlay top-level fuori da main-scroll animato
+  const [recuperoScadutoModal, setRecuperoScadutoModal] = useState(null); // {lesson, onExtend, onDismiss}
+  const [cambioOraModal,     setCambioOraModal]         = useState(null); // {lesson, onSave}
+  const [adminRecuperoModal, setAdminRecuperoModal]     = useState(null); // {lesson}
+  // ── Ripristina sessione Auth al refresh pagina + gestisci link invito ──────
+  useEffect(()=>{
+    if(!window.FM_AUTH) return;
+    (async()=>{
+      try {
+        // Controlla se siamo arrivati da un link di invito/reset (hash nell'URL)
+        const hash = window.location.hash;
+        if (hash && hash.includes('access_token') && hash.includes('type=invite')) {
+          // Supabase ha già gestito il token e creato la sessione
+          setSchermata("setpassword");
+          // Pulisci l'URL
+          window.history.replaceState(null, '', window.location.pathname);
+          return;
+        }
+
+        const session = await window.FM_AUTH.getSession();
+        if(session?.user){
+          const profilo = await window.FM_AUTH.getProfilo(session.user.id);
+          if(profilo && profilo.stato!=='sospeso'){
+            setUser({email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null});
+            setSharedRuolo(profilo.ruolo||"admin");
+            try{ window.__currentUserName__=profilo.nome||""; }catch(e){}
+            setSchermata("app");
+            // Carica richieste in attesa per le notifiche (admin)
+            if ((profilo.ruolo||'admin')==='admin' && window.FM_AUTH.getRichieste) {
+              try { const r = await window.FM_AUTH.getRichieste(); setSharedRichieste(r||[]); } catch(e){}
+            }
+            // Carica notifiche non lette — filtrate per ruolo/utente
+            const sb0 = window.supabaseClient;
+            if (sb0) {
+              try {
+                // Usa l'utente corrente se disponibile, altrimenti skip
+                // (verrà caricato correttamente al login)
+                const _cu = window.__currentUser__;
+                if (_cu && _cu.ruolo) {
+                  const _r0 = _cu.ruolo;
+                  const _i0 = _cu.allievoId || _cu.docenteId || null;
+                  const _n0 = _cu.nome || '';
+                  const { data: nn } = await sb0.from('notifiche').select('*')
+                    .eq('letto', false).eq('destinatario_ruolo', _r0)
+                    .order('created_at', {ascending:false}).limit(50);
+                  if (nn) {
+                    let filtered = nn;
+                    if (_r0 !== 'admin') {
+                      filtered = nn.filter(function(n){
+                        if(!n.destinatario_id && !n.destinatario_nome) return true;
+                        if(_i0 && n.destinatario_id && String(n.destinatario_id)===String(_i0)) return true;
+                        if(_n0 && n.destinatario_nome){const dn=(n.destinatario_nome||'').toLowerCase();const mn=_n0.toLowerCase();return dn===mn||dn.includes(mn)||mn.includes(dn);}
+                        return false;
+                      });
+                    }
+                    setSharedNotifiche(filtered);
+                  }
+                }
+              } catch(e){}
+              try {
+                const { data: rr } = await sb0.from('richieste_recupero').select('*').order('created_at', {ascending:false}).limit(200);
+                if (rr) window.__richiesteRecupero__ = rr;
+              } catch(e){}
+            }
+          }
+        }
+      } catch(e){}
+    })();
+  },[]);
+  // ───────────────────────────────────────────────────────────────
+
+  // ── Sync corsi e statistiche → sito pubblico ───────────────────
+  useEffect(() => {
+    try {
+      const existing = JSON.parse(localStorage.getItem('fm_admin_data') || '{}');
+      existing.corsi = sharedCourses.map(c => ({
+        nome:    c.name,
+        desc:    c.description || '',
+        livelli: c.type === 'individuale' ? 'Tutti i livelli' : 'Base, Avanzato',
+        foto:    ((existing.corsi || []).find(x => x.nome === c.name) || {}).foto || ''
+      }));
+      if (!existing.testi) existing.testi = {};
+      existing.testi.stat_studenti = sharedStudents.length + '+';
+      existing.testi.stat_docenti  = sharedDocenti.length  + '+';
+      localStorage.setItem('fm_admin_data', JSON.stringify(existing));
+    } catch(e) {}
+  }, [sharedCourses, sharedStudents, sharedDocenti]);
+  // ───────────────────────────────────────────────────────────────
+
+  // ── Supabase: esponi stato + reload hook ──────────────────────
+  useEffect(() => {
+    // Aggiorna snapshot stato corrente (usato da fm_sync.js per il write-back)
+    if (window.__FM_ON_STATE__) {
+      window.__FM_ON_STATE__({
+        students: sharedStudents, courses: sharedCourses, docenti: sharedDocenti,
+        lessons: sharedLessons, brani: sharedRepertorio, spese: sharedSpese, entrate: sharedEntrate,
+        concerti: sharedConcerti, allegati: sharedAllegati,
+      });
+    }
+    // Espone docenti globalmente per recupero modal e altri componenti profondi
+    window.__docenti__ = sharedDocenti;
+    window.__unreadCount__ = (sharedNotifiche||[]).filter(n=>!n.letto).length;
+  }, [sharedStudents, sharedCourses, sharedDocenti, sharedLessons, sharedRepertorio, sharedSpese, sharedEntrate, sharedConcerti, sharedAllegati]);
+
+  useEffect(() => {
+    // Hook che fm_sync.js chiama per iniettare aggiornamenti real-time nel React state
+    window.__FM_RELOAD__ = function(data) {
+      if (data.students)       setSharedStudents(data.students);
+      if (data.courses)        setSharedCourses(data.courses);
+      if (data.docenti)        setSharedDocenti(data.docenti);
+      if (data.lessons)        setSharedLessons(data.lessons);
+      if (data.brani)          setSharedRepertorio(data.brani);
+      if (data.spese)          setSharedSpese(data.spese);
+      if (data.entrate)        setSharedEntrate(data.entrate);
+      if (data.concerti)       setSharedConcerti(data.concerti);
+      if (data.allegati)       setSharedAllegati(data.allegati);
+      if (data.richieste)      setSharedRichieste(data.richieste);
+      if (data.config)          setSharedConfig(c => ({...CONFIG_DEFAULT, ...c, ...data.config}));
+      if (data.anniScolastici !== undefined) setSharedAnniScolastici(data.anniScolastici || []);
+      if (data.dashboardPanels) setSharedPanels(p => ({...p, ...data.dashboardPanels}));
+    };
+
+    // ── Refresh completo da Supabase ─────────────────────────────────────────
+    // Espone window.__FM_FORCE_REFRESH__ per trigger manuale da qualsiasi punto
+    let _refreshing = false;
+    window.__FM_FORCE_REFRESH__ = async function(silent) {
+      if (_refreshing) return;
+      _refreshing = true;
+      if (!silent) {
+        const t = document.getElementById('sync-toast');
+        if (t) { t.textContent = '⟳ Aggiornamento…'; t.style.opacity = '1'; }
+      }
+      try {
+        const sb = window.supabaseClient;
+        if (!sb) return;
+        const FA = window.FMAdapter;
+        const todayISO = new Date().toISOString().split('T')[0];
+        // Soglia: ultimi 24h per lezioni modificate/create (non tutto il DB)
+        const threshold24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+        // ── Tabelle piccole: carica tutto (cambiano raramente) ───────────────
+        const [
+          { data: sS }, { data: sD }, { data: sC },
+          { data: sB }, { data: sP }, { data: sQ }, { data: sEV },
+          { data: sAL }, { data: sSALA }, { data: sCFG }, { data: sANNI },
+        ] = await Promise.all([
+          sb.from('studenti').select('*').order('nome'),
+          sb.from('docenti').select('*').order('nome'),
+          sb.from('corsi').select('*, corsi_docenti(docente_id)').order('nome'),
+          sb.from('brani').select('*').order('titolo'),
+          sb.from('spese').select('*').order('data', { ascending: false }),
+          sb.from('quote').select('*').order('anno').order('mese'),
+          sb.from('concerti').select('*').order('data', { ascending: false }),
+          sb.from('allegati').select('*').order('created_at', { ascending: false }),
+          sb.from('prenotazioni_sala').select('*').order('data').order('ora_inizio'),
+          sb.from('sito_config').select('*'),
+          sb.from('anni_scolastici').select('*').order('anno_inizio', { ascending: false }),
+        ]);
+
+        // ── Lezioni: SOLO oggi + modificate nelle ultime 24h ────────────────
+        // Mantiene in memoria quelle più vecchie già caricate
+        const [{ data: sLToday }, { data: sLRecent }] = await Promise.all([
+          sb.from('lezioni').select('*').eq('data', todayISO),
+          sb.from('lezioni').select('*').gt('updated_at', threshold24h).neq('data', todayISO),
+        ]);
+        const allFetchedL = [...(sLToday||[]), ...(sLRecent||[])];
+        const fetchedIds  = new Set(allFetchedL.map(r => r.id));
+        // Lezioni già in memoria che non sono state toccate → le teniamo
+        const existingLessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
+        const untouched = existingLessons.filter(l => !fetchedIds.has(l.id));
+
+        const adaptL = (r) => {
+          const allegatiAll = sAL || [];
+          const allegati = allegatiAll.filter(a => a.lezione_id === r.id).map(a => ({
+            id: a.id, fileName: a.file_name||'', fileUrl: a.file_url||null,
+            fileType: a.file_type||'', descrizione: a.descrizione||'',
+            corso: a.corso||'', lezioneId: a.lezione_id||null,
+            allievoNome: a.allievo_nome||'', createdAt: a.created_at||null,
+          }));
+          return {
+            id: r.id, date: r.data,
+            hour: r.ora ? r.ora.slice(0,5) : '',
+            student: r.student||'', tipo: r.tipo||'individuale',
+            studentId: r.studente_id||null,
+            instrument: r.strumento||r.instrument||'', teacher: r.teacher||'',
+            room: r.room||'', topic: r.topic||'', attendance: r.attendance||'',
+            recurrence: r.recurrence||'Nessuna', notes: r.notes||'',
+            exercises: r.exercises||'', type: r.tipo||'individuale',
+            linkUrl: r.link_url||'', inRecupero: r.in_recupero||false,
+            recuperoScadenza: r.recupero_scadenza||null,
+            durata: r.durata ? parseInt(r.durata) : (r.tipo==='collettivo'?60:r.tipo==='prova'?30:45),
+            repertorioIds: (() => { try { return r.repertorio_ids ? JSON.parse(r.repertorio_ids) : []; } catch(e) { return []; } })(),
+            allegati,
+            courseId: r.corso_id||null, courseName: r.corso_nome||null,
+            students: (() => { try { return r.students ? JSON.parse(r.students) : []; } catch(e) { return []; } })(),
+          };
+        };
+        const sL = [...untouched, ...allFetchedL.map(adaptL)];
+
+        const adaptA = r => ({
+          id:r.id, lezioneId:r.lezione_id||null, allievoId:r.allievo_id||null,
+          allievoNome:r.allievo_nome||null, corso:r.corso||null,
+          descrizione:r.descrizione||null, fileUrl:r.file_url||null,
+          fileName:r.file_name||null, fileType:r.file_type||null, createdAt:r.created_at||null,
+        });
+        const configFromDB = {};
+        (sCFG || []).forEach(r => {
+          try { configFromDB[r.chiave] = JSON.parse(r.valore); }
+          catch(e) { configFromDB[r.chiave] = r.valore; }
+        });
+        // Estrai chiavi speciali da configFromDB (non sono campi config normali)
+        const anniScolasticiDB = (sANNI||[]).map(r => ({
+          id: r.id, label: r.label, annoInizio: r.anno_inizio, stato: r.stato, note: r.note||'',
+        }));
+        if (configFromDB.anniScolastici) delete configFromDB.anniScolastici;
+        const dashboardPanelsDB = (configFromDB.dashboardPanels && typeof configFromDB.dashboardPanels === 'object') ? configFromDB.dashboardPanels : null;
+        if (dashboardPanelsDB) delete configFromDB.dashboardPanels;
+
+        if (window.__FM_RELOAD__) {
+          const reloadData = {
+            students: (sS||[]).map(r => {
+              const base = FA ? FA.studente(r) : r;
+              const pj = (v,f=[]) => { if(!v) return f; if(Array.isArray(v)) return v; try { return JSON.parse(v); } catch(e) { return f; } };
+              base.repertorio = pj(r.repertorio, []);
+              base.extraInstruments = pj(r.extra_instruments, []);
+              base.extraTeachers = pj(r.extra_teachers, {});
+              return base;
+            }),
+            docenti:  (sD||[]).map(r => FA ? FA.docente(r) : r),
+            courses:  (sC||[]).map(r => FA ? FA.corso(r) : r),
+            lessons:  sL,
+            brani:    (sB||[]).map(r => ({ id:r.id, title:r.titolo||'', composer:r.compositore||'', periodo:r.periodo||'', tonality:r.tonalita||'', difficulty:r.difficolta||'Intermedio', tipo:r.tipo||'individuale', note:r.note||'', lezioni:r.lezioni||0 })),
+            spese:    (sP||[]).map(r => ({ id:String(r.id), docenteId:r.docente_id||null, data:r.data||'', mese:r.mese!=null?r.mese:new Date((r.data||'')+'T00:00:00').getMonth(), anno:r.anno||new Date().getFullYear(), importo:parseFloat(r.importo)||0, desc:r.desc||r.descrizione||'', nota:r.nota||'', metodo:r.metodo||'Bonifico', categoria:r.categoria||'altro' })),
+            entrate:  (sQ||[]).map(r => ({ id:String(r.id), studentId:r.studente_id||null, studentName:r.studente_nome||'', importo:parseFloat(r.importo)||0, mese:r.mese, anno:r.anno, data:r.data_pagamento||'', metodo:r.metodo||'Contanti', categoria:'quota', desc:r.note||'', stato:r.stato||'attesa' })),
+            concerti: (sEV||[]).map(r => ({ id:r.id, nome:r.nome||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:[], partecipanti:[], prenotazioni:[], biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0 })),
+            allegati: (sAL||[]).map(adaptA),
+            config:   Object.keys(configFromDB).length > 0 ? configFromDB : null,
+            anniScolastici:  anniScolasticiDB, // sempre passato, anche se []
+            dashboardPanels: dashboardPanelsDB,
+          };
+          if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__(reloadData);
+          window.__FM_RELOAD__(reloadData);
+        }
+        // Notifiche
+        try {
+          const _u = window.__currentUser__;
+          const _ruolo = (_u && _u.ruolo) || 'admin';
+          const _id = (_u && (_u.allievoId || _u.docenteId)) || null;
+          const _nome = (_u && _u.nome) || '';
+          let nq = sb.from('notifiche').select('*').eq('letto', false).eq('destinatario_ruolo', _ruolo).order('created_at', {ascending:false}).limit(50);
+          const { data: nn } = await nq;
+          if (nn) {
+            let filtered = nn;
+            if (_ruolo !== 'admin') {
+              filtered = nn.filter(function(n){
+                if(!n.destinatario_id && !n.destinatario_nome) return true;
+                if(_id && n.destinatario_id && String(n.destinatario_id)===String(_id)) return true;
+                if(_nome && n.destinatario_nome){const dn=(n.destinatario_nome||'').toLowerCase();const mn=_nome.toLowerCase();return dn===mn||dn.includes(mn)||mn.includes(dn);}
+                return false;
+              });
+            }
+            setSharedNotifiche(filtered);
+          }
+        } catch(e) {}
+        // Richieste recupero
+        try {
+          const { data: rr } = await sb.from('richieste_recupero').select('*').order('created_at', {ascending:false}).limit(200);
+          if (rr) window.__richiesteRecupero__ = rr;
+        } catch(e) {}
+        if (!silent) {
+          const t = document.getElementById('sync-toast');
+          if (t) {
+            const nLezioni = allFetchedL.length;
+            t.textContent = `✓ Aggiornati ${nLezioni} lezioni oggi/recenti`;
+            t.style.opacity = '1';
+            setTimeout(() => { t.style.opacity = '0'; }, 2500);
+          }
+        }
+      } catch(e) {
+        console.warn('[FM] Refresh error:', e);
+        if (!silent) {
+          const t = document.getElementById('sync-toast');
+          if (t) { t.textContent = '⚠ Errore aggiornamento'; t.style.opacity = '1'; setTimeout(() => { t.style.opacity = '0'; }, 3000); }
+        }
+      } finally {
+        _refreshing = false;
+      }
+    };
+
+    // ── Carica notifiche_config al boot (per il reminder checker) ────────────
+    (async function() {
+      try {
+        const sb = window.supabaseClient;
+        if (!sb) return;
+        const { data } = await sb.from('notifiche_config').select('*');
+        if (data && data.length > 0) {
+          const map = {};
+          data.forEach(r => { map[r.id] = { attivo: r.attivo !== false, anticipo_min: r.anticipo_min ?? 60 }; });
+          window.__FM_NOTIFICHE_CONFIG__ = map;
+          console.log('[FM] notifiche_config caricate:', Object.keys(map));
+        }
+      } catch(e) { console.warn('[FM] notifiche_config load error:', e?.message); }
+    })();
+
+    // ── Polling leggero ogni 45s: solo dati del giorno + notifiche ────────────
+    // Il refresh COMPLETO (tutti i record) rimane solo sul pulsante manuale ⟳
+    let _polling = false;
+    window.__FM_POLL_TODAY__ = async function() {
+      if (_polling) return;
+      _polling = true;
+      try {
+        const sb = window.supabaseClient;
+        if (!sb) return;
+        const todayISO = new Date().toISOString().split('T')[0];
+        // Soglia "recente": tutto ciò che è stato modificato negli ultimi 10 minuti
+        const recentThreshold = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+        // 1. Lezioni di OGGI + lezioni modificate di recente (nuove ricorrenti, nuove prove, modifiche stato)
+        //    Due query leggere invece di scaricare tutto il DB
+        const [{ data: sLToday }, { data: sLRecent }] = await Promise.all([
+          sb.from('lezioni').select('*').eq('data', todayISO),
+          sb.from('lezioni').select('*').gt('updated_at', recentThreshold).neq('data', todayISO),
+        ]);
+
+        const allFetched = [...(sLToday||[]), ...(sLRecent||[])];
+
+        if (allFetched.length > 0 && window.__FM_RELOAD__) {
+          const existingLessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
+          const fetchedIds = new Set(allFetched.map(function(r){ return r.id; }));
+          // Mantieni le lezioni non toccate da questo poll
+          const untouched = existingLessons.filter(function(l){ return !fetchedIds.has(l.id); });
+          const adaptL = function(r) {
+            return {
+              id: r.id, date: r.data, hour: r.ora ? r.ora.slice(0,5) : '',
+              student: r.student||'', tipo: r.tipo||'individuale',
+              studentId: r.studente_id||null, instrument: r.strumento||r.instrument||'',
+              teacher: r.teacher||'', room: r.room||'', topic: r.topic||'',
+              attendance: r.attendance||'', recurrence: r.recurrence||'Nessuna',
+              notes: r.notes||'', type: r.tipo||'individuale',
+              linkUrl: r.link_url||'', inRecupero: r.in_recupero||false,
+              recuperoScadenza: r.recupero_scadenza||null,
+              durata: r.durata ? parseInt(r.durata) : (r.tipo==='collettivo'?60:45),
+              repertorioIds: (function(){ try{return r.repertorio_ids?JSON.parse(r.repertorio_ids):[];}catch(e){return [];} })(),
+              allegati: [],
+              students: (function(){ try{return r.students?JSON.parse(r.students):[];}catch(e){return [];} })(),
+              courseId: r.corso_id||null, courseName: r.corso_nome||null,
+              notesRecupero: r.notes_recupero||'',
+            };
+          };
+          const mergedLessons = [...untouched, ...allFetched.map(adaptL)];
+          if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ lessons: mergedLessons });
+          window.__FM_RELOAD__({ lessons: mergedLessons });
+        }
+
+        // 2. Notifiche non lette — filtrate per utente corrente
+        try {
+          const _pu = window.__currentUser__;
+          const _pr = (_pu && _pu.ruolo) || 'admin';
+          const _pi = (_pu && (_pu.allievoId || _pu.docenteId)) || null;
+          const _pn = (_pu && _pu.nome) || '';
+          const { data: nn } = await sb.from('notifiche').select('*')
+            .eq('letto', false).eq('destinatario_ruolo', _pr)
+            .order('created_at', {ascending:false}).limit(50);
+          if (nn) {
+            let filtered = nn;
+            if (_pr !== 'admin') {
+              filtered = nn.filter(function(n){
+                if(!n.destinatario_id && !n.destinatario_nome) return true;
+                if(_pi && n.destinatario_id && String(n.destinatario_id)===String(_pi)) return true;
+                if(_pn && n.destinatario_nome){const dn=(n.destinatario_nome||'').toLowerCase();const mn=_pn.toLowerCase();return dn===mn||dn.includes(mn)||mn.includes(dn);}
+                return false;
+              });
+            }
+            setSharedNotifiche(filtered);
+          }
+        } catch(e) {}
+
+        // 3. Richieste recupero recenti
+        const { data: rr } = await sb.from('richieste_recupero').select('*')
+          .order('created_at', {ascending:false}).limit(100);
+        if (rr) window.__richiesteRecupero__ = rr;
+
+        // 4. Auto-marca recuperi scaduti come ASSENTE
+        // Lezioni con inRecupero=true e recuperoScadenza < oggi → assente (così il docente viene pagato)
+        try {
+          const todayISO2 = new Date().toISOString().split('T')[0];
+          const { data: scaduti } = await sb.from('lezioni')
+            .select('id,student,teacher,data')
+            .eq('in_recupero', true)
+            .lt('recupero_scadenza', todayISO2)
+            .is('attendance', null);  // solo quelle senza presenza ancora
+          if (scaduti && scaduti.length > 0) {
+            console.log('[FM] Recuperi scaduti da marcare come assente:', scaduti.length);
+            // Aggiorna in batch
+            const ids = scaduti.map(function(l){ return l.id; });
+            await sb.from('lezioni').update({
+              attendance: 'assente',
+              in_recupero: false,
+              recupero_scadenza: null,
+            }).in('id', ids);
+            // Aggiorna React state
+            if (window.__FM_RELOAD__) {
+              const allLessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
+              const updated = allLessons.map(function(l) {
+                if (ids.includes(l.id)) {
+                  return { ...l, attendance: 'assente', inRecupero: false, recuperoScadenza: null };
+                }
+                return l;
+              });
+              if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ lessons: updated });
+              window.__FM_RELOAD__({ lessons: updated });
+            }
+          }
+        } catch(eRec) {
+          console.warn('[FM] Auto-mark recuperi error:', eRec?.message);
+        }
+
+      } catch(e) {
+        console.warn('[FM] Poll today error:', e);
+      } finally {
+        _polling = false;
+      }
+    };
+
+    const _pollInterval = setInterval(function() {
+      // Poll adattivo: ogni 60s durante l'orario scolastico (8-20), ogni 5 minuti di notte
+      const h = new Date().getHours();
+      const isScoolHours = h >= 8 && h < 20;
+      if (!isScoolHours) {
+        // Di notte, esegui solo ogni 5 minuti (ogni 5° tick)
+        _pollNightCounter = (_pollNightCounter||0) + 1;
+        if (_pollNightCounter < 5) return;
+        _pollNightCounter = 0;
+      }
+      window.__FM_POLL_TODAY__ && window.__FM_POLL_TODAY__();
+      // ── Reminder lezioni 1h prima ────────────────────────────────────────
+      window.__FM_CHECK_LESSON_REMINDER__ && window.__FM_CHECK_LESSON_REMINDER__();
+    }, 60000);
+    var _pollNightCounter = 0;
+
+    // ── Reminder lezioni: controlla ogni minuto se c'è una lezione tra 55-65 min ──
+    // Prima chiamata dopo 5 secondi (per dare tempo al DB di caricare le lezioni)
+    setTimeout(function() {
+      window.__FM_CHECK_LESSON_REMINDER__ && window.__FM_CHECK_LESSON_REMINDER__();
+    }, 5000);
+    const _reminderSent = new Set(); // evita notifiche doppie per la stessa lezione
+    window.__FM_CHECK_LESSON_REMINDER__ = function() {
+      const nowMs  = Date.now();
+      const nowStr = new Date().toISOString().split('T')[0];
+      const lessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
+      const curUser = window.__currentUser__;
+      if (!curUser) return;
+
+      lessons.forEach(function(l) {
+        if (l.date !== nowStr) return;
+        if (l.tipo === 'sala_prove') return;
+        // Controlla se il tipo di notifica è abilitato
+        const cfgKey   = isColl(l) ? 'lezione_collettiva' : 'lezione_individuale';
+        const notifCfg = (window.__FM_NOTIFICHE_CONFIG__ || {})[cfgKey];
+        if (notifCfg && notifCfg.attivo === false) return;
+        const anticipoMin = (notifCfg && notifCfg.anticipo_min != null) ? notifCfg.anticipo_min : 60;
+        const marginLow   = anticipoMin - 5;
+        const marginHigh  = anticipoMin + 5;
+        // Orario lezione
+        const hhmmParts = (l.hour||'00:00').split(':').map(Number);
+        const hh = hhmmParts[0] || 0;
+        const mm = hhmmParts[1] || 0;
+        const todayMid = new Date(); todayMid.setHours(0,0,0,0);
+        const lessonMs = todayMid.getTime() + hh*3600000 + mm*60000;
+        const diffMin  = (lessonMs - nowMs) / 60000;
+        // Finestra configurabile attorno all'anticipo scelto (±5 min)
+        if (diffMin < marginLow || diffMin > marginHigh) return;
+        const key = l.id + '_' + nowStr;
+        if (_reminderSent.has(key)) return;
+
+        // Filtra per utente corrente
+        const ruolo = curUser.ruolo || 'admin';
+        if (ruolo === 'allievo') {
+          const myId   = curUser.allievoId;
+          const myNome = (curUser.nome||'').toLowerCase();
+          const match  = (myId && String(l.studentId) === String(myId))
+                      || (myNome && (l.student||'').toLowerCase().includes(myNome));
+          if (!match) return;
+        } else if (ruolo === 'docente') {
+          const myNome = (curUser.nome||'').toLowerCase();
+          if (!(l.teacher||'').toLowerCase().includes(myNome)) return;
+        }
+        // admin vede tutte
+
+        _reminderSent.add(key);
+        const titolo  = `⏰ Lezione tra 1 ora`;
+        const testo   = (l.tipo==='collettivo'
+          ? `${l.courseName||'Lezione collettiva'} alle ${l.hour}`
+          : `${l.instrument||'Lezione'} con ${l.teacher||''} alle ${l.hour}`);
+
+        // PWA: notifica push nativa
+        if (IS_PWA && 'Notification' in window) {
+          if (Notification.permission === 'granted') {
+            navigator.serviceWorker.ready.then(function(reg) {
+              reg.showNotification(titolo, {
+                body:    testo,
+                icon:    '/FM-webapp/icons/icon-192.png',
+                badge:   '/FM-webapp/icons/icon-192.png',
+                tag:     key,
+                vibrate: [200, 100, 200],
+              });
+            }).catch(function() {
+              new Notification(titolo, { body: testo, icon: '/FM-webapp/icons/icon-192.png' });
+            });
+          } else if (Notification.permission !== 'denied') {
+            Notification.requestPermission().then(function(p) {
+              if (p === 'granted') {
+                new Notification(titolo, { body: testo, icon: '/FM-webapp/icons/icon-192.png' });
+              }
+            });
+          }
+        } else {
+          // Desktop: banner a video stile Google Calendar
+          var banner = document.createElement('div');
+          banner.style.cssText = [
+            'position:fixed','top:20px','right:20px','z-index:99999',
+            'background:#fff','border:1px solid #e2e8f0','border-radius:12px',
+            'box-shadow:0 8px 32px rgba(0,0,0,0.18)','padding:16px 20px',
+            'display:flex','align-items:flex-start','gap:12px','max-width:320px',
+            'font-family:Open Sans,sans-serif','animation:slideIn 0.3s ease',
+          ].join(';');
+          banner.innerHTML = `
+            <div style="width:36px;height:36px;border-radius:10px;background:#fff7ed;
+              border:1px solid #fed7aa;display:flex;align-items:center;
+              justify-content:center;font-size:18px;flex-shrink:0">⏰</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:700;color:#1e293b;margin-bottom:3px">
+                ${titolo}</div>
+              <div style="font-size:12px;color:#64748b;line-height:1.4">${testo}</div>
+              <button onclick="this.closest('[data-fm-reminder]').remove()"
+                style="margin-top:8px;font-size:11px;color:#f97316;background:none;
+                  border:none;cursor:pointer;padding:0;font-family:inherit;font-weight:600">
+                Chiudi
+              </button>
+            </div>
+            <button onclick="this.closest('[data-fm-reminder]').remove()"
+              style="background:none;border:none;cursor:pointer;color:#94a3b8;
+                font-size:18px;line-height:1;padding:0;flex-shrink:0">×</button>
+          `;
+          banner.setAttribute('data-fm-reminder', key);
+          document.body.appendChild(banner);
+          // Auto-chiudi dopo 30 secondi
+          setTimeout(function() { if (banner.parentNode) banner.remove(); }, 30000);
+        }
+      });
+    };
+
+    // ── beforeunload: avvisa sempre quando l'utente prova a uscire ──────────
+    const handleBeforeUnload = (e) => {
+      // Mostra sempre il dialog nativo del browser quando si è loggati
+      e.preventDefault();
+      e.returnValue = ''; // stringa vuota = il browser usa il suo testo standard
+      return '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    // Overlay globale
+    window.__FM_SHOW_MODAL__ = (element) => setGlobalModal(element);
+    window.__FM_HIDE_MODAL__ = ()        => setGlobalModal(null);
+    window.__FM_SHOW_RECUPERO_SCADUTO__ = (data) => setRecuperoScadutoModal(data);
+    window.__FM_SHOW_CAMBIO_ORA__ = (data) => setCambioOraModal(data);
+    window.__FM_SHOW_ADMIN_RECUPERO__ = (lesson) => setAdminRecuperoModal({ lesson });
+    return () => {
+      window.__FM_RELOAD__ = null;
+      window.__FM_FORCE_REFRESH__ = null;
+      window.__FM_POLL_TODAY__ = null;
+      window.__FM_UPDATE_PREV__ = null;
+      window.__FM_SHOW_MODAL__ = null;
+      window.__FM_HIDE_MODAL__ = null;
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      clearInterval(_pollInterval);
+    };
+  }, []);
+  // ─────────────────────────────────────────────────────────────
+
+  const cambiaSchermata = (s) => { setSchermata(s); setPanKey(p=>p+1); };
+
+  // ── SCHERMATA AUTH ──
+  if (!user) {
+    return (
+      React.createElement(React.Fragment, null
+        , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10745}}, G)
+        , React.createElement('div', { style: {minHeight:"100vh",display:"flex",background:C.bg,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10746}}
+          , React.createElement('div', { className: "login-left-panel", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10747}}, React.createElement(PanelloSinistra, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10747}}))
+          , React.createElement('div', { style: {flex:1,display:"flex",alignItems:"center",justifyContent:"center",
+            padding:"40px 24px",overflowY:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10748}}
+            , React.createElement('div', { key: panKey, style: {width:"100%",maxWidth:400,padding:"0 4px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10750}}
+              , schermata==="login" && (
+                React.createElement(FormLogin, {
+                  onSuccess: u=>{
+                    setUser(u);setSharedRuolo(u.ruolo||"admin");setView(u.ruolo==="band"?"sala_prove":"dashboard");
+                    try{window.__currentUserName__=u.nome||"";}catch(e){};
+                    if(u.ruolo==="admin"&&window.FM_AUTH&&window.FM_AUTH.getRichieste){window.FM_AUTH.getRichieste().then(r=>setSharedRichieste(r||[])).catch(()=>{});}
+                    // Carica notifiche non lette al login — filtrate per ruolo/utente
+                    const sbLogin = window.supabaseClient;
+                    if(sbLogin){
+                      const ruoloLogin = u.ruolo || 'admin';
+                      const idLogin = u.allievoId || u.docenteId || null;
+                      const nomeLogin = u.nome || '';
+                      sbLogin.from('notifiche').select('*').eq('letto',false).eq('destinatario_ruolo', ruoloLogin).order('created_at',{ascending:false}).limit(50).then(function(r){
+                        if(r.data){
+                          let nn = r.data;
+                          if(ruoloLogin !== 'admin'){
+                            nn = r.data.filter(function(n){
+                              if(!n.destinatario_id && !n.destinatario_nome) return true;
+                              if(idLogin && n.destinatario_id && String(n.destinatario_id)===String(idLogin)) return true;
+                              if(nomeLogin && n.destinatario_nome){
+                                const dn=(n.destinatario_nome||'').toLowerCase().trim();
+                                const mn=nomeLogin.toLowerCase().trim();
+                                return dn===mn||dn.includes(mn)||mn.includes(dn);
+                              }
+                              return false;
+                            });
+                          }
+                          setSharedNotifiche(nn);
+                        }
+                      });
+                    }
+                  },
+                  onRegistrazione: ()=>cambiaSchermata("register"),
+                  onRecupero: ()=>cambiaSchermata("recover"),
+                  onBand: ()=>cambiaSchermata("band"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10752}}
+                )
+              )
+              , schermata==="register" && React.createElement(FormRegistrazione, { onBack: ()=>cambiaSchermata("login"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10758}})
+              , schermata==="band"     && React.createElement(FormRegistrazioneBand, { onBack: ()=>cambiaSchermata("login") })
+              , schermata==="recover"  && React.createElement(FormRecupero, { onBack: ()=>cambiaSchermata("login"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10759}})
+              , schermata==="setpassword" && React.createElement(FormSetPassword, {
+                  onSuccess: async () => {
+                    // Dopo aver impostato la password, carica il profilo e fa login
+                    try {
+                      const sb = window.supabaseClient;
+                      const { data: { session } } = await sb.auth.getSession();
+                      if (session?.user) {
+                        const profilo = await window.FM_AUTH.getProfilo(session.user.id);
+                        if (profilo) {
+                          // Aggiorna profilo da invitato ad attivo
+                          await sb.from('profili').update({ stato: 'attivo' }).eq('id', session.user.id);
+                          setUser({email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null});
+                          setSharedRuolo(profilo.ruolo||"admin");
+                          try{ window.__currentUserName__=profilo.nome||""; }catch(e){}
+                          setSchermata("app");
+                        }
+                      }
+                    } catch(e) { cambiaSchermata("login"); }
+                  }
+                })
+            )
+          )
+        )
+      )
+    );
+  }
+
+  // ── WEBAPP PRINCIPALE ──
+  // Render della vista corrente — NON usare un oggetto views{} perché ricrea i componenti
+  // ad ogni render di App (ogni cambio stato), causando il reset dei setInterval interni
+  const renderCurrentView = () => {
+    switch(view) {
+      case 'dashboard':   return React.createElement(DashboardView, { appUser: user, onNavigate: setView, config: sharedConfig, setConfig: setSharedConfig, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, docenti: sharedDocenti, lessons: sharedLessons, concerti: sharedConcerti, richieste: sharedRichieste, notifiche: sharedNotifiche, panels: sharedPanels, setPanels: setSharedPanels, onQuickAction: (action)=>setSharedQuickAction(action)});
+      case 'allievi':     return React.createElement(AllieviView, { students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'docenti':     return React.createElement(DocentiView, { students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user, annoInizioAttivo: sharedConfig.annoInizioAttivo, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null)});
+      case 'corsi':       return React.createElement(CorsiView, { courses: sharedCourses, setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'calendario':  return React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, config: sharedConfig});
+      case 'contabilita': return React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'repertorio':  return React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'allegati':    return React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user});
+      case 'biblioteca':  return React.createElement(BibliotecaView, { userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'concerti':    return React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti});
+      case 'utenti':      return (user?.ruolo||"admin")==="admin" ? React.createElement(UtentiView, { students: sharedStudents, docenti: sharedDocenti}) : null;
+      case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici});
+      case 'schedaScuola':return React.createElement(SchedaScuolaView, { config: sharedConfig});
+      case 'modulistica': return React.createElement(ModulisticaView, {});
+      case 'messaggi':            return React.createElement(MessaggiView, { appUser: user, ruolo: user?.ruolo||'admin', students: sharedStudents, docenti: sharedDocenti });
+      case 'notifiche':          return React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste});
+      case 'notifiche_settings': return React.createElement(NotificheSettingsView, { ruolo: user?.ruolo||"admin" });
+      case 'reminders':   return React.createElement(RemindersView, { ruolo: user?.ruolo||"admin" });
+      case 'sala_prove':  return React.createElement(SalaProveStandaloneView, { appUser: user, userRuolo: user?.ruolo||"band", lessons: sharedLessons });
+      default: return null;
+    }
+  };
+
+  // Logout con controllo notifiche non lette (include notifiche live calcolate in memoria)
+  const handleLogout = async () => {
+    const unreadDB   = (sharedNotifiche||[]).filter(n=>!n.letto).length;
+    const unreadLive = window.__FM_NOTIF_COUNT__ || 0;
+    const unread     = Math.max(unreadDB, unreadLive);
+    if (unread > 0) {
+      const ok = window.confirm(`Hai ${unread} notific${unread===1?'a':'he'} non lett${unread===1?'a':'e'}.\nVuoi leggerle prima di uscire?`);
+      if (ok) { setView("notifiche"); return; }
+    }
+    try { if(window.FM_AUTH) await window.FM_AUTH.signOut(); } catch(e) {}
+    setUser(null); setSharedRuolo("admin"); setView("dashboard");
+    setSchermata("login"); setPanKey(p=>p+1);
+    try{window.__currentUserName__="";}catch(e){}
+    window.__FM_NOTIF_COUNT__ = 0;
+  };
+
+  // Esci senza fare signOut — la sessione rimane attiva per le notifiche PWA
+  // La prossima apertura dell'app riprende automaticamente la sessione
+  const handleEsciSenzaLogout = () => {
+    if (IS_PWA) {
+      // In PWA: minimizza tornando alla home dello smartphone
+      window.history.back();
+    } else {
+      // Su browser desktop: chiude il tab se possibile, altrimenti avvisa
+      const closed = window.close();
+      if (closed === false || closed === undefined) {
+        window.alert('Puoi chiudere questo tab manualmente (Ctrl+W / Cmd+W).\nLa sessione rimarrà attiva — al prossimo accesso entrerai direttamente.');
+      }
+    }
+  };
+
+  return (
+    React.createElement(React.Fragment, null
+      , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
+      , React.createElement('div', { style: {display:"flex",height:"100dvh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement('div', { key: view, className: "main-scroll", style: {flex:1,overflow:"auto",background:C.bg,animation:"fadeIn 0.25s ease",
+          paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 4px)",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10788}}
+          , renderCurrentView()
+        )
+      )
+      /* ─── Global Modal Slot ───────────────────────────────────────────────────
+         Renderizzato come fratello del div principale, FUORI da main-scroll.
+         main-scroll ha animation:"fadeIn" che crea un compositing layer:
+         i position:fixed dentro vengono trappola da esso. Qui siamo nel Fragment
+         root, quindi position:fixed si aggancia al viewport come previsto.  */
+      , globalModal
+      /* Modal recupero scaduto — solo admin, position:fixed fuori da main-scroll */
+      , recuperoScadutoModal && React.createElement(RecuperoScadutoModal, {
+          lesson: recuperoScadutoModal.lesson,
+          onExtend: recuperoScadutoModal.onExtend,
+          onDismiss: () => setRecuperoScadutoModal(null),
+          setLessons: setSharedLessons,
+        })
+      , cambioOraModal && React.createElement(CambioOraModal, {
+          lesson: cambioOraModal.lesson,
+          onSave: (updatedLesson) => {
+            setSharedLessons(p => p.map(l => l.id === updatedLesson.id ? {...l, ...updatedLesson} : l));
+            if (cambioOraModal.onSave) cambioOraModal.onSave(updatedLesson);
+          },
+          onDismiss: () => setCambioOraModal(null),
+        })
+      , adminRecuperoModal && React.createElement(AdminRecuperoModal, {
+          lesson: adminRecuperoModal.lesson,
+          setLessons: setSharedLessons,
+          onDismiss: () => setAdminRecuperoModal(null),
+        })
+    )
+  );
+}
 
 
 // ─── MODAL RECUPERO SCADUTO (solo admin) ──────────────────────────────────────
