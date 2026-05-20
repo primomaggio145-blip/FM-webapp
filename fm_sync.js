@@ -751,6 +751,7 @@
       './app-views-a.js',
       './app-views-b.js',
       './app-root.js',
+      './app-gcal.js',
     ];
     let idx = 0;
     function loadNext() {
