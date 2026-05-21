@@ -25,7 +25,7 @@ const GCAL_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/gcal-sy
 
 // ← Inserisci qui il tuo Google OAuth 2.0 Client ID
 // Ottienilo da: console.cloud.google.com → Credenziali → OAuth 2.0 Client ID
-const GOOGLE_CLIENT_ID_FRONTEND = '19550052351-4rtmrp9gjfg22h6uhh1vijrtr6bbuibq.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID_FRONTEND = '';
 
 // ── Utility: sync singola lezione in background ───────────────────────────────
 // Chiamata automaticamente da app-calendario.js e app-views-b.js
@@ -97,11 +97,16 @@ window.GoogleCalendarSection = function(props) {
   // Gestisce ritorno da OAuth Google (gcal_code nel query string)
   _useEffect(function() {
     const params = new URLSearchParams(window.location.search);
-    const code = params.get('gcal_code');
+    // Google redirect usa ?code=, la webapp lo rinomina ?gcal_code= per distinguerlo
+    const code = params.get('gcal_code') || (params.get('code') && params.get('scope') ? params.get('code') : null);
     if (!code) return;
-    // Rimuovi il parametro dall'URL
+    // Rimuovi i parametri OAuth dall'URL
     const cleanUrl = window.location.href
       .replace(/[?&]gcal_code=[^&]+/, '')
+      .replace(/[?&]code=[^&]+/, '')
+      .replace(/[?&]scope=[^&]+/, '')
+      .replace(/[?&]authuser=[^&]+/, '')
+      .replace(/[?&]prompt=[^&]+/, '')
       .replace(/\?$/, '');
     window.history.replaceState({}, '', cleanUrl);
     // Scambia il code con i token
@@ -110,6 +115,8 @@ window.GoogleCalendarSection = function(props) {
       try {
         const sb = window.supabaseClient;
         const { data: { session } } = await sb.auth.getSession();
+        // Invia il code all'Edge Function con il token Supabase dell'utente
+        // redirect_uri deve corrispondere a quello usato nell'autorizzazione
         const res = await fetch(GCAL_EDGE, {
           method: 'POST',
           headers: {
@@ -119,7 +126,8 @@ window.GoogleCalendarSection = function(props) {
           body: JSON.stringify({
             action: 'oauth_callback',
             code: code,
-            user_id: session.user.id
+            user_id: session.user.id,
+            redirect_uri: 'https://primomaggio145-blip.github.io/FM-webapp/webapp.html'
           })
         });
         const json = await res.json();
@@ -136,19 +144,23 @@ window.GoogleCalendarSection = function(props) {
     })();
   }, []);
 
+  // URL della webapp — Google reindirizza qui con ?gcal_code=...
+  const WEBAPP_URL = 'https://primomaggio145-blip.github.io/FM-webapp/webapp.html';
+
   const handleConnect = function() {
     if (!GOOGLE_CLIENT_ID_FRONTEND) {
       alert(
         'Per attivare Google Calendar:\n\n' +
         '1. Vai su console.cloud.google.com → Credenziali\n' +
         '2. Crea un OAuth 2.0 Client ID (tipo: Web Application)\n' +
-        '3. Aggiungi come Redirect URI:\n   ' + GCAL_EDGE + '\n' +
+        '3. Aggiungi come Authorized Redirect URI:\n   ' + WEBAPP_URL + '\n' +
         '4. Copia il Client ID e incollalo in app-gcal.js\n' +
         '   alla riga GOOGLE_CLIENT_ID_FRONTEND'
       );
       return;
     }
-    const redirectUri = encodeURIComponent(GCAL_EDGE);
+    // Redirect URI = la webapp stessa (riceve il code e lo manda all'Edge Function)
+    const redirectUri = encodeURIComponent(WEBAPP_URL);
     const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events');
     const authUrl =
       'https://accounts.google.com/o/oauth2/v2/auth' +
