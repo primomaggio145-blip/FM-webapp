@@ -3383,6 +3383,13 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
       )
     )
 
+    /* ── Google Calendar ─────────────────────────────────────────────────── */
+    , React.createElement(ImpSection, {title:"Google Calendar", icon:"calendar"}
+      , typeof GoogleCalendarSection !== 'undefined'
+        ? React.createElement(GoogleCalendarSection, {appUser: window.__appUser__||null})
+        : React.createElement('div', {style:{fontSize:13,color:C.textMuted}}, '⏳ Caricamento modulo Google Calendar...')
+    )
+
     /* ── Chiusure personalizzate ──────────────────────────────────────────── */
     , React.createElement(ImpSection, {title:"Chiusure e festività", icon:"cal"}
       // Festività nazionali con toggle aperto/chiuso
