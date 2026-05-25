@@ -2609,20 +2609,49 @@ const lessonHex   = l => isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaPr
 
 // ── Google Calendar auto-sync ─────────────────────────────────────────────────
 // Chiama la Edge Function gcal-sync per create/update/delete in background
+
+// Controlla filtri GCal configurati
+const gcalShouldSync = (lesson) => {
+  const cfg = window.__gcalConfig__ || {};
+  if (cfg.filtroDocente && cfg.filtroDocente.length > 0) {
+    const d = (lesson.teacher||lesson.docente||'').toLowerCase();
+    if (!cfg.filtroDocente.some(x => x.toLowerCase()===d)) return false;
+  }
+  if (cfg.filtroStrumento && cfg.filtroStrumento.length > 0) {
+    const s = (lesson.instrument||lesson.strumento||'').toLowerCase();
+    if (!cfg.filtroStrumento.some(x => x.toLowerCase()===s)) return false;
+  }
+  return true;
+};
+
+// Costruisce titolo evento GCal con template configurabile
+window.gcalBuildCaption = (lesson, tpl) => {
+  const t = tpl || (window.__gcalConfig__ && window.__gcalConfig__.captionTemplate) || '{studente} - {strumento}';
+  return t
+    .replace('{studente}',  lesson.student   ||lesson.studente ||'')
+    .replace('{strumento}', lesson.instrument||lesson.strumento||'')
+    .replace('{docente}',   lesson.teacher   ||lesson.docente  ||'')
+    .replace('{aula}',      lesson.room      ||'')
+    .replace('{argomento}', lesson.topic     ||'')
+    .replace('{tipo}',      lesson.tipo      ||'individuale')
+    .replace('{ora}',       (lesson.hour||'').slice(0,5))
+    .trim();
+};
+
 const gcalSyncLesson = async (action, lesson) => {
   try {
     const sb = window.supabaseClient; if (!sb) return;
     const { data:{session} } = await sb.auth.getSession();
     if (!session?.user?.id) return;
-    // Controlla se l'utente ha GCal connesso
     const { data: tokenRow } = await sb.from('google_calendar_tokens')
       .select('sync_enabled').eq('user_id', session.user.id).maybeSingle();
     if (!tokenRow?.sync_enabled) return;
-    // Fire & forget
+    if (action === 'sync_one' && lesson && !gcalShouldSync(lesson)) return;
+    const lessonOut = lesson ? { ...lesson, _gcalCaption: window.gcalBuildCaption(lesson) } : lesson;
     fetch(GCAL_EDGE, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, user_id: session.user.id, lesson, lezione_id: lesson?.id }),
+      headers: { 'Authorization': 'Bearer '+session.access_token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, user_id: session.user.id, lesson: lessonOut, lezione_id: lesson&&lesson.id }),
     }).catch(() => null);
   } catch(e) { /* silenzioso */ }
 };
