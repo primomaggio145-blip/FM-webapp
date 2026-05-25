@@ -25,7 +25,7 @@ const GCAL_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/gcal-sy
 
 // ← Inserisci qui il tuo Google OAuth 2.0 Client ID
 // Ottienilo da: console.cloud.google.com → Credenziali → OAuth 2.0 Client ID
-const GOOGLE_CLIENT_ID_FRONTEND = '19550052351-4rtmrp9gjfg22h6uhh1vijrtr6bbuibq.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID_FRONTEND = '';
 
 // ── Utility: sync singola lezione in background ───────────────────────────────
 // Chiamata automaticamente da app-calendario.js e app-views-b.js
@@ -227,6 +227,41 @@ window.GoogleCalendarSection = function(props) {
     setSyncing(false);
   };
 
+  // ── Configurazione filtri e caption ──────────────────────────────────────
+  const [showConfig, setShowConfig] = React.useState(false);
+  const [captionTpl, setCaptionTpl] = React.useState(
+    (window.__gcalConfig__ && window.__gcalConfig__.captionTemplate) || '{studente} - {strumento}'
+  );
+  const [filtroDocente,   setFiltroDocente]   = React.useState('');
+  const [filtroStrumento, setFiltroStrumento] = React.useState('');
+
+  const saveConfig = function() {
+    const cfg = {
+      captionTemplate: captionTpl,
+      filtroDocente:   filtroDocente ? filtroDocente.split(',').map(s=>s.trim()).filter(Boolean) : [],
+      filtroStrumento: filtroStrumento ? filtroStrumento.split(',').map(s=>s.trim()).filter(Boolean) : [],
+    };
+    window.__gcalConfig__ = cfg;
+    // Salva in localStorage per persistenza
+    try { localStorage.setItem('fm_gcal_config', JSON.stringify(cfg)); } catch(e) {}
+    showToast(true, '✅ Configurazione GCal salvata');
+    setShowConfig(false);
+  };
+
+  // Carica config salvata
+  React.useEffect(function() {
+    try {
+      const saved = localStorage.getItem('fm_gcal_config');
+      if (saved) {
+        const cfg = JSON.parse(saved);
+        window.__gcalConfig__ = cfg;
+        if (cfg.captionTemplate) setCaptionTpl(cfg.captionTemplate);
+        if (cfg.filtroDocente)   setFiltroDocente(cfg.filtroDocente.join(', '));
+        if (cfg.filtroStrumento) setFiltroStrumento(cfg.filtroStrumento.join(', '));
+      }
+    } catch(e) {}
+  }, []);
+
   // Stili riutilizzabili (usa i colori C già definiti in app-core.js)
   const cardStyle = {
     display: 'flex', alignItems: 'center', gap: 10,
@@ -285,6 +320,10 @@ window.GoogleCalendarSection = function(props) {
         )
         , React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } }
           , React.createElement('button', {
+              onClick: function() { setShowConfig(!showConfig); },
+              style: { padding: '9px 14px', borderRadius: 8, border: '1px solid '+(showConfig?C.tealBorder:C.border), background: showConfig?C.tealBg:C.bg, color: showConfig?C.teal:C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 5 }
+            }, '⚙️ Impostazioni')
+          , React.createElement('button', {
               onClick: handleSyncAll,
               disabled: syncing,
               style: {
@@ -308,6 +347,26 @@ window.GoogleCalendarSection = function(props) {
           }
           , '💡 Le lezioni vengono sincronizzate automaticamente quando le crei o modifichi. '
           , 'Usa "Sincronizza tutte" per il primo avvio o dopo un\'importazione massiva.'
+        )
+        , showConfig && React.createElement('div', { style: { marginTop: 14, padding: 16, background: C.bg, border: '1px solid '+C.border, borderRadius: 10 } }
+          , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: "'Open Sans',sans-serif" } }, '⚙️ Impostazioni sincronizzazione')
+          , React.createElement('div', { style: { marginBottom: 10 } }
+            , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 4, fontFamily: "'Open Sans',sans-serif" } }, '📝 Titolo evento GCal')
+            , React.createElement('input', { type: 'text', value: captionTpl, onChange: function(e){setCaptionTpl(e.target.value);}, placeholder: '{studente} - {strumento}', style: { width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: 7, border: '1px solid '+C.border, background: C.surface, color: C.text, fontSize: 13, fontFamily: "'Open Sans',sans-serif" } })
+            , React.createElement('div', { style: { fontSize: 11, color: C.textDim, marginTop: 3, fontFamily: "'Open Sans',sans-serif" } }, 'Variabili: {studente} {strumento} {docente} {aula} {argomento} {tipo} {ora}')
+          )
+          , React.createElement('div', { style: { marginBottom: 10 } }
+            , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 4, fontFamily: "'Open Sans',sans-serif" } }, '👤 Filtra per docente (virgola per separare, vuoto = tutti)')
+            , React.createElement('input', { type: 'text', value: filtroDocente, onChange: function(e){setFiltroDocente(e.target.value);}, placeholder: 'es. Marco Bianchi, Laura Rossi', style: { width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: 7, border: '1px solid '+C.border, background: C.surface, color: C.text, fontSize: 13, fontFamily: "'Open Sans',sans-serif" } })
+          )
+          , React.createElement('div', { style: { marginBottom: 14 } }
+            , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 4, fontFamily: "'Open Sans',sans-serif" } }, '🎸 Filtra per strumento (virgola per separare, vuoto = tutti)')
+            , React.createElement('input', { type: 'text', value: filtroStrumento, onChange: function(e){setFiltroStrumento(e.target.value);}, placeholder: 'es. Pianoforte, Chitarra', style: { width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: 7, border: '1px solid '+C.border, background: C.surface, color: C.text, fontSize: 13, fontFamily: "'Open Sans',sans-serif" } })
+          )
+          , React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end' } }
+            , React.createElement('button', { onClick: function(){setShowConfig(false);}, style: { padding: '8px 14px', borderRadius: 7, border: '1px solid '+C.border, background: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif" } }, 'Annulla')
+            , React.createElement('button', { onClick: saveConfig, style: { padding: '8px 16px', borderRadius: 7, border: 'none', background: C.teal, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: "'Open Sans',sans-serif" } }, '💾 Salva')
+          )
         )
       )
 
