@@ -25,7 +25,7 @@ const GCAL_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/gcal-sy
 
 // ← Inserisci qui il tuo Google OAuth 2.0 Client ID
 // Ottienilo da: console.cloud.google.com → Credenziali → OAuth 2.0 Client ID
-const GOOGLE_CLIENT_ID_FRONTEND = '';
+const GOOGLE_CLIENT_ID_FRONTEND = '19550052351-4rtmrp9gjfg22h6uhh1vijrtr6bbuibq.apps.googleusercontent.com';
 
 // ── Utility: sync singola lezione in background ───────────────────────────────
 // Chiamata automaticamente da app-calendario.js e app-views-b.js
