@@ -2369,6 +2369,21 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       , _ruoloAV==="admin" && modal==="add" && React.createElement(Modal, { title: "Nuovo allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}, React.createElement(StudentForm, { onSave: handleAddStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}))
       , _ruoloAV==="admin" && modal==="edit" && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], role: propUserRuoloAV||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
       , _ruoloAV==="admin" && modal==="delete" && selected && React.createElement(ConfirmDelete, { label: selected.name, description: "Questa azione è irreversibile."   , onConfirm: handleDeleteStudent, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3911}})
+
+      /* ── Google Calendar per allievo ── */
+      , _ruoloAV==="allievo" && React.createElement('div', {style:{padding:"16px", maxWidth:600}}
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
+              , React.createElement('span',{style:{fontSize:16}},'📅')
+              , React.createElement('span',{style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Google Calendar")
+            )
+            , React.createElement('div',{style:{padding:"16px 20px"}}
+              , typeof GoogleCalendarSectionSimple !== 'undefined'
+                ? React.createElement(GoogleCalendarSectionSimple, {appUser: _appUserAV, userRuolo: 'allievo'})
+                : React.createElement('div',{style:{fontSize:13,color:C.textMuted}},'⏳ Caricamento...')
+            )
+          )
+        )
     )
   );
 };
