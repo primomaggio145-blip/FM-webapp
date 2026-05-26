@@ -1340,6 +1340,19 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
             )
           )
 
+          /* ── Google Calendar ── */
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
+              , React.createElement('span',{style:{fontSize:16}},'📅')
+              , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Google Calendar")
+            )
+            , React.createElement('div', {style:{padding:"16px 20px"}}
+              , typeof GoogleCalendarSectionSimple !== 'undefined'
+                ? React.createElement(GoogleCalendarSectionSimple, {appUser: _appUserDocView, userRuolo: 'docente'})
+                : React.createElement('div',{style:{fontSize:13,color:C.textMuted}},'⏳ Caricamento...')
+            )
+          )
+
         )
       )
     )
