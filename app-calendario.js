@@ -2628,13 +2628,16 @@ const lessonHex   = l => isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaPr
 // Controlla filtri GCal configurati
 const gcalShouldSync = (lesson) => {
   const cfg = window.__gcalConfig__ || {};
+  // Filtro per docente
   if (cfg.filtroDocente && cfg.filtroDocente.length > 0) {
     const d = (lesson.teacher||lesson.docente||'').toLowerCase();
     if (!cfg.filtroDocente.some(x => x.toLowerCase()===d)) return false;
   }
-  if (cfg.filtroStrumento && cfg.filtroStrumento.length > 0) {
-    const s = (lesson.instrument||lesson.strumento||'').toLowerCase();
-    if (!cfg.filtroStrumento.some(x => x.toLowerCase()===s)) return false;
+  // Filtro per corso (courseName o instrument come fallback)
+  const filtroCorso = cfg.filtroCorso || cfg.filtroStrumento || [];
+  if (filtroCorso.length > 0) {
+    const corsoLezione = (lesson.courseName||lesson.corso_nome||lesson.instrument||lesson.strumento||'').toLowerCase();
+    if (!filtroCorso.some(x => x.toLowerCase()===corsoLezione)) return false;
   }
   return true;
 };

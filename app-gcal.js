@@ -25,7 +25,7 @@ const GCAL_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/gcal-sy
 
 // ← Inserisci qui il tuo Google OAuth 2.0 Client ID
 // Ottienilo da: console.cloud.google.com → Credenziali → OAuth 2.0 Client ID
-const GOOGLE_CLIENT_ID_FRONTEND = '19550052351-4rtmrp9gjfg22h6uhh1vijrtr6bbuibq.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID_FRONTEND = '';
 
 // ── Utility: sync singola lezione in background ───────────────────────────────
 // Chiamata automaticamente da app-calendario.js e app-views-b.js
@@ -239,7 +239,7 @@ window.GoogleCalendarSection = function(props) {
     const cfg = {
       captionTemplate: captionTpl,
       filtroDocente:   filtroDocente ? filtroDocente.split(',').map(s=>s.trim()).filter(Boolean) : [],
-      filtroStrumento: filtroStrumento ? filtroStrumento.split(',').map(s=>s.trim()).filter(Boolean) : [],
+      filtroCorso: filtroStrumento ? filtroStrumento.split(',').map(s=>s.trim()).filter(Boolean) : [],
     };
     window.__gcalConfig__ = cfg;
     // Salva in localStorage per persistenza
@@ -373,17 +373,22 @@ window.GoogleCalendarSection = function(props) {
             , filtroDocente && React.createElement('div',{style:{fontSize:11,color:C.teal,marginTop:4,fontFamily:"'Open Sans',sans-serif"}},'Selezionati: ',filtroDocente)
           )
           , React.createElement('div', { style: { marginBottom: 14 } }
-            , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 6, fontFamily: "'Open Sans',sans-serif" } }, '🎸 Sincronizza strumenti (vuoto = tutti)')
+            , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 6, fontFamily: "'Open Sans',sans-serif" } }, '🎵 Sincronizza corsi (vuoto = tutti)')
             , React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } }
-                , [...new Set((window.__FM_DATA__&&window.__FM_DATA__.lessons||[]).map(function(l){return l.instrument||l.strumento||'';}).filter(Boolean))].sort().map(function(str) {
-                    const sel = filtroStrumento ? filtroStrumento.split(',').map(s=>s.trim()).includes(str) : false;
-                    return React.createElement('button', { key: str, onClick: function() {
-                        const cur = filtroStrumento ? filtroStrumento.split(',').map(s=>s.trim()).filter(Boolean) : [];
-                        const next = sel ? cur.filter(x=>x!==str) : [...cur, str];
-                        setFiltroStrumento(next.join(', '));
-                      }, style: { padding: '4px 10px', borderRadius: 20, border: '1px solid '+(sel?C.teal:C.border), background: sel?C.tealBg:C.bg, color: sel?C.teal:C.textMuted, cursor: 'pointer', fontSize: 12, fontFamily: "'Open Sans',sans-serif" }
-                    }, str);
-                  })
+                , (window.__FM_DATA__&&window.__FM_DATA__.courses||[])
+                    .slice().sort(function(a,b){ return (a.name||a.nome||'').localeCompare(b.name||b.nome||''); })
+                    .map(function(c) {
+                        const nome = c.name||c.nome||'';
+                        if (!nome) return null;
+                        const sel = filtroStrumento ? filtroStrumento.split(',').map(s=>s.trim()).includes(nome) : false;
+                        return React.createElement('button', { key: c.id||nome, onClick: function() {
+                            const cur = filtroStrumento ? filtroStrumento.split(',').map(s=>s.trim()).filter(Boolean) : [];
+                            const next = sel ? cur.filter(x=>x!==nome) : [...cur, nome];
+                            setFiltroStrumento(next.join(', '));
+                          }, style: { padding: '4px 10px', borderRadius: 20, border: '1px solid '+(sel?C.teal:C.border), background: sel?C.tealBg:C.bg, color: sel?C.teal:C.textMuted, cursor: 'pointer', fontSize: 12, fontFamily: "'Open Sans',sans-serif" }
+                        }, nome);
+                      })
+                , (window.__FM_DATA__&&window.__FM_DATA__.courses||[]).length===0 && React.createElement('span',{style:{fontSize:12,color:C.textDim,fontFamily:"'Open Sans',sans-serif"}},'(nessun corso trovato)')
             )
             , filtroStrumento && React.createElement('div',{style:{fontSize:11,color:C.teal,marginTop:4,fontFamily:"'Open Sans',sans-serif"}},'Selezionati: ',filtroStrumento)
           )
