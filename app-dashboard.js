@@ -1645,8 +1645,13 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
 
       /* ── Dropdown ── */
       , open && React.createElement('div', {style:{
-            position:'absolute',top:'calc(100% + 8px)',right:0,
-            width:340,maxHeight:480,overflowY:'auto',
+            position:'fixed',
+            top: ref.current ? ref.current.getBoundingClientRect().bottom + 8 : 60,
+            right: 8,
+            left: 8,
+            maxWidth: 380,
+            marginLeft: 'auto',
+            maxHeight: 480, overflowY:'auto',
             background:C.surface,border:`1px solid ${C.border}`,
             borderRadius:14,boxShadow:'0 12px 40px rgba(0,0,0,0.25)',
             zIndex:1000,animation:'fadeUp .18s ease both',
