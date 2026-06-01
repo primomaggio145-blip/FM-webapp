@@ -2385,8 +2385,8 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
           , React.createElement('p', {style:{marginTop:12, fontSize:14}}, "Nessun allegato trovato")
           , React.createElement('p', {style:{fontSize:12, color:C.textDim, marginTop:4}}, "Gli allegati vengono aggiunti nelle lezioni")
         )
-        : React.createElement('div', { style: {background:C.surface, borderRadius:14, border:`1px solid ${C.border}`, overflow:"hidden"}}
-          , React.createElement('table', { style: {width:"100%", borderCollapse:"collapse"}}
+        : React.createElement('div', { style: {overflowX:"auto", WebkitOverflowScrolling:"touch", borderRadius:14, border:`1px solid ${C.border}`}}
+          , React.createElement('table', { style: {width:"100%", borderCollapse:"collapse", minWidth:680}}
             , React.createElement('thead', null
               , React.createElement('tr', { style: {background:C.bg, borderBottom:`1px solid ${C.border}`}}
                 , React.createElement(SortTh, {label:"Allegato",    sortKey:"fileName",    currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})

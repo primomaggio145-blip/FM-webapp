@@ -9337,7 +9337,8 @@ const BranoDrawer = ({brano,lezioniCount,allieviList,onClose,onEdit,onDelete})=>
     React.createElement(React.Fragment, null
       , React.createElement('div', { onClick: onClose, style: {position:"fixed",inset:0,zIndex:300,
         background:"rgba(0,0,0,.7)",backdropFilter:"blur(3px)",animation:"fadeIn .2s ease"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7455}})
-      , React.createElement('div', { style: {position:"fixed",top:0,right:0,bottom:0,zIndex:301,width:480,
+      , React.createElement('div', { style: {position:"fixed",top:0,right:0,bottom:0,zIndex:301,
+        width:"min(480px, 100vw)",
         background:C.surface,borderLeft:`1px solid ${C.border}`,
         display:"flex",flexDirection:"column",animation:"slideDrawer .26s cubic-bezier(.4,0,.2,1)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7457}}
 
