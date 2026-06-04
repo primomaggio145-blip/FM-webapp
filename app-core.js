@@ -643,7 +643,7 @@ const Modal = ({ title, onClose, children, footer, wide=false }) => (
       style: {position:"relative",background:C.surface,
       border:`1px solid ${C.border}`,borderRadius:"16px 16px 0 0",width:"100%",
       maxWidth:wide?900:520,
-      maxHeight:"min(94svh, calc(100svh - env(safe-area-inset-bottom, 0px) - 8px))",
+      maxHeight:"min(94svh, calc(100svh - env(safe-area-inset-bottom, 0px) - 60px - 8px))",
       overflow:"hidden",
       margin:"0 auto",
       boxSizing:"border-box",
