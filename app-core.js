@@ -635,38 +635,53 @@ const NotifPermBtn = function() {
 };
 
 const Modal = ({ title, onClose, children, footer, wide=false }) => (
-  React.createElement('div', { className: "modal-resp-outer", style: {position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"flex-end",
-    justifyContent:"center",padding:"0"}, onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 407}}
-    , React.createElement('div', { style: {position:"absolute",inset:0,background:"rgba(0,0,0,0.78)",
-      backdropFilter:"blur(4px)",animation:"overlayIn 0.2s ease"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 409}})
-    , React.createElement('div', { onClick: e=>e.stopPropagation(), className: "modal-resp" + (wide?" modal-wide":""),
-      style: {position:"relative",background:C.surface,
-      border:`1px solid ${C.border}`,borderRadius:"16px 16px 0 0",width:"100%",
-      maxWidth:wide?900:520,
-      maxHeight:"min(94svh, calc(100svh - env(safe-area-inset-bottom, 0px) - 60px - 8px))",
-      overflow:"hidden",
-      margin:"0 auto",
-      boxSizing:"border-box",
-      display:"flex",flexDirection:"column",animation:"fadeUp 0.25s ease"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 411}}
-      /* Intestazione fissa */
-      , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center",
-        padding:"14px 20px",borderBottom:`1px solid ${C.border}`,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 421}}
-        , React.createElement('h2', { style: {fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,margin:0,letterSpacing:"0.05em",textTransform:"uppercase",color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 423}}, title)
-        , React.createElement('button', { onClick: onClose, style: {background:"none",border:"none",cursor:"pointer",
-          color:C.textMuted,display:"flex",padding:4,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 424}}
-          , React.createElement(Ic, { n: "x", size: 18, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 426}})
+  React.createElement('div', { className: "modal-resp-outer", style: {
+      position:"fixed", inset:0, zIndex:200,
+      display:"flex", flexDirection:"column",
+      background:C.surface,
+      animation:"fadeIn 0.2s ease"
+    }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 407}}
+
+    /* Header — rispetta la status bar iOS (notch / Dynamic Island) */
+    , React.createElement('div', { style: {
+        paddingTop:"env(safe-area-inset-top, 0px)",
+        background:C.surface,
+        borderBottom:`1px solid ${C.border}`,
+        flexShrink:0,
+        zIndex:2
+      }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 409}}
+      , React.createElement('div', { style: {
+            display:"flex", justifyContent:"space-between", alignItems:"center",
+            padding:"14px 20px"
+          }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 421}}
+          , React.createElement('h2', { style: {
+              fontFamily:"'Oswald',sans-serif", fontSize:18, fontWeight:600,
+              margin:0, letterSpacing:"0.05em", textTransform:"uppercase", color:C.gold
+            }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 423}}, title)
+          , React.createElement('button', { onClick: onClose, style: {
+              background:"none", border:"none", cursor:"pointer",
+              color:C.textMuted, display:"flex", padding:4, flexShrink:0
+            }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 424}}
+            , React.createElement(Ic, { n:"x", size:22, stroke:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 426}})
+          )
         )
-      )
-      /* Contenuto scrollabile */
-      , React.createElement('div', { style: {overflow:"auto",flex:1,WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 430}}, children)
-      /* Footer fisso con pulsanti — sempre visibile, mai coperto */
-      , footer && (
-        React.createElement('div', { style: {flexShrink:0,borderTop:`1px solid ${C.border}`,
-          paddingBottom:"env(safe-area-inset-bottom, 12px)",
-          background:C.surface}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 433}}
-          , footer
-        )
-      )
+    )
+
+    /* Contenuto scrollabile — occupa tutto lo spazio disponibile */
+    , React.createElement('div', { style: {
+        flex:1, overflow:"auto", WebkitOverflowScrolling:"touch",
+        maxWidth: wide ? 900 : 620,
+        width:"100%", margin:"0 auto", alignSelf:"stretch",
+        boxSizing:"border-box"
+      }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 430}}, children)
+
+    /* Footer fisso con pulsanti — sempre sopra la bottom nav */
+    , footer && React.createElement('div', { style: {
+        flexShrink:0, borderTop:`1px solid ${C.border}`,
+        background:C.surface,
+        paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 60px)"
+      }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 433}}
+      , footer
     )
   )
 );
