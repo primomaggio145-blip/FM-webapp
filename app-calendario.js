@@ -3366,7 +3366,20 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
     : null;
 
   return (
-    React.createElement(Modal, { title: "Dettaglio lezione" , onClose: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4493}}
+    React.createElement(Modal, { title: "Dettaglio lezione" , onClose: onClose,
+      footer: React.createElement('div', { style: {padding:"14px 22px", display:"flex", justifyContent:"space-between", alignItems:"center"}}
+        , canEdit ? (
+          React.createElement(React.Fragment, null
+            , React.createElement(Btn, { danger: true, onClick: onDelete, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4753}}, React.createElement(Ic, { n: "trash", size: 14, stroke: C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4753}}), "Elimina")
+            , React.createElement(Btn, { variant: "secondary", onClick: onEdit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4754}}, React.createElement(Ic, { n: "edit", size: 14, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4754}}), "Modifica")
+          )
+        ) : (
+          React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,color:C.textDim,fontSize:12,width:"100%",justifyContent:"center"}}
+            , React.createElement(Ic, { n: "lock", size: 14, stroke: C.textDim}), "Solo docenti e amministratori possono modificare le lezioni"
+          )
+        )
+      ),
+      __self: this, __source: {fileName: _jsxFileName, lineNumber: 4493}}
       , React.createElement('div', { style: {padding:22, display:"flex", flexDirection:"column", gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4494}}
         , React.createElement('div', { style: {display:"flex", gap:14, alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4495}}
           , React.createElement('div', { style: {width:46, height:46, borderRadius:10,
@@ -3846,18 +3859,6 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
 
       )
 
-      , React.createElement('div', { style: {padding:"14px 22px", borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:14, display:"flex", justifyContent:"space-between", alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4750}}
-        , canEdit ? (
-          React.createElement(React.Fragment, null
-            , React.createElement(Btn, { danger: true, onClick: onDelete, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4753}}, React.createElement(Ic, { n: "trash", size: 14, stroke: C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4753}}), "Elimina")
-            , React.createElement(Btn, { variant: "secondary", onClick: onEdit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4754}}, React.createElement(Ic, { n: "edit", size: 14, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4754}}), "Modifica")
-          )
-        ) : (
-          React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,color:C.textDim,fontSize:12,width:"100%",justifyContent:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4757}}
-            , React.createElement(Ic, { n: "lock", size: 14, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4758}}), "Solo docenti e amministratori possono modificare le lezioni"
-          )
-        )
-      )
     )
   );
 };
