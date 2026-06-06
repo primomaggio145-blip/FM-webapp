@@ -634,57 +634,70 @@ const NotifPermBtn = function() {
   );
 };
 
-const Modal = ({ title, onClose, children, footer, wide=false }) => (
-  React.createElement('div', { className: "modal-resp-outer", style: {
-      position:"fixed", inset:0, zIndex:200,
-      display:"flex", flexDirection:"column",
-      background:C.surface,
-      animation:"fadeIn 0.2s ease"
-    }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 407}}
+const Modal = ({ title, onClose, children, footer, wide=false }) => {
+  // Detect mobile/PWA — full-screen layout; desktop — centered overlay
+  const isMob = typeof useIsMobile === 'function' ? useIsMobile() : false;
+  const isPwa = typeof window !== 'undefined' &&
+    (window.__IS_PWA__ || window.matchMedia('(display-mode: standalone)').matches);
+  const fullScreen = isMob || isPwa;
 
-    /* Header — rispetta la status bar iOS (notch / Dynamic Island) */
-    , React.createElement('div', { style: {
-        paddingTop:"env(safe-area-inset-top, 0px)",
-        background:C.surface,
-        borderBottom:`1px solid ${C.border}`,
-        flexShrink:0,
-        zIndex:2
-      }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 409}}
+  if (fullScreen) {
+    // ── MOBILE / PWA — full-screen come le schede native ────────────────────
+    return React.createElement('div', { style: {
+        position:"fixed", inset:0, zIndex:200,
+        display:"flex", flexDirection:"column",
+        background:C.surface, animation:"fadeIn 0.2s ease"
+      }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 407}}
+
+      /* Header con safe-area per notch/Dynamic Island */
       , React.createElement('div', { style: {
-            display:"flex", justifyContent:"space-between", alignItems:"center",
-            padding:"14px 20px"
-          }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 421}}
-          , React.createElement('h2', { style: {
-              fontFamily:"'Oswald',sans-serif", fontSize:18, fontWeight:600,
-              margin:0, letterSpacing:"0.05em", textTransform:"uppercase", color:C.gold
-            }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 423}}, title)
-          , React.createElement('button', { onClick: onClose, style: {
-              background:"none", border:"none", cursor:"pointer",
-              color:C.textMuted, display:"flex", padding:4, flexShrink:0
-            }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 424}}
+          paddingTop:"env(safe-area-inset-top, 0px)",
+          background:C.surface, borderBottom:`1px solid ${C.border}`, flexShrink:0
+        }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 409}}
+        , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 421}}
+          , React.createElement('h2', { style: {fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,margin:0,letterSpacing:"0.05em",textTransform:"uppercase",color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 423}}, title)
+          , React.createElement('button', { onClick: onClose, style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,display:"flex",padding:4,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 424}}
             , React.createElement(Ic, { n:"x", size:22, stroke:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 426}})
           )
         )
-    )
+      )
+      /* Contenuto scrollabile */
+      , React.createElement('div', { style: {flex:1,overflow:"auto",WebkitOverflowScrolling:"touch",width:"100%",boxSizing:"border-box"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 430}}, children)
+      /* Footer sopra la bottom nav */
+      , footer && React.createElement('div', { style: {flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface,paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 60px)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 433}}, footer)
+    );
+  }
 
-    /* Contenuto scrollabile — occupa tutto lo spazio disponibile */
-    , React.createElement('div', { style: {
-        flex:1, overflow:"auto", WebkitOverflowScrolling:"touch",
-        maxWidth: wide ? 900 : 620,
-        width:"100%", margin:"0 auto", alignSelf:"stretch",
-        boxSizing:"border-box"
-      }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 430}}, children)
-
-    /* Footer fisso con pulsanti — sempre sopra la bottom nav */
-    , footer && React.createElement('div', { style: {
-        flexShrink:0, borderTop:`1px solid ${C.border}`,
-        background:C.surface,
-        paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 60px)"
-      }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 433}}
-      , footer
+  // ── DESKTOP — centered overlay classico ─────────────────────────────────
+  return React.createElement('div', { className: "modal-resp-outer", style: {
+      position:"fixed",inset:0,zIndex:200,
+      display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"
+    }, onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 407}}
+    /* Backdrop */
+    , React.createElement('div', { style: {position:"absolute",inset:0,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",animation:"overlayIn 0.2s ease"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 409}})
+    /* Pannello centrale */
+    , React.createElement('div', { onClick: e=>e.stopPropagation(), className:"modal-resp"+(wide?" modal-wide":""),
+        style: {
+          position:"relative",background:C.surface,border:`1px solid ${C.border}`,
+          borderRadius:16,width:"100%",maxWidth:wide?900:520,
+          maxHeight:"90vh",overflow:"hidden",
+          display:"flex",flexDirection:"column",animation:"fadeUp 0.22s ease",
+          boxSizing:"border-box"
+        }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 411}}
+      /* Header */
+      , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 22px",borderBottom:`1px solid ${C.border}`,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 421}}
+        , React.createElement('h2', { style: {fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,margin:0,letterSpacing:"0.05em",textTransform:"uppercase",color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 423}}, title)
+        , React.createElement('button', { onClick: onClose, style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,display:"flex",padding:4,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 424}}
+          , React.createElement(Ic, { n:"x", size:18, stroke:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 426}})
+        )
+      )
+      /* Contenuto scrollabile */
+      , React.createElement('div', { style: {overflow:"auto",flex:1,WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 430}}, children)
+      /* Footer */
+      , footer && React.createElement('div', { style: {flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 433}}, footer)
     )
-  )
-);
+  );
+};
 
 const Toggle = ({ value, checked, onChange, label }) => (
   React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10,cursor:"pointer"},
