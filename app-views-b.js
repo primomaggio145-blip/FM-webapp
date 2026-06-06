@@ -1790,20 +1790,28 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
 const MobileMoreMenu = ({ current, setView, extraItems, onLogout, onEsciSenzaLogout }) => {
   const [open, setOpen] = useState(false);
   const activeExtra = extraItems.some(i => i.id === current);
+  if (!extraItems || extraItems.length === 0) return null;
+  const btnColor  = activeExtra ? '#ffffff' : C.sidebarText;
+  const iconColor = activeExtra ? '#ffffff' : C.sidebarText;
   return (
     React.createElement(React.Fragment, null
       , React.createElement('button', { onClick: ()=>setOpen(v=>!v),
         style: {flex:1,display:"flex",flexDirection:"column",alignItems:"center",
-          justifyContent:"center",gap:3,border:"none",background:"transparent",
+          justifyContent:"center",gap:3,border:"none",
+          background: activeExtra ? 'rgba(255,255,255,0.15)' : 'transparent',
+          borderRadius: activeExtra ? 8 : 0,
           cursor:"pointer",padding:"6px 2px",
-          color:activeExtra?C.gold:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10680}}
-        , React.createElement(Ic, { n: "grid", size: 20, stroke: activeExtra?C.gold:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10685}})
+          color: btnColor, transition:"all 0.15s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10680}}
+        , React.createElement(Ic, { n: "grid", size: 20, stroke: iconColor, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10685}})
         , React.createElement('span', { style: {fontSize:9,letterSpacing:"0.04em",fontFamily:"'Open Sans',sans-serif",
-          fontWeight:activeExtra?600:400,textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10686}}, "Altro")
+          fontWeight: activeExtra ? 600 : 400, textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10686}}, "Altro")
       )
+      , open && React.createElement('div', { onClick:()=>setOpen(false), style:{position:"fixed",inset:0,zIndex:399,background:"rgba(0,0,0,0.3)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10689}})
       , open && (
-        React.createElement('div', { style: {position:"fixed",bottom:60,left:0,right:0,zIndex:400,
-          background:C.surface,borderTop:`1px solid ${C.border}`,
+        React.createElement('div', { style: {position:"fixed",
+          bottom:"calc(60px + env(safe-area-inset-bottom, 0px))",
+          left:0,right:0,zIndex:400,
+          background:C.surface,borderTop:`1px solid ${C.border}`,borderRadius:"16px 16px 0 0",
           padding:"8px 0",boxShadow:"0 -4px 20px rgba(0,0,0,0.5)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10690}}
           , extraItems.map(item => {
             const active = current === item.id;
