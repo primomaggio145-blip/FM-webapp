@@ -2072,9 +2072,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 
           /* ── NAVBAR ── */
           , React.createElement('header', { style: {background:C.surface,borderBottom:`1px solid ${C.border}`,
-            padding:"0 28px",paddingTop:"env(safe-area-inset-top, 0px)",
+            padding:"0 28px",paddingTop:0,
             display:"flex",alignItems:"center",gap:0,flexShrink:0,
-            minHeight:56,height:"calc(56px + env(safe-area-inset-top, 0px))"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2122}}
+            minHeight:56,height:56}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2122}}
             , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10,height:"100%"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2124}}
               , React.createElement(LogoMark, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 2125}})
               , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 2126}}
