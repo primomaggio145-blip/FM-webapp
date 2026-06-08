@@ -233,7 +233,7 @@ const G = `
   .modal-footer-safe { padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)) !important; }
   /* Su mobile PWA: spinge il contenuto fuori dalla zona della Dynamic Island/notch */
   @media (max-width:767px) {
-    .main-scroll { padding-top: env(safe-area-inset-top, 0px) !important; }
+    .main-scroll { padding-top: 0 !important; }
   }
   /* Nascondi pulsante Sito Web esterno */
   #sito-web-fab, .sito-web-btn, a[href*="futuro-musica"], a[href*="index.html"].fab { display:none!important; }
