@@ -3039,7 +3039,7 @@ const ImpRSToggle = ({k, label, rs, ac, setRS}) => {
   );
 };
 
-const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: propSetPanels, ruolo: propRuolo, setRuolo: propSetRuolo }) => {
+const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: propSetPanels, ruolo: propRuolo, setRuolo: propSetRuolo, anniScolastici: propAnni, setAnniScolastici: propSetAnni }) => {
   const [draft, setDraft] = useState(config||CONFIG_DEFAULT);
   // NON aggiornare draft quando config cambia dall'esterno — altrimenti handleSave viene interrotto
   // Il draft viene aggiornato solo dall'utente che modifica i campi
@@ -3185,6 +3185,146 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         , React.createElement(Input,{label:"Anno scolastico", value:draft.annoScolastico||"", onChange:e=>setD("annoScolastico",e.target.value), placeholder:"2024/2025"})
         , React.createElement(Input,{label:"Nota ricevuta", value:draft.notaRicevuta||"", onChange:e=>setD("notaRicevuta",e.target.value), placeholder:"Ricevuta non fiscale..."})
       )
+    )
+
+    /* ── Sale lezioni ──────────────────────────────────────────────────────── */
+    , React.createElement(ImpSection, {title:"Sale e aule", icon:"home"}
+      , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
+          'Gestisci le sale dove si svolgono le lezioni. Le sale appaiono nel form di creazione lezione.')
+      , React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8,marginBottom:10}}
+        , (draft.sale||[]).map((sala, i) =>
+            React.createElement('div', {key:i, style:{display:'flex',alignItems:'center',gap:8}}
+              , React.createElement('input', {type:'text', value:sala, placeholder:'Es. Sala A, Studio 1...',
+                  onChange: e => {const ns=[...(draft.sale||[])]; ns[i]=e.target.value; setD('sale',ns);},
+                  style:{flex:1,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif"}})
+              , React.createElement('button', {onClick:()=>setD('sale',(draft.sale||[]).filter((_,j)=>j!==i)),
+                  style:{padding:'6px 10px',borderRadius:6,border:`1px solid ${C.redBorder}`,background:C.redBg,color:C.red,cursor:'pointer',fontSize:12}}, '✕')
+            )
+          )
+      )
+      , React.createElement('button', {
+          onClick:()=>setD('sale',[...(draft.sale||[]),'Sala A'.replace('A',String.fromCharCode(65+(draft.sale||[]).length))]),
+          style:{padding:'7px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:12,fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:6}}
+        , React.createElement(Ic,{n:'plus',size:13,stroke:C.textMuted}), '+ Aggiungi sala'
+      )
+    )
+
+    /* ── Anni scolastici ────────────────────────────────────────────────────── */
+    , React.createElement(ImpSection, {title:"Archivio anni scolastici", icon:"cal"}
+      , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
+          'Gestisci gli anni scolastici. Imposta quello attivo e i mesi in cui si svolgono le lezioni.')
+      , (() => {
+          const MESI_LABEL = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+          const anni = propAnni || [];
+          const annoAttivo = draft.annoInizioAttivo || (anni[0] && anni[0].annoInizio) || new Date().getFullYear();
+
+          const handleSetAttivo = async (annoInizio) => {
+            setD('annoInizioAttivo', annoInizio);
+            const sb = window.supabaseClient; if (!sb) return;
+            await sb.from('anni_scolastici').update({attivo:false}).neq('anno_inizio', annoInizio);
+            await sb.from('anni_scolastici').update({attivo:true}).eq('anno_inizio', annoInizio);
+          };
+
+          const handleToggleMese = async (annoInizio, mese) => {
+            const anno = anni.find(a => a.annoInizio === annoInizio); if (!anno) return;
+            const mesiAttivi = anno.mesiAttivi || [];
+            const nuovi = mesiAttivi.includes(mese) ? mesiAttivi.filter(m=>m!==mese) : [...mesiAttivi, mese].sort((a,b)=>a-b);
+            if (propSetAnni) propSetAnni(prev => prev.map(a => a.annoInizio===annoInizio ? {...a, mesiAttivi:nuovi} : a));
+            const sb = window.supabaseClient; if (!sb) return;
+            await sb.from('anni_scolastici').update({mesi_attivi: nuovi}).eq('anno_inizio', annoInizio);
+          };
+
+          const handleAddAnno = async () => {
+            const ultimoAnno = anni.reduce((max, a) => Math.max(max, a.annoInizio||0), new Date().getFullYear()-1);
+            const nuovoInizio = ultimoAnno + 1;
+            const nuovoAnno = { annoInizio: nuovoInizio, annoFine: nuovoInizio+1, mesiAttivi:[0,1,2,3,4,8,9,10,11], attivo:false };
+            if (propSetAnni) propSetAnni(prev => [...prev, nuovoAnno]);
+            const sb = window.supabaseClient; if (!sb) return;
+            await sb.from('anni_scolastici').upsert({anno_inizio:nuovoInizio, anno_fine:nuovoInizio+1, mesi_attivi:[0,1,2,3,4,8,9,10,11], attivo:false});
+          };
+
+          return React.createElement('div', null
+            , anni.length === 0 && React.createElement('div',{style:{fontSize:13,color:C.textDim,fontStyle:'italic',marginBottom:12}},'Nessun anno scolastico configurato. Aggiungine uno.')
+
+            , anni.slice().sort((a,b)=>(b.annoInizio||0)-(a.annoInizio||0)).map(anno => {
+                const inizio = anno.annoInizio || new Date().getFullYear();
+                const fine   = anno.annoFine   || inizio+1;
+                const label  = `${inizio}/${fine}`;
+                const isAttivo = String(inizio) === String(annoAttivo);
+                const mesiAttivi = anno.mesiAttivi || [];
+
+                // Mesi nell'ordine scolastico: set(8), ott(9), nov(10), dic(11), gen(0), feb(1), mar(2), apr(3), mag(4), giu(5), lug(6), ago(7)
+                const ORDINE_SCOLASTICO = [8,9,10,11,0,1,2,3,4,5,6,7];
+
+                return React.createElement('div', {key:inizio, style:{background:isAttivo?`${C.teal}0A`:C.bg, border:`1px solid ${isAttivo?C.teal:C.border}`, borderRadius:10, padding:'14px 16px', marginBottom:10}}
+                  , React.createElement('div', {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}
+                    , React.createElement('div', null
+                      , React.createElement('span', {style:{fontSize:15,fontWeight:700,color:isAttivo?C.teal:C.text,fontFamily:"'Oswald',sans-serif"}}, label)
+                      , isAttivo && React.createElement('span',{style:{marginLeft:8,fontSize:10,background:C.teal,color:'#fff',borderRadius:20,padding:'2px 8px',fontWeight:600}},'ATTIVO')
+                    )
+                    , !isAttivo && React.createElement('button', {
+                        onClick: ()=>handleSetAttivo(inizio),
+                        style:{padding:'5px 12px',borderRadius:6,border:`1px solid ${C.teal}`,background:C.tealBg,color:C.teal,cursor:'pointer',fontSize:11,fontWeight:600}
+                      }, '→ Imposta attivo')
+                  )
+                  /* Mesi nell'ordine scolastico con anno di riferimento */
+                  , React.createElement('div', {style:{display:'flex',flexWrap:'wrap',gap:5}}
+                    , ORDINE_SCOLASTICO.map(m => {
+                        const annoRif = m >= 8 ? inizio : fine;
+                        const sel = mesiAttivi.includes(m);
+                        return React.createElement('button', {key:m, onClick:()=>handleToggleMese(inizio,m),
+                          style:{padding:'4px 8px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.teal:C.bg,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:11,fontFamily:"'Open Sans',sans-serif"}}
+                          , MESI_LABEL[m].slice(0,3)+' '+String(annoRif).slice(2)
+                        );
+                      })
+                  )
+                );
+              })
+
+            , React.createElement('button', {onClick:handleAddAnno,
+                style:{marginTop:6,padding:'7px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:12,fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:6}}
+              , React.createElement(Ic,{n:'plus',size:13,stroke:C.textMuted}), '+ Aggiungi anno scolastico'
+            )
+          );
+        })()
+    )
+
+    /* ── Contatore ricevute ─────────────────────────────────────────────────── */
+    , React.createElement(ImpSection, {title:"Contatore ricevute", icon:"receipt"}
+      , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
+          'Il contatore si azzera automaticamente ogni 1° gennaio. Puoi impostare il numero di partenza per l\'anno corrente.')
+      , (() => {
+          const annoCorrente = new Date().getFullYear();
+          const contatoriAnni = draft.contatoriRicevute || {};
+          const annoSolare = String(annoCorrente);
+          const valoreCorrente = contatoriAnni[annoSolare] ?? draft.progressivoRicevute ?? 1;
+
+          return React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:14}}
+            /* Anno corrente */
+            , React.createElement('div', {style:{background:C.tealBg,border:`1px solid ${C.tealBorder}`,borderRadius:10,padding:'14px 16px'}}
+              , React.createElement('div',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:6}},'📋 Anno solare corrente: ',annoCorrente)
+              , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:12}}
+                , React.createElement('div',{style:{fontSize:12,color:C.textMuted}},'Prossimo n° ricevuta:')
+                , React.createElement('input',{type:'number',min:1,value:valoreCorrente,
+                    onChange: e => {
+                      const v = parseInt(e.target.value)||1;
+                      const nuovi = {...(draft.contatoriRicevute||{}), [annoSolare]: v};
+                      setD('contatoriRicevute', nuovi);
+                      setD('progressivoRicevute', v);
+                    },
+                    style:{width:90,padding:'6px 10px',borderRadius:7,border:`1px solid ${C.teal}`,background:C.surface,color:C.text,fontSize:14,fontWeight:700,textAlign:'center',fontFamily:"'Oswald',sans-serif"}})
+              )
+            )
+            /* Anni precedenti */
+            , Object.keys(contatoriAnni).filter(a=>a!==annoSolare).sort((a,b)=>b-a).map(anno =>
+                React.createElement('div', {key:anno, style:{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8}}
+                  , React.createElement('span',{style:{fontSize:12,color:C.textMuted,minWidth:60}},'Anno '+anno)
+                  , React.createElement('span',{style:{fontSize:13,color:C.textDim}},'Ultimo n° emesso: ')
+                  , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}},contatoriAnni[anno])
+                )
+              )
+          );
+        })()
     )
 
     , React.createElement(ImpSection, {title:"Stile grafico app", icon:"palette"}

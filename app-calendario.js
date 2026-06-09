@@ -2458,7 +2458,8 @@ const DAYS_FULL   = ["Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sa
 const MONTHS      = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 const HOURS       = Array.from({length:15},(_,i)=>`${(i+8).toString().padStart(2,"0")}:00`);
 const STUDENTS_LIST = ["Sofia Marchetti","Luca Ferrara","Emma Conti","Marco Ricci","Giulia Romano","Alessandro Gallo"];
-const ROOMS       = ["Sala A","Sala B","Sala C","Sala Grande","Studio 1"];
+// ROOMS è ora dinamico: usa le sale configurate nelle Impostazioni, con fallback
+const ROOMS       = () => (window.__FM_CONFIG__&&window.__FM_CONFIG__.sale&&window.__FM_CONFIG__.sale.length>0) ? window.__FM_CONFIG__.sale : ["Sala A","Sala B","Sala C","Sala Grande","Studio 1"];
 const RECURRENCE_OPTS = ["Nessuna","Ogni settimana","Ogni 2 settimane","Ogni mese"];
 const DIFFICULTY_OPTS = ["Principiante","Elementare","Intermedio","Avanzato","Professionale"];
 const TONALITY_OPTS   = [
@@ -2910,7 +2911,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     const set = new Set();
     (_studentsRaw||[]).forEach(s => { /* niente sale dagli studenti */ });
     // Usa ROOMS come base + aggiungi eventuali sale dai corsi
-    ROOMS.forEach(r => set.add(r));
+    ROOMS().forEach(r => set.add(r));
     return [...set];
   }, []);
 
