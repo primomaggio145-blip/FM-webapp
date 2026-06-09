@@ -1303,7 +1303,11 @@ const CONFIG_DEFAULT = {
   annoInizioAttivo: annoScolasticoAttivo,
   inizioAnno:`${ANNO}-09-01`, fineAnno:`${ANNO+1}-06-30`, dataSaggio:`${ANNO+1}-06-07`,
   mesiAttivi:[0,1,2,3,4,8,9,10,11],
-  progressivoRicevute:29,
+  progressivoRicevute:1,
+  // Sale dove si svolgono le lezioni
+  sale: ['Sala A', 'Sala B', 'Studio'],
+  // Contatore ricevute per anno solare: { "2025": 42, "2026": 1 }
+  contatoriRicevute: {},
   // Chiusure personalizzate: array di {da, a, etichetta}
   giorniChiusi: [],
   // Festività nazionali: oggetto {data: true/false} (true=chiuso, false=aperto)
@@ -1328,6 +1332,7 @@ const CONFIG_DEFAULT = {
     labelCassiere: "Il cassiere / responsabile",
   },
 };
+
 
 
 // ─── NOTIFICATION BELL ────────────────────────────────────────────────────────
