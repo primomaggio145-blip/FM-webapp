@@ -900,6 +900,54 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
     w.document.close();
   };
 
+  const handleExportPdf = async () => {
+    // Usa la Print API con destinazione file su browser moderni
+    // Su iOS/Safari → apre dialog stampa → "Salva come PDF"
+    // Su Chrome/Edge → usa jsPDF o print-to-PDF
+    try {
+      // Prova con jsPDF se disponibile
+      if (window.jspdf || window.jsPDF) {
+        const jsPDF = window.jspdf ? window.jspdf.jsPDF : window.jsPDF;
+        const doc = new jsPDF({ unit:'mm', format:'a4' });
+        const html = buildHtml();
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:210mm;height:297mm;border:none';
+        document.body.appendChild(iframe);
+        iframe.contentDocument.write(html);
+        iframe.contentDocument.close();
+        setTimeout(() => {
+          doc.html(iframe.contentDocument.body, {
+            callback: (doc2) => {
+              doc2.save(`Ricevuta_${numRic.replace('/','_')}_${intestatario.replace(/\s+/g,'_')}.pdf`);
+              document.body.removeChild(iframe);
+            },
+            x:0, y:0, width:210, windowWidth:794
+          });
+        }, 500);
+      } else {
+        // Fallback: apri in popup e stampa
+        const w = window.open("","_blank","width=794,height=1123");
+        if(!w) { alert("Abilita i popup per esportare il PDF"); return; }
+        // Modifica l'HTML per non auto-stampare ma salvare come PDF
+        const pdfHtml = buildHtml().replace(
+          'window.onload=function(){window.print();}',
+          `window.onload=function(){
+            const btn=document.createElement('button');
+            btn.innerText='Salva come PDF';
+            btn.style='position:fixed;top:12px;right:12px;padding:10px 18px;background:#1a4fa0;color:#fff;border:none;borderRadius:6px;cursor:pointer;fontSize:14px;zIndex:9999;fontFamily:Arial';
+            btn.onclick=function(){window.print();};
+            document.body.insertBefore(btn,document.body.firstChild);
+          }`
+        );
+        w.document.write(pdfHtml);
+        w.document.close();
+      }
+    } catch(e) {
+      console.warn('[FM] exportPdf error:', e);
+      handlePrint();
+    }
+  };
+
   const rows = [
     {k:"Ricevuta n°", v:numRic},
     {k:"Data stampa",  v:dataStampa},
@@ -982,6 +1030,9 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
     , React.createElement('div', {style:{padding:"14px 24px",borderTop:`1px solid ${C.border}`,
         display:"flex",justifyContent:"flex-end",gap:10,background:C.surface}}
       , React.createElement(Btn, {variant:"secondary", onClick:onClose}, "Chiudi")
+      , React.createElement(Btn, {variant:"secondary", onClick:handleExportPdf}
+        , React.createElement(Ic,{n:"download",size:14,stroke:C.textMuted}), " Esporta PDF"
+      )
       , React.createElement(Btn, {onClick:handlePrint}
         , React.createElement(Ic,{n:"receipt",size:14,stroke:"#ffffff"}), " Stampa ricevuta"
       )
