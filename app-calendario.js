@@ -8459,6 +8459,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
     anno: new Date().getFullYear(), data: yyyymmdd(today),
     metodo: "Bonifico bancario", desc: "", note: "",
     stato: "pagato",  // default: registrare un'entrata = già pagata
+    noRicevuta: false, // default: emetti ricevuta
   });
   const [err, setErr] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
@@ -8619,9 +8620,19 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
         )
         , React.createElement(Textarea, { label: "Note", value: f.note, onChange: e=>set("note",e.target.value), placeholder: "Note aggiuntive..." , __self: this, __source: {fileName: _jsxFileName, lineNumber: 6788}})
       )
-      , React.createElement('div', { style: {padding:"14px 22px",borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"flex-end",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6790}}
-        , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6791}}, "Annulla")
-        , React.createElement(Btn, { onClick: handleSave, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6792}}, React.createElement(Ic, { n: "check", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6792}}), _optionalChain([initial, 'optionalAccess', _58 => _58.id])?"Salva modifiche":"Registra entrata")
+      , React.createElement('div', { style: {padding:"14px 22px",borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6790}}
+        /* Toggle no_ricevuta */
+        , React.createElement('label', {style:{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:12,color:f.noRicevuta?C.textDim:C.text,userSelect:'none'}}
+          , React.createElement('div', {onClick:()=>set('noRicevuta',!f.noRicevuta),
+              style:{width:36,height:20,borderRadius:10,background:f.noRicevuta?C.border:C.teal,position:'relative',cursor:'pointer',transition:'background .15s',flexShrink:0}}
+            , React.createElement('div',{style:{position:'absolute',top:3,left:f.noRicevuta?3:19,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}})
+          )
+          , React.createElement('span',null, f.noRicevuta ? '❌ Nessuna ricevuta' : '🧾 Emetti ricevuta')
+        )
+        , React.createElement('div',{style:{display:'flex',gap:10}}
+          , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6791}}, "Annulla")
+          , React.createElement(Btn, { onClick: handleSave, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6792}}, React.createElement(Ic, { n: "check", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6792}}), _optionalChain([initial, 'optionalAccess', _58 => _58.id])?"Salva modifiche":"Registra entrata")
+        )
       )
     )
   );
@@ -8706,14 +8717,26 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
     const handleAdd    = d => { setSpese(p=>[...p,{...d,id:uid()}]); closeModal(); };
     const handleEdit   = d => { setSpese(p=>p.map(x=>x.id===d.id?{...x,...d}:x)); closeModal(); };
     const handleDel    = () => { setSpese(p=>p.filter(x=>x.id!==_optionalChain([selSpesa, 'optionalAccess', _60 => _60.id]))); closeModal(); };
-    const handleAddQ   = d => {
+    const handleAddQ   = async d => {
       const anno = d.anno || new Date().getFullYear();
-      const progressivo = config.progressivoRicevute || 1;
-      const numRicevuta = String(progressivo).padStart(3,"0") + "/" + anno;
-      // Normalizza: il form usa 'data', toDB.quote usa 'dataPagamento'
       const dataPagamento = d.dataPagamento || d.data || '';
-      setEntrate(p=>[...p,{...d, id:uid(), numRicevuta, dataPagamento}]);
-      setConfig(p=>({...p, progressivoRicevute: progressivo + 1}));
+      let numRicevuta = '';
+      if (!d.noRicevuta) {
+        // Usa contatore per anno solare
+        const contatoriRicevute = config.contatoriRicevute || {};
+        const annoKey = String(anno);
+        const progressivo = contatoriRicevute[annoKey] ?? config.progressivoRicevute ?? 1;
+        numRicevuta = String(progressivo).padStart(3,"0") + "/" + anno;
+        // Aggiorna contatore
+        const nuoviContatori = {...contatoriRicevute, [annoKey]: progressivo + 1};
+        setConfig(p=>({...p, contatoriRicevute: nuoviContatori, progressivoRicevute: progressivo + 1}));
+        // Salva contatore nel DB config
+        try {
+          const sb = window.supabaseClient;
+          if (sb) await sb.from('sito_config').upsert({chiave:'contatoriRicevute', valore: JSON.stringify(nuoviContatori)});
+        } catch(e) { console.warn('[FM] save contatori:', e?.message); }
+      }
+      setEntrate(p=>[...p,{...d, id:uid(), numRicevuta, dataPagamento, noRicevuta: d.noRicevuta||false}]);
       closeModal();
     };
     const handleEditQ  = d => { setEntrate(p=>p.map(x=>x.id===d.id?{...x,...d, dataPagamento: d.data||d.dataPagamento||x.dataPagamento}:x)); closeModal(); };
