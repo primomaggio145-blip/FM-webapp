@@ -222,6 +222,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const [sortKeyDC, sortDirDC, handleSortDC, sortFnDC] = useSortable("mese", "asc");
   // Mostra/nascondi importi (per il docente loggato)
   const [showAmountsDoc, setShowAmountsDoc] = useState(false);
+  // Selettore anno scolastico per admin
+  const [annoSelDoc, setAnnoSelDoc] = useState(annoInizio);
   // Impostazioni docente (dashboard panels + profilo personale)
   const [docSettings, setDocSettings] = useState({
     panels: { lezioni:true, allievi:true, compenso:true, repertorio:true, allegati:true },
@@ -309,10 +311,40 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
         )
       )
 
+      /* ── Selettore anno scolastico ── */
+      , ruoloDocView==="admin" && React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8,marginBottom:16,flexWrap:'wrap'}}
+          , React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontWeight:600,letterSpacing:'.07em',textTransform:'uppercase'}},'Anno scolastico:')
+          , (() => {
+              const anniDisp = window.__FM_DATA__&&window.__FM_DATA__.anniScolastici
+                ? window.__FM_DATA__.anniScolastici.slice().sort((a,b)=>(b.annoInizio||0)-(a.annoInizio||0))
+                : [{annoInizio:annoInizio, annoFine:annoInizio+1}];
+              return anniDisp.map(a => {
+                const label = `${a.annoInizio}/${String(a.annoFine||a.annoInizio+1).slice(2)}`;
+                const sel = String(a.annoInizio)===String(annoSelDoc);
+                return React.createElement('button',{key:a.annoInizio, onClick:()=>setAnnoSelDoc(a.annoInizio),
+                  style:{padding:'4px 12px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.teal:C.bg,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:12,fontWeight:sel?700:400,fontFamily:"'Open Sans',sans-serif"}}
+                  , label, sel&&' ●');
+              });
+            })()
+        )
+
       , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9969}}
         , (ruoloDocView==="docente"
           ? (()=>{ const did=(_appUserDocView&&_appUserDocView.docenteId)||null; if(did) return (docenti||[]).filter(d=>String(d.id)===String(did)); const ln=(_appUserDocView&&_appUserDocView.nome)||""; return (docenti||[]).filter(d=>d.teacherKey===ln||(d.nome||"").toLowerCase().includes(ln.toLowerCase())); })()
-          : (docenti||[])).map(d=>{
+          // Admin: filtra per anno scolastico (docenti con lezioni in quell'anno)
+          : (() => {
+              const tuttiDocenti = docenti||[];
+              const docConLezioni = new Set(
+                lessons.filter(l => {
+                  const [ly] = (l.date||'').split('-').map(Number);
+                  const lm = parseInt((l.date||'').split('-')[1]||'0');
+                  return (lm>=9 && ly===annoSelDoc) || (lm<=8 && ly===annoSelDoc+1);
+                }).map(l=>l.teacher||l.docente||'').filter(Boolean)
+              );
+              if (docConLezioni.size===0) return tuttiDocenti;
+              return tuttiDocenti.filter(d => docConLezioni.has(d.nome||'') || docConLezioni.has(d.teacherKey||''));
+            })()
+        ).map(d=>{
           const all = allievi(d);
           return (
             React.createElement('div', { key: d.id, onClick: ()=>{setSelected(d);setTab("profilo");},

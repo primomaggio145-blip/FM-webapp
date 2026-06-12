@@ -2234,6 +2234,32 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const [view,     setView]     = useState(_ruoloAV==="allievo" ? "detail" : "list");
   const [selected, setSelected] = useState(_ruoloAV==="allievo" ? (students[0]||null) : null);
   const [modal,    setModal]    = useState(null);
+  // ── Selettore anno scolastico ────────────────────────────────────────────────
+  const anniDisp = React.useMemo(() => {
+    const anni = window.__FM_DATA__&&window.__FM_DATA__.anniScolastici ? window.__FM_DATA__.anniScolastici : [];
+    if (anni.length > 0) return anni.slice().sort((a,b)=>(b.annoInizio||0)-(a.annoInizio||0));
+    // Fallback: genera anni dagli anni presenti nelle entrate
+    const anniUniq = [...new Set(entrate.map(e=>e.annoScolastico||e.anno_scolastico).filter(Boolean))].sort((a,b)=>b-a);
+    return anniUniq.length > 0 ? anniUniq.map(a=>({annoInizio:a, annoFine:a+1})) : [{annoInizio: annoInizioAttivo||new Date().getFullYear(), annoFine:(annoInizioAttivo||new Date().getFullYear())+1}];
+  }, [entrate, annoInizioAttivo]);
+  const [annoSel, setAnnoSel] = useState(annoInizioAttivo || (anniDisp[0]&&anniDisp[0].annoInizio) || new Date().getFullYear());
+  
+  // Filtra allievi per anno scolastico selezionato (chi ha quote in quell'anno)
+  const studentsAnno = React.useMemo(() => {
+    if (_ruoloAV !== 'admin') return students; // allievo/docente vedono solo se stessi
+    const idConQuote = new Set(
+      entrate
+        .filter(e => {
+          const as = e.annoScolastico || e.anno_scolastico;
+          return String(as) === String(annoSel);
+        })
+        .map(e => e.studentId || e.studente_id)
+        .filter(Boolean)
+        .map(String)
+    );
+    if (idConQuote.size === 0) return students; // se nessun filtro, mostra tutti
+    return students.filter(s => idConQuote.has(String(s.id)));
+  }, [students, entrate, annoSel, _ruoloAV]);
 
   // ── Auto-seleziona l'allievo loggato appena i dati Supabase arrivano ──────────
   React.useEffect(() => {
@@ -2337,9 +2363,25 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             onSelectAllievo: (s) => { setSelected(s); setView('detail'); },
           })
 
+        /* ── Selettore Anno Scolastico (solo admin, solo in vista lista) ── */
+        , view==="list" && _ruoloAV==="admin" && anniDisp.length > 1 && React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8,marginBottom:12,flexWrap:'wrap'}}
+            , React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontWeight:600,letterSpacing:'.07em',textTransform:'uppercase'}},'Anno scolastico:')
+            , anniDisp.map(a => {
+                const label = `${a.annoInizio}/${String(a.annoFine||a.annoInizio+1).slice(2)}`;
+                const sel = String(a.annoInizio) === String(annoSel);
+                return React.createElement('button',{key:a.annoInizio, onClick:()=>setAnnoSel(a.annoInizio),
+                  style:{padding:'4px 12px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.teal:C.bg,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:12,fontWeight:sel?700:400,fontFamily:"'Open Sans',sans-serif"}}
+                  , label, sel && ' ●'
+                );
+              })
+            , React.createElement('span',{style:{fontSize:11,color:C.textDim}}
+              , `(${studentsAnno.length} alliev${studentsAnno.length===1?'o':'i'})`
+            )
+          )
+
         , view==="list" && (
           React.createElement(StudentList, {
-            students: students, courses: courses,
+            students: studentsAnno, courses: courses,
             onSelect: s=>{setSelected(s);setView("detail");},
             onAdd: _ruoloAV==="admin" ? ()=>setModal("add") : undefined,
             onEdit: _ruoloAV==="admin" ? s=>{setSelected(s);setModal("edit");} : undefined,
@@ -2354,7 +2396,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             lessons: lessons,
             entrate: _ruoloAV==="docente" ? [] : entrate,
             setEntrate: _ruoloAV==="docente" ? undefined : setEntrate,
-            annoInizioAttivo: annoInizioAttivo,
+            annoInizioAttivo: annoSel,
             config: propConfig,
             setConfig: propSetConfigAV,
             userRuolo: _ruoloAV,
