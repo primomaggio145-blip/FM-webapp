@@ -3221,7 +3221,8 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
           const handleSetAttivo = async (annoInizio) => {
             setD('annoInizioAttivo', annoInizio);
             const sb = window.supabaseClient; if (!sb) return;
-            await sb.from('anni_scolastici').update({attivo:false}).neq('anno_inizio', annoInizio);
+            // Prima disattiva tutti, poi attiva quello scelto
+            await sb.from('anni_scolastici').update({attivo:false}).not('anno_inizio','eq',annoInizio);
             await sb.from('anni_scolastici').update({attivo:true}).eq('anno_inizio', annoInizio);
           };
 
