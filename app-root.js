@@ -241,7 +241,10 @@ function App() {
         });
         // Estrai chiavi speciali da configFromDB (non sono campi config normali)
         const anniScolasticiDB = (sANNI||[]).map(r => ({
-          id: r.id, label: r.label, annoInizio: r.anno_inizio, stato: r.stato, note: r.note||'',
+          id: r.id, label: r.label||`${r.anno_inizio}/${(r.anno_fine||(r.anno_inizio+1))}`,
+          annoInizio: r.anno_inizio, annoFine: r.anno_fine||(r.anno_inizio+1),
+          mesiAttivi: Array.isArray(r.mesi_attivi) ? r.mesi_attivi : [0,1,2,3,4,8,9,10,11],
+          attivo: r.attivo||false, stato: r.stato, note: r.note||'',
         }));
         if (configFromDB.anniScolastici) delete configFromDB.anniScolastici;
         const dashboardPanelsDB = (configFromDB.dashboardPanels && typeof configFromDB.dashboardPanels === 'object') ? configFromDB.dashboardPanels : null;
