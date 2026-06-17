@@ -246,6 +246,13 @@ function App() {
           mesiAttivi: Array.isArray(r.mesi_attivi) ? r.mesi_attivi : [0,1,2,3,4,8,9,10,11],
           attivo: r.attivo||false, stato: r.stato, note: r.note||'',
         }));
+        // annoInizioAttivo: usa l'anno con attivo=true come fonte di verità
+        const annoAttivoFromDB = (sANNI||[]).find(r => r.attivo === true);
+        if (annoAttivoFromDB) {
+          configFromDB.annoInizioAttivo = annoAttivoFromDB.anno_inizio;
+        } else if (configFromDB.annoInizioAttivo) {
+          configFromDB.annoInizioAttivo = parseInt(configFromDB.annoInizioAttivo) || configFromDB.annoInizioAttivo;
+        }
         if (configFromDB.anniScolastici) delete configFromDB.anniScolastici;
         const dashboardPanelsDB = (configFromDB.dashboardPanels && typeof configFromDB.dashboardPanels === 'object') ? configFromDB.dashboardPanels : null;
         if (dashboardPanelsDB) delete configFromDB.dashboardPanels;
@@ -3224,9 +3231,17 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
           const handleSetAttivo = async (annoInizio) => {
             setD('annoInizioAttivo', annoInizio);
             const sb = window.supabaseClient; if (!sb) return;
-            // Disattiva TUTTI (nessun filtro), poi attiva solo quello scelto
+            // Disattiva TUTTI, poi attiva quello scelto
             await sb.from('anni_scolastici').update({attivo:false}).gt('anno_inizio', 0);
             await sb.from('anni_scolastici').update({attivo:true}).eq('anno_inizio', annoInizio);
+            // Salva anche nel config così persiste al ricaricamento
+            await sb.from('sito_config').upsert(
+              {chiave:'annoInizioAttivo', valore: String(annoInizio)},
+              {onConflict:'chiave'}
+            );
+            // Aggiorna anche lo sharedConfig globale
+            if (setConfig) setConfig(p => ({...p, annoInizioAttivo: annoInizio}));
+            showToast && showToast(true, `Anno scolastico ${annoInizio}/${annoInizio+1} impostato come attivo ✅`);
           };
 
           const handleToggleMese = async (annoInizio, mese) => {
