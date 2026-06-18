@@ -2208,7 +2208,137 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
   );
 };
 
-const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV }) => {
+// ─── MODAL IMPORTA ISCRIZIONI DA ANNO PRECEDENTE ─────────────────────────────
+const ImportaIscrizioniModal = ({ annoCorrente, anniDisp, allStudents, studentsNonIscritti, courses, docenti, iscrizioniAnno, setIscrizioniAnno, onClose }) => {
+  const annoPrecedenteDefault = (anniDisp.find(a=>a.annoInizio < annoCorrente)||{}).annoInizio || annoCorrente-1;
+  const [annoOrigine, setAnnoOrigine] = useState(annoPrecedenteDefault);
+  const [selezionati, setSelezionati] = useState({}); // {studentId: {corsoId, corsoNome, docenteId, docenteNome, checked}}
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+
+  // Allievi iscritti nell'anno di origine, esclusi quelli già iscritti nell'anno corrente
+  const idGiaIscrittiCorrente = new Set(iscrizioniAnno.filter(i=>String(i.annoInizio)===String(annoCorrente)).map(i=>String(i.studentId)));
+  const iscrittiOrigine = iscrizioniAnno.filter(i => String(i.annoInizio)===String(annoOrigine) && !idGiaIscrittiCorrente.has(String(i.studentId)));
+
+  // Inizializza selezionati quando cambia annoOrigine
+  React.useEffect(() => {
+    const init = {};
+    iscrittiOrigine.forEach(i => {
+      const stu = allStudents.find(s=>String(s.id)===String(i.studentId));
+      if (!stu) return;
+      init[i.studentId] = {
+        checked: true,
+        corsoId: i.corsoId||'', corsoNome: i.corsoNome||'',
+        docenteId: i.docenteId||'', docenteNome: i.docenteNome||'',
+      };
+    });
+    setSelezionati(init);
+  }, [annoOrigine]);
+
+  const filtered = iscrittiOrigine.filter(i => {
+    const stu = allStudents.find(s=>String(s.id)===String(i.studentId));
+    if (!stu) return false;
+    if (!search) return true;
+    return (stu.name||stu.nome||'').toLowerCase().includes(search.toLowerCase());
+  });
+
+  const toggleStudent = (studentId) => {
+    setSelezionati(p => ({...p, [studentId]: {...p[studentId], checked: !p[studentId]?.checked}}));
+  };
+  const updateField = (studentId, field, value, label) => {
+    setSelezionati(p => ({...p, [studentId]: {...p[studentId], [field]: value, [field.replace('Id','Nome')]: label}}));
+  };
+
+  const handleImporta = async () => {
+    const daImportare = Object.entries(selezionati).filter(([_,v])=>v.checked);
+    if (daImportare.length === 0) { onClose(); return; }
+    setSaving(true);
+    const sb = window.supabaseClient;
+    const nuoveIscrizioni = [];
+    for (const [studentId, v] of daImportare) {
+      const row = {
+        studente_id: parseInt(studentId)||studentId,
+        anno_inizio: annoCorrente,
+        corso_id: v.corsoId||null, corso_nome: v.corsoNome||'',
+        docente_id: v.docenteId||null, docente_nome: v.docenteNome||'',
+        data_iscrizione: yyyymmdd(new Date()),
+      };
+      nuoveIscrizioni.push(row);
+    }
+    try {
+      if (sb) {
+        const { data, error } = await sb.from('iscrizioni_anno').upsert(nuoveIscrizioni, {onConflict:'studente_id,anno_inizio'}).select();
+        if (error) { console.warn('[FM] import iscrizioni error:', error.message); alert('Errore: '+error.message); setSaving(false); return; }
+        // Aggiorna stato locale con le righe inserite (con id dal DB)
+        const nuoveLocali = (data||nuoveIscrizioni).map(r => ({
+          id: r.id||uid(), studentId: r.studente_id||r.studentId, annoInizio: r.anno_inizio||annoCorrente,
+          corsoId: r.corso_id||r.corsoId||'', corsoNome: r.corso_nome||r.corsoNome||'',
+          docenteId: r.docente_id||r.docenteId||'', docenteNome: r.docente_nome||r.docenteNome||'',
+          dataIscrizione: r.data_iscrizione||yyyymmdd(new Date()),
+        }));
+        setIscrizioniAnno(p => [...p, ...nuoveLocali]);
+      }
+    } catch(e) { console.warn('[FM] import exception:', e?.message); }
+    setSaving(false);
+    onClose();
+  };
+
+  return React.createElement(Modal, {title:"Importa iscrizioni da anno precedente", onClose, wide:true}
+    , React.createElement('div', {style:{padding:"20px 24px"}}
+      /* Selettore anno origine */
+      , React.createElement('div', {style:{marginBottom:16}}
+        , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:6}},'Importa da anno scolastico:')
+        , React.createElement('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}}
+          , anniDisp.filter(a=>a.annoInizio < annoCorrente).map(a => {
+              const label = `${a.annoInizio}/${String(a.annoFine||a.annoInizio+1).slice(2)}`;
+              const sel = String(a.annoInizio)===String(annoOrigine);
+              return React.createElement('button',{key:a.annoInizio, onClick:()=>setAnnoOrigine(a.annoInizio),
+                style:{padding:'5px 14px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.teal:C.bg,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:13,fontWeight:sel?700:400}}, label);
+            })
+        )
+      )
+      , React.createElement(Input,{placeholder:"Cerca allievo...", value:search, onChange:e=>setSearch(e.target.value), style:{marginBottom:14}})
+      , filtered.length === 0
+        ? React.createElement('div',{style:{padding:'30px 0',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo trovato in questo anno (o già tutti importati)')
+        : React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8,maxHeight:'50vh',overflowY:'auto'}}
+          , filtered.map(i => {
+              const stu = allStudents.find(s=>String(s.id)===String(i.studentId));
+              if (!stu) return null;
+              const sel = selezionati[i.studentId] || {checked:false, corsoId:i.corsoId, corsoNome:i.corsoNome, docenteId:i.docenteId, docenteNome:i.docenteNome};
+              return React.createElement('div', {key:i.studentId, style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',background:sel.checked?C.tealBg:C.bg,border:`1px solid ${sel.checked?C.tealBorder:C.border}`,borderRadius:10}}
+                , React.createElement('input',{type:'checkbox', checked:!!sel.checked, onChange:()=>toggleStudent(i.studentId), style:{width:18,height:18,cursor:'pointer',flexShrink:0}})
+                , React.createElement('div',{style:{flex:1,minWidth:120}}
+                  , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.text}}, stu.name||stu.nome)
+                  , React.createElement('div',{style:{fontSize:11,color:C.textDim}}, `Anno scorso: ${i.corsoNome||'—'} · ${i.docenteNome||'—'}`)
+                )
+                , React.createElement('select', {value:sel.corsoId||'', disabled:!sel.checked,
+                    onChange:e=>{ const c=courses.find(c=>String(c.id)===e.target.value); updateField(i.studentId,'corsoId',e.target.value,c?(c.name||c.nome):''); },
+                    style:{padding:'6px 8px',borderRadius:7,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:12,minWidth:130}}
+                  , React.createElement('option',{value:''},'-- Corso --')
+                  , courses.map(c=>React.createElement('option',{key:c.id,value:c.id}, c.name||c.nome))
+                )
+                , React.createElement('select', {value:sel.docenteId||'', disabled:!sel.checked,
+                    onChange:e=>{ const d=docenti.find(d=>String(d.id)===e.target.value); updateField(i.studentId,'docenteId',e.target.value,d?d.nome:''); },
+                    style:{padding:'6px 8px',borderRadius:7,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:12,minWidth:130}}
+                  , React.createElement('option',{value:''},'-- Docente --')
+                  , docenti.map(d=>React.createElement('option',{key:d.id,value:d.id}, d.nome))
+                )
+              );
+            })
+          )
+      , React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:18,paddingTop:14,borderTop:`1px solid ${C.border}`}}
+        , React.createElement('span',{style:{fontSize:12,color:C.textMuted}}, Object.values(selezionati).filter(v=>v.checked).length+' allievi selezionati')
+        , React.createElement('div',{style:{display:'flex',gap:10}}
+          , React.createElement(Btn,{variant:'secondary',onClick:onClose},'Annulla')
+          , React.createElement(Btn,{onClick:handleImporta, disabled:saving}, saving?'⏳ Importazione...':'📥 Importa selezionati')
+        )
+      )
+    )
+  );
+};
+
+
+const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV, iscrizioniAnno:propIscrizioniAnno, setIscrizioniAnno:propSetIscrizioniAnno, anniScolastici:propAnniScolasticiAV }) => {
   const _ruoloAV = propUserRuoloAV || "admin";
   const _nomeAV  = (_appUserAV && _appUserAV.nome) || "";
   const isMobile = useIsMobile();
@@ -2234,32 +2364,36 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const [view,     setView]     = useState(_ruoloAV==="allievo" ? "detail" : "list");
   const [selected, setSelected] = useState(_ruoloAV==="allievo" ? (students[0]||null) : null);
   const [modal,    setModal]    = useState(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const iscrizioniAnno = propIscrizioniAnno || [];
+  const setIscrizioniAnno = propSetIscrizioniAnno || (()=>{});
+
   // ── Selettore anno scolastico ────────────────────────────────────────────────
   const anniDisp = React.useMemo(() => {
-    const anni = window.__FM_DATA__&&window.__FM_DATA__.anniScolastici ? window.__FM_DATA__.anniScolastici : [];
+    const anni = propAnniScolasticiAV || (window.__FM_DATA__&&window.__FM_DATA__.anniScolastici) || [];
     if (anni.length > 0) return anni.slice().sort((a,b)=>(b.annoInizio||0)-(a.annoInizio||0));
-    // Fallback: genera anni dagli anni presenti nelle entrate
-    const anniUniq = [...new Set(entrate.map(e=>e.annoScolastico||e.anno_scolastico).filter(Boolean))].sort((a,b)=>b-a);
-    return anniUniq.length > 0 ? anniUniq.map(a=>({annoInizio:a, annoFine:a+1})) : [{annoInizio: annoInizioAttivo||new Date().getFullYear(), annoFine:(annoInizioAttivo||new Date().getFullYear())+1}];
-  }, [entrate, annoInizioAttivo]);
+    return [{annoInizio: annoInizioAttivo||new Date().getFullYear(), annoFine:(annoInizioAttivo||new Date().getFullYear())+1}];
+  }, [propAnniScolasticiAV, annoInizioAttivo]);
   const [annoSel, setAnnoSel] = useState(annoInizioAttivo || (anniDisp[0]&&anniDisp[0].annoInizio) || new Date().getFullYear());
-  
-  // Filtra allievi per anno scolastico selezionato (chi ha quote in quell'anno)
+
+  // Filtra allievi per anno scolastico selezionato: SOLO chi ha una riga in iscrizioni_anno per quell'anno
   const studentsAnno = React.useMemo(() => {
     if (_ruoloAV !== 'admin') return students; // allievo/docente vedono solo se stessi
-    const idConQuote = new Set(
-      entrate
-        .filter(e => {
-          const as = e.annoScolastico || e.anno_scolastico;
-          return String(as) === String(annoSel);
-        })
-        .map(e => e.studentId || e.studente_id)
-        .filter(Boolean)
-        .map(String)
+    const idIscritti = new Set(
+      iscrizioniAnno
+        .filter(i => String(i.annoInizio) === String(annoSel))
+        .map(i => String(i.studentId))
     );
-    if (idConQuote.size === 0) return students; // se nessun filtro, mostra tutti
-    return students.filter(s => idConQuote.has(String(s.id)));
-  }, [students, entrate, annoSel, _ruoloAV]);
+    return students.filter(s => idIscritti.has(String(s.id)));
+  }, [students, iscrizioniAnno, annoSel, _ruoloAV]);
+
+  // Allievi NON ancora iscritti nell'anno selezionato (candidati per import da anno precedente)
+  const studentsNonIscritti = React.useMemo(() => {
+    const idIscritti = new Set(
+      iscrizioniAnno.filter(i => String(i.annoInizio) === String(annoSel)).map(i => String(i.studentId))
+    );
+    return students.filter(s => !idIscritti.has(String(s.id)));
+  }, [students, iscrizioniAnno, annoSel]);
 
   // ── Auto-seleziona l'allievo loggato appena i dati Supabase arrivano ──────────
   React.useEffect(() => {
@@ -2306,6 +2440,24 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         newStudent.extraTeachers = d.extraTeachers||{};
         newStudent.lessons = [];
         setStudents(p => [...p, newStudent]);
+        // Crea automaticamente l'iscrizione per l'anno scolastico attualmente selezionato
+        try {
+          const corso = courses.find(c=>(c.name||c.nome)===d.instrument || String(c.id)===String(d.courseId));
+          const { data: iscrData } = await sb.from('iscrizioni_anno').upsert({
+            studente_id: inserted.id, anno_inizio: annoSel,
+            corso_id: corso?String(corso.id):null, corso_nome: corso?(corso.name||corso.nome):(d.instrument||''),
+            docente_id: null, docente_nome: d.teacher||'',
+            data_iscrizione: yyyymmdd(new Date()),
+          }, {onConflict:'studente_id,anno_inizio'}).select().single();
+          if (iscrData) {
+            setIscrizioniAnno(p => [...p, {
+              id: iscrData.id, studentId: iscrData.studente_id, annoInizio: iscrData.anno_inizio,
+              corsoId: iscrData.corso_id||'', corsoNome: iscrData.corso_nome||'',
+              docenteId: iscrData.docente_id||'', docenteNome: iscrData.docente_nome||'',
+              dataIscrizione: iscrData.data_iscrizione||'',
+            }]);
+          }
+        } catch(e) { console.warn('[FM] auto-iscrizione error:', e?.message); }
       } else if (error) {
         console.warn('[FM] handleAddStudent error:', error.message);
         // Fallback offline
@@ -2377,6 +2529,10 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             , React.createElement('span',{style:{fontSize:11,color:C.textDim}}
               , `(${studentsAnno.length} alliev${studentsAnno.length===1?'o':'i'})`
             )
+            , React.createElement('button', {onClick:()=>setShowImportModal(true),
+                style:{marginLeft:'auto',padding:'5px 14px',borderRadius:8,border:`1px solid ${C.teal}`,background:C.tealBg,color:C.teal,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:6}}
+              , React.createElement(Ic,{n:'download',size:13,stroke:C.teal}), '📥 Importa da anno precedente'
+            )
           )
 
         , view==="list" && (
@@ -2426,6 +2582,19 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             )
           )
         )
+
+      /* ── Modal Importa iscrizioni da anno precedente ── */
+      , showImportModal && React.createElement(ImportaIscrizioniModal, {
+          annoCorrente: annoSel,
+          anniDisp: anniDisp,
+          allStudents: students,
+          studentsNonIscritti: studentsNonIscritti,
+          courses: courses,
+          docenti: propDocentiAV||[],
+          iscrizioniAnno: iscrizioniAnno,
+          setIscrizioniAnno: setIscrizioniAnno,
+          onClose: ()=>setShowImportModal(false),
+        })
     )
   );
 };
