@@ -2484,6 +2484,23 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       };
       const { error } = await sb.from('studenti').update(row).eq('id', d.id);
       if (error) console.warn('[FM] handleEditStudent error:', error.message);
+      // Aggiorna anche l'iscrizione dell'anno selezionato se corso/docente sono cambiati
+      try {
+        const corso = courses.find(c=>(c.name||c.nome)===d.instrument || String(c.id)===String(d.courseId));
+        const { data: upd } = await sb.from('iscrizioni_anno').upsert({
+          studente_id: d.id, anno_inizio: annoSel,
+          corso_id: corso?String(corso.id):null, corso_nome: corso?(corso.name||corso.nome):(d.instrument||''),
+          docente_nome: d.teacher||'',
+          data_iscrizione: yyyymmdd(new Date()),
+        }, {onConflict:'studente_id,anno_inizio'}).select().single();
+        if (upd) {
+          setIscrizioniAnno(p => {
+            const exists = p.some(i=>String(i.studentId)===String(d.id)&&String(i.annoInizio)===String(annoSel));
+            const newRow = {id:upd.id, studentId:upd.studente_id, annoInizio:upd.anno_inizio, corsoId:upd.corso_id||'', corsoNome:upd.corso_nome||'', docenteId:upd.docente_id||'', docenteNome:upd.docente_nome||'', dataIscrizione:upd.data_iscrizione||''};
+            return exists ? p.map(i=>(String(i.studentId)===String(d.id)&&String(i.annoInizio)===String(annoSel))?newRow:i) : [...p, newRow];
+          });
+        }
+      } catch(e) { console.warn('[FM] update iscrizione error:', e?.message); }
     }
     setStudents(p => p.map(s => s.id===d.id ? {...s,...d} : s));
     if (_optionalChain([selected, 'optionalAccess', _43 => _43.id])===d.id) setSelected(p=>({...p,...d}));
