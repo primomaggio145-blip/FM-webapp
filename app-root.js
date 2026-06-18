@@ -3304,6 +3304,38 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
                 style:{marginTop:6,padding:'7px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:12,fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:6}}
               , React.createElement(Ic,{n:'plus',size:13,stroke:C.textMuted}), '+ Aggiungi anno scolastico'
             )
+
+            /* Migrazione una tantum: crea iscrizioni_anno per allievi esistenti */
+            , React.createElement('div', {style:{marginTop:18,paddingTop:16,borderTop:`1px solid ${C.border}`}}
+              , React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:8}},
+                  '⚠️ Se hai appena attivato questa funzione, importa gli allievi esistenti come iscritti all\'anno attivo:')
+              , React.createElement('button', {
+                  onClick: async () => {
+                    if (!window.confirm(`Iscrivere tutti gli allievi attivi all'anno ${annoAttivo}/${annoAttivo+1}? (Userà il corso/docente attuale di ciascuno)`)) return;
+                    const sb = window.supabaseClient; if (!sb) return;
+                    const allStu = (window.__FM_DATA__&&window.__FM_DATA__.students) || [];
+                    const allCourses = (window.__FM_DATA__&&window.__FM_DATA__.courses) || [];
+                    const righe = allStu.filter(s=>s.status!=='inattivo').map(s => {
+                      const corso = allCourses.find(c=>String(c.id)===String(s.courseId)||c.name===s.course);
+                      return {
+                        studente_id: parseInt(s.id)||s.id,
+                        anno_inizio: annoAttivo,
+                        corso_id: corso?String(corso.id):null,
+                        corso_nome: corso?(corso.name||corso.nome):(s.course||''),
+                        docente_id: null,
+                        docente_nome: s.teacher||s.docente||'',
+                        data_iscrizione: yyyymmdd(new Date()),
+                      };
+                    });
+                    if (righe.length===0) { alert('Nessun allievo da migrare'); return; }
+                    const { error } = await sb.from('iscrizioni_anno').upsert(righe, {onConflict:'studente_id,anno_inizio'});
+                    if (error) { alert('Errore: '+error.message); return; }
+                    alert(`✅ ${righe.length} allievi migrati all'anno ${annoAttivo}/${annoAttivo+1}`);
+                    if (window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
+                  },
+                  style:{padding:'7px 16px',borderRadius:8,border:`1px solid ${C.gold}`,background:C.goldBg,color:C.gold,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif"}
+                }, '🔄 Migra allievi esistenti nell\'anno attivo')
+            )
           );
         })()
     )

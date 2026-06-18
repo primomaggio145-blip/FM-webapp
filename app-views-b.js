@@ -7,7 +7,7 @@ const INIT_DOCENTI_EXT = [
   { id:"d4", corsi:["c9","c10"], nome:"Prof.ssa Lia Marino", teacherKey:"Prof. Marino",  email:"l.marino@accademia.it",   phone:"366 3344556", strumenti:"Canto · Solfeggio",      bio:"Soprano lirico, docente di tecnica vocale e teoria musicale.",  tariffaOra:35, contratto:"Tempo indeterminato", dataInizio:"2017-09-01", colore:C.purple  },
 ];
 
-const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView }) => {
+const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV }) => {
   const ruoloDocView = _ruoloDocView || "admin";
   const isMobile = useIsMobile();
   const students = _studentsRaw || [];
@@ -331,9 +331,17 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
       , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9969}}
         , (ruoloDocView==="docente"
           ? (()=>{ const did=(_appUserDocView&&_appUserDocView.docenteId)||null; if(did) return (docenti||[]).filter(d=>String(d.id)===String(did)); const ln=(_appUserDocView&&_appUserDocView.nome)||""; return (docenti||[]).filter(d=>d.teacherKey===ln||(d.nome||"").toLowerCase().includes(ln.toLowerCase())); })()
-          // Admin: filtra per anno scolastico (docenti con lezioni in quell'anno)
+          // Admin: filtra per anno scolastico — usa iscrizioni_anno come fonte di verità, fallback su lezioni
           : (() => {
               const tuttiDocenti = docenti||[];
+              const iscrAnno = _propIscrizioniDV||[];
+              const docConIscrizioni = new Set(
+                iscrAnno.filter(i=>String(i.annoInizio)===String(annoSelDoc)).map(i=>i.docenteNome).filter(Boolean)
+              );
+              if (docConIscrizioni.size > 0) {
+                return tuttiDocenti.filter(d => docConIscrizioni.has(d.nome||'') || docConIscrizioni.has(d.teacherKey||''));
+              }
+              // Fallback: nessuna iscrizione registrata ancora, usa le lezioni come prima
               const docConLezioni = new Set(
                 lessons.filter(l => {
                   const [ly] = (l.date||'').split('-').map(Number);
