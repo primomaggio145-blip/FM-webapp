@@ -2616,7 +2616,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   );
 };
 
-const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:propStudents, setStudents:propSetStudents, docenti:propDocenti, userRuolo:_rC2, appUser:_aC }) => {
+const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:propStudents, setStudents:propSetStudents, docenti:propDocenti, userRuolo:_rC2, appUser:_aC, iscrizioniAnno:propIscrizioniCV, annoInizioAttivo:propAnnoIniziCV, anniScolastici:propAnniCV }) => {
   const _ruoloCorsi = _rC2 || "admin";
   const _nomeCorsi  = (_aC && _aC.nome) || "";
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
@@ -2626,6 +2626,24 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
   const students    = _nullishCoalesce(propStudents, () => ( _students));
   const setStudents = _nullishCoalesce(propSetStudents, () => ( _setStudents));
   const docenti     = _nullishCoalesce(propDocenti, () => ( []));
+
+  // Selettore anno scolastico per filtrare allievi per corso
+  const anniDisp = React.useMemo(() => {
+    const anni = propAnniCV || (window.__FM_DATA__&&window.__FM_DATA__.anniScolastici) || [];
+    return anni.length > 0 ? anni.slice().sort((a,b)=>(b.annoInizio||0)-(a.annoInizio||0)) : [{annoInizio: propAnnoIniziCV||new Date().getFullYear()}];
+  }, [propAnniCV, propAnnoIniziCV]);
+  const [annoSel, setAnnoSel] = useState(propAnnoIniziCV || (anniDisp[0]&&anniDisp[0].annoInizio) || new Date().getFullYear());
+
+  // Allievi filtrati per anno: solo chi ha un'iscrizione in quell'anno
+  const iscrizioniAnno = propIscrizioniCV || (window.__FM_DATA__&&window.__FM_DATA__.iscrizioniAnno) || [];
+  const studentsAnno = React.useMemo(() => {
+    if (_ruoloCorsi !== 'admin') return students;
+    const idIscritti = new Set(
+      iscrizioniAnno.filter(i=>String(i.annoInizio)===String(annoSel)).map(i=>String(i.studentId))
+    );
+    if (idIscritti.size === 0) return students; // se nessuna iscrizione registrata, mostra tutti
+    return students.filter(s => idIscritti.has(String(s.id)));
+  }, [students, iscrizioniAnno, annoSel, _ruoloCorsi]);
 
   const handleAddCourse = async (d) => {
     const sb = window.supabaseClient;
@@ -2658,13 +2676,24 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
 
   return (
     React.createElement('div', { style: {maxWidth:1200,margin:"0 auto",padding:"clamp(12px, 3vw, 32px)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3933}}
+      /* ── Selettore anno scolastico (solo admin) ── */
+      , _ruoloCorsi==="admin" && anniDisp.length > 1 && React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8,marginBottom:16,flexWrap:'wrap'}}
+          , React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontWeight:600,letterSpacing:'.07em',textTransform:'uppercase'}},'Anno scolastico:')
+          , anniDisp.map(a => {
+              const label = `${a.annoInizio}/${String(a.annoFine||a.annoInizio+1).slice(2)}`;
+              const sel = String(a.annoInizio)===String(annoSel);
+              return React.createElement('button',{key:a.annoInizio, onClick:()=>setAnnoSel(a.annoInizio),
+                style:{padding:'4px 12px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.teal:C.bg,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:12,fontWeight:sel?700:400,fontFamily:"'Open Sans',sans-serif"}}
+                , label, sel&&' ●');
+            })
+        )
       , React.createElement(CourseManager, {
         courses: _ruoloCorsi==="docente" && _nomeCorsi
           ? (()=>{ const myD=(propDocenti||[]).find(d=>d.teacherKey===_nomeCorsi||(d.nome||"").toLowerCase().includes(_nomeCorsi.toLowerCase())); return myD?courses.filter(c=>(c.docenti||[]).includes(myD.id)):courses; })()
           : _ruoloCorsi==="allievo"
           ? (()=>{ const _avId=(_aC&&_aC.allievoId)||null; const me=_avId?students.find(s=>String(s.id)===String(_avId)):students.find(s=>(s.name||s.nome||"").toLowerCase()===_nomeCorsi.toLowerCase()); if(!me) return []; const ids=new Set([...(me.instrument?courses.filter(c=>c.name===me.instrument).map(c=>c.id):[]),...(me.complementaryCourse?[me.complementaryCourse]:[]),...((me.extraInstruments||[]).flatMap(i=>courses.filter(c=>c.name===i).map(c=>c.id)))]); return courses.filter(c=>ids.has(c.id)); })()
           : courses,
-        students: students,
+        students: _ruoloCorsi==="admin" ? studentsAnno : students,
         docenti: docenti,
         userRuolo: _ruoloCorsi,
         onAdd: _ruoloCorsi==="admin" ? handleAddCourse : undefined,
