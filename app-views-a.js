@@ -1428,9 +1428,71 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
     return base;
   }).sort((a,b)=>(b.data||'').localeCompare(a.data||''));
 
-  const handleSave   = ev => { setConcerti(p=>[...p.filter(x=>x.id!==ev.id),ev]); setModal(null); if(_optionalChain([selected, 'optionalAccess', _77 => _77.id])===ev.id) setSelected(ev); };
-  const handleDelete = () => { setConcerti(p=>p.filter(x=>x.id!==_optionalChain([selected, 'optionalAccess', _78 => _78.id]))); setSelected(null); setModal(null); };
-  const handleUpdate = ev => { setConcerti(p=>p.map(x=>x.id===ev.id?ev:x)); setSelected(ev); };
+  const handleSave   = async ev => {
+    const isNew = !concerti.some(x=>x.id===ev.id);
+    setConcerti(p=>[...p.filter(x=>x.id!==ev.id),ev]);
+    setModal(null);
+    if(_optionalChain([selected, 'optionalAccess', _77 => _77.id])===ev.id) setSelected(ev);
+    // Persisti su Supabase
+    try {
+      const sb = window.supabaseClient;
+      if (sb) {
+        const row = {
+          nome: ev.titolo||ev.nome||'', data: ev.data||'', luogo: ev.luogo||'',
+          tipo: ev.tipo||'evento', stato: ev.stato||'programmato',
+          descrizione: ev.descrizione||'', note: ev.note||'',
+          biglietto: !!ev.biglietto, prezzo_biglietto: parseFloat(ev.prezzoBiglietto)||0,
+          programma: JSON.stringify(ev.programma||[]),
+          partecipanti: JSON.stringify(ev.partecipanti||[]),
+          prenotazioni: JSON.stringify(ev.prenotazioni||[]),
+          ora: ev.ora||null, capienza: ev.capienza||null,
+        };
+        if (isNew) {
+          // Non passare l'id generato lato client (es. "ev123456") — lascia che il DB generi il suo
+          const { id: _skipId, ...rowNoId } = row;
+          const { data, error } = await sb.from('concerti').insert(rowNoId).select().single();
+          if (error) { console.warn('[FM] insert concerto error:', error.message); }
+          else if (data) {
+            // Aggiorna l'id locale (temporaneo) con quello reale del DB
+            setConcerti(p => p.map(x => x.id===ev.id ? {...ev, id:data.id} : x));
+          }
+        } else {
+          const { error } = await sb.from('concerti').update(row).eq('id', ev.id);
+          if (error) console.warn('[FM] update concerto error:', error.message);
+        }
+      }
+    } catch(e) { console.warn('[FM] handleSave concerto exception:', e?.message); }
+  };
+  const handleDelete = async () => {
+    const id = _optionalChain([selected, 'optionalAccess', _78 => _78.id]);
+    setConcerti(p=>p.filter(x=>x.id!==id)); setSelected(null); setModal(null);
+    try {
+      const sb = window.supabaseClient;
+      if (sb && id) {
+        const { error } = await sb.from('concerti').delete().eq('id', id);
+        if (error) console.warn('[FM] delete concerto error:', error.message);
+      }
+    } catch(e) { console.warn('[FM] handleDelete concerto exception:', e?.message); }
+  };
+  const handleUpdate = async ev => {
+    setConcerti(p=>p.map(x=>x.id===ev.id?ev:x)); setSelected(ev);
+    try {
+      const sb = window.supabaseClient;
+      if (sb) {
+        const row = {
+          nome: ev.titolo||ev.nome||'', data: ev.data||'', luogo: ev.luogo||'',
+          tipo: ev.tipo||'evento', stato: ev.stato||'programmato',
+          descrizione: ev.descrizione||'', note: ev.note||'',
+          biglietto: !!ev.biglietto, prezzo_biglietto: parseFloat(ev.prezzoBiglietto)||0,
+          programma: JSON.stringify(ev.programma||[]),
+          partecipanti: JSON.stringify(ev.partecipanti||[]),
+          prenotazioni: JSON.stringify(ev.prenotazioni||[]),
+        };
+        const { error } = await sb.from('concerti').update(row).eq('id', ev.id);
+        if (error) console.warn('[FM] handleUpdate concerto error:', error.message);
+      }
+    } catch(e) { console.warn('[FM] handleUpdate concerto exception:', e?.message); }
+  };
 
   if(selected) return (
     React.createElement(React.Fragment, null
