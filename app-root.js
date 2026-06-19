@@ -288,7 +288,10 @@ function App() {
             brani:    (sB||[]).map(r => ({ id:r.id, title:r.titolo||'', composer:r.compositore||'', periodo:r.periodo||'', tonality:r.tonalita||'', difficulty:r.difficolta||'Intermedio', tipo:r.tipo||'individuale', note:r.note||'', lezioni:r.lezioni||0 })),
             spese:    (sP||[]).map(r => ({ id:String(r.id), docenteId:r.docente_id||null, data:r.data||'', mese:r.mese!=null?r.mese:new Date((r.data||'')+'T00:00:00').getMonth(), anno:r.anno||new Date().getFullYear(), importo:parseFloat(r.importo)||0, desc:r.desc||r.descrizione||'', nota:r.nota||'', metodo:r.metodo||'Bonifico', categoria:r.categoria||'altro' })),
             entrate:  (sQ||[]).map(r => ({ id:String(r.id), studentId:r.studente_id||null, studentName:r.studente_nome||'', importo:parseFloat(r.importo)||0, mese:r.mese, anno:r.anno, data:r.data_pagamento||'', metodo:r.metodo||'Contanti', categoria:'quota', desc:r.note||'', stato:r.stato||'attesa' })),
-            concerti: (sEV||[]).map(r => ({ id:r.id, nome:r.nome||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:[], partecipanti:[], prenotazioni:[], biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0 })),
+            concerti: (sEV||[]).map(r => {
+              const pj = (v,f=[]) => { if(!v) return f; if(Array.isArray(v)) return v; if(typeof v==='object') return v; try { return JSON.parse(v); } catch(e) { return f; } };
+              return { id:r.id, titolo:r.nome||'', nome:r.nome||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:pj(r.programma,[]), partecipanti:pj(r.partecipanti,[]), prenotazioni:pj(r.prenotazioni,[]), biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0, ora:r.ora||'', capienza:r.capienza||null };
+            }),
             allegati: (sAL||[]).map(adaptA),
             config:   Object.keys(configFromDB).length > 0 ? configFromDB : null,
             anniScolastici:  anniScolasticiDB,
