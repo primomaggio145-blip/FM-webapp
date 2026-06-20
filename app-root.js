@@ -290,7 +290,7 @@ function App() {
             entrate:  (sQ||[]).map(r => ({ id:String(r.id), studentId:r.studente_id||null, studentName:r.studente_nome||'', importo:parseFloat(r.importo)||0, mese:r.mese, anno:r.anno, data:r.data_pagamento||'', metodo:r.metodo||'Contanti', categoria:'quota', desc:r.note||'', stato:r.stato||'attesa' })),
             concerti: (sEV||[]).map(r => {
               const pj = (v,f=[]) => { if(!v) return f; if(Array.isArray(v)) return v; if(typeof v==='object') return v; try { return JSON.parse(v); } catch(e) { return f; } };
-              return { id:r.id, titolo:r.nome||'', nome:r.nome||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:pj(r.programma,[]), partecipanti:pj(r.partecipanti,[]), prenotazioni:pj(r.prenotazioni,[]), biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0, ora:r.ora||'', capienza:r.capienza||null };
+              return { id:r.id, titolo:r.titolo||'', nome:r.titolo||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:pj(r.programma,[]), partecipanti:pj(r.partecipanti,[]), prenotazioni:pj(r.prenotazioni,[]), biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0, ora:r.ora||'', capienza:r.capienza||null };
             }),
             allegati: (sAL||[]).map(adaptA),
             config:   Object.keys(configFromDB).length > 0 ? configFromDB : null,

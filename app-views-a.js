@@ -1433,29 +1433,23 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
     setConcerti(p=>[...p.filter(x=>x.id!==ev.id),ev]);
     setModal(null);
     if(_optionalChain([selected, 'optionalAccess', _77 => _77.id])===ev.id) setSelected(ev);
-    // Persisti su Supabase
+    // Persisti su Supabase — colonne reali: titolo (non nome), id è TEXT (ok passarlo), jsonb diretto
     try {
       const sb = window.supabaseClient;
       if (sb) {
         const row = {
-          nome: ev.titolo||ev.nome||'', data: ev.data||'', luogo: ev.luogo||'',
+          id: ev.id, titolo: ev.titolo||ev.nome||'', data: ev.data||'', luogo: ev.luogo||'',
           tipo: ev.tipo||'evento', stato: ev.stato||'programmato',
           descrizione: ev.descrizione||'', note: ev.note||'',
           biglietto: !!ev.biglietto, prezzo_biglietto: parseFloat(ev.prezzoBiglietto)||0,
-          programma: JSON.stringify(ev.programma||[]),
-          partecipanti: JSON.stringify(ev.partecipanti||[]),
-          prenotazioni: JSON.stringify(ev.prenotazioni||[]),
+          programma: ev.programma||[],
+          partecipanti: ev.partecipanti||[],
+          prenotazioni: ev.prenotazioni||[],
           ora: ev.ora||null, capienza: ev.capienza||null,
         };
         if (isNew) {
-          // Non passare l'id generato lato client (es. "ev123456") — lascia che il DB generi il suo
-          const { id: _skipId, ...rowNoId } = row;
-          const { data, error } = await sb.from('concerti').insert(rowNoId).select().single();
-          if (error) { console.warn('[FM] insert concerto error:', error.message); }
-          else if (data) {
-            // Aggiorna l'id locale (temporaneo) con quello reale del DB
-            setConcerti(p => p.map(x => x.id===ev.id ? {...ev, id:data.id} : x));
-          }
+          const { error } = await sb.from('concerti').insert(row);
+          if (error) console.warn('[FM] insert concerto error:', error.message);
         } else {
           const { error } = await sb.from('concerti').update(row).eq('id', ev.id);
           if (error) console.warn('[FM] update concerto error:', error.message);
@@ -1480,13 +1474,13 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
       const sb = window.supabaseClient;
       if (sb) {
         const row = {
-          nome: ev.titolo||ev.nome||'', data: ev.data||'', luogo: ev.luogo||'',
+          titolo: ev.titolo||ev.nome||'', data: ev.data||'', luogo: ev.luogo||'',
           tipo: ev.tipo||'evento', stato: ev.stato||'programmato',
           descrizione: ev.descrizione||'', note: ev.note||'',
           biglietto: !!ev.biglietto, prezzo_biglietto: parseFloat(ev.prezzoBiglietto)||0,
-          programma: JSON.stringify(ev.programma||[]),
-          partecipanti: JSON.stringify(ev.partecipanti||[]),
-          prenotazioni: JSON.stringify(ev.prenotazioni||[]),
+          programma: ev.programma||[],
+          partecipanti: ev.partecipanti||[],
+          prenotazioni: ev.prenotazioni||[],
         };
         const { error } = await sb.from('concerti').update(row).eq('id', ev.id);
         if (error) console.warn('[FM] handleUpdate concerto error:', error.message);
