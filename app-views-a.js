@@ -1428,6 +1428,26 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
     return base;
   }).sort((a,b)=>(b.data||'').localeCompare(a.data||''));
 
+  // Sincronizza i partecipanti su tabella relazionale concerti_partecipanti
+  // (fonte di verità) — sostituisce tutte le righe per questo concerto
+  const syncPartecipanti = async (concertoId, partecipanti) => {
+    const sb = window.supabaseClient; if (!sb) return;
+    try {
+      // Elimina le righe esistenti per questo concerto
+      await sb.from('concerti_partecipanti').delete().eq('concerto_id', concertoId);
+      const lista = (partecipanti||[]).filter(p=>p.studentId);
+      if (lista.length === 0) return;
+      const righe = lista.map(p => ({
+        concerto_id: concertoId,
+        studente_id: parseInt(p.studentId)||p.studentId,
+        studente_nome: p.studentName||'',
+        brani: p.brani||[],
+      }));
+      const { error } = await sb.from('concerti_partecipanti').insert(righe);
+      if (error) console.warn('[FM] syncPartecipanti error:', error.message);
+    } catch(e) { console.warn('[FM] syncPartecipanti exception:', e?.message); }
+  };
+
   const handleSave   = async ev => {
     const isNew = !concerti.some(x=>x.id===ev.id);
     setConcerti(p=>[...p.filter(x=>x.id!==ev.id),ev]);
@@ -1443,7 +1463,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
           descrizione: ev.descrizione||'', note: ev.note||'',
           biglietto: !!ev.biglietto, prezzo_biglietto: parseFloat(ev.prezzoBiglietto)||0,
           programma: ev.programma||[],
-          partecipanti: ev.partecipanti||[],
+          scaletta: ev.scaletta||[],
           prenotazioni: ev.prenotazioni||[],
           ora: ev.ora||null, capienza: ev.capienza||null,
         };
@@ -1454,6 +1474,8 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
           const { error } = await sb.from('concerti').update(row).eq('id', ev.id);
           if (error) { console.warn('[FM] update concerto error:', error.message); alert('⚠️ Errore salvataggio concerto:\n'+error.message); }
         }
+        // Sincronizza i partecipanti sulla tabella relazionale dedicata
+        await syncPartecipanti(ev.id, ev.partecipanti);
       }
     } catch(e) { console.warn('[FM] handleSave concerto exception:', e?.message); }
   };
@@ -1465,6 +1487,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
       if (sb && id) {
         const { error } = await sb.from('concerti').delete().eq('id', id);
         if (error) console.warn('[FM] delete concerto error:', error.message);
+        // concerti_partecipanti viene eliminato automaticamente (ON DELETE CASCADE)
       }
     } catch(e) { console.warn('[FM] handleDelete concerto exception:', e?.message); }
   };
@@ -1479,14 +1502,17 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
           descrizione: ev.descrizione||'', note: ev.note||'',
           biglietto: !!ev.biglietto, prezzo_biglietto: parseFloat(ev.prezzoBiglietto)||0,
           programma: ev.programma||[],
-          partecipanti: ev.partecipanti||[],
+          scaletta: ev.scaletta||[],
           prenotazioni: ev.prenotazioni||[],
         };
         const { error } = await sb.from('concerti').update(row).eq('id', ev.id);
         if (error) console.warn('[FM] handleUpdate concerto error:', error.message);
+        // Se sono stati modificati i partecipanti (raro da qui, ma per sicurezza)
+        if (ev.partecipanti) await syncPartecipanti(ev.id, ev.partecipanti);
       }
     } catch(e) { console.warn('[FM] handleUpdate concerto exception:', e?.message); }
   };
+
 
   if(selected) return (
     React.createElement(React.Fragment, null

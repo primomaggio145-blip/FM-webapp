@@ -179,7 +179,7 @@ function App() {
           { data: sS }, { data: sD }, { data: sC },
           { data: sB }, { data: sP }, { data: sQ }, { data: sEV },
           { data: sAL }, { data: sSALA }, { data: sCFG }, { data: sANNI },
-          { data: sISCR },
+          { data: sISCR }, { data: sCP },
         ] = await Promise.all([
           sb.from('studenti').select('*').order('nome'),
           sb.from('docenti').select('*').order('nome'),
@@ -193,6 +193,7 @@ function App() {
           sb.from('sito_config').select('*'),
           sb.from('anni_scolastici').select('*').order('anno_inizio', { ascending: false }),
           sb.from('iscrizioni_anno').select('*'),
+          sb.from('concerti_partecipanti').select('*'),
         ]);
 
         // ── Lezioni: SOLO oggi + modificate nelle ultime 24h ────────────────
@@ -290,7 +291,11 @@ function App() {
             entrate:  (sQ||[]).map(r => ({ id:String(r.id), studentId:r.studente_id||null, studentName:r.studente_nome||'', importo:parseFloat(r.importo)||0, mese:r.mese, anno:r.anno, data:r.data_pagamento||'', metodo:r.metodo||'Contanti', categoria:'quota', desc:r.note||'', stato:r.stato||'attesa' })),
             concerti: (sEV||[]).map(r => {
               const pj = (v,f=[]) => { if(!v) return f; if(Array.isArray(v)) return v; if(typeof v==='object') return v; try { return JSON.parse(v); } catch(e) { return f; } };
-              return { id:r.id, titolo:r.titolo||'', nome:r.titolo||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:pj(r.programma,[]), partecipanti:pj(r.partecipanti,[]), prenotazioni:pj(r.prenotazioni,[]), biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0, ora:r.ora||'', capienza:r.capienza||null };
+              // Partecipanti: fonte di verità = tabella concerti_partecipanti (relazionale)
+              const partecipantiDaTabella = (sCP||[])
+                .filter(p => String(p.concerto_id) === String(r.id))
+                .map(p => ({ studentId: p.studente_id, studentName: p.studente_nome||'', brani: p.brani||[] }));
+              return { id:r.id, titolo:r.titolo||'', nome:r.titolo||'', data:r.data||'', luogo:r.luogo||'', tipo:r.tipo||'evento', stato:r.stato||'programmato', descrizione:r.descrizione||'', note:r.note||'', programma:pj(r.programma,[]), scaletta:pj(r.scaletta,[]), partecipanti: partecipantiDaTabella.length>0 ? partecipantiDaTabella : pj(r.partecipanti,[]), prenotazioni:pj(r.prenotazioni,[]), biglietto:r.biglietto||false, prezzoBiglietto:parseFloat(r.prezzo_biglietto)||0, ora:r.ora||'', capienza:r.capienza||null };
             }),
             allegati: (sAL||[]).map(adaptA),
             config:   Object.keys(configFromDB).length > 0 ? configFromDB : null,
