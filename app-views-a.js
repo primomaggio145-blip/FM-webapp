@@ -1449,10 +1449,10 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
         };
         if (isNew) {
           const { error } = await sb.from('concerti').insert(row);
-          if (error) console.warn('[FM] insert concerto error:', error.message);
+          if (error) { console.warn('[FM] insert concerto error:', error.message); alert('⚠️ Errore salvataggio concerto:\n'+error.message); }
         } else {
           const { error } = await sb.from('concerti').update(row).eq('id', ev.id);
-          if (error) console.warn('[FM] update concerto error:', error.message);
+          if (error) { console.warn('[FM] update concerto error:', error.message); alert('⚠️ Errore salvataggio concerto:\n'+error.message); }
         }
       }
     } catch(e) { console.warn('[FM] handleSave concerto exception:', e?.message); }
