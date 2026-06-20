@@ -902,6 +902,44 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
 };
 
 
+// ─── Deriva la lista unificata di partecipanti da TUTTE le fonti ────────────
+// Fonti: programma (allievi strutturati per brano), scaletta (performer testo
+// libero, può contenere più nomi separati da virgola), partecipanti (picker)
+// Tenta di collegare i nomi liberi (scaletta) a uno studentId reale per nome.
+const derivePartecipanti = (evento, studentsList) => {
+  const stuList = studentsList || [];
+  const map = {};
+  const keyFor = (id, name) => id ? ('id:'+id) : ('name:'+(name||'').toLowerCase().trim());
+
+  // 1. Da programma (struttura ricca, già con studentId)
+  (evento.programma||[]).forEach(p => {
+    (p.allievi||[]).forEach(a => {
+      const k = keyFor(a.studentId, a.studentName);
+      if (!map[k]) map[k] = {studentId:a.studentId||null, studentName:a.studentName||'', brani:new Set()};
+      if (p.branoTitle) map[k].brani.add(p.branoTitle);
+    });
+  });
+
+  // 2. Da scaletta (performer testo libero — split su virgola, match per nome)
+  (evento.scaletta||[]).forEach(s => {
+    const nomi = (s.performer||'').split(',').map(n=>n.trim()).filter(Boolean);
+    nomi.forEach(nome => {
+      const stu = stuList.find(st => (st.name||st.nome||'').toLowerCase() === nome.toLowerCase());
+      const k = keyFor(stu?stu.id:null, nome);
+      if (!map[k]) map[k] = {studentId: stu?stu.id:null, studentName:nome, brani:new Set()};
+      if (s.brano) map[k].brani.add(s.brano);
+    });
+  });
+
+  // 3. Da partecipanti espliciti (picker "Partecipanti facoltativi")
+  (evento.partecipanti||[]).forEach(p => {
+    const k = keyFor(p.studentId, p.studentName);
+    if (!map[k]) map[k] = {studentId:p.studentId||null, studentName:p.studentName||'', brani: new Set(p.brani||[])};
+  });
+
+  return Object.values(map).map(p => ({...p, brani: Array.from(p.brani)}));
+};
+
 const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBack, onUpdate }) => {
   const braniCatalog = _braniED || [];
   const [tab,    setTab]    = useState("info");
@@ -1061,15 +1099,8 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
 
         /* PARTECIPANTI */
         , tab==="partec" && (() => {
-          const hasProg3 = ["saggio","concerto","pubblico"].includes(evento.tipo);
-          const prog3    = evento.programma || [];
-          const parts3   = evento.partecipanti || [];
-          const byStudent = {};
-          prog3.forEach(p=>(p.allievi||[]).forEach(a=>{
-            if(!byStudent[a.studentId]) byStudent[a.studentId]={studentId:a.studentId,studentName:a.studentName,brani:[]};
-            byStudent[a.studentId].brani.push(p.branoTitle||"");
-          }));
-          const lista = hasProg3 ? Object.values(byStudent) : parts3;
+          const lista = derivePartecipanti(evento, students);
+          const hasProg3 = lista.some(p=>(p.brani||[]).length>0);
           return React.createElement('div', {style:{maxWidth:680}}
             , lista.length===0
               ? React.createElement('div', {style:{textAlign:"center",padding:"56px 0",color:C.textDim}}
@@ -1475,7 +1506,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
           if (error) { console.warn('[FM] update concerto error:', error.message); alert('⚠️ Errore salvataggio concerto:\n'+error.message); }
         }
         // Sincronizza i partecipanti sulla tabella relazionale dedicata
-        await syncPartecipanti(ev.id, ev.partecipanti);
+        await syncPartecipanti(ev.id, derivePartecipanti(ev, students));
       }
     } catch(e) { console.warn('[FM] handleSave concerto exception:', e?.message); }
   };
@@ -1508,7 +1539,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
         const { error } = await sb.from('concerti').update(row).eq('id', ev.id);
         if (error) console.warn('[FM] handleUpdate concerto error:', error.message);
         // Se sono stati modificati i partecipanti (raro da qui, ma per sicurezza)
-        if (ev.partecipanti) await syncPartecipanti(ev.id, ev.partecipanti);
+        await syncPartecipanti(ev.id, derivePartecipanti(ev, students));
       }
     } catch(e) { console.warn('[FM] handleUpdate concerto exception:', e?.message); }
   };
