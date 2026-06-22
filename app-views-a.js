@@ -670,12 +670,19 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
 
 // ─── DETTAGLIO EVENTO ─────────────────────────────────────────────────────────
 const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: studentsTab }) => {
-  // Trova il corso/strumento di un allievo dato il suo nome (match case-insensitive)
+  // Trova il corso/strumento di uno o più allievi dato il testo performer
+  // (gestisce nomi multipli separati da virgola, match tollerante su spazi/maiuscole)
   const getCorso = React.useCallback((nomePerformer) => {
-    if (!nomePerformer || !studentsTab) return '';
-    const nome = nomePerformer.trim().toLowerCase();
-    const stu = studentsTab.find(s => (s.name||s.nome||'').toLowerCase() === nome);
-    return stu ? (stu.instrument||stu.corso||'') : '';
+    if (!nomePerformer || !studentsTab || studentsTab.length===0) return '';
+    const norm = (s) => (s||'').toLowerCase().trim().replace(/\s+/g,' ');
+    const nomi = nomePerformer.split(',').map(n=>n.trim()).filter(Boolean);
+    const corsi = nomi.map(nome => {
+      const target = norm(nome);
+      const stu = studentsTab.find(s => norm(s.name||s.nome) === target);
+      return stu ? (stu.instrument||stu.corso||'') : '';
+    }).filter(Boolean);
+    // Rimuovi duplicati e unisci
+    return [...new Set(corsi)].join(', ');
   }, [studentsTab]);
   const cat = braniCatalog || [];
 
