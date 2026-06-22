@@ -737,7 +737,17 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
     setAddText(''); setAddPerf(''); setShowAdd(false);
   };
 
-  const resetToAuto = () => save(autoItems);
+  // Importa da programma SENZA azzerare la scaletta esistente: aggiunge solo
+  // i brani non già presenti (confronto per nome brano, case-insensitive)
+  const importaDaProgramma = () => {
+    const nomiGiaPresenti = new Set(items.map(i => (i.brano||'').toLowerCase().trim()));
+    const nuoviDaAggiungere = autoItems.filter(a => !nomiGiaPresenti.has((a.brano||'').toLowerCase().trim()));
+    if (nuoviDaAggiungere.length === 0) {
+      alert('Tutti i brani del programma sono già presenti in scaletta.');
+      return;
+    }
+    save([...items, ...nuoviDaAggiungere]);
+  };
 
   const handlePrint = () => {
     const w = window.open('','_blank','width=794,height=1123');
@@ -780,10 +790,10 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
         items.length > 0 ? items.length+' brani in scaletta' : 'Scaletta vuota'
       ),
       React.createElement('div', {style:{display:'flex',gap:8,flexWrap:'wrap'}},
-        autoItems.length > 0 && React.createElement('button', {onClick:resetToAuto,
+        autoItems.length > 0 && React.createElement('button', {onClick:importaDaProgramma,
           style:{fontSize:12,padding:'6px 12px',borderRadius:7,border:'1px solid '+C.border,
             background:C.bg,color:C.textMuted,cursor:'pointer'}},
-          '↺ Importa da programma ('+autoItems.length+')'
+          '➕ Aggiungi da programma ('+autoItems.length+')'
         ),
         React.createElement('button', {onClick:()=>setShowAdd(v=>!v),
           style:{fontSize:12,padding:'6px 12px',borderRadius:7,
