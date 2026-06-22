@@ -670,19 +670,18 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
 
 // ─── DETTAGLIO EVENTO ─────────────────────────────────────────────────────────
 const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: studentsTab }) => {
-  // Trova il corso/strumento di uno o più allievi dato il testo performer
-  // (gestisce nomi multipli separati da virgola, match tollerante su spazi/maiuscole)
-  const getCorso = React.useCallback((nomePerformer) => {
-    if (!nomePerformer || !studentsTab || studentsTab.length===0) return '';
+  // Restituisce il testo performer con corso accoppiato a ciascun nome:
+  // "Mario Rossi - Pianoforte, Luigi Bianchi - Chitarra"
+  const getPerformerConCorso = React.useCallback((nomePerformer) => {
+    if (!nomePerformer || !studentsTab || studentsTab.length===0) return nomePerformer||'';
     const norm = (s) => (s||'').toLowerCase().trim().replace(/\s+/g,' ');
     const nomi = nomePerformer.split(',').map(n=>n.trim()).filter(Boolean);
-    const corsi = nomi.map(nome => {
+    return nomi.map(nome => {
       const target = norm(nome);
       const stu = studentsTab.find(s => norm(s.name||s.nome) === target);
-      return stu ? (stu.instrument||stu.corso||'') : '';
-    }).filter(Boolean);
-    // Rimuovi duplicati e unisci
-    return [...new Set(corsi)].join(', ');
+      const corso = stu ? (stu.instrument||stu.corso||'') : '';
+      return corso ? (nome+' - '+corso) : nome;
+    }).join(', ');
   }, [studentsTab]);
   const cat = braniCatalog || [];
 
@@ -780,8 +779,8 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
     const w = window.open('','_blank','width=794,height=1123');
     if (!w) { alert('Abilita i popup per stampare'); return; }
     const rows = items.map((s,i) => {
-      const corso = getCorso(s.performer);
-      const perf = s.performer ? '<div style="font-size:11px;color:#888;margin-top:3px">'+s.performer+(corso?' <span style="color:#bbb">· '+corso+'</span>':'')+'</div>' : '';
+      const perfTesto = getPerformerConCorso(s.performer);
+      const perf = s.performer ? '<div style="font-size:11px;color:#888;margin-top:3px">'+perfTesto+'</div>' : '';
       const nota = s.note ? '<div style="font-size:10.5px;color:#b8860b;margin-top:4px;font-style:italic">📝 '+s.note+'</div>' : '';
       return '<tr><td style="width:44px;text-align:center;font-weight:700;color:#1a4fa0;font-size:16px;padding:16px 8px">'+(i+1)+'</td>'
         +'<td style="padding:14px 16px"><div style="font-size:15px;font-weight:600">'+s.brano+'</div>'+perf+nota+'</td></tr>';
@@ -917,8 +916,7 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
             React.createElement('div', {style:{fontSize:13,fontWeight:600,
               overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, item.brano),
             item.performer && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:1}},
-              item.performer,
-              getCorso(item.performer) && React.createElement('span', {style:{color:C.textDim}}, ' · '+getCorso(item.performer))
+              getPerformerConCorso(item.performer)
             ),
             /* Nota: editabile inline al click, altrimenti mostrata come testo */
             editingNoteIdx === idx
