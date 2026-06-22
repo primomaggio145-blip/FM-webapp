@@ -669,7 +669,14 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
 };
 
 // ─── DETTAGLIO EVENTO ─────────────────────────────────────────────────────────
-const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
+const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: studentsTab }) => {
+  // Trova il corso/strumento di un allievo dato il suo nome (match case-insensitive)
+  const getCorso = React.useCallback((nomePerformer) => {
+    if (!nomePerformer || !studentsTab) return '';
+    const nome = nomePerformer.trim().toLowerCase();
+    const stu = studentsTab.find(s => (s.name||s.nome||'').toLowerCase() === nome);
+    return stu ? (stu.instrument||stu.corso||'') : '';
+  }, [studentsTab]);
   const cat = braniCatalog || [];
 
   // Costruisce lista brani dalla struttura programma (eventi creati dal form)
@@ -699,6 +706,9 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
   const [showAdd, setShowAdd] = React.useState(false);
   const [addText, setAddText] = React.useState('');
   const [addPerf, setAddPerf] = React.useState('');
+  const [addNote, setAddNote] = React.useState('');
+  const [editingNoteIdx, setEditingNoteIdx] = React.useState(null);
+  const [noteTemp, setNoteTemp] = React.useState('');
 
   // Ricarica se cambia evento
   React.useEffect(() => {
@@ -732,9 +742,15 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
 
   const addItem = () => {
     if (!addText.trim()) return;
-    const newItems = [...items, { brano: addText.trim(), performer: addPerf.trim() }];
+    const newItems = [...items, { brano: addText.trim(), performer: addPerf.trim(), note: addNote.trim() }];
     save(newItems);
-    setAddText(''); setAddPerf(''); setShowAdd(false);
+    setAddText(''); setAddPerf(''); setAddNote(''); setShowAdd(false);
+  };
+
+  // Aggiorna la nota di un singolo brano in scaletta
+  const updateNote = (idx, nuovaNota) => {
+    const newItems = items.map((it,i) => i===idx ? {...it, note: nuovaNota} : it);
+    save(newItems);
   };
 
   // Importa da programma SENZA azzerare la scaletta esistente: aggiunge solo
@@ -757,9 +773,11 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
     const w = window.open('','_blank','width=794,height=1123');
     if (!w) { alert('Abilita i popup per stampare'); return; }
     const rows = items.map((s,i) => {
-      const perf = s.performer ? '<div style="font-size:11px;color:#888;margin-top:3px">'+s.performer+'</div>' : '';
+      const corso = getCorso(s.performer);
+      const perf = s.performer ? '<div style="font-size:11px;color:#888;margin-top:3px">'+s.performer+(corso?' <span style="color:#bbb">· '+corso+'</span>':'')+'</div>' : '';
+      const nota = s.note ? '<div style="font-size:10.5px;color:#b8860b;margin-top:4px;font-style:italic">📝 '+s.note+'</div>' : '';
       return '<tr><td style="width:44px;text-align:center;font-weight:700;color:#1a4fa0;font-size:16px;padding:16px 8px">'+(i+1)+'</td>'
-        +'<td style="padding:14px 16px"><div style="font-size:15px;font-weight:600">'+s.brano+'</div>'+perf+'</td></tr>';
+        +'<td style="padding:14px 16px"><div style="font-size:15px;font-weight:600">'+s.brano+'</div>'+perf+nota+'</td></tr>';
     }).join('');
     const dataStr = evento.data ? new Date(evento.data+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '';
     w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><title>Programma – '+evento.titolo+'</title>'
@@ -843,6 +861,17 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
           })
         )
       ),
+      React.createElement('div', null,
+        React.createElement('label', {style:{fontSize:10,color:C.textMuted,display:'block',marginBottom:4}}, 'NOTE (facoltative)'),
+        React.createElement('input', {
+          value: addNote,
+          onChange: e=>setAddNote(e.target.value),
+          onKeyDown: e=>{if(e.key==='Enter')addItem();},
+          placeholder: 'Es. Cambio microfono, durata 4min...',
+          style:{width:'100%',background:C.bg,border:'1px solid '+C.border,borderRadius:7,
+            color:C.text,fontSize:13,padding:'8px 12px',fontFamily:"'Open Sans',sans-serif"}
+        })
+      ),
       React.createElement('button', {onClick:addItem,
         style:{alignSelf:'flex-start',padding:'7px 18px',borderRadius:7,border:'none',
           background:C.gold,color:"#ffffff",cursor:'pointer',fontSize:13,fontWeight:600,
@@ -880,7 +909,27 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
           React.createElement('div', {style:{flex:1,minWidth:0}},
             React.createElement('div', {style:{fontSize:13,fontWeight:600,
               overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, item.brano),
-            item.performer && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:1}}, item.performer)
+            item.performer && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:1}},
+              item.performer,
+              getCorso(item.performer) && React.createElement('span', {style:{color:C.textDim}}, ' · '+getCorso(item.performer))
+            ),
+            /* Nota: editabile inline al click, altrimenti mostrata come testo */
+            editingNoteIdx === idx
+              ? React.createElement('input', {
+                  autoFocus: true,
+                  value: noteTemp,
+                  onChange: e=>setNoteTemp(e.target.value),
+                  onBlur: () => { updateNote(idx, noteTemp); setEditingNoteIdx(null); },
+                  onKeyDown: e=>{ if(e.key==='Enter'){ updateNote(idx, noteTemp); setEditingNoteIdx(null); } if(e.key==='Escape'){ setEditingNoteIdx(null); } },
+                  placeholder: 'Note (facoltative)...',
+                  style:{width:'100%',marginTop:4,fontSize:11,padding:'4px 7px',borderRadius:5,
+                    border:'1px solid '+C.goldDim,background:C.bg,color:C.text,fontFamily:"'Open Sans',sans-serif"}
+                })
+              : React.createElement('div', {
+                  onClick: ()=>{ setEditingNoteIdx(idx); setNoteTemp(item.note||''); },
+                  style:{fontSize:11,color:item.note?C.gold:C.textDim,marginTop:3,cursor:'pointer',
+                    fontStyle:item.note?'normal':'italic'}
+                }, item.note || '📝 Aggiungi nota...')
           ),
 
           /* bottoni */
@@ -1317,7 +1366,7 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
         )
 
         /* SCALETTA */
-        , tab==="brani" && React.createElement(ScalettaTab, { evento: evento, onUpdate: onUpdate, brani: braniCatalog })
+        , tab==="brani" && React.createElement(ScalettaTab, { evento: evento, onUpdate: onUpdate, brani: braniCatalog, students: students })
 
         /* REPORT */
         , tab==="report" && (
