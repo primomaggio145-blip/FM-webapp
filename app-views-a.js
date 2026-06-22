@@ -740,6 +740,10 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
   // Importa da programma SENZA azzerare la scaletta esistente: aggiunge solo
   // i brani non già presenti (confronto per nome brano, case-insensitive)
   const importaDaProgramma = () => {
+    if (autoItems.length === 0) {
+      alert('Nessun brano trovato nel Programma o nei Partecipanti.\nAssegna prima gli allievi ai brani nella tab "Programma" dell\'evento.');
+      return;
+    }
     const nomiGiaPresenti = new Set(items.map(i => (i.brano||'').toLowerCase().trim()));
     const nuoviDaAggiungere = autoItems.filter(a => !nomiGiaPresenti.has((a.brano||'').toLowerCase().trim()));
     if (nuoviDaAggiungere.length === 0) {
@@ -790,10 +794,10 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog }) => {
         items.length > 0 ? items.length+' brani in scaletta' : 'Scaletta vuota'
       ),
       React.createElement('div', {style:{display:'flex',gap:8,flexWrap:'wrap'}},
-        autoItems.length > 0 && React.createElement('button', {onClick:importaDaProgramma,
+        React.createElement('button', {onClick:importaDaProgramma,
           style:{fontSize:12,padding:'6px 12px',borderRadius:7,border:'1px solid '+C.border,
             background:C.bg,color:C.textMuted,cursor:'pointer'}},
-          '➕ Aggiungi da programma ('+autoItems.length+')'
+          autoItems.length > 0 ? '➕ Aggiungi da programma ('+autoItems.length+')' : '➕ Aggiungi da programma'
         ),
         React.createElement('button', {onClick:()=>setShowAdd(v=>!v),
           style:{fontSize:12,padding:'6px 12px',borderRadius:7,
