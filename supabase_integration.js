@@ -180,13 +180,33 @@
 
     // Admin: elimina utente — rimuove solo il profilo nel DB
     async eliminaUtente({ userId }) {
-      const { error } = await sb.from("profili")
-        .delete()
-        .eq("id", userId);
-      if (error) throw new Error(error.message || "Errore eliminazione");
-      // Nota: la cancellazione auth-side richiede service_role (Edge Function)
-      // Il profilo viene rimosso, laccesso risulterà negato al prossimo login
-      return { ok: true };
+      // Usa la Edge Function admin-users per eliminare COMPLETAMENTE
+      // l'account (auth.users + profilo), non solo il profilo.
+      // Richiede ruolo admin — verificato lato server.
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (!session) throw new Error("Sessione non valida");
+        const res = await fetch(
+          'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-users',
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + session.access_token,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ action: 'delete', userId }),
+          }
+        );
+        const json = await res.json();
+        if (!json.ok) throw new Error(json.error || "Errore eliminazione");
+        return { ok: true };
+      } catch (e) {
+        // Fallback: elimina almeno il profilo se la Edge Function non risponde
+        console.warn('[FM] admin-users delete failed, fallback a solo profilo:', e?.message);
+        const { error } = await sb.from("profili").delete().eq("id", userId);
+        if (error) throw new Error(error.message || "Errore eliminazione");
+        return { ok: true, partial: true };
+      }
     },
 
     // Carica tutte le richieste in attesa (solo admin)
