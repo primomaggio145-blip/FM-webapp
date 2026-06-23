@@ -736,7 +736,7 @@ function App() {
       case 'repertorio':  return React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
       case 'allegati':    return React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user});
       case 'biblioteca':  return React.createElement(BibliotecaView, { userRuolo: user?.ruolo||"admin", appUser: user});
-      case 'concerti':    return React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti});
+      case 'concerti':    return React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, docenti: sharedDocenti});
       case 'utenti':      return (user?.ruolo||"admin")==="admin" ? React.createElement(UtentiView, { students: sharedStudents, docenti: sharedDocenti}) : null;
       case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici});
       case 'schedaScuola':return React.createElement(SchedaScuolaView, { config: sharedConfig});
@@ -3073,6 +3073,124 @@ const ImpRSToggle = ({k, label, rs, ac, setRS}) => {
   );
 };
 
+// ─── RESET DATI (solo admin) ──────────────────────────────────────────────────
+const ADMIN_RESET_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-reset';
+
+const CATEGORIE_RESET = [
+  {id:'allievi',    label:'👨‍🎓 Allievi',              desc:'Tutte le schede allievi'},
+  {id:'docenti',     label:'👤 Docenti',               desc:'Tutte le schede docenti'},
+  {id:'corsi',       label:'🎵 Corsi',                 desc:'Tutti i corsi configurati'},
+  {id:'lezioni',     label:'📅 Lezioni',               desc:'Tutto il calendario lezioni'},
+  {id:'pagamenti',   label:'💶 Pagamenti/Quote',       desc:'Storico quote e ricevute'},
+  {id:'spese',       label:'💸 Spese/Rimborsi',        desc:'Rimborsi spese docenti'},
+  {id:'concerti',    label:'🎤 Concerti/Eventi',       desc:'Eventi, scalette, prenotazioni biglietti'},
+  {id:'iscrizioni',  label:'📋 Iscrizioni anno',       desc:'Iscrizioni allievi per anno scolastico'},
+  {id:'repertorio',  label:'🎼 Repertorio/Brani',      desc:'Catalogo brani'},
+  {id:'allegati',    label:'📎 Allegati',              desc:'Riferimenti file allegati'},
+  {id:'messaggi',    label:'💬 Messaggi',              desc:'Tutti i messaggi interni'},
+  {id:'notifiche',   label:'🔔 Notifiche',             desc:'Storico notifiche'},
+  {id:'sala_prove',  label:'🥁 Sala prove',            desc:'Prenotazioni sala prove'},
+];
+
+const ResetDatiSection = () => {
+  const [selected, setSelected] = React.useState({});
+  const [counts, setCounts] = React.useState({});
+  const [loadingCounts, setLoadingCounts] = React.useState(false);
+  const [confirmText, setConfirmText] = React.useState('');
+  const [resetting, setResetting] = React.useState(false);
+  const [toast, setToast] = React.useState(null);
+  const [showPanel, setShowPanel] = React.useState(false);
+
+  const showToast = (ok, msg) => { setToast({ok,msg}); setTimeout(()=>setToast(null),6000); };
+
+  const toggle = (id) => setSelected(p => ({...p, [id]: !p[id]}));
+  const selectedIds = Object.keys(selected).filter(k=>selected[k]);
+
+  const loadCounts = async () => {
+    if (selectedIds.length === 0) { setCounts({}); return; }
+    setLoadingCounts(true);
+    try {
+      const sb = window.supabaseClient;
+      const { data:{session} } = await sb.auth.getSession();
+      const res = await fetch(ADMIN_RESET_EDGE, {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
+        body: JSON.stringify({action:'count', categorie:selectedIds})
+      });
+      const json = await res.json();
+      if (json.ok) setCounts(json.counts);
+    } catch(e) { console.warn('[FM] count error:', e?.message); }
+    setLoadingCounts(false);
+  };
+
+  React.useEffect(() => { loadCounts(); }, [JSON.stringify(selectedIds)]);
+
+  const totaleRecord = Object.values(counts).reduce((a,b)=>a+b,0);
+
+  const handleReset = async () => {
+    if (confirmText !== 'ELIMINA') { showToast(false, 'Scrivi esattamente ELIMINA per confermare'); return; }
+    setResetting(true);
+    try {
+      const sb = window.supabaseClient;
+      const { data:{session} } = await sb.auth.getSession();
+      const res = await fetch(ADMIN_RESET_EDGE, {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
+        body: JSON.stringify({action:'reset', categorie:selectedIds})
+      });
+      const json = await res.json();
+      if (json.ok) {
+        showToast(true, `✅ Reset completato. Ricarica la pagina per vedere i cambiamenti.`);
+        setSelected({}); setCounts({}); setConfirmText(''); setShowPanel(false);
+      } else {
+        showToast(false, json.error||'Errore durante il reset');
+      }
+    } catch(e) { showToast(false, e?.message||'Errore'); }
+    setResetting(false);
+  };
+
+  return React.createElement(ImpSection, {title:"⚠️ Reset dati", icon:"trash"}
+    , toast && React.createElement('div',{style:{padding:'10px 14px',borderRadius:8,marginBottom:12,fontSize:13,background:toast.ok?C.greenBg:C.redBg,border:`1px solid ${toast.ok?C.greenBorder:C.redBorder}`,color:toast.ok?C.green:C.red}}, toast.msg)
+    , React.createElement('div', {style:{padding:'12px 14px',background:C.redBg,border:`1px solid ${C.redBorder}`,borderRadius:8,marginBottom:14,fontSize:12,color:C.red}}
+        , '🔴 Operazione irreversibile. Elimina permanentemente i dati delle categorie selezionate. Non tocca account utente, profili o configurazioni generali.'
+      )
+    , !showPanel
+      ? React.createElement('button', {onClick:()=>setShowPanel(true),
+          style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.red}`,background:C.redBg,color:C.red,cursor:'pointer',fontSize:13,fontWeight:600}}
+        , '🗑️ Apri pannello reset')
+      : React.createElement('div', null
+        , React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8,marginBottom:16}}
+            , CATEGORIE_RESET.map(cat => React.createElement('label', {key:cat.id,
+                style:{display:'flex',alignItems:'center',gap:10,padding:'9px 12px',background:selected[cat.id]?C.redBg:C.bg,border:`1px solid ${selected[cat.id]?C.redBorder:C.border}`,borderRadius:8,cursor:'pointer'}}
+                , React.createElement('input',{type:'checkbox', checked:!!selected[cat.id], onChange:()=>toggle(cat.id), style:{width:16,height:16,cursor:'pointer'}})
+                , React.createElement('div',{style:{flex:1}}
+                  , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:selected[cat.id]?C.red:C.text}}, cat.label)
+                  , React.createElement('div',{style:{fontSize:11,color:C.textDim}}, cat.desc)
+                )
+                , selected[cat.id] && React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.red}}
+                    , loadingCounts ? '...' : (counts[cat.id]!==undefined ? counts[cat.id]+' record' : '')
+                  )
+              ))
+          )
+        , selectedIds.length > 0 && React.createElement('div', {style:{padding:'12px 14px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:14}}
+            , React.createElement('div',{style:{fontSize:13,fontWeight:600,marginBottom:10}}, `Stai per eliminare ${totaleRecord} record totali da ${selectedIds.length} categorie.`)
+            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'block',marginBottom:5}}, 'Scrivi "ELIMINA" per confermare:')
+            , React.createElement('input',{type:'text', value:confirmText, onChange:e=>setConfirmText(e.target.value), placeholder:'ELIMINA',
+                style:{width:'100%',padding:'8px 12px',borderRadius:7,border:`1px solid ${C.redBorder}`,background:C.bg,color:C.text,fontSize:14,fontFamily:"'Open Sans',sans-serif",boxSizing:'border-box'}})
+          )
+        , React.createElement('div', {style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+            , React.createElement('button', {onClick:()=>{setShowPanel(false);setSelected({});setConfirmText('');},
+                style:{padding:'9px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:'none',color:C.textMuted,cursor:'pointer',fontSize:13}}, 'Annulla')
+            , React.createElement('button', {onClick:handleReset, disabled:resetting||selectedIds.length===0||confirmText!=='ELIMINA',
+                style:{padding:'9px 20px',borderRadius:8,border:'none',
+                  background:(resetting||selectedIds.length===0||confirmText!=='ELIMINA')?C.border:C.red,
+                  color:'#fff',cursor:(resetting||selectedIds.length===0||confirmText!=='ELIMINA')?'not-allowed':'pointer',fontSize:13,fontWeight:700}}
+              , resetting?'⏳ Eliminazione...':'🗑️ Esegui reset definitivo')
+          )
+      )
+  );
+};
+
 const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: propSetPanels, ruolo: propRuolo, setRuolo: propSetRuolo, anniScolastici: propAnni, setAnniScolastici: propSetAnni }) => {
   const [draft, setDraft] = useState(config||CONFIG_DEFAULT);
   // NON aggiornare draft quando config cambia dall'esterno — altrimenti handleSave viene interrotto
@@ -3401,6 +3519,9 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
           );
         })()
     )
+
+    /* ── Reset dati (solo admin) ──────────────────────────────────────────── */
+    , (propRuolo==="admin"||!propRuolo) && React.createElement(ResetDatiSection)
 
     , React.createElement(ImpSection, {title:"Stile grafico app", icon:"palette"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
