@@ -22,8 +22,8 @@ function App() {
   React.useEffect(() => { window.__FM_CONFIG__ = sharedConfig; }, [sharedConfig]);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
   const [sharedSpese,          setSharedSpese]          = useState(_d.spese      || INIT_SPESE);
-  const [sharedAnniScolastici, setSharedAnniScolastici] = useState(INIT_ANNI_SCOLASTICI);
-  const [sharedIscrizioniAnno, setSharedIscrizioniAnno] = useState([]);
+  const [sharedAnniScolastici, setSharedAnniScolastici] = useState(_d.anniScolastici || INIT_ANNI_SCOLASTICI);
+  const [sharedIscrizioniAnno, setSharedIscrizioniAnno] = useState(_d.iscrizioniAnno || []);
   React.useEffect(() => {
     window.__FM_DATA__ = {...(window.__FM_DATA__||{}), iscrizioniAnno: sharedIscrizioniAnno, anniScolastici: sharedAnniScolastici};
   }, [sharedIscrizioniAnno, sharedAnniScolastici]);
@@ -738,7 +738,7 @@ function App() {
       case 'biblioteca':  return React.createElement(BibliotecaView, { userRuolo: user?.ruolo||"admin", appUser: user});
       case 'concerti':    return React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, docenti: sharedDocenti});
       case 'utenti':      return (user?.ruolo||"admin")==="admin" ? React.createElement(UtentiView, { students: sharedStudents, docenti: sharedDocenti}) : null;
-      case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici});
+      case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno});
       case 'schedaScuola':return React.createElement(SchedaScuolaView, { config: sharedConfig});
       case 'modulistica': return React.createElement(ModulisticaView, {});
       case 'messaggi':            return React.createElement(MessaggiView, { appUser: user, ruolo: user?.ruolo||'admin', students: sharedStudents, docenti: sharedDocenti });
@@ -3191,7 +3191,7 @@ const ResetDatiSection = () => {
   );
 };
 
-const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: propSetPanels, ruolo: propRuolo, setRuolo: propSetRuolo, anniScolastici: propAnni, setAnniScolastici: propSetAnni }) => {
+const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: propSetPanels, ruolo: propRuolo, setRuolo: propSetRuolo, anniScolastici: propAnni, setAnniScolastici: propSetAnni, setIscrizioniAnno: propSetIscrizioniAnno }) => {
   const [draft, setDraft] = useState(config||CONFIG_DEFAULT);
   // NON aggiornare draft quando config cambia dall'esterno — altrimenti handleSave viene interrotto
   // Il draft viene aggiornato solo dall'utente che modifica i campi
@@ -3457,11 +3457,13 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
                     const sb = window.supabaseClient; if (!sb) return;
                     const allStu = (window.__FM_DATA__&&window.__FM_DATA__.students) || [];
                     const allCourses = (window.__FM_DATA__&&window.__FM_DATA__.courses) || [];
+                    if (allStu.length === 0) { alert('⚠️ Nessun allievo trovato in window.__FM_DATA__.students.\nProva a ricaricare la pagina e riprova.'); return; }
+                    const annoInt = parseInt(annoAttivo) || annoAttivo;
                     const righe = allStu.filter(s=>s.status!=='inattivo').map(s => {
                       const corso = allCourses.find(c=>String(c.id)===String(s.courseId)||c.name===s.course);
                       return {
                         studente_id: parseInt(s.id)||s.id,
-                        anno_inizio: annoAttivo,
+                        anno_inizio: annoInt,
                         corso_id: corso?String(corso.id):null,
                         corso_nome: corso?(corso.name||corso.nome):(s.course||''),
                         docente_id: null,
@@ -3469,10 +3471,34 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
                         data_iscrizione: yyyymmdd(new Date()),
                       };
                     });
-                    if (righe.length===0) { alert('Nessun allievo da migrare'); return; }
-                    const { error } = await sb.from('iscrizioni_anno').upsert(righe, {onConflict:'studente_id,anno_inizio'});
-                    if (error) { alert('Errore: '+error.message); return; }
-                    alert(`✅ ${righe.length} allievi migrati all'anno ${annoAttivo}/${annoAttivo+1}`);
+                    if (righe.length===0) { alert('Nessun allievo da migrare (tutti segnati come inattivi?)'); return; }
+                    const { data: inserted, error } = await sb.from('iscrizioni_anno')
+                      .upsert(righe, {onConflict:'studente_id,anno_inizio'})
+                      .select();
+                    if (error) { alert('❌ Errore upsert:\n'+error.message+'\n\nVerifica che la tabella iscrizioni_anno e le sue RLS siano configurate correttamente.'); return; }
+                    // Verifica effettiva nel DB con una query di conferma
+                    const { count: countDB } = await sb.from('iscrizioni_anno')
+                      .select('*', { count: 'exact', head: true })
+                      .eq('anno_inizio', annoInt);
+                    alert(`✅ Operazione completata.\n\n`+
+                      `Righe inviate: ${righe.length}\n`+
+                      `Righe confermate dal DB (upsert): ${inserted?inserted.length:'?'}\n`+
+                      `Totale righe in iscrizioni_anno per l'anno ${annoInt}: ${countDB}\n\n`+
+                      `Se "Totale righe" è 0, il problema è nelle RLS o nel valore di anno_inizio. Se è > 0, ricarica la pagina (F5) — i dati dovrebbero apparire.`);
+                    // Aggiorna subito lo stato locale, senza aspettare il refresh
+                    if (inserted && inserted.length > 0 && typeof propSetIscrizioniAnno === 'function') {
+                      const nuoveLocali = inserted.map(r => ({
+                        id:r.id, studentId:r.studente_id, annoInizio:r.anno_inizio,
+                        corsoId:r.corso_id||'', corsoNome:r.corso_nome||'',
+                        docenteId:r.docente_id||'', docenteNome:r.docente_nome||'',
+                        dataIscrizione:r.data_iscrizione||'',
+                      }));
+                      propSetIscrizioniAnno(prev => {
+                        const idsNuovi = new Set(nuoveLocali.map(n=>`${n.studentId}-${n.annoInizio}`));
+                        const filtratiVecchi = prev.filter(p=>!idsNuovi.has(`${p.studentId}-${p.annoInizio}`));
+                        return [...filtratiVecchi, ...nuoveLocali];
+                      });
+                    }
                     if (window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
                   },
                   style:{padding:'7px 16px',borderRadius:8,border:`1px solid ${C.gold}`,background:C.goldBg,color:C.gold,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif"}
