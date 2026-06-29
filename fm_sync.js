@@ -116,18 +116,33 @@
     };
   }
   function adaptBrano(r) {
-    const parseJson = (v, fallback=[]) => { if (!v) return fallback; if (Array.isArray(v)) return v; try { return JSON.parse(v); } catch(e) { return fallback; } };
+    const parseJson = (v, fallback=[]) => { if (!v) return fallback; if (Array.isArray(v)) return v; if (typeof v==='object') return v; try { return JSON.parse(v); } catch(e) { return fallback; } };
+    let versioni = parseJson(r.versioni, []);
+    // Migrazione automatica: se non ci sono versioni ma ci sono dati legacy
+    // (tonalita/tonality, spartiti, files, link_backing), crea la prima versione al volo
+    if (versioni.length === 0) {
+      const tonLegacy = r.tonalita || r.tonality || '';
+      const spartitiLegacy = parseJson(r.spartiti, []);
+      const filesLegacy = parseJson(r.files, []);
+      const linkLegacy = r.link_backing ? [{url:r.link_backing, label:'Backing track'}] : [];
+      if (tonLegacy || spartitiLegacy.length || filesLegacy.length || linkLegacy.length) {
+        versioni = [{ tonalita: tonLegacy, spartiti: spartitiLegacy, allegati: filesLegacy, link: linkLegacy, allievi: [] }];
+      }
+    }
     return {
       id: r.id,
       title: r.titolo || r.title || '',
       composer: r.compositore || r.composer || '',
-      periodo: r.periodo || '', tonality: r.tonality || '',
-      difficulty: r.difficulty || '', tipo: r.tipo || 'individuale',
+      tipo: r.tipo || 'individuale',
+      strumento: r.strumento || '',           // '' = ensemble/tutti gli strumenti
+      eventiIds: parseJson(r.eventi_ids, []),
+      versioni: versioni,
       note: r.note || '', dataPrima: r.data_prima || '',
       dataUltima: r.data_ultima || '',
-      linkBacking: r.link_backing || '',
-      files: parseJson(r.files, []),
-      spartiti: parseJson(r.spartiti, []),
+      lezioni: r.lezioni || 0,
+      // Campi legacy mantenuti per retrocompatibilità (letti, non più scritti)
+      periodo: r.periodo || '',
+      difficulty: r.difficolta || r.difficulty || '',
     };
   }
   function adaptConcerto(r, partecipantiMap) {

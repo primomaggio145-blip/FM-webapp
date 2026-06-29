@@ -3,7 +3,7 @@ var _jsxFileName = ""; function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) 
 // APP
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep, quickAction, clearQuickAction, userRuolo:_ruoloRep, appUser:_appUserRep }) => {
+const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep, docenti:_propDocentiRep, concerti:_propConcertiRep, quickAction, clearQuickAction, userRuolo:_ruoloRep, appUser:_appUserRep }) => {
   const ruoloRep = _ruoloRep || "admin";
   const _nomeAllievoRep = ruoloRep==="allievo" ? ((_appUserRep&&_appUserRep.nome)||"") : "";
   const isMobile = useIsMobile();
@@ -13,14 +13,30 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
   const setBrani = propSetBrani || _setBraniLocal;
   const _studBranoRep = (_propStudentsRep||[]).filter(s=>s.status==="attivo"||!s.status);
   const _lessonsRep   = _propLessonsRep || [];
+  const _concertiRep  = _propConcertiRep || [];
   const usageCount    = id => _lessonsRep.filter(l => (l.repertorioIds||[]).includes(id)).length;
-  const allieviOfBrano= id => _studBranoRep.filter(s => (s.repertorio||[]).some(r => r.id === id));
+  // Conta allievi assegnati attraverso TUTTE le versioni del brano
+  const allieviOfBrano= id => {
+    const b = brani.find(x=>x.id===id); if (!b) return [];
+    const ids = new Set();
+    const out = [];
+    (b.versioni||[]).forEach(v => (v.allievi||[]).forEach(a => {
+      if (!ids.has(a.studentId)) { ids.add(a.studentId); out.push(a); }
+    }));
+    return out;
+  };
   const allieviCount  = id => allieviOfBrano(id).length;
+
+  // Il proprio strumento (per allievi) — usato per filtrare la visibilità
+  const _myStudentRep = ruoloRep==="allievo" ? _studBranoRep.find(s=>(s.name||s.nome||"").toLowerCase()===_nomeAllievoRep.toLowerCase()) : null;
+  const _myStrumento = _myStudentRep ? (_myStudentRep.instrument||"") : "";
+
     const [tab,       setTab]      = useState("catalogo"); // catalogo | allievi
     const [layout,    setLayout]   = useState("grid");     // grid | list
     const [search,    setSearch]   = useState("");
-    const [fDiff,     setFDiff]    = useState("");
-    const [fPeriodo,  setFPeriodo] = useState("");
+    const [fStrumento,setFStrumento]= useState("");
+    const [fTipo,     setFTipo]    = useState("");
+    const [fTonalita, setFTonalita]= useState("");
     const [drawer,    setDrawer]   = useState(null);
     const [modal,     setModal]    = useState(null); // "add"|"edit"|"confirm_delete"
     const [selBrano,  setSelBrano] = useState(null);
@@ -29,23 +45,93 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
   
     const showToast=(msg,hex=C.green)=>{setToast({msg,hex});setTimeout(()=>setToast(null),3000);};
     const closeModal=()=>{setModal(null);setSelBrano(null);};
-  
-    // ── CRUD ──
-    const aggiungiBrano=(f)=>{setBrani(p=>[...p,{...f,id:uid()}]);closeModal();showToast("Brano aggiunto");};
-    const modificaBrano=(f)=>{setBrani(p=>p.map(b=>b.id===selBrano.id?{...b,...f}:b));closeModal();setDrawer(null);showToast("Brano aggiornato");};
-    const eliminaBrano=()=>{
-      setBrani(p=>p.filter(b=>b.id!==selBrano.id));
+
+    // ── Mappa brano JS → riga DB ──
+    const toDbRow = (f) => ({
+      titolo: f.title||'', compositore: f.composer||'',
+      tipo: f.tipo||'individuale', strumento: f.strumento||null,
+      eventi_ids: f.eventiIds||[], versioni: f.versioni||[],
+      note: f.note||'',
+    });
+
+    // ── CRUD con persistenza Supabase ──
+    const aggiungiBrano = async (f) => {
+      const tempId = uid();
+      setBrani(p=>[...p,{...f,id:tempId}]);
+      closeModal();
+      try {
+        const sb = window.supabaseClient;
+        if (sb) {
+          const { data, error } = await sb.from('brani').insert(toDbRow(f)).select().single();
+          if (error) { console.warn('[FM] insert brano error:', error.message); showToast('Errore salvataggio: '+error.message, C.red); }
+          else if (data) setBrani(p=>p.map(b=>b.id===tempId?{...f,id:data.id}:b));
+        }
+      } catch(e) { console.warn('[FM] aggiungiBrano exception:', e?.message); }
+      showToast("Brano aggiunto");
+    };
+    const modificaBrano = async (f) => {
+      setBrani(p=>p.map(b=>b.id===selBrano.id?{...b,...f}:b));
+      closeModal(); setDrawer(null);
+      try {
+        const sb = window.supabaseClient;
+        if (sb) {
+          const { error } = await sb.from('brani').update(toDbRow(f)).eq('id', selBrano.id);
+          if (error) { console.warn('[FM] update brano error:', error.message); showToast('Errore salvataggio: '+error.message, C.red); return; }
+        }
+      } catch(e) { console.warn('[FM] modificaBrano exception:', e?.message); }
+      showToast("Brano aggiornato");
+    };
+    const eliminaBrano = async () => {
+      const id = selBrano.id;
+      setBrani(p=>p.filter(b=>b.id!==id));
       setDrawer(null); closeModal();
+      try {
+        const sb = window.supabaseClient;
+        if (sb) {
+          const { error } = await sb.from('brani').delete().eq('id', id);
+          if (error) console.warn('[FM] delete brano error:', error.message);
+        }
+      } catch(e) { console.warn('[FM] eliminaBrano exception:', e?.message); }
       showToast("Brano eliminato",C.red);
     };
+
+    // Salva direttamente le versioni di un brano (usato dal drawer per assegnare allievi/file inline)
+    const aggiornaVersioni = async (branoId, nuoveVersioni) => {
+      setBrani(p=>p.map(b=>b.id===branoId?{...b,versioni:nuoveVersioni}:b));
+      try {
+        const sb = window.supabaseClient;
+        if (sb) {
+          const { error } = await sb.from('brani').update({versioni:nuoveVersioni}).eq('id', branoId);
+          if (error) console.warn('[FM] aggiornaVersioni error:', error.message);
+        }
+      } catch(e) { console.warn('[FM] aggiornaVersioni exception:', e?.message); }
+    };
   
+    // ── VISIBILITÀ per strumento (allievi vedono solo il proprio + ensemble) ──
+    const braniVisibili = useMemo(() => {
+      if (ruoloRep === "docente" || ruoloRep === "admin") return brani; // vedono tutto
+      if (ruoloRep === "allievo" && _myStrumento) {
+        return brani.filter(b => !b.strumento || b.strumento === _myStrumento);
+      }
+      return brani;
+    }, [brani, ruoloRep, _myStrumento]);
+
     // ── FILTRI ──
-    const filtrati = useMemo(()=>brani.filter(b=>{
+    const tuttiStrumenti = useMemo(() => [...new Set(braniVisibili.map(b=>b.strumento).filter(Boolean))].sort(), [braniVisibili]);
+    const tutteTonalita  = useMemo(() => {
+      const set = new Set();
+      braniVisibili.forEach(b => (b.versioni||[]).forEach(v => { if (v.tonalita) set.add(v.tonalita); }));
+      return [...set].sort();
+    }, [braniVisibili]);
+
+    const filtrati = useMemo(()=>braniVisibili.filter(b=>{
       const q=search.toLowerCase();
-      return(!q||b.title.toLowerCase().includes(q)||b.composer.toLowerCase().includes(q)||_optionalChain([b, 'access', _70 => _70.tonality, 'optionalAccess', _71 => _71.toLowerCase, 'call', _72 => _72(), 'access', _73 => _73.includes, 'call', _74 => _74(q)]))
-        &&(!fDiff||b.difficulty===fDiff)
-        &&(!fPeriodo||b.periodo===fPeriodo);
-    }),[brani,search,fDiff,fPeriodo]);
+      const matchTonalita = (b.versioni||[]).some(v=>(v.tonalita||'').toLowerCase().includes(q));
+      return(!q||b.title.toLowerCase().includes(q)||b.composer.toLowerCase().includes(q)||matchTonalita)
+        &&(!fStrumento||b.strumento===fStrumento||(fStrumento==='__ensemble__'&&!b.strumento))
+        &&(!fTipo||b.tipo===fTipo)
+        &&(!fTonalita||(b.versioni||[]).some(v=>v.tonalita===fTonalita));
+    }),[braniVisibili,search,fStrumento,fTipo,fTonalita]);
   
 
     // ── STATS ──
@@ -163,20 +249,20 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                             color:C.text,fontSize:13,padding:"9px 12px 9px 34px",fontFamily:"'Open Sans',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7819}})
                       )
                       , [
-                        
-                        {val:fDiff,set:setFDiff,opts:DIFFICULTY.map(d=>d.id),ph:"Difficoltà"},
-                        {val:fPeriodo,set:setFPeriodo,opts:PERIODI.map(p=>p.id),ph:"Periodo"},
+                        {val:fStrumento,set:setFStrumento,opts:[{id:'__ensemble__',label:'🎭 Ensemble/Collettivo'},...tuttiStrumenti.map(s=>({id:s,label:s}))],ph:"Strumento/Corso"},
+                        {val:fTipo,set:setFTipo,opts:[{id:'individuale',label:'Individuale'},{id:'collettivo',label:'Collettivo'}],ph:"Tipo"},
+                        {val:fTonalita,set:setFTonalita,opts:tutteTonalita.map(t=>({id:t,label:t})),ph:"Tonalità"},
                       ].map((f,i)=>(
                         React.createElement('select', { key: i, value: f.val, onChange: e=>f.set(e.target.value),
                           style: {background:C.surface,border:`1px solid ${f.val?C.goldDim:C.border}`,
                             borderRadius:8,color:f.val?C.gold:C.textMuted,fontSize:13,
                             padding:"9px 12px",fontFamily:"'Open Sans',sans-serif",appearance:"none",cursor:"pointer"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7829}}
                           , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7833}}, f.ph)
-                          , f.opts.map(o=>React.createElement('option', { key: o, value: o, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7834}}, o))
+                          , f.opts.map(o=>React.createElement('option', { key: o.id, value: o.id, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7834}}, o.label))
                         )
                       ))
-                      , (search||fDiff||fPeriodo)&&(
-                        React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setSearch("");setFDiff("");setFPeriodo("");}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7838}}
+                      , (search||fStrumento||fTipo||fTonalita)&&(
+                        React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setSearch("");setFStrumento("");setFTipo("");setFTonalita("");}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7838}}
                           , React.createElement(Ic, { n: "x", size: 12, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7839}}), "Azzera"
                         )
                       )
@@ -191,36 +277,40 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                           React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7850}}
                             , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7856}}
                               , filtrati.map((b,i)=>{
-                                const d=diffById(b.difficulty);
-                                const p=periodoById(b.periodo);
+                                const primaTonalita = (b.versioni||[])[0]?.tonalita || '';
+                                const nVersioni = (b.versioni||[]).length;
                                 return(
                                   React.createElement('div', { key: b.id, className: "card-anim", onClick: ()=>setDrawer(b),
                                     style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
                                       padding:"15px 17px",cursor:"pointer",transition:"all .15s"},
                                     onMouseEnter: e=>{e.currentTarget.style.borderColor=C.gold+"50";e.currentTarget.style.background=C.surfaceHover;},
-                                    onMouseLeave: e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background=C.surface;}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7861}}
-                                    , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7866}}
-                                      , React.createElement('div', { style: {flex:1,minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7867}}
+                                    onMouseLeave: e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.background=C.surface;}}
+                                    , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}
+                                      , React.createElement('div', { style: {flex:1,minWidth:0}}
                                         , React.createElement('div', { style: {fontSize:14,fontWeight:600,lineHeight:1.3,marginBottom:3,
-                                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7868}}, b.title)
-                                        , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7870}}, b.composer)
+                                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}, b.title)
+                                        , React.createElement('div', { style: {fontSize:12,color:C.textMuted}}, b.composer)
                                       )
-                                      , React.createElement(Ic, { n: "right", size: 14, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7872}})
+                                      , React.createElement(Ic, { n: "right", size: 14, stroke: C.textDim})
                                     )
-                                    , React.createElement('div', { style: {display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7874}}
-                                      , b.tonality&&React.createElement('span', { style: {fontSize:10,padding:"2px 6px",borderRadius:4,border:`1px solid ${C.border}`,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7875}}, b.tonality)
-                                      , b.periodo&&React.createElement('span', { style: {fontSize:10,padding:"2px 6px",borderRadius:4,background:p.hex+"18",color:p.hex,border:`1px solid ${p.hex}30`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7876}}, b.periodo)
-                                      , React.createElement(DiffBadge, { diff: b.difficulty, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7877}})
+                                    , React.createElement('div', { style: {display:"flex",gap:5,flexWrap:"wrap",alignItems:"center",marginBottom:8}}
+                                      , React.createElement('span', { style: {fontSize:10,padding:"2px 7px",borderRadius:4,
+                                          background:b.strumento?`${C.teal}18`:`${C.purple}18`,
+                                          color:b.strumento?C.teal:C.purple,
+                                          border:`1px solid ${b.strumento?C.tealBorder:C.purple+'40'}`}}
+                                        , b.strumento ? b.strumento : '🎭 Ensemble')
+                                      , primaTonalita&&React.createElement('span', { style: {fontSize:10,padding:"2px 6px",borderRadius:4,border:`1px solid ${C.border}`,color:C.textMuted}}, primaTonalita)
+                                      , nVersioni>1&&React.createElement('span', { style: {fontSize:10,padding:"2px 6px",borderRadius:4,background:C.bg,color:C.textDim,border:`1px solid ${C.border}`}}, nVersioni+' versioni')
                                     )
                                     , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center",
-                                      paddingTop:8,borderTop:`1px solid ${C.border}20`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7879}}
-                                      , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7881}}
-                                        , React.createElement(Ic, { n: "users", size: 12, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7882}})
-                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7883}}, allieviCount(b.id), " alliev" , allieviCount(b.id)===1?"o":"i")
+                                      paddingTop:8,borderTop:`1px solid ${C.border}20`}}
+                                      , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:5}}
+                                        , React.createElement(Ic, { n: "users", size: 12, stroke: C.textDim})
+                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}}, allieviCount(b.id), " alliev" , allieviCount(b.id)===1?"o":"i")
                                       )
-                                      , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7885}}
-                                        , React.createElement(Ic, { n: "calendar", size: 12, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7886}})
-                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7887}}, usageCount(b.id), " lezioni" )
+                                      , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:5}}
+                                        , React.createElement(Ic, { n: "calendar", size: 12, stroke: C.textDim})
+                                        , React.createElement('span', { style: {fontSize:11,color:C.textDim}}, usageCount(b.id), " lezioni" )
                                       )
                                     )
                                   )
@@ -243,33 +333,31 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                     /* ── LIST ── */
                     , layout==="list"&&(
                       React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7956}}
-                        , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"2.5fr 1.2fr 1.2fr 1fr 0.8fr 0.8fr auto",minWidth:560,
-                          padding:"8px 20px",borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7957}}
-                          , ["Brano","Tipo","Difficoltà","Periodo","Allievi","Lezioni",""].map(h=>(
-                            React.createElement('div', { key: h, style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7960}}, h)
+                        , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 1fr 0.8fr 0.8fr auto",minWidth:560,
+                          padding:"8px 20px",borderBottom:`1px solid ${C.border}`,background:C.bg}}
+                          , ["Brano","Tipo","Strumento","Tonalità","Allievi","Lezioni",""].map(h=>(
+                            React.createElement('div', { key: h, style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}}, h)
                           ))
                         )
                         , filtrati.map((b,i)=>{
-                          const p=periodoById(b.periodo);
+                          const primaTonalita = (b.versioni||[])[0]?.tonalita || '';
                           return(
                             React.createElement('div', { key: b.id, onClick: ()=>setDrawer(b),
-                              style: {display:"grid",gridTemplateColumns:"2.5fr 1.2fr 1.2fr 1fr 0.8fr 0.8fr auto",minWidth:560,
+                              style: {display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 1fr 0.8fr 0.8fr auto",minWidth:560,
                                 padding:"12px 20px",borderBottom:i<filtrati.length-1?`1px solid ${C.border}20`:"none",
                                 alignItems:"center",cursor:"pointer",transition:"background .1s"},
                               onMouseEnter: e=>e.currentTarget.style.background=C.surfaceHover,
-                              onMouseLeave: e=>e.currentTarget.style.background="transparent", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7966}}
-                              , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7972}}
-                                , React.createElement('div', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7973}}, b.title)
-                                , React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7974}}, b.composer)
+                              onMouseLeave: e=>e.currentTarget.style.background="transparent"}
+                              , React.createElement('div', null
+                                , React.createElement('div', { style: {fontSize:13,fontWeight:500}}, b.title)
+                                , React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:1}}, b.composer)
                               )
-                              
-                              , React.createElement(DiffBadge, { diff: b.difficulty, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7977}})
-                              , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7978}}
-                                , b.periodo&&React.createElement('span', { style: {fontSize:11,color:p.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7979}}, b.periodo)
-                              )
-                              , React.createElement('span', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7981}}, allieviCount(b.id))
-                              , React.createElement('span', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7982}}, usageCount(b.id))
-                              , React.createElement(Ic, { n: "right", size: 14, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7983}})
+                              , React.createElement(TipoBadge, { tipo: b.tipo})
+                              , React.createElement('span', { style: {fontSize:12,color:b.strumento?C.teal:C.purple}}, b.strumento||'🎭 Ensemble')
+                              , React.createElement('span', { style: {fontSize:12,color:C.textMuted}}, primaTonalita||'—')
+                              , React.createElement('span', { style: {fontSize:12,color:C.textMuted}}, allieviCount(b.id))
+                              , React.createElement('span', { style: {fontSize:12,color:C.textMuted}}, usageCount(b.id))
+                              , React.createElement(Ic, { n: "right", size: 14, stroke: C.textDim})
                             )
                           );
                         })
@@ -326,23 +414,22 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         , drawer&&(
           React.createElement(BranoDrawer, {
             brano: drawer,
-            lezioniCount: usageCount(drawer.id),
-            allieviList: allieviOfBrano(drawer.id).map(s=>s.name||s.nome||""),
+            concerti: _concertiRep,
             onClose: ()=>setDrawer(null),
             onEdit: (b)=>{setSelBrano(b);setDrawer(null);setModal("edit");},
-            onDelete: (b)=>{setSelBrano(b);setModal("confirm_delete");}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8038}}
+            onDelete: (b)=>{setSelBrano(b);setModal("confirm_delete");}}
           )
         )
 
         /* ── MODALI ── */
         , modal==="add"&&(
-          React.createElement(Modal, { title: "Nuovo brano" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8048}}
-            , React.createElement(BranoForm, { onSave: aggiungiBrano, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8049}})
+          React.createElement(Modal, { title: "Nuovo brano" , onClose: closeModal, wide: true}
+            , React.createElement(BranoForm, { onSave: aggiungiBrano, onClose: closeModal, students: _studBranoRep, concerti: _concertiRep})
           )
         )
         , modal==="edit"&&selBrano&&(
-          React.createElement(Modal, { title: "Modifica brano" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8053}}
-            , React.createElement(BranoForm, { initial: selBrano, onSave: modificaBrano, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8054}})
+          React.createElement(Modal, { title: "Modifica brano" , onClose: closeModal, wide: true}
+            , React.createElement(BranoForm, { initial: selBrano, onSave: modificaBrano, onClose: closeModal, students: _studBranoRep, concerti: _concertiRep})
           )
         )
         , modal==="confirm_delete"&&selBrano&&(
@@ -461,18 +548,70 @@ const INIT_CONCERTI = [
 
 
 // ─── FORM PRENOTAZIONE ────────────────────────────────────────────────────────
-const PrenotazioneForm = ({ evento, initial, onSave, onClose }) => {
-  const def = initial || {id:"",nome:"",email:"",telefono:"",posti:1,stato:"confermata",dataPren:new Date().toISOString().split("T")[0],pagato:false};
+const PrenotazioneForm = ({ evento, students:psStudents, docenti:psDocenti, initial, onSave, onClose }) => {
+  const stuList = psStudents || [];
+  const docList = psDocenti || [];
+  const def = initial || {id:"",nome:"",email:"",telefono:"",posti:1,stato:"confermata",dataPren:new Date().toISOString().split("T")[0],pagato:false,categoria:"pubblico",studentId:"",docenteId:"",sconto:0};
   const [f,setF] = useState(def);
   const set = (k,v) => setF(p=>({...p,[k]:v}));
   const postiGia = evento.prenotazioni
     .filter(p=>p.stato==="confermata"&&p.id!==(_optionalChain([initial, 'optionalAccess', _75 => _75.id])||""))
     .reduce((t,p)=>t+p.posti,0);
   const postiLib = Math.max(0, evento.capienza - postiGia);
-  const importo  = f.posti*(evento.prezzoBiglietto||0);
+  const importoLordo = f.posti*(evento.prezzoBiglietto||0);
+  const importo  = Math.max(0, importoLordo - (parseFloat(f.sconto)||0));
+
+  // Quando si seleziona un allievo/docente dal menu, precompila automaticamente il nome
+  const handleSelectPersona = (id, tipo) => {
+    if (tipo === 'allievo') {
+      const stu = stuList.find(s=>String(s.id)===String(id));
+      setF(p=>({...p, studentId:id, docenteId:'', nome: stu?(stu.name||stu.nome):p.nome}));
+    } else if (tipo === 'docente') {
+      const doc = docList.find(d=>String(d.id)===String(id));
+      setF(p=>({...p, docenteId:id, studentId:'', nome: doc?doc.nome:p.nome}));
+    }
+  };
+
   return (
     React.createElement(React.Fragment, null
       , React.createElement('div', { style: {padding:"20px 24px",display:"flex",flexDirection:"column",gap:14,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8184}}
+
+        /* Categoria prenotazione */
+        , React.createElement('div', null
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",display:"block",marginBottom:6}}, "Categoria biglietto")
+          , React.createElement('div', {style:{display:"flex",gap:6,flexWrap:"wrap"}}
+            , [{id:"pubblico",label:"🎫 Pubblico esterno"},{id:"allievo",label:"🎓 Allievo"},{id:"docente",label:"👤 Docente"}].map(c => {
+                const sel = f.categoria === c.id;
+                return React.createElement('button', {key:c.id, onClick:()=>set("categoria",c.id),
+                  style:{padding:"6px 14px",borderRadius:20,border:`1px solid ${sel?C.gold:C.border}`,
+                    background:sel?C.goldBg:C.bg,color:sel?C.gold:C.textMuted,cursor:"pointer",
+                    fontSize:12,fontWeight:sel?700:400,fontFamily:"'Open Sans',sans-serif"}}, c.label);
+              })
+          )
+        )
+
+        /* Selettore allievo o docente, se categoria lo richiede */
+        , f.categoria === "allievo" && React.createElement('div', null
+            , React.createElement('label', {style:{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",display:"block",marginBottom:4}}, "Seleziona allievo")
+            , React.createElement('select', {value:f.studentId, onChange:e=>handleSelectPersona(e.target.value,'allievo'),
+                style:{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif"}}
+              , React.createElement('option',{value:""},"-- Seleziona --")
+              , stuList.slice().sort((a,b)=>(a.name||a.nome||"").localeCompare(b.name||b.nome||"")).map(s=>
+                  React.createElement('option',{key:s.id,value:s.id}, s.name||s.nome)
+                )
+            )
+          )
+        , f.categoria === "docente" && React.createElement('div', null
+            , React.createElement('label', {style:{fontSize:11,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.07em",display:"block",marginBottom:4}}, "Seleziona docente")
+            , React.createElement('select', {value:f.docenteId, onChange:e=>handleSelectPersona(e.target.value,'docente'),
+                style:{width:"100%",padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif"}}
+              , React.createElement('option',{value:""},"-- Seleziona --")
+              , docList.slice().sort((a,b)=>(a.nome||"").localeCompare(b.nome||"")).map(d=>
+                  React.createElement('option',{key:d.id,value:d.id}, d.nome)
+                )
+            )
+          )
+
         , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(190px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8185}}
           , React.createElement(Input, { label: "Nome *" , value: f.nome, onChange: e=>set("nome",e.target.value), placeholder: "Nome e cognome"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 8186}})
           , React.createElement(Input, { label: "Email", type: "email", value: f.email, onChange: e=>set("email",e.target.value), placeholder: "email@esempio.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 8187}})
@@ -481,10 +620,14 @@ const PrenotazioneForm = ({ evento, initial, onSave, onClose }) => {
             onChange: e=>set("posti",Math.min(postiLib,Math.max(1,+e.target.value))), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8189}})
           , React.createElement(Sel, { label: "Stato", value: f.stato, onChange: e=>set("stato",e.target.value), options: ["confermata","in attesa","annullata"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 8191}})
           , React.createElement(Sel, { label: "Pagamento", value: f.pagato?"pagato":"da pagare", onChange: e=>set("pagato",e.target.value==="pagato"), options: ["pagato","da pagare"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 8192}})
+          , evento.biglietto && React.createElement(Input, { label: "Sconto (€)", type: "number", value: f.sconto||0,
+              onChange: e=>set("sconto", Math.max(0, parseFloat(e.target.value)||0)), placeholder: "0.00" })
         )
         , evento.biglietto && (
           React.createElement('div', { style: {background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:8,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8195}}
-            , React.createElement('span', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8196}}, "Importo da riscuotere"  )
+            , React.createElement('span', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8196}}
+              , "Importo da riscuotere", (parseFloat(f.sconto)||0)>0 && React.createElement('span',{style:{display:"block",fontSize:10,color:C.textDim}}, `€${importoLordo.toFixed(2)} − €${(parseFloat(f.sconto)||0).toFixed(2)} sconto`)
+            )
             , React.createElement('span', { style: {fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8197}}, "€ " , importo.toFixed(2))
           )
         )
@@ -1008,7 +1151,7 @@ const derivePartecipanti = (evento, studentsList) => {
   return Object.values(map).map(p => ({...p, brani: Array.from(p.brani)}));
 };
 
-const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBack, onUpdate }) => {
+const EventoDetail = ({ evento, students, docenti:docentiED, brani:_braniED, onEdit, onDelete, onBack, onUpdate }) => {
   const braniCatalog = _braniED || [];
   const [tab,    setTab]    = useState("info");
   const [modalP, setModalP] = useState(null); // null | "add" | prenotazione-obj
@@ -1017,8 +1160,8 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
   const sc  = statoEvColor(evento.stato);
   const prenConf     = evento.prenotazioni.filter(p=>p.stato==="confermata");
   const postiOcc     = prenConf.reduce((t,p)=>t+p.posti,0);
-  const incassoRisc  = prenConf.filter(p=>p.pagato).reduce((t,p)=>t+p.posti*(evento.prezzoBiglietto||0),0);
-  const incassoAtteso= prenConf.reduce((t,p)=>t+p.posti*(evento.prezzoBiglietto||0),0);
+  const incassoRisc  = prenConf.filter(p=>p.pagato).reduce((t,p)=>t+Math.max(0,p.posti*(evento.prezzoBiglietto||0)-(parseFloat(p.sconto)||0)),0);
+  const incassoAtteso= prenConf.reduce((t,p)=>t+Math.max(0,p.posti*(evento.prezzoBiglietto||0)-(parseFloat(p.sconto)||0)),0);
 
   const savePren = pren => {
     const newP = evento.prenotazioni.find(p=>p.id===pren.id)
@@ -1028,6 +1171,7 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
     setModalP(null);
   };
   const delPren = id => onUpdate({...evento,prenotazioni:evento.prenotazioni.filter(p=>p.id!==id)});
+  const togglePagato = id => onUpdate({...evento,prenotazioni:evento.prenotazioni.map(p=>p.id===id?{...p,pagato:!p.pagato}:p)});
 
   const TABS = [
     {id:"info",    label:"Informazioni", icon:"flag"},
@@ -1234,22 +1378,29 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
                         const w = window.open('','_blank','width=900,height=700');
                         if(!w){alert('Abilita i popup per stampare');return;}
                         const dataEvento = evento.data ? new Date(evento.data+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '';
+                        const CAT_LABEL = {allievo:'🎓 Allievo', docente:'👤 Docente', pubblico:'🎫 Pubblico'};
                         const righe = evento.prenotazioni.map((p,i) => {
-                          const imp = p.posti*(evento.prezzoBiglietto||0);
+                          const lordo = p.posti*(evento.prezzoBiglietto||0);
+                          const sconto = parseFloat(p.sconto)||0;
+                          const imp = Math.max(0, lordo - sconto);
                           const statoColor = p.stato==='confermata'?'#15803d':p.stato==='annullata'?'#8c1818':'#b45309';
-                          const check = p.stato==='confermata'?'☑':'☐';
+                          // Il check riflette il PAGAMENTO effettivo, non lo stato prenotazione
+                          const check = p.pagato?'☑':'☐';
+                          const scontoTxt = sconto>0 ? `<br><small style="color:#b45309">−€${sconto.toFixed(2)} sconto</small>` : '';
                           return `<tr style="border-bottom:1px solid #eee">
-                            <td style="padding:10px 12px;text-align:center;font-size:15px;color:#1a4fa0;font-weight:700">${check}</td>
+                            <td style="padding:10px 12px;text-align:center;font-size:16px;color:#1a4fa0;font-weight:700">${check}</td>
                             <td style="padding:10px 12px;font-weight:600">${p.nome||'—'}</td>
+                            <td style="padding:10px 12px;font-size:11px;color:#666">${CAT_LABEL[p.categoria]||CAT_LABEL.pubblico}</td>
                             <td style="padding:10px 12px;font-size:12px;color:#666">${p.email||''}<br>${p.telefono||''}</td>
                             <td style="padding:10px 12px;text-align:center;font-weight:600">${p.posti||0}</td>
-                            <td style="padding:10px 12px;font-weight:600;color:${p.pagato?'#15803d':'#8c1818'}">${p.pagato?'✓ Pagato':'Da pagare'}<br><small style="font-weight:400">${imp>0?'€'+imp.toFixed(2):''}</small></td>
+                            <td style="padding:10px 12px;font-weight:600;color:${p.pagato?'#15803d':'#8c1818'}">${p.pagato?'✓ Pagato':'Da pagare'}<br><small style="font-weight:400">€${imp.toFixed(2)}</small>${scontoTxt}</td>
                             <td style="padding:10px 12px"><span style="padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700;background:${statoColor}20;color:${statoColor}">${p.stato||'—'}</span></td>
                             <td style="padding:10px 12px;text-align:center;width:80px"><div style="width:70px;height:24px;border:1px solid #999;border-radius:4px;"></div></td>
                           </tr>`;
                         }).join('');
                         const totPosti = evento.prenotazioni.reduce((t,p)=>t+p.posti,0);
-                        const totIncasso = evento.prenotazioni.filter(p=>p.pagato).reduce((t,p)=>t+p.posti*(evento.prezzoBiglietto||0),0);
+                        const totIncassoSistema = evento.prenotazioni.filter(p=>p.pagato).reduce((t,p)=>t+Math.max(0,p.posti*(evento.prezzoBiglietto||0)-(parseFloat(p.sconto)||0)),0);
+                        const totTeorico = totPosti*(evento.prezzoBiglietto||0);
                         w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
                           <title>Biglietteria – ${evento.titolo}</title>
                           <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
@@ -1265,6 +1416,14 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
                             thead th{padding:10px 12px;text-align:left;font-size:11px;letter-spacing:0.06em;text-transform:uppercase}
                             tbody tr:nth-child(even){background:#f8f9fb}
                             .footer{margin-top:20px;display:flex;justify-content:space-between;font-size:11px;color:#888;border-top:1px solid #eee;padding-top:10px}
+                            .saldo{margin-top:24px;border:2px solid #1a4fa0;border-radius:8px;overflow:hidden;page-break-inside:avoid}
+                            .saldo-hdr{background:#1a4fa0;color:#fff;padding:8px 16px;font-family:'Oswald',sans-serif;font-size:14px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase}
+                            .saldo-body{padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:14px}
+                            .saldo-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #eee}
+                            .saldo-label{font-size:12px;color:#555}
+                            .saldo-val{font-family:'Oswald',sans-serif;font-size:16px;font-weight:600}
+                            .saldo-blank{display:inline-block;min-width:110px;border-bottom:2px solid #333;height:20px;}
+                            .saldo-ref{font-size:10px;color:#999;margin-top:14px;text-align:center;font-style:italic}
                             @media print{button{display:none}}
                           </style>
                         </head><body>
@@ -1275,21 +1434,48 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
                             </div>
                             <div style="text-align:right;font-size:12px;color:#666">
                               <div><strong>${evento.prenotazioni.length}</strong> prenotazioni · <strong>${totPosti}</strong> posti</div>
-                              <div>Incassato: <strong style="color:#15803d">€${totIncasso.toFixed(2)}</strong></div>
+                              <div>Incassato (sistema): <strong style="color:#15803d">€${totIncassoSistema.toFixed(2)}</strong></div>
                             </div>
                           </div>
                           <table>
                             <thead><tr>
-                              <th style="width:40px">✓</th>
+                              <th style="width:36px">✓</th>
                               <th>Nome</th>
+                              <th style="width:90px">Categoria</th>
                               <th>Contatto</th>
-                              <th style="width:60px;text-align:center">Posti</th>
-                              <th style="width:120px">Pagamento</th>
-                              <th style="width:110px">Stato</th>
+                              <th style="width:55px;text-align:center">Posti</th>
+                              <th style="width:130px">Pagamento</th>
+                              <th style="width:100px">Stato</th>
                               <th style="width:90px;text-align:center">Timbro</th>
                             </tr></thead>
                             <tbody>${righe}</tbody>
                           </table>
+
+                          <div class="saldo">
+                            <div class="saldo-hdr">💰 Riepilogo cassa — da completare alla biglietteria</div>
+                            <div class="saldo-body">
+                              <div class="saldo-row">
+                                <span class="saldo-label">Biglietti già pagati (calcolo da sistema)</span>
+                                <span class="saldo-val" style="color:#15803d">€${totIncassoSistema.toFixed(2)}</span>
+                              </div>
+                              <div class="saldo-row">
+                                <span class="saldo-label">Biglietti pagati in loco (manuale)</span>
+                                <span class="saldo-blank"></span>
+                              </div>
+                              <div class="saldo-row">
+                                <span class="saldo-label"><strong>SALDO TOTALE</strong></span>
+                                <span class="saldo-blank"></span>
+                              </div>
+                              <div class="saldo-row" style="border-bottom:none">
+                                <span class="saldo-label">Firma responsabile cassa</span>
+                                <span class="saldo-blank" style="min-width:160px"></span>
+                              </div>
+                            </div>
+                            <div class="saldo-ref" style="padding-bottom:12px">
+                              Il Saldo Totale deve coincidere con: ${totPosti} biglietti venduti × €${(evento.prezzoBiglietto||0).toFixed(2)} = <strong>€${totTeorico.toFixed(2)}</strong> (al netto di eventuali sconti applicati)
+                            </div>
+                          </div>
+
                           <div class="footer">
                             <span>Controllo accessi — ${evento.titolo}</span>
                             <span>Data stampa: ${new Date().toLocaleDateString('it-IT')}</span>
@@ -1323,7 +1509,7 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
                     ))
                   )
                   , evento.prenotazioni.map((pren,i)=>{
-                    const imp = pren.posti*(evento.prezzoBiglietto||0);
+                    const imp = Math.max(0, pren.posti*(evento.prezzoBiglietto||0) - (parseFloat(pren.sconto)||0));
                     const pc  = {confermata:{fg:C.green,bg:C.greenBg},annullata:{fg:C.red,bg:C.redBg},"in attesa":{fg:C.gold,bg:C.goldBg}}[pren.stato]||{fg:C.textMuted,bg:C.surface};
                     return (
                       React.createElement('div', { key: pren.id, style: {display:"grid",gridTemplateColumns:"1.6fr 1fr 55px 90px 85px 70px",minWidth:520,
@@ -1331,7 +1517,11 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
                         onMouseEnter: e=>e.currentTarget.style.background=C.surfaceHover,
                         onMouseLeave: e=>e.currentTarget.style.background="transparent", __self: this, __source: {fileName: _jsxFileName, lineNumber: 8719}}
                         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 8723}}
-                          , React.createElement('div', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8724}}, pren.nome)
+                          , React.createElement('div', { style: {fontSize:13,fontWeight:500,display:"flex",alignItems:"center",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8724}}
+                            , pren.nome
+                            , pren.categoria==="allievo" && React.createElement('span',{style:{fontSize:9,padding:"1px 6px",borderRadius:8,background:C.tealBg,color:C.teal}},"🎓")
+                            , pren.categoria==="docente" && React.createElement('span',{style:{fontSize:9,padding:"1px 6px",borderRadius:8,background:C.goldBg,color:C.gold}},"👤")
+                          )
                           , React.createElement('div', { style: {fontSize:10,color:C.textDim,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8725}}, formatDataS(pren.dataPren))
                         )
                         , React.createElement('div', { style: {fontSize:11,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8727}}
@@ -1339,11 +1529,15 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
                           , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 8729}}, pren.telefono)
                         )
                         , React.createElement('div', { style: {fontSize:13,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8731}}, pren.posti)
-                        , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 8732}}
+                        , React.createElement('div', {
+                            onClick: ()=>togglePagato(pren.id),
+                            title: "Clicca per cambiare stato pagamento",
+                            style:{cursor:"pointer"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8732}}
                           , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:15,fontWeight:600,
                             color:pren.pagato?C.green:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8733}}, fmt(imp))
-                          , React.createElement('div', { style: {fontSize:10,color:pren.pagato?C.green:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8735}}
-                            , pren.pagato?"✓ pagato":"da pagare"
+                          , React.createElement('div', { style: {fontSize:10,color:pren.pagato?C.green:C.red,display:"flex",alignItems:"center",gap:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8735}}
+                            , React.createElement('span',{style:{fontSize:12}}, pren.pagato?"☑":"☐")
+                            , pren.pagato?"pagato":"da pagare"
                           )
                         )
                         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 8739}}
@@ -1476,7 +1670,7 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
       /* Modal prenotazione */
       , modalP && (
         React.createElement(Modal, { title: modalP==="add"?"Nuova prenotazione":"Modifica prenotazione", onClose: ()=>setModalP(null), wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8865}}
-          , React.createElement(PrenotazioneForm, { evento: evento, initial: modalP!=="add"?modalP:null, onSave: savePren, onClose: ()=>setModalP(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8866}})
+          , React.createElement(PrenotazioneForm, { evento: evento, students: students, docenti: docentiED, initial: modalP!=="add"?modalP:null, onSave: savePren, onClose: ()=>setModalP(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8866}})
         )
       )
     )
@@ -1484,10 +1678,11 @@ const EventoDetail = ({ evento, students, brani:_braniED, onEdit, onDelete, onBa
 };
 
 // ─── CONCERTI VIEW ────────────────────────────────────────────────────────────
-const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, clearQuickAction, userRuolo:_ruoloConc, concerti:propConcerti, setConcerti:propSetConcerti }) => {
+const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, clearQuickAction, userRuolo:_ruoloConc, concerti:propConcerti, setConcerti:propSetConcerti, docenti:propDocentiCV }) => {
   const ruoloConc = _ruoloConc || "admin";
   const isMobile = useIsMobile();
   const students  = propStudents || INIT_STUDENTS;
+  const docenti   = propDocentiCV || [];
   const [_localConcerti, _setLocalConcerti] = useState(INIT_CONCERTI);
   const concerti    = propConcerti    || _localConcerti;
   const setConcerti = propSetConcerti || _setLocalConcerti;
@@ -1615,7 +1810,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
 
   if(selected) return (
     React.createElement(React.Fragment, null
-      , React.createElement(EventoDetail, { evento: selected, students: students, brani: propBraniCV||[],
+      , React.createElement(EventoDetail, { evento: selected, students: students, docenti: docenti, brani: propBraniCV||[],
         onEdit: ()=>setModal("edit"),
         onDelete: ()=>setModal("del"),
         onBack: ()=>setSelected(null),
@@ -2343,10 +2538,36 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
         }
       }
       if (propSetAllegati) propSetAllegati(p => p.filter(x => x.id !== a.id));
-    } else if (a._categoria === 'spartito' && a.branoId && propSetBrani) {
-      propSetBrani(p => p.map(b => b.id===a.branoId ? {...b, spartiti:(b.spartiti||[]).filter(s=>s.id!==a.id&&('sp_'+b.id+'_'+s.fileName)!==a.id)} : b));
-    } else if (a._categoria === 'file_brano' && a.branoId && propSetBrani) {
-      propSetBrani(p => p.map(b => b.id===a.branoId ? {...b, files:(b.files||[]).filter(f=>f.id!==a.id&&('fa_'+b.id+'_'+f.fileName)!==a.id)} : b));
+    } else if ((a._categoria === 'spartito' || a._categoria === 'file_brano') && a.branoId) {
+      const brano = brani.find(b => b.id === a.branoId);
+      if (brano) {
+        const vIdx = a.versioneIdx != null ? a.versioneIdx : 0;
+        const nuoveVersioni = (brano.versioni||[]).map((v, i) => {
+          if (i !== vIdx) return v;
+          const campo = a._categoria === 'spartito' ? 'spartiti' : 'allegati';
+          return {...v, [campo]: (v[campo]||[]).filter(f => f.id !== a.id)};
+        });
+        // Aggiorna stato locale immediatamente
+        if (propSetBrani) propSetBrani(p => p.map(b => b.id === a.branoId ? {...b, versioni: nuoveVersioni} : b));
+        // Persisti su Supabase
+        try {
+          const sb = window.supabaseClient;
+          if (sb) {
+            const { error } = await sb.from('brani').update({versioni: nuoveVersioni}).eq('id', a.branoId);
+            if (error) console.warn('[FM] delete spartito/allegato brano error:', error.message);
+            // Rimuovi anche il file fisico dallo Storage
+            if (a.storagePath) {
+              try { await sb.storage.from('allegati').remove([a.storagePath]); }
+              catch(e) { console.warn('[FM] storage delete brano file:', e); }
+            } else if (a.fileUrl) {
+              try {
+                const urlPath = a.fileUrl.split('/object/public/allegati/')[1];
+                if (urlPath) await sb.storage.from('allegati').remove([urlPath]);
+              } catch(e) { console.warn('[FM] storage delete brano file (fallback url):', e); }
+            }
+          }
+        } catch(e) { console.warn('[FM] handleDeleteAllegato brano exception:', e?.message); }
+      }
     }
     if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
     setConfirmDelAll(null);
@@ -2416,25 +2637,30 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     }
   }, [editAllegato, editAllegatoDesc]);  // eslint-disable-line
 
-  // Unisce allegati lezioni + files/spartiti dei brani in un unico array
+  // Unisce allegati lezioni + spartiti/allegati di TUTTE le versioni dei brani
   const allegatiBrani = [];
   brani.forEach(b => {
-    (b.spartiti||[]).forEach(s => {
-      if(s.fileUrl||s.fileName) allegatiBrani.push({
-        id: s.id||('sp_'+b.id+'_'+s.fileName),
-        fileName: s.fileName||'Spartito', fileUrl: s.fileUrl||null, fileType: s.fileType||'application/pdf',
-        descrizione: `Spartito: ${b.title||b.titolo||''}`,
-        corso: b.title||b.titolo||'', allievoNome:'', lezioneId:null,
-        branoId: b.id, _categoria:'spartito', createdAt: s.createdAt||null,
+    (b.versioni||[]).forEach((v, vIdx) => {
+      const tonLabel = v.tonalita ? ` (${v.tonalita})` : '';
+      (v.spartiti||[]).forEach(s => {
+        if(s.fileUrl||s.fileName) allegatiBrani.push({
+          id: s.id||('sp_'+b.id+'_'+vIdx+'_'+s.fileName),
+          fileName: s.fileName||'Spartito', fileUrl: s.fileUrl||null, fileType: s.fileType||'application/pdf',
+          descrizione: `Spartito: ${b.title||''}${tonLabel}`,
+          corso: b.title||'', allievoNome:'', lezioneId:null,
+          branoId: b.id, versioneIdx: vIdx, storagePath: s.storagePath||null,
+          _categoria:'spartito', createdAt: s.createdAt||null,
+        });
       });
-    });
-    (b.files||[]).forEach(fi => {
-      if(fi.fileUrl||fi.fileName) allegatiBrani.push({
-        id: fi.id||('fa_'+b.id+'_'+fi.fileName),
-        fileName: fi.fileName||'File', fileUrl: fi.fileUrl||null, fileType: fi.fileType||'',
-        descrizione: `File brano: ${b.title||b.titolo||''}`,
-        corso: b.title||b.titolo||'', allievoNome:'', lezioneId:null,
-        branoId: b.id, _categoria:'file_brano', createdAt: fi.createdAt||null,
+      (v.allegati||[]).forEach(fi => {
+        if(fi.fileUrl||fi.fileName) allegatiBrani.push({
+          id: fi.id||('fa_'+b.id+'_'+vIdx+'_'+fi.fileName),
+          fileName: fi.fileName||'File', fileUrl: fi.fileUrl||null, fileType: fi.fileType||'',
+          descrizione: `File brano: ${b.title||''}${tonLabel}`,
+          corso: b.title||'', allievoNome:'', lezioneId:null,
+          branoId: b.id, versioneIdx: vIdx, storagePath: fi.storagePath||null,
+          _categoria:'file_brano', createdAt: fi.createdAt||null,
+        });
       });
     });
   });
