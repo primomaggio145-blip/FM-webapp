@@ -9477,16 +9477,42 @@ const INIT_BRANI = [
 ];
 
 // ─── FORM BRANO ──────────────────────────────────────────────────────────────
-const BranoForm = ({initial,onSave,onClose,students:_studBranoIn})=>{
-  const empty={title:"",composer:"",periodo:"",tonality:"",difficulty:"Intermedio",tipo:"individuale",note:"",linkBacking:"",files:[],spartiti:[]};
-  const [f,setF]=useState(initial||empty);
+const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_concertiBranoIn})=>{
+  const empty={title:"",composer:"",tipo:"individuale",strumento:"",eventiIds:[],note:"",versioni:[{tonalita:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
+  const [f,setF]=useState(initial ? {...empty,...initial,versioni:(initial.versioni&&initial.versioni.length>0)?initial.versioni:empty.versioni} : empty);
   const [err,setErr]=useState({});
+  const [openVersione, setOpenVersione] = useState(0); // indice versione espansa
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  const studentsList = _studBranoIn || [];
+  const concertiList = _concertiBranoIn || [];
+
+  const setVersione = (idx, patch) => {
+    setF(p => ({...p, versioni: p.versioni.map((v,i)=>i===idx?{...v,...patch}:v)}));
+  };
+  const addVersione = () => {
+    setF(p => ({...p, versioni: [...p.versioni, {tonalita:"",link:[],spartiti:[],allegati:[],allievi:[]}]}));
+    setOpenVersione(f.versioni.length);
+  };
+  const delVersione = (idx) => {
+    if (f.versioni.length <= 1) { alert("Deve esserci almeno una versione"); return; }
+    setF(p => ({...p, versioni: p.versioni.filter((_,i)=>i!==idx)}));
+    if (openVersione >= idx) setOpenVersione(Math.max(0, openVersione-1));
+  };
+  const toggleEvento = (eventoId) => {
+    setF(p => ({...p, eventiIds: (p.eventiIds||[]).includes(eventoId) ? p.eventiIds.filter(x=>x!==eventoId) : [...(p.eventiIds||[]), eventoId]}));
+  };
+  const toggleAllievoVersione = (idx, stu) => {
+    const v = f.versioni[idx];
+    const giaDentro = (v.allievi||[]).some(a=>String(a.studentId)===String(stu.id));
+    const nuovi = giaDentro
+      ? (v.allievi||[]).filter(a=>String(a.studentId)!==String(stu.id))
+      : [...(v.allievi||[]), {studentId:stu.id, studentName:stu.name||stu.nome}];
+    setVersione(idx, {allievi:nuovi});
+  };
 
   const validate=()=>{
     const e={};
     if(!f.title.trim())    e.title="Titolo obbligatorio";
-    // compositore facoltativo
     return e;
   };
   const handleSave=()=>{
@@ -9494,105 +9520,159 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn})=>{
     onSave(f);
   };
 
+  // Allievi filtrabili per lo strumento selezionato (per assegnazione più rapida)
+  const allieviFiltrabili = f.strumento
+    ? studentsList.filter(s => (s.instrument||"")===f.strumento)
+    : studentsList;
+
   return(
     React.createElement(React.Fragment, null
-      , React.createElement('div', { style: {padding:"20px 22px",display:"flex",flexDirection:"column",gap:14,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7358}}
-        , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7359}}
-          , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7360}}
-            , React.createElement(Input, { label: "Titolo *" , value: f.title, onChange: e=>set("title",e.target.value), error: err.title, placeholder: "Es. Notturno Op.9 n.2"   , __self: this, __source: {fileName: _jsxFileName, lineNumber: 7361}})
+      , React.createElement('div', { style: {padding:"20px 22px",display:"flex",flexDirection:"column",gap:16,overflow:"auto"}}
+        , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}, className: "form-2col"}
+          , React.createElement('div', { style: {gridColumn:"1/-1"}}
+            , React.createElement(Input, { label: "Titolo *" , value: f.title, onChange: e=>set("title",e.target.value), error: err.title, placeholder: "Es. Jingle Bells" })
           )
-          , React.createElement(Input, { label: "Compositore *" , value: f.composer, onChange: e=>set("composer",e.target.value), error: err.composer, placeholder: "Es. Chopin" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 7363}})
-          , React.createElement(Sel, { label: "Periodo", value: f.periodo, onChange: e=>set("periodo",e.target.value),
-            options: PERIODI.map(p=>({value:p.id,label:p.id})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7364}})
-          , React.createElement(Sel, { label: "Tonalità / Scala"  , value: f.tonality, onChange: e=>set("tonality",e.target.value), options: TONALITY_OPTS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7366}})
-          , React.createElement(Sel, { label: "Difficoltà", value: f.difficulty, onChange: e=>set("difficulty",e.target.value),
-            options: DIFFICULTY.map(d=>({value:d.id,label:d.id})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7367}})
+          , React.createElement(Input, { label: "Compositore" , value: f.composer, onChange: e=>set("composer",e.target.value), placeholder: "Es. James Pierpont" })
+          , React.createElement(Sel, { label: "Tipo", value: f.tipo, onChange: e=>set("tipo",e.target.value),
+            options: [{value:"individuale",label:"Individuale"},{value:"collettivo",label:"Collettivo"}] })
+          , React.createElement(Sel, { label: "Strumento/Corso (vuoto = ensemble, visibile a tutti)", value: f.strumento, onChange: e=>set("strumento",e.target.value),
+            options: [{value:"",label:"🎭 Ensemble (tutti)"},...INSTRUMENTS.map(i=>({value:i,label:i}))] })
         )
 
-
-
+        /* ── Eventi collegati ── */
+        , React.createElement('div', null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}},'🎤 Eventi collegati (facoltativo)')
+          , concertiList.length === 0
+            ? React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}},'Nessun concerto/evento ancora creato')
+            : React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6}}
+                , concertiList.slice().sort((a,b)=>(b.data||'').localeCompare(a.data||'')).map(ev => {
+                    const sel = (f.eventiIds||[]).includes(ev.id);
+                    return React.createElement('button',{key:ev.id, onClick:()=>toggleEvento(ev.id),
+                      style:{padding:'5px 12px',borderRadius:20,border:`1px solid ${sel?C.gold:C.border}`,background:sel?C.goldBg:C.bg,color:sel?C.gold:C.textMuted,cursor:'pointer',fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+                      , (ev.titolo||ev.nome||'(senza titolo)') + (ev.data?' · '+new Date(ev.data+'T00:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'}):'')
+                    );
+                  })
+              )
+        )
 
         /* Note */
         , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:5}}
           , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase"}},"Note tecniche / annotazioni")
-          , React.createElement('textarea', { value: f.note, onChange: e=>set("note",e.target.value), rows: 3,
+          , React.createElement('textarea', { value: f.note, onChange: e=>set("note",e.target.value), rows: 2,
             placeholder: "Indicazioni tecniche, riferimenti, obiettivi didattici...",
             style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
               color:C.text,fontSize:13,padding:"9px 13px",width:"100%",
               fontFamily:"'Open Sans',sans-serif",resize:"vertical"}})
         )
 
-        /* ── Link Backing Track ── */
-        , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:5}}
-          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase"}},'Link Backing / YouTube / Drive')
-          , React.createElement('input',{
-              type:'url', value:f.linkBacking||'', placeholder:'https://youtube.com/...',
-              onChange:e=>set('linkBacking',e.target.value),
-              style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,
-                background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",
-                outline:'none',boxSizing:'border-box'}})
-        )
-
-        /* ── Spartiti (PDF) ── */
+        /* ── VERSIONI (tonalità multiple, ognuna con file/link/allievi propri) ── */
         , React.createElement('div', null
-          , React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}
-            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase'}},'Spartiti')
-            , React.createElement('label',{style:{fontSize:11,color:C.blue,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}
-              , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.blue}),' Carica PDF'
-              , React.createElement('input',{type:'file',accept:'.pdf,image/*',multiple:true,style:{display:'none'},
-                  onChange:async e=>{
-                    const sb=window.supabaseClient; const newItems=[];
-                    for(const file of Array.from(e.target.files||[])){
-                      const path=`spartiti/${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
-                      let fileUrl=null;
-                      if(sb){try{await sb.storage.from('allegati').upload(path,file,{upsert:true});const{data:u}=sb.storage.from('allegati').getPublicUrl(path);fileUrl=u?.publicUrl||null;}catch(er){}}
-                      newItems.push({id:'sp_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),fileName:file.name,fileUrl,fileType:file.type});
-                    }
-                    set('spartiti',[...(f.spartiti||[]),...newItems]);e.target.value='';
-                  }})
-            )
+          , React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}
+            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase'}},'🎼 Versioni / Tonalità')
+            , React.createElement('button',{onClick:addVersione,
+                style:{fontSize:11,padding:'5px 11px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer'}}, '+ Aggiungi versione')
           )
-          , (f.spartiti||[]).length>0 && React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:4}}
-            , (f.spartiti||[]).map((s,i)=>React.createElement('div',{key:s.id||i,style:{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg}}
-              , React.createElement(Ic,{n:'paperclip',size:12,stroke:C.red})
-              , s.fileUrl
-                ? React.createElement('a',{href:s.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{flex:1,fontSize:12,color:C.blue,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},s.fileName||'Spartito')
-                : React.createElement('span',{style:{flex:1,fontSize:12,color:C.text}},s.fileName||'Spartito')
-              , React.createElement('button',{onClick:()=>set('spartiti',(f.spartiti||[]).filter((_,j)=>j!==i)),style:{background:'none',border:'none',cursor:'pointer',padding:2,color:C.textMuted},onMouseEnter:e=>e.currentTarget.style.color=C.red,onMouseLeave:e=>e.currentTarget.style.color=C.textMuted}
-                , React.createElement(Ic,{n:'x',size:12,stroke:'currentColor'}))
-            ))
-          )
-        )
+          , f.versioni.map((v, idx) => {
+              const isOpen = openVersione === idx;
+              return React.createElement('div', {key:idx, style:{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:8,overflow:'hidden'}}
+                , React.createElement('div', {onClick:()=>setOpenVersione(isOpen?-1:idx),
+                    style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:C.bg,cursor:'pointer'}}
+                  , React.createElement('div',{style:{transform:isOpen?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s',display:'flex'}},React.createElement(Ic,{n:'chevron-down',size:14,stroke:C.textMuted}))
+                  , React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600}}, v.tonalita || `Versione ${idx+1}`)
+                  , React.createElement('span',{style:{fontSize:11,color:C.textDim}}, `${(v.allievi||[]).length} allievi · ${(v.spartiti||[]).length+(v.allegati||[]).length} file`)
+                  , f.versioni.length>1 && React.createElement('button',{onClick:(e)=>{e.stopPropagation();delVersione(idx);},
+                      style:{background:'none',border:'none',cursor:'pointer',color:C.red,padding:2}}, React.createElement(Ic,{n:'trash',size:13,stroke:C.red}))
+                )
+                , isOpen && React.createElement('div', {style:{padding:'14px',display:'flex',flexDirection:'column',gap:12}}
 
-        /* ── File allegati (audio/video/altro) ── */
-        , React.createElement('div', null
-          , React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}
-            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase'}},'File allegati')
-            , React.createElement('label',{style:{fontSize:11,color:C.blue,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}
-              , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.blue}),' Carica file'
-              , React.createElement('input',{type:'file',multiple:true,style:{display:'none'},
-                  onChange:async e=>{
-                    const sb=window.supabaseClient; const newItems=[];
-                    for(const file of Array.from(e.target.files||[])){
-                      const path=`brani/${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
-                      let fileUrl=null;
-                      if(sb){try{await sb.storage.from('allegati').upload(path,file,{upsert:true});const{data:u}=sb.storage.from('allegati').getPublicUrl(path);fileUrl=u?.publicUrl||null;}catch(er){}}
-                      newItems.push({id:'fa_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),fileName:file.name,fileUrl,fileType:file.type});
-                    }
-                    set('files',[...(f.files||[]),...newItems]);e.target.value='';
-                  }})
-            )
-          )
-          , (f.files||[]).length>0 && React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:4}}
-            , (f.files||[]).map((fi,i)=>React.createElement('div',{key:fi.id||i,style:{display:'flex',alignItems:'center',gap:8,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg}}
-              , React.createElement(Ic,{n:'paperclip',size:12,stroke:C.blue})
-              , fi.fileUrl
-                ? React.createElement('a',{href:fi.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{flex:1,fontSize:12,color:C.blue,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},fi.fileName||'File')
-                : React.createElement('span',{style:{flex:1,fontSize:12,color:C.text}},fi.fileName||'File')
-              , React.createElement('button',{onClick:()=>set('files',(f.files||[]).filter((_,j)=>j!==i)),style:{background:'none',border:'none',cursor:'pointer',padding:2,color:C.textMuted},onMouseEnter:e=>e.currentTarget.style.color=C.red,onMouseLeave:e=>e.currentTarget.style.color=C.textMuted}
-                , React.createElement(Ic,{n:'x',size:12,stroke:'currentColor'}))
-            ))
-          )
+                  /* Tonalità */
+                  , React.createElement(Sel, { label: "Tonalità / Scala", value: v.tonalita, onChange: e=>setVersione(idx,{tonalita:e.target.value}), options: TONALITY_OPTS })
+
+                  /* Link */
+                  , React.createElement('div', null
+                    , React.createElement('label',{style:{fontSize:10,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:5}},'Link (YouTube/Drive/Backing)')
+                    , (v.link||[]).map((l,li) => React.createElement('div',{key:li,style:{display:'flex',gap:6,marginBottom:5}}
+                        , React.createElement('input',{value:l.url||'', placeholder:'https://...', onChange:e=>{const nl=[...(v.link||[])];nl[li]={...nl[li],url:e.target.value};setVersione(idx,{link:nl});},
+                            style:{flex:1,padding:'7px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:12}})
+                        , React.createElement('input',{value:l.label||'', placeholder:'Etichetta', onChange:e=>{const nl=[...(v.link||[])];nl[li]={...nl[li],label:e.target.value};setVersione(idx,{link:nl});},
+                            style:{width:110,padding:'7px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:12}})
+                        , React.createElement('button',{onClick:()=>setVersione(idx,{link:(v.link||[]).filter((_,j)=>j!==li)}), style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted}}, '✕')
+                      ))
+                    , React.createElement('button',{onClick:()=>setVersione(idx,{link:[...(v.link||[]),{url:'',label:''}]}),
+                        style:{fontSize:11,color:C.blue,background:'none',border:'none',cursor:'pointer',padding:0}}, '+ Aggiungi link')
+                  )
+
+                  /* Spartiti */
+                  , React.createElement('div', null
+                    , React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}
+                      , React.createElement('label',{style:{fontSize:10,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase'}},'Spartiti (PDF)')
+                      , React.createElement('label',{style:{fontSize:11,color:C.blue,cursor:'pointer'}}
+                        , '📎 Carica'
+                        , React.createElement('input',{type:'file',accept:'.pdf,image/*',multiple:true,style:{display:'none'},
+                            onChange:async e=>{
+                              const sb=window.supabaseClient; const newItems=[];
+                              for(const file of Array.from(e.target.files||[])){
+                                const path=`spartiti/${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
+                                let fileUrl=null;
+                                if(sb){try{await sb.storage.from('allegati').upload(path,file,{upsert:true});const{data:u}=sb.storage.from('allegati').getPublicUrl(path);fileUrl=u?.publicUrl||null;}catch(er){}}
+                                newItems.push({id:'sp_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),fileName:file.name,fileUrl,fileType:file.type,storagePath:path});
+                              }
+                              setVersione(idx,{spartiti:[...(v.spartiti||[]),...newItems]}); e.target.value='';
+                            }})
+                      )
+                    )
+                    , (v.spartiti||[]).map((s,si)=>React.createElement('div',{key:s.id||si,style:{display:'flex',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,marginBottom:4}}
+                        , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.red})
+                        , React.createElement('a',{href:s.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{flex:1,fontSize:11,color:C.blue,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},s.fileName)
+                        , React.createElement('button',{onClick:()=>setVersione(idx,{spartiti:(v.spartiti||[]).filter((_,j)=>j!==si)}),style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted}},'✕')
+                      ))
+                  )
+
+                  /* Allegati extra */
+                  , React.createElement('div', null
+                    , React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:5}}
+                      , React.createElement('label',{style:{fontSize:10,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase'}},'Altri allegati (audio/video)')
+                      , React.createElement('label',{style:{fontSize:11,color:C.blue,cursor:'pointer'}}
+                        , '📎 Carica'
+                        , React.createElement('input',{type:'file',multiple:true,style:{display:'none'},
+                            onChange:async e=>{
+                              const sb=window.supabaseClient; const newItems=[];
+                              for(const file of Array.from(e.target.files||[])){
+                                const path=`brani/${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
+                                let fileUrl=null;
+                                if(sb){try{await sb.storage.from('allegati').upload(path,file,{upsert:true});const{data:u}=sb.storage.from('allegati').getPublicUrl(path);fileUrl=u?.publicUrl||null;}catch(er){}}
+                                newItems.push({id:'fa_'+Date.now()+'_'+Math.random().toString(36).slice(2,5),fileName:file.name,fileUrl,fileType:file.type,storagePath:path});
+                              }
+                              setVersione(idx,{allegati:[...(v.allegati||[]),...newItems]}); e.target.value='';
+                            }})
+                      )
+                    )
+                    , (v.allegati||[]).map((fi,fii)=>React.createElement('div',{key:fi.id||fii,style:{display:'flex',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,marginBottom:4}}
+                        , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.blue})
+                        , React.createElement('a',{href:fi.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{flex:1,fontSize:11,color:C.blue,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},fi.fileName)
+                        , React.createElement('button',{onClick:()=>setVersione(idx,{allegati:(v.allegati||[]).filter((_,j)=>j!==fii)}),style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted}},'✕')
+                      ))
+                  )
+
+                  /* Allievi assegnati a questa versione */
+                  , React.createElement('div', null
+                    , React.createElement('label',{style:{fontSize:10,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},
+                        `Allievi assegnati ${f.strumento?'('+f.strumento+')':''}`)
+                    , allieviFiltrabili.length === 0
+                      ? React.createElement('div',{style:{fontSize:11,color:C.textDim,fontStyle:'italic'}},'Nessun allievo trovato per questo strumento')
+                      : React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6,maxHeight:140,overflowY:'auto'}}
+                          , allieviFiltrabili.map(s => {
+                              const sel = (v.allievi||[]).some(a=>String(a.studentId)===String(s.id));
+                              return React.createElement('button',{key:s.id, onClick:()=>toggleAllievoVersione(idx,s),
+                                style:{padding:'4px 11px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.tealBg:C.bg,color:sel?C.teal:C.textMuted,cursor:'pointer',fontSize:12}}
+                                , s.name||s.nome
+                              );
+                            })
+                        )
+                  )
+                )
+              );
+            })
         )
       )
 
@@ -9605,148 +9685,162 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn})=>{
 };
 
 // ─── DRAWER DETTAGLIO BRANO ──────────────────────────────────────────────────
-const BranoDrawer = ({brano,lezioniCount,allieviList,onClose,onEdit,onDelete})=>{
-  const _lezCount = lezioniCount || 0;
-  const _allieviL = allieviList  || [];
-  const d=diffById(brano.difficulty);
-  const p=periodoById(brano.periodo);
+const BranoDrawer = ({brano,onClose,onEdit,onDelete,concerti}) => {
+  const [openV, setOpenV] = useState(0); // indice versione aperta (-1 = tutte chiuse)
   const isCol=brano.tipo==="collettivo";
   const typeHex=isCol?C.purple:C.gold;
   const typeBg=isCol?C.purpleBg:C.goldBg;
   const typeBd=isCol?C.purpleBorder:C.goldDim;
+  const versioni = brano.versioni||[];
+  const eventiCollegati = (concerti||[]).filter(c => (brano.eventiIds||[]).includes(c.id));
+  // Allievi totali (unici, attraverso tutte le versioni)
+  const allieviTotali = (() => {
+    const seen = new Set(); const out = [];
+    versioni.forEach(v => (v.allievi||[]).forEach(a => {
+      if (!seen.has(String(a.studentId))) { seen.add(String(a.studentId)); out.push(a); }
+    }));
+    return out;
+  })();
 
   return(
     React.createElement(React.Fragment, null
       , React.createElement('div', { onClick: onClose, style: {position:"fixed",inset:0,zIndex:300,
-        background:"rgba(0,0,0,.7)",backdropFilter:"blur(3px)",animation:"fadeIn .2s ease"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7455}})
+        background:"rgba(0,0,0,.7)",backdropFilter:"blur(3px)",animation:"fadeIn .2s ease"}})
       , React.createElement('div', { style: {position:"fixed",top:0,right:0,bottom:0,zIndex:301,
         width:"min(480px, 100vw)",
         background:C.surface,borderLeft:`1px solid ${C.border}`,
-        display:"flex",flexDirection:"column",animation:"slideDrawer .26s cubic-bezier(.4,0,.2,1)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7457}}
+        display:"flex",flexDirection:"column",animation:"slideDrawer .26s cubic-bezier(.4,0,.2,1)"}}
 
         /* Header */
-        , React.createElement('div', { style: {padding:"calc(env(safe-area-inset-top, 0px) + 18px) 22px 18px",borderBottom:`1px solid ${C.border}`,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7462}}
-          , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7463}}
-            , React.createElement('div', { style: {flex:1,minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7464}}
-              , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:21,fontWeight:600,lineHeight:1.25,marginBottom:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7465}}
+        , React.createElement('div', { style: {padding:"calc(env(safe-area-inset-top, 0px) + 18px) 22px 18px",borderBottom:`1px solid ${C.border}`,flexShrink:0}}
+          , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12}}
+            , React.createElement('div', { style: {flex:1,minWidth:0}}
+              , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:21,fontWeight:600,lineHeight:1.25,marginBottom:5}}
                 , brano.title
               )
-              , React.createElement('div', { style: {fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7468}}, brano.composer)
+              , brano.composer && React.createElement('div', { style: {fontSize:13,color:C.textMuted}}, brano.composer)
             )
             , React.createElement('button', { onClick: onClose, style: {background:"none",border:"none",cursor:"pointer",
-              color:C.textMuted,display:"flex",padding:4,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7470}}
-              , React.createElement(Ic, { n: "x", size: 17, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7472}})
+              color:C.textMuted,display:"flex",padding:4,flexShrink:0}}
+              , React.createElement(Ic, { n: "x", size: 17, stroke: C.textMuted})
             )
           )
-          , React.createElement('div', { style: {display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7475}}
-            , React.createElement(DiffBadge, { diff: brano.difficulty, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7476}})
-            , React.createElement(TipoBadge, { tipo: brano.tipo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7477}})
-            , brano.periodo&&(
-              React.createElement('span', { style: {background:p.hex+"18",color:p.hex,border:`1px solid ${p.hex}40`,
-                borderRadius:4,padding:"2px 7px",fontSize:10,fontWeight:600,letterSpacing:"0.05em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7479}}, brano.periodo)
+          , React.createElement('div', { style: {display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}
+            , React.createElement(TipoBadge, { tipo: brano.tipo})
+            , React.createElement('span', { style: {background:brano.strumento?C.tealBg:`${C.purple}18`,color:brano.strumento?C.teal:C.purple,
+                border:`1px solid ${brano.strumento?C.tealBorder:C.purple+'40'}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}
+              , brano.strumento ? '🎵 '+brano.strumento : '🎭 Ensemble'
             )
-            , brano.tonality&&(
-              React.createElement('span', { style: {background:C.bg,color:C.textMuted,border:`1px solid ${C.border}`,
-                borderRadius:4,padding:"2px 7px",fontSize:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7483}}, brano.tonality)
-            )
+            , versioni.length > 1 && React.createElement('span', { style: {background:C.bg,color:C.textMuted,border:`1px solid ${C.border}`,
+                borderRadius:4,padding:"2px 8px",fontSize:10}}, versioni.length+' versioni')
           )
         )
 
         /* Body */
-        , React.createElement('div', { style: {flex:1,overflow:"auto",padding:"18px 22px",display:"flex",flexDirection:"column",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7490}}
+        , React.createElement('div', { style: {flex:1,overflow:"auto",padding:"18px 22px",display:"flex",flexDirection:"column",gap:16}}
 
-          /* Statistiche */
-          , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7493}}
-            , [
-              {label:"Lezioni totali",   val:_lezCount, hex:C.gold},
-              {label:"Allievi assegnati",val:_allieviL.length, hex:typeHex},
-              {label:"Settimane attivo", val:brano.dataPrima?Math.round((new Date()-new Date(brano.dataPrima))/(7*86400000)):0, hex:C.blue},
-            ].map(s=>(
-              React.createElement('div', { key: s.label, style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px",textAlign:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7499}}
-                , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600,color:s.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7500}}, s.val)
-                , React.createElement('div', { style: {fontSize:10,color:C.textDim,marginTop:3,lineHeight:1.3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7501}}, s.label)
-              )
-            ))
-          )
-
-          /* Timeline */
-          , (brano.dataPrima||brano.dataUltima)&&(
-            React.createElement('div', { style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 16px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7508}}
-              , React.createElement('div', { style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7509}}, "Timeline studio" )
-              , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7510}}
-                , brano.dataPrima&&(
-                  React.createElement('div', { style: {display:"flex",justifyContent:"space-between"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7512}}
-                    , React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7513}}, "Prima lezione" )
-                    , React.createElement('span', { style: {fontSize:12,color:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7514}}, new Date(brano.dataPrima+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"long",year:"numeric"}))
-                  )
-                )
-                , brano.dataUltima&&(
-                  React.createElement('div', { style: {display:"flex",justifyContent:"space-between"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7518}}
-                    , React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7519}}, "Ultima lezione" )
-                    , React.createElement('span', { style: {fontSize:12,color:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7520}}, new Date(brano.dataUltima+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"long",year:"numeric"}))
-                  )
-                )
-                , brano.insegnante&&(
-                  React.createElement('div', { style: {display:"flex",justifyContent:"space-between"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7524}}
-                    , React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7525}}, "Insegnante")
-                    , React.createElement('span', { style: {fontSize:12,color:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7526}}, brano.insegnante)
-                  )
-                )
+          /* Eventi collegati */
+          , eventiCollegati.length > 0 && (
+            React.createElement('div', { style: {background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:10,padding:"12px 16px"}}
+              , React.createElement('div', { style: {fontSize:10,color:C.gold,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}, "🎤 Eventi collegati")
+              , React.createElement('div', { style: {display:"flex",flexWrap:"wrap",gap:6}}
+                , eventiCollegati.map(ev => React.createElement('span',{key:ev.id, style:{fontSize:12,padding:"4px 10px",borderRadius:20,background:C.surface,color:C.text,border:`1px solid ${C.border}`}}
+                    , ev.titolo||ev.nome, ev.data?' · '+new Date(ev.data+'T00:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'}):''
+                  ))
               )
             )
           )
 
-          /* Allievi */
-          , (brano.allievi||[]).length>0&&(
-            React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7535}}
-              , React.createElement('div', { style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7536}}, "Allievi "
-                 , brano.tipo==="collettivo"?"nell'ensemble":"che studiano questo brano", " (" , brano.allievi.length, ")"
-              )
-              , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7539}}
-                , brano.allievi.map(a=>(
-                  React.createElement('div', { key: a, style: {display:"flex",alignItems:"center",gap:10,padding:"9px 12px",
-                    background:C.bg,border:`1px solid ${C.border}`,borderRadius:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7541}}
-                    , React.createElement('div', { style: {width:30,height:30,borderRadius:"50%",background:`${typeHex}18`,
-                      border:`1.5px solid ${typeHex}40`,display:"flex",alignItems:"center",
-                      justifyContent:"center",flexShrink:0,
-                      fontFamily:"'Oswald',sans-serif",fontSize:13,fontWeight:600,color:typeHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7543}}
-                      , stuName.split(" ").map(p=>p[0]).join("").slice(0,2)
-                    )
-                    , React.createElement('span', { style: {fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7549}}, a)
-                  )
-                ))
-              )
+          /* Riepilogo allievi totali */
+          , allieviTotali.length > 0 && (
+            React.createElement('div', { style: {fontSize:12,color:C.textMuted}}
+              , `👥 ${allieviTotali.length} allievi coinvolti in totale (tutte le versioni)`
             )
           )
 
           /* Note */
           , brano.note&&(
-            React.createElement('div', { style: {background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:10,padding:"14px 16px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7558}}
-              , React.createElement('div', { style: {fontSize:10,color:C.gold,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:7}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7559}}, "Note tecniche" )
-              , React.createElement('div', { style: {fontSize:13,color:C.text,lineHeight:1.65}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7560}}, brano.note)
+            React.createElement('div', { style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px 16px"}}
+              , React.createElement('div', { style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:7}}, "Note tecniche")
+              , React.createElement('div', { style: {fontSize:13,color:C.text,lineHeight:1.65}}, brano.note)
             )
           )
-          , _allieviL.length > 0 && (
-            React.createElement('div', { style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 16px"} }
-              , React.createElement('div', { style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10} }, "Allievi")
-              , React.createElement('div', { style: {display:"flex",gap:6,flexWrap:"wrap"} }
-                , _allieviL.map(nome=>React.createElement('span', { key: nome,
-                    style: {fontSize:12,padding:"3px 10px",borderRadius:4,background:typeHex+"18",color:typeHex,border:`1px solid ${typeHex}40`} }
-                  , nome
-                ))
-              )
-            )
+
+          /* ── Versioni raggruppate con toggle ── */
+          , React.createElement('div', null
+            , React.createElement('div', { style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:10}}, "🎼 Versioni")
+            , versioni.length === 0
+              ? React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}},'Nessuna versione configurata')
+              : versioni.map((v, idx) => {
+                  const isOpen = openV === idx;
+                  const fileCount = (v.spartiti||[]).length + (v.allegati||[]).length + (v.link||[]).length;
+                  return React.createElement('div', {key:idx, style:{border:`1px solid ${C.border}`,borderRadius:10,marginBottom:8,overflow:'hidden'}}
+                    , React.createElement('div', {onClick:()=>setOpenV(isOpen?-1:idx),
+                        style:{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:C.bg,cursor:'pointer'}}
+                      , React.createElement('div',{style:{transform:isOpen?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s',display:'flex'}}
+                          , React.createElement(Ic,{n:'chevron-down',size:14,stroke:C.textMuted}))
+                      , React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600}}, v.tonalita || `Versione ${idx+1}`)
+                      , React.createElement('span',{style:{fontSize:11,color:C.textDim}}, `${(v.allievi||[]).length} 👤 · ${fileCount} 📎`)
+                    )
+                    , isOpen && React.createElement('div', {style:{padding:'14px',display:'flex',flexDirection:'column',gap:14}}
+
+                      /* Link */
+                      , (v.link||[]).length > 0 && React.createElement('div', null
+                          , React.createElement('div',{style:{fontSize:10,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:6}},'🔗 Link')
+                          , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:5}}
+                              , v.link.map((l,li)=>React.createElement('a',{key:li, href:l.url, target:'_blank', rel:'noopener noreferrer',
+                                  style:{fontSize:12,color:C.blue,textDecoration:'none',display:'flex',alignItems:'center',gap:6,padding:'7px 10px',background:C.bg,borderRadius:7,border:`1px solid ${C.border}`}}
+                                  , React.createElement(Ic,{n:'link',size:11,stroke:C.blue}), l.label||l.url
+                                ))
+                            )
+                        )
+
+                      /* Spartiti + allegati */
+                      , ((v.spartiti||[]).length+(v.allegati||[]).length) > 0 && React.createElement('div', null
+                          , React.createElement('div',{style:{fontSize:10,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:6}},'📎 File')
+                          , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:5}}
+                              , [...(v.spartiti||[]),...(v.allegati||[])].map((fi,fii)=>React.createElement('a',{key:fi.id||fii, href:fi.fileUrl, target:'_blank', rel:'noopener noreferrer',
+                                  style:{fontSize:12,color:C.text,textDecoration:'none',display:'flex',alignItems:'center',gap:6,padding:'7px 10px',background:C.bg,borderRadius:7,border:`1px solid ${C.border}`}}
+                                  , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.textMuted}), fi.fileName
+                                ))
+                            )
+                        )
+
+                      /* Allievi di questa versione */
+                      , React.createElement('div', null
+                          , React.createElement('div',{style:{fontSize:10,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:6}},
+                              `👤 Allievi (${(v.allievi||[]).length})`)
+                          , (v.allievi||[]).length === 0
+                            ? React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}},'Nessun allievo assegnato')
+                            : React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:6}}
+                                , v.allievi.map(a=>(
+                                  React.createElement('div', { key: a.studentId, style: {display:"flex",alignItems:"center",gap:10,padding:"8px 11px",
+                                    background:C.bg,border:`1px solid ${C.border}`,borderRadius:8}}
+                                    , React.createElement('div', { style: {width:26,height:26,borderRadius:"50%",background:`${typeHex}18`,
+                                      border:`1.5px solid ${typeHex}40`,display:"flex",alignItems:"center",
+                                      justifyContent:"center",flexShrink:0,
+                                      fontFamily:"'Oswald',sans-serif",fontSize:11,fontWeight:600,color:typeHex}}
+                                      , (a.studentName||'').split(" ").map(p=>p[0]).join("").slice(0,2)
+                                    )
+                                    , React.createElement('span', { style: {fontSize:13}}, a.studentName)
+                                  )
+                                ))
+                              )
+                        )
+                    )
+                  );
+                })
           )
         )
 
         /* Footer */
         , React.createElement('div', { style: {padding:"14px 22px",borderTop:`1px solid ${C.border}`,
-          position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"space-between",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7566}}
-          , React.createElement(Btn, { danger: true, onClick: ()=>onDelete(brano), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7568}}
-            , React.createElement(Ic, { n: "trash", size: 13, stroke: C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7569}}), "Elimina"
+          position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"space-between",flexShrink:0}}
+          , React.createElement(Btn, { danger: true, onClick: ()=>onDelete(brano)}
+            , React.createElement(Ic, { n: "trash", size: 13, stroke: C.red}), "Elimina"
           )
-          , React.createElement(Btn, { variant: "secondary", onClick: ()=>onEdit(brano), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7571}}
-            , React.createElement(Ic, { n: "edit", size: 13, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7572}}), "Modifica"
+          , React.createElement(Btn, { variant: "secondary", onClick: ()=>onEdit(brano)}
+            , React.createElement(Ic, { n: "edit", size: 13, stroke: C.textMuted}), "Modifica"
           )
         )
       )

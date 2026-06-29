@@ -286,7 +286,17 @@ function App() {
             docenti:  (sD||[]).map(r => FA ? FA.docente(r) : r),
             courses:  (sC||[]).map(r => FA ? FA.corso(r) : r),
             lessons:  sL,
-            brani:    (sB||[]).map(r => ({ id:r.id, title:r.titolo||'', composer:r.compositore||'', periodo:r.periodo||'', tonality:r.tonalita||'', difficulty:r.difficolta||'Intermedio', tipo:r.tipo||'individuale', note:r.note||'', lezioni:r.lezioni||0 })),
+            brani:    (sB||[]).map(r => {
+              const pj = (v,f=[]) => { if(!v) return f; if(Array.isArray(v)) return v; if(typeof v==='object') return v; try { return JSON.parse(v); } catch(e) { return f; } };
+              let versioni = pj(r.versioni, []);
+              if (versioni.length === 0) {
+                const tonLeg = r.tonalita||r.tonality||'';
+                const spLeg = pj(r.spartiti,[]); const fLeg = pj(r.files,[]);
+                const lkLeg = r.link_backing ? [{url:r.link_backing,label:'Backing track'}] : [];
+                if (tonLeg||spLeg.length||fLeg.length||lkLeg.length) versioni = [{tonalita:tonLeg,spartiti:spLeg,allegati:fLeg,link:lkLeg,allievi:[]}];
+              }
+              return { id:r.id, title:r.titolo||'', composer:r.compositore||'', tipo:r.tipo||'individuale', strumento:r.strumento||'', eventiIds:pj(r.eventi_ids,[]), versioni:versioni, note:r.note||'', lezioni:r.lezioni||0, periodo:r.periodo||'', difficulty:r.difficolta||'Intermedio' };
+            }),
             spese:    (sP||[]).map(r => ({ id:String(r.id), docenteId:r.docente_id||null, data:r.data||'', mese:r.mese!=null?r.mese:new Date((r.data||'')+'T00:00:00').getMonth(), anno:r.anno||new Date().getFullYear(), importo:parseFloat(r.importo)||0, desc:r.desc||r.descrizione||'', nota:r.nota||'', metodo:r.metodo||'Bonifico', categoria:r.categoria||'altro' })),
             entrate:  (sQ||[]).map(r => ({ id:String(r.id), studentId:r.studente_id||null, studentName:r.studente_nome||'', importo:parseFloat(r.importo)||0, mese:r.mese, anno:r.anno, data:r.data_pagamento||'', metodo:r.metodo||'Contanti', categoria:'quota', desc:r.note||'', stato:r.stato||'attesa' })),
             concerti: (sEV||[]).map(r => {
@@ -733,7 +743,7 @@ function App() {
       case 'corsi':       return React.createElement(CorsiView, { courses: sharedCourses, setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user, iscrizioniAnno: sharedIscrizioniAnno, annoInizioAttivo: sharedConfig.annoInizioAttivo, anniScolastici: sharedAnniScolastici});
       case 'calendario':  return React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, config: sharedConfig});
       case 'contabilita': return React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
-      case 'repertorio':  return React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'repertorio':  return React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, concerti: sharedConcerti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
       case 'allegati':    return React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user});
       case 'biblioteca':  return React.createElement(BibliotecaView, { userRuolo: user?.ruolo||"admin", appUser: user});
       case 'concerti':    return React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, docenti: sharedDocenti});
