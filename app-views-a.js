@@ -47,7 +47,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     const closeModal=()=>{setModal(null);setSelBrano(null);};
 
     // ── Mappa brano JS → riga DB ──
-    const toDbRow = (f) => ({
+    const toDbRow = (f, includeId=false) => ({
+      ...(includeId ? {id: f.id||uid()} : {}),
       titolo: f.title||'', compositore: f.composer||'',
       tipo: f.tipo||'individuale', strumento: f.strumento||null,
       eventi_ids: f.eventiIds||[], versioni: f.versioni||[],
@@ -62,7 +63,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       try {
         const sb = window.supabaseClient;
         if (sb) {
-          const { data, error } = await sb.from('brani').insert(toDbRow(f)).select().single();
+          const { data, error } = await sb.from('brani').insert(toDbRow(f, true)).select().single();
           if (error) { console.warn('[FM] insert brano error:', error.message); showToast('Errore salvataggio: '+error.message, C.red); }
           else if (data) setBrani(p=>p.map(b=>b.id===tempId?{...f,id:data.id}:b));
         }
@@ -424,12 +425,12 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         /* ── MODALI ── */
         , modal==="add"&&(
           React.createElement(Modal, { title: "Nuovo brano" , onClose: closeModal, wide: true}
-            , React.createElement(BranoForm, { onSave: aggiungiBrano, onClose: closeModal, students: _studBranoRep, concerti: _concertiRep})
+            , React.createElement(BranoForm, { onSave: aggiungiBrano, onClose: closeModal, students: _studBranoRep, concerti: _concertiRep, courses: _propStudentsRep?window.__FM_DATA__&&window.__FM_DATA__.courses||[]:[]})
           )
         )
         , modal==="edit"&&selBrano&&(
           React.createElement(Modal, { title: "Modifica brano" , onClose: closeModal, wide: true}
-            , React.createElement(BranoForm, { initial: selBrano, onSave: modificaBrano, onClose: closeModal, students: _studBranoRep, concerti: _concertiRep})
+            , React.createElement(BranoForm, { initial: selBrano, onSave: modificaBrano, onClose: closeModal, students: _studBranoRep, concerti: _concertiRep, courses: window.__FM_DATA__&&window.__FM_DATA__.courses||[]})
           )
         )
         , modal==="confirm_delete"&&selBrano&&(
@@ -2519,58 +2520,49 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   };
 
   const handleDeleteAllegato = async (a) => {
+    const sb = window.supabaseClient;
+    setConfirmDelAll(null); // chiude subito il modal
     if (a._categoria === 'lezione') {
-      const sb = window.supabaseClient;
+      // Rimuovi dal DB allegati
       if (sb) {
         const { error } = await sb.from('allegati').delete().eq('id', a.id);
-        if (error) console.warn('[FM] delete allegato error:', error.message);
-        // Rimuovi file dallo Storage
-        if (a.fileUrl) {
-          try {
-            const urlPath = a.fileUrl.split('/object/public/allegati/')[1];
-            if (urlPath) await sb.storage.from('allegati').remove([urlPath]);
-          } catch(e) { console.warn('[FM] storage delete:', e); }
-        }
-        // Ricarica sharedAllegati e sharedLessons via FM_RELOAD
+        if (error) { console.warn('[FM] delete allegato error:', error.message); alert('Errore eliminazione: '+error.message); return; }
+        // Rimuovi file fisico dallo Storage
+        try {
+          const urlPath = a.fileUrl ? a.fileUrl.split('/object/public/allegati/')[1] : null;
+          if (urlPath) await sb.storage.from('allegati').remove([urlPath]);
+        } catch(e) { console.warn('[FM] storage delete:', e); }
+        // Aggiorna stato locale immediatamente — NON aspettare FM_RELOAD
+        if (propSetAllegati) propSetAllegati(p => p.filter(x => x.id !== a.id));
+        // Poi ricarica in background per sincronizzare
         if (window.__FM_RELOAD__) {
           const {data:allAl} = await sb.from('allegati').select('*').order('created_at',{ascending:false});
           if (allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
         }
       }
-      if (propSetAllegati) propSetAllegati(p => p.filter(x => x.id !== a.id));
     } else if ((a._categoria === 'spartito' || a._categoria === 'file_brano') && a.branoId) {
       const brano = brani.find(b => b.id === a.branoId);
-      if (brano) {
-        const vIdx = a.versioneIdx != null ? a.versioneIdx : 0;
-        const nuoveVersioni = (brano.versioni||[]).map((v, i) => {
-          if (i !== vIdx) return v;
-          const campo = a._categoria === 'spartito' ? 'spartiti' : 'allegati';
-          return {...v, [campo]: (v[campo]||[]).filter(f => f.id !== a.id)};
-        });
-        // Aggiorna stato locale immediatamente
-        if (propSetBrani) propSetBrani(p => p.map(b => b.id === a.branoId ? {...b, versioni: nuoveVersioni} : b));
-        // Persisti su Supabase
-        try {
-          const sb = window.supabaseClient;
-          if (sb) {
-            const { error } = await sb.from('brani').update({versioni: nuoveVersioni}).eq('id', a.branoId);
-            if (error) console.warn('[FM] delete spartito/allegato brano error:', error.message);
-            // Rimuovi anche il file fisico dallo Storage
-            if (a.storagePath) {
-              try { await sb.storage.from('allegati').remove([a.storagePath]); }
-              catch(e) { console.warn('[FM] storage delete brano file:', e); }
-            } else if (a.fileUrl) {
-              try {
-                const urlPath = a.fileUrl.split('/object/public/allegati/')[1];
-                if (urlPath) await sb.storage.from('allegati').remove([urlPath]);
-              } catch(e) { console.warn('[FM] storage delete brano file (fallback url):', e); }
-            }
-          }
-        } catch(e) { console.warn('[FM] handleDeleteAllegato brano exception:', e?.message); }
+      if (!brano) { console.warn('[FM] brano non trovato per id', a.branoId); return; }
+      const vIdx = a.versioneIdx != null ? a.versioneIdx : 0;
+      const campo = a._categoria === 'spartito' ? 'spartiti' : 'allegati';
+      const nuoveVersioni = (brano.versioni||[]).map((v, i) => {
+        if (i !== vIdx) return v;
+        return {...v, [campo]: (v[campo]||[]).filter(f => f.id !== a.id && f.id !== a.id)};
+      });
+      // Aggiorna stato locale immediatamente
+      if (propSetBrani) propSetBrani(p => p.map(b => b.id === a.branoId ? {...b, versioni: nuoveVersioni} : b));
+      // Persisti su Supabase
+      if (sb) {
+        const { error } = await sb.from('brani').update({versioni: nuoveVersioni}).eq('id', a.branoId);
+        if (error) { console.warn('[FM] update brani versioni error:', error.message); alert('Errore eliminazione file dal brano: '+error.message); return; }
+        // Rimuovi file fisico dallo Storage
+        const storePath = a.storagePath || (a.fileUrl ? a.fileUrl.split('/object/public/allegati/')[1] : null);
+        if (storePath) {
+          try { await sb.storage.from('allegati').remove([storePath]); }
+          catch(e) { console.warn('[FM] storage delete brano file:', e); }
+        }
       }
     }
-    if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
-    setConfirmDelAll(null);
   };
 
   // useEffect: aggiorna lo slot modale globale ogni volta che confirmDelAll o editAllegato cambiano

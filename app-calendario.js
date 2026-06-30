@@ -9477,7 +9477,7 @@ const INIT_BRANI = [
 ];
 
 // ─── FORM BRANO ──────────────────────────────────────────────────────────────
-const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_concertiBranoIn})=>{
+const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_concertiBranoIn,courses:_coursesBranoIn})=>{
   const empty={title:"",composer:"",tipo:"individuale",strumento:"",eventiIds:[],note:"",versioni:[{tonalita:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
   const [f,setF]=useState(initial ? {...empty,...initial,versioni:(initial.versioni&&initial.versioni.length>0)?initial.versioni:empty.versioni} : empty);
   const [err,setErr]=useState({});
@@ -9485,6 +9485,9 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const studentsList = _studBranoIn || [];
   const concertiList = _concertiBranoIn || [];
+  const coursesList  = _coursesBranoIn || []; // corsi reali dal DB
+  // Lista strumenti = nomi dei corsi attivi (de-duplicati)
+  const strumentiDisp = [...new Set(coursesList.map(c=>c.name||c.nome).filter(Boolean))].sort();
 
   const setVersione = (idx, patch) => {
     setF(p => ({...p, versioni: p.versioni.map((v,i)=>i===idx?{...v,...patch}:v)}));
@@ -9521,9 +9524,10 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
   };
 
   // Allievi filtrabili per lo strumento selezionato (per assegnazione più rapida)
+  // Ensemble = tutti gli allievi; strumento specifico = solo quelli di quel corso
   const allieviFiltrabili = f.strumento
-    ? studentsList.filter(s => (s.instrument||"")===f.strumento)
-    : studentsList;
+    ? studentsList.filter(s => (s.instrument||s.course||"")===f.strumento)
+    : studentsList; // ensemble: mostra tutti
 
   return(
     React.createElement(React.Fragment, null
@@ -9535,8 +9539,8 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
           , React.createElement(Input, { label: "Compositore" , value: f.composer, onChange: e=>set("composer",e.target.value), placeholder: "Es. James Pierpont" })
           , React.createElement(Sel, { label: "Tipo", value: f.tipo, onChange: e=>set("tipo",e.target.value),
             options: [{value:"individuale",label:"Individuale"},{value:"collettivo",label:"Collettivo"}] })
-          , React.createElement(Sel, { label: "Strumento/Corso (vuoto = ensemble, visibile a tutti)", value: f.strumento, onChange: e=>set("strumento",e.target.value),
-            options: [{value:"",label:"🎭 Ensemble (tutti)"},...INSTRUMENTS.map(i=>({value:i,label:i}))] })
+          , React.createElement(Sel, { label: "Strumento", value: f.strumento, onChange: e=>set("strumento",e.target.value),
+            options: [{value:"",label:"🎭 Ensemble (tutti)"},...strumentiDisp.map(i=>({value:i,label:i}))] })
         )
 
         /* ── Eventi collegati ── */
@@ -9578,7 +9582,8 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
                 , React.createElement('div', {onClick:()=>setOpenVersione(isOpen?-1:idx),
                     style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:C.bg,cursor:'pointer'}}
                   , React.createElement('div',{style:{transform:isOpen?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s',display:'flex'}},React.createElement(Ic,{n:'chevron-down',size:14,stroke:C.textMuted}))
-                  , React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600}}, v.tonalita || `Versione ${idx+1}`)
+                  , React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600}}
+                      , [f.title, f.strumento||'Ensemble', v.tonalita].filter(Boolean).join(' - ') || `Versione ${idx+1}`)
                   , React.createElement('span',{style:{fontSize:11,color:C.textDim}}, `${(v.allievi||[]).length} allievi · ${(v.spartiti||[]).length+(v.allegati||[]).length} file`)
                   , f.versioni.length>1 && React.createElement('button',{onClick:(e)=>{e.stopPropagation();delVersione(idx);},
                       style:{background:'none',border:'none',cursor:'pointer',color:C.red,padding:2}}, React.createElement(Ic,{n:'trash',size:13,stroke:C.red}))
@@ -9657,7 +9662,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
                   /* Allievi assegnati a questa versione */
                   , React.createElement('div', null
                     , React.createElement('label',{style:{fontSize:10,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},
-                        `Allievi assegnati ${f.strumento?'('+f.strumento+')':''}`)
+                        `Allievi assegnati ${f.strumento ? '(' + f.strumento + ')' : '(Ensemble — tutti i corsi)'}`)
                     , allieviFiltrabili.length === 0
                       ? React.createElement('div',{style:{fontSize:11,color:C.textDim,fontStyle:'italic'}},'Nessun allievo trovato per questo strumento')
                       : React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6,maxHeight:140,overflowY:'auto'}}
@@ -9779,7 +9784,8 @@ const BranoDrawer = ({brano,onClose,onEdit,onDelete,concerti}) => {
                         style:{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:C.bg,cursor:'pointer'}}
                       , React.createElement('div',{style:{transform:isOpen?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s',display:'flex'}}
                           , React.createElement(Ic,{n:'chevron-down',size:14,stroke:C.textMuted}))
-                      , React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600}}, v.tonalita || `Versione ${idx+1}`)
+                      , React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600}}
+                        , [brano.title, brano.strumento||'Ensemble', v.tonalita].filter(Boolean).join(' - ') || `Versione ${idx+1}`)
                       , React.createElement('span',{style:{fontSize:11,color:C.textDim}}, `${(v.allievi||[]).length} 👤 · ${fileCount} 📎`)
                     )
                     , isOpen && React.createElement('div', {style:{padding:'14px',display:'flex',flexDirection:'column',gap:14}}
