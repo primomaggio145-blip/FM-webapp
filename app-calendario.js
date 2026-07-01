@@ -9478,7 +9478,7 @@ const INIT_BRANI = [
 
 // ─── FORM BRANO ──────────────────────────────────────────────────────────────
 const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_concertiBranoIn,courses:_coursesBranoIn})=>{
-  const empty={title:"",composer:"",tipo:"individuale",strumento:"",eventiIds:[],note:"",versioni:[{tonalita:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
+  const empty={title:"",composer:"",strumento:"",eventiIds:[],note:"",versioni:[{tonalita:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
   const [f,setF]=useState(initial ? {...empty,...initial,versioni:(initial.versioni&&initial.versioni.length>0)?initial.versioni:empty.versioni} : empty);
   const [err,setErr]=useState({});
   const [openVersione, setOpenVersione] = useState(0); // indice versione espansa
@@ -9542,8 +9542,6 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
             , React.createElement(Input, { label: "Titolo *" , value: f.title, onChange: e=>set("title",e.target.value), error: err.title, placeholder: "Es. Jingle Bells" })
           )
           , React.createElement(Input, { label: "Compositore" , value: f.composer, onChange: e=>set("composer",e.target.value), placeholder: "Es. James Pierpont" })
-          , React.createElement(Sel, { label: "Tipo", value: f.tipo, onChange: e=>set("tipo",e.target.value),
-            options: [{value:"individuale",label:"Individuale"},{value:"collettivo",label:"Collettivo"}] })
           , React.createElement(Sel, { label: "Strumento", value: f.strumento, onChange: e=>set("strumento",e.target.value),
             options: strumentiDisp.map(i=>({value:i,label:i})) })
         )
@@ -9682,12 +9680,20 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
                         // Filtra per lo strumento della versione, poi del brano, poi mostra tutti
                         const strFiltro = v.strumento || f.strumento || '';
                         const allievi = strFiltro
-                          ? studentsList.filter(s => 
-                              (s.instrument||'') === strFiltro || 
-                              (s.course||'') === strFiltro ||
-                              (s.complementaryCourse||'') === strFiltro ||
-                              (s.extraInstruments||[]).includes(strFiltro)
-                            )
+                          ? studentsList.filter(s => {
+                              // Match sul corso principale (strumento)
+                              if ((s.instrument||'') === strFiltro) return true;
+                              // Match su corso complementare
+                              if ((s.complementaryCourse||'') === strFiltro) return true;
+                              // Match su corsi extra (ensemble, collettivi)
+                              if ((s.extraInstruments||[]).includes(strFiltro)) return true;
+                              // Match tramite iscrizioni_anno (fonte più affidabile)
+                              const iscrizioni = window.__FM_DATA__?.iscrizioniAnno || [];
+                              return iscrizioni.some(i =>
+                                String(i.studentId) === String(s.id) &&
+                                (i.corsoNome === strFiltro || i.corsoId === strFiltro)
+                              );
+                            })
                           : studentsList;
                         if (allievi.length === 0)
                           return React.createElement('div',{style:{fontSize:11,color:C.textDim,fontStyle:'italic'}},'Nessun allievo trovato per questo strumento');
