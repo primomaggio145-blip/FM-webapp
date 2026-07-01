@@ -9486,8 +9486,14 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
   const studentsList = _studBranoIn || [];
   const concertiList = _concertiBranoIn || [];
   const coursesList  = _coursesBranoIn || []; // corsi reali dal DB
-  // Lista strumenti = nomi dei corsi attivi (de-duplicati)
-  const strumentiDisp = [...new Set(coursesList.map(c=>c.name||c.nome).filter(Boolean))].sort();
+  // Lista strumenti filtrata per tipo (individuale/collettivo)
+  // Un corso è "collettivo" se il suo tipo è 'collettivo' o ha più di un allievo per design
+  const strumentiDisp = [...new Set(
+    coursesList
+      .filter(c => !f.tipo || !c.tipo || c.tipo === f.tipo || c.tipo === 'misto')
+      .map(c => c.name||c.nome)
+      .filter(Boolean)
+  )].sort();
 
   const setVersione = (idx, patch) => {
     setF(p => ({...p, versioni: p.versioni.map((v,i)=>i===idx?{...v,...patch}:v)}));
@@ -9540,7 +9546,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
           , React.createElement(Sel, { label: "Tipo", value: f.tipo, onChange: e=>set("tipo",e.target.value),
             options: [{value:"individuale",label:"Individuale"},{value:"collettivo",label:"Collettivo"}] })
           , React.createElement(Sel, { label: "Strumento", value: f.strumento, onChange: e=>set("strumento",e.target.value),
-            options: [{value:"",label:"🎭 Ensemble (tutti)"},...strumentiDisp.map(i=>({value:i,label:i}))] })
+            options: strumentiDisp.map(i=>({value:i,label:i})) })
         )
 
         /* ── Eventi collegati ── */
@@ -9659,21 +9665,38 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
                       ))
                   )
 
+                  /* Strumento per questa versione (opzionale — sovrascrive quello del brano) */
+                  , React.createElement('div', null
+                    , React.createElement('label',{style:{fontSize:10,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:4}},'Strumento/Corso per questa versione (opzionale)')
+                    , React.createElement('select', {value:v.strumento||'', onChange:e=>setVersione(idx,{strumento:e.target.value}),
+                        style:{width:'100%',padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif"}}
+                      , React.createElement('option',{value:''},'(uguale al brano: '+(f.strumento||'nessuno')+')')
+                      , strumentiDisp.map(s=>React.createElement('option',{key:s,value:s},s))
+                    )
+                  )
+
                   /* Allievi assegnati a questa versione */
                   , React.createElement('div', null
                     , React.createElement('label',{style:{fontSize:10,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},
-                        `Allievi assegnati ${f.strumento ? '(' + f.strumento + ')' : '(Ensemble — tutti i corsi)'}`)
-                    , allieviFiltrabili.length === 0
-                      ? React.createElement('div',{style:{fontSize:11,color:C.textDim,fontStyle:'italic'}},'Nessun allievo trovato per questo strumento')
-                      : React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6,maxHeight:140,overflowY:'auto'}}
-                          , allieviFiltrabili.map(s => {
+                        `Allievi assegnati (${v.strumento||f.strumento||'tutti i corsi'})`)
+                    , (() => {
+                        // Filtra per lo strumento della versione, poi del brano, poi mostra tutti
+                        const strFiltro = v.strumento || f.strumento || '';
+                        const allievi = strFiltro
+                          ? studentsList.filter(s => (s.instrument||s.course||'') === strFiltro)
+                          : studentsList;
+                        if (allievi.length === 0)
+                          return React.createElement('div',{style:{fontSize:11,color:C.textDim,fontStyle:'italic'}},'Nessun allievo trovato per questo strumento');
+                        return React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6,maxHeight:140,overflowY:'auto'}}
+                          , allievi.map(s => {
                               const sel = (v.allievi||[]).some(a=>String(a.studentId)===String(s.id));
                               return React.createElement('button',{key:s.id, onClick:()=>toggleAllievoVersione(idx,s),
                                 style:{padding:'4px 11px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.tealBg:C.bg,color:sel?C.teal:C.textMuted,cursor:'pointer',fontSize:12}}
                                 , s.name||s.nome
                               );
                             })
-                        )
+                        );
+                      })()
                   )
                 )
               );
