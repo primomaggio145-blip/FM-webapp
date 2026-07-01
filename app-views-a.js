@@ -2604,70 +2604,8 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     }
   };
 
-  // useEffect: aggiorna lo slot modale globale ogni volta che confirmDelAll o editAllegato cambiano
-  useEffect(() => {
-    if (confirmDelAll) {
-      if (window.__FM_SHOW_MODAL__) window.__FM_SHOW_MODAL__(
-        React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
-          , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:400,width:'90%',border:`1px solid ${C.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}
-            , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:8,color:C.red}},'Elimina allegato')
-            , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:20}},'Eliminare "', confirmDelAll.fileName, '"? Questa azione non è reversibile.')
-            , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
-              , React.createElement('button',{onClick:()=>{ setConfirmDelAll(null); if(window.__FM_HIDE_MODAL__)window.__FM_HIDE_MODAL__(); },style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
-              , React.createElement('button',{onClick:()=>handleDeleteAllegato(confirmDelAll),style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.red,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}},'Elimina')
-            )
-          )
-        )
-      );
-    } else if (!editAllegato) {
-      if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
-    }
-  }, [confirmDelAll]);  // eslint-disable-line
-
-  useEffect(() => {
-    if (editAllegato) {
-      const _descRef = { v: editAllegatoDesc };
-      const _renderEditModal = (desc) => {
-        if (window.__FM_SHOW_MODAL__) window.__FM_SHOW_MODAL__(
-          React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
-            , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:440,width:'90%',border:`1px solid ${C.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}
-              , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}},'Modifica allegato')
-              , React.createElement('div',{style:{marginBottom:14}}
-                , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
-                , React.createElement('input',{type:'text', autoFocus:true, defaultValue:desc,
-                    onChange:e=>{ _descRef.v=e.target.value; },
-                    style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none',boxSizing:'border-box'}})
-              )
-              , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
-                , React.createElement('button',{onClick:()=>{ setEditAllegato(null); if(window.__FM_HIDE_MODAL__)window.__FM_HIDE_MODAL__(); },style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
-                , React.createElement('button',{onClick:()=>{
-                    const newDesc = _descRef.v;
-                    if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===editAllegato.id?{...x,descrizione:newDesc}:x));
-                    const sb2=window.supabaseClient;
-                    if(sb2){
-                      sb2.from('allegati').update({descrizione:newDesc}).eq('id',editAllegato.id)
-                        .then(async({error})=>{
-                          if(error){ console.warn('[FM] edit allegato:',error.message); return; }
-                          if(window.__FM_RELOAD__){
-                            const {data:allAl}=await sb2.from('allegati').select('*').order('created_at',{ascending:false});
-                            if(allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoId:r.allievo_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
-                          }
-                        });
-                    }
-                    setEditAllegato(null);
-                    if(window.__FM_HIDE_MODAL__)window.__FM_HIDE_MODAL__();
-                  }, style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.gold,color:'#0d1f4a',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},'Salva')
-              )
-            )
-          )
-        );
-      };
-      _renderEditModal(editAllegatoDesc);
-    } else {
-      if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
-    }
-  }, [editAllegato, editAllegatoDesc]);  // eslint-disable-line
-
+  // Modal inline: niente __FM_SHOW_MODAL__ (può non essere definito)
+  // Renderizzati direttamente nel return della AllegatiView
   // Unisce allegati lezioni + spartiti/allegati di TUTTE le versioni dei brani
   const allegatiBrani = [];
   brani.forEach(b => {
@@ -2884,11 +2822,39 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
             )
           )
         )
+
+      /* ── Modal conferma eliminazione allegato (inline, non globale) ── */
+      , confirmDelAll && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
+          , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:400,width:'90%',border:`1px solid ${C.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}
+            , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:8,color:C.red}},'Elimina allegato')
+            , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:20}},'Eliminare "',confirmDelAll.fileName,'"? Questa azione non è reversibile.')
+            , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+              , React.createElement('button',{onClick:()=>setConfirmDelAll(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+              , React.createElement('button',{onClick:()=>handleDeleteAllegato(confirmDelAll),style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.red,color:'#fff',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:600}},'Elimina')
+            )
+          )
+        )
+
+      /* ── Modal modifica descrizione allegato (inline) ── */
+      , editAllegato && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
+          , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:440,width:'90%',border:`1px solid ${C.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}
+            , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}},'Modifica allegato')
+            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
+            , React.createElement('input',{type:'text',autoFocus:true,value:editAllegatoDesc,
+                onChange:e=>setEditAllegatoDesc(e.target.value),
+                style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none',boxSizing:'border-box',marginBottom:18}})
+            , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+              , React.createElement('button',{onClick:()=>setEditAllegato(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
+              , React.createElement('button',{onClick:async()=>{
+                    if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===editAllegato.id?{...x,descrizione:editAllegatoDesc}:x));
+                    const sb2=window.supabaseClient;
+                    if(sb2){ const {error}=await sb2.from('allegati').update({descrizione:editAllegatoDesc}).eq('id',editAllegato.id); if(error) console.warn('[FM] edit allegato:',error.message); }
+                    setEditAllegato(null);
+                  },style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.gold,color:'#0d1f4a',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},'Salva')
+            )
+          )
+        )
     )
-    /* ── I modali (confirm delete / modifica) sono gestiti tramite
-       window.__FM_SHOW_MODAL__ nello slot globalModal di App,
-       fuori dal div main-scroll animato (fadeIn) che crea un
-       compositing layer che intrappola position:fixed. ── */
   );
 };
 

@@ -9488,11 +9488,10 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
   const coursesList  = _coursesBranoIn || []; // corsi reali dal DB
   // Lista strumenti filtrata per tipo (individuale/collettivo)
   // Un corso è "collettivo" se il suo tipo è 'collettivo' o ha più di un allievo per design
+  // Tutti i corsi attivi — la distinzione individuale/collettivo
+  // è una caratteristica del BRANO, non del corso in sé
   const strumentiDisp = [...new Set(
-    coursesList
-      .filter(c => !f.tipo || !c.tipo || c.tipo === f.tipo || c.tipo === 'misto')
-      .map(c => c.name||c.nome)
-      .filter(Boolean)
+    coursesList.map(c => c.name||c.nome).filter(Boolean)
   )].sort();
 
   const setVersione = (idx, patch) => {
@@ -9683,7 +9682,12 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
                         // Filtra per lo strumento della versione, poi del brano, poi mostra tutti
                         const strFiltro = v.strumento || f.strumento || '';
                         const allievi = strFiltro
-                          ? studentsList.filter(s => (s.instrument||s.course||'') === strFiltro)
+                          ? studentsList.filter(s => 
+                              (s.instrument||'') === strFiltro || 
+                              (s.course||'') === strFiltro ||
+                              (s.complementaryCourse||'') === strFiltro ||
+                              (s.extraInstruments||[]).includes(strFiltro)
+                            )
                           : studentsList;
                         if (allievi.length === 0)
                           return React.createElement('div',{style:{fontSize:11,color:C.textDim,fontStyle:'italic'}},'Nessun allievo trovato per questo strumento');

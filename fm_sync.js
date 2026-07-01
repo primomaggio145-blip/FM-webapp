@@ -461,8 +461,8 @@
       ['corsi',    'courses',  toDB.corsi   ],
       ['quote',    'entrate',  toDB.quote   ],
       ['spese',    'spese',    toDB.spese   ],
-      ['brani',    'brani',    toDB.brani   ],
-      ['concerti', 'concerti', toDB.concerti],
+      // brani: gestiti direttamente da RepertorioView (no double-insert)
+     ['concerti', 'concerti', toDB.concerti],
       ['allegati', 'allegati', toDB.allegati],
       ['prenotazioni_sala', 'prenotazioni_sala', toDB.prenotazioni_sala],
     ];
