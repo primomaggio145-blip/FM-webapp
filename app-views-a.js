@@ -2549,6 +2549,22 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     setConfirmDelAll(null);
     const sb = window.supabaseClient;
 
+    if (a._categoria === 'storage_orphan') {
+      // File orfano in Storage — elimina solo il file fisico (non ha record nel DB)
+      if (sb && a.fileUrl) {
+        try {
+          const urlPath = a.fileUrl.split('/object/public/allegati/')[1];
+          if (urlPath) {
+            const { error } = await sb.storage.from('allegati').remove([decodeURIComponent(urlPath)]);
+            if (error) { alert('Errore eliminazione file: '+error.message); return; }
+          }
+        } catch(e) { alert('Errore: '+e?.message); return; }
+      }
+      // Rimuovi dalla lista locale (storageOrphans è derivato dinamicamente — forza refresh)
+      if (window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
+      return;
+    }
+
     if (a._categoria === 'lezione') {
       if (a.lezioneId) {
         // Allegato inline nella lezione — aggiorna la lezione stessa
