@@ -56,6 +56,24 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     });
 
     // ── CRUD con persistenza Supabase ──
+    // Sincronizza brano nella scaletta degli eventi collegati
+    const syncBranoInEventi = async (branoId, branoTitle, branoComposer, eventiIds) => {
+      const sb = window.supabaseClient; if (!sb) return;
+      for (const evId of (eventiIds||[])) {
+        const evento = _concertiRep.find(e=>e.id===evId); if (!evento) continue;
+        const scaletta = evento.scaletta||[];
+        // Aggiungi solo se non già presente
+        if (!scaletta.some(s=>(s.branoId||s.brano)===branoId && !s.branoId ? s.brano===branoTitle : s.branoId===branoId)) {
+          const nuovaScaletta = [...scaletta, {brano:branoTitle, performer:'', branoId:branoId, note:''}];
+          await sb.from('concerti').update({scaletta:nuovaScaletta}).eq('id',evId);
+          // Aggiorna stato locale concerti
+          if (window.__FM_DATA__&&window.__FM_DATA__.setConcerti) {
+            window.__FM_DATA__.setConcerti(p=>p.map(e=>e.id===evId?{...e,scaletta:nuovaScaletta}:e));
+          }
+        }
+      }
+    };
+
     const aggiungiBrano = async (f) => {
       const tempId = uid();
       setBrani(p=>[...p,{...f,id:tempId}]);
@@ -65,7 +83,12 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         if (sb) {
           const { data, error } = await sb.from('brani').insert(toDbRow(f, true)).select().single();
           if (error) { console.warn('[FM] insert brano error:', error.message); showToast('Errore salvataggio: '+error.message, C.red); }
-          else if (data) setBrani(p=>p.map(b=>b.id===tempId?{...f,id:data.id}:b));
+          else if (data) {
+            const realId = data.id;
+            setBrani(p=>p.map(b=>b.id===tempId?{...f,id:realId}:b));
+            // Sincronizza nella scaletta degli eventi collegati
+            if ((f.eventiIds||[]).length>0) await syncBranoInEventi(realId, f.title, f.composer, f.eventiIds);
+          }
         }
       } catch(e) { console.warn('[FM] aggiungiBrano exception:', e?.message); }
       showToast("Brano aggiunto");
@@ -78,6 +101,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         if (sb) {
           const { error } = await sb.from('brani').update(toDbRow(f)).eq('id', selBrano.id);
           if (error) { console.warn('[FM] update brano error:', error.message); showToast('Errore salvataggio: '+error.message, C.red); return; }
+          // Sincronizza eventi collegati nuovi (quelli già presenti vengono saltati)
+          if ((f.eventiIds||[]).length>0) await syncBranoInEventi(selBrano.id, f.title, f.composer, f.eventiIds);
         }
       } catch(e) { console.warn('[FM] modificaBrano exception:', e?.message); }
       showToast("Brano aggiornato");
@@ -2519,47 +2544,61 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
   };
 
-  const handleDeleteAllegato = async (a) => {
+  const handleDeleteAllegato = async (allegatoDaEliminare) => {
+    const a = allegatoDaEliminare; // cattura prima di azzerare
+    setConfirmDelAll(null);
     const sb = window.supabaseClient;
-    setConfirmDelAll(null); // chiude subito il modal
+
     if (a._categoria === 'lezione') {
-      // Rimuovi dal DB allegati
-      if (sb) {
-        const { error } = await sb.from('allegati').delete().eq('id', a.id);
-        if (error) { console.warn('[FM] delete allegato error:', error.message); alert('Errore eliminazione: '+error.message); return; }
-        // Rimuovi file fisico dallo Storage
-        try {
-          const urlPath = a.fileUrl ? a.fileUrl.split('/object/public/allegati/')[1] : null;
-          if (urlPath) await sb.storage.from('allegati').remove([urlPath]);
-        } catch(e) { console.warn('[FM] storage delete:', e); }
-        // Aggiorna stato locale immediatamente — NON aspettare FM_RELOAD
-        if (propSetAllegati) propSetAllegati(p => p.filter(x => x.id !== a.id));
-        // Poi ricarica in background per sincronizzare
-        if (window.__FM_RELOAD__) {
-          const {data:allAl} = await sb.from('allegati').select('*').order('created_at',{ascending:false});
-          if (allAl) window.__FM_RELOAD__({allegati:allAl.map(r=>({id:r.id,lezioneId:r.lezione_id||null,allievoNome:r.allievo_nome||null,corso:r.corso||null,descrizione:r.descrizione||null,fileUrl:r.file_url||null,fileName:r.file_name||null,fileType:r.file_type||null,createdAt:r.created_at||null}))});
+      if (a.lezioneId) {
+        // Allegato inline nella lezione — aggiorna la lezione stessa
+        const lesson = _avLessons.find(l => l.id === a.lezioneId);
+        if (lesson && sb) {
+          const nuoviAllegati = (lesson.allegati||[]).filter(x => x.id !== a.id);
+          const { error } = await sb.from('lezioni').update({allegati: nuoviAllegati}).eq('id', a.lezioneId);
+          if (error) { alert('Errore: '+error.message); return; }
+          // Rimuovi file fisico dallo Storage
+          if (a.fileUrl) {
+            try {
+              const urlPath = a.fileUrl.split('/object/public/allegati/')[1];
+              if (urlPath) await sb.storage.from('allegati').remove([urlPath]);
+            } catch(e) { console.warn('[FM] storage delete lesson file:', e); }
+          }
+        }
+      } else {
+        // Allegato in tabella allegati separata
+        if (sb) {
+          const { error } = await sb.from('allegati').delete().eq('id', a.id);
+          if (error) { alert('Errore: '+error.message); return; }
+          if (a.fileUrl) {
+            try {
+              const urlPath = a.fileUrl.split('/object/public/allegati/')[1];
+              if (urlPath) await sb.storage.from('allegati').remove([urlPath]);
+            } catch(e) { console.warn('[FM] storage delete allegati:', e); }
+          }
         }
       }
+      // Aggiorna stato locale
+      if (propSetAllegati) propSetAllegati(p => p.filter(x => x.id !== a.id));
+      // Forza ricaricamento dati
+      if (window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
+
     } else if ((a._categoria === 'spartito' || a._categoria === 'file_brano') && a.branoId) {
       const brano = brani.find(b => b.id === a.branoId);
-      if (!brano) { console.warn('[FM] brano non trovato per id', a.branoId); return; }
+      if (!brano) { console.warn('[FM] brano non trovato', a.branoId); return; }
       const vIdx = a.versioneIdx != null ? a.versioneIdx : 0;
       const campo = a._categoria === 'spartito' ? 'spartiti' : 'allegati';
       const nuoveVersioni = (brano.versioni||[]).map((v, i) => {
         if (i !== vIdx) return v;
-        return {...v, [campo]: (v[campo]||[]).filter(f => f.id !== a.id && f.id !== a.id)};
+        return {...v, [campo]: (v[campo]||[]).filter(f => f.id !== a.id)};
       });
-      // Aggiorna stato locale immediatamente
       if (propSetBrani) propSetBrani(p => p.map(b => b.id === a.branoId ? {...b, versioni: nuoveVersioni} : b));
-      // Persisti su Supabase
       if (sb) {
         const { error } = await sb.from('brani').update({versioni: nuoveVersioni}).eq('id', a.branoId);
-        if (error) { console.warn('[FM] update brani versioni error:', error.message); alert('Errore eliminazione file dal brano: '+error.message); return; }
-        // Rimuovi file fisico dallo Storage
+        if (error) { alert('Errore eliminazione file brano: '+error.message); return; }
         const storePath = a.storagePath || (a.fileUrl ? a.fileUrl.split('/object/public/allegati/')[1] : null);
         if (storePath) {
-          try { await sb.storage.from('allegati').remove([storePath]); }
-          catch(e) { console.warn('[FM] storage delete brano file:', e); }
+          try { await sb.storage.from('allegati').remove([storePath]); } catch(e) {}
         }
       }
     }
