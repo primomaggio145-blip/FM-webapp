@@ -50,7 +50,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     const toDbRow = (f, includeId=false) => ({
       ...(includeId ? {id: f.id||uid()} : {}),
       titolo: f.title||'', compositore: f.composer||'',
-      tipo: f.tipo||'individuale', strumento: f.strumento||null,
+      strumento: f.strumento||null,
       eventi_ids: f.eventiIds||[], versioni: f.versioni||[],
       note: f.note||'',
     });
@@ -2718,7 +2718,8 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   };
 
   return (
-    React.createElement('div', { style: {padding:"28px 32px", maxWidth:1100, margin:"0 auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 0}}
+    React.createElement(React.Fragment, null
+    , React.createElement('div', { style: {padding:"28px 32px", maxWidth:1100, margin:"0 auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 0}}
       , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:24}}
         , React.createElement('div', null
           , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif", fontWeight:600, fontSize:26, letterSpacing:"0.02em", color:C.text}}, "Allegati")
@@ -2855,7 +2856,8 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
           )
         )
     )
-  );
+    )
+    ) // close Fragment
 };
 
 const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
