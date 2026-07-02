@@ -86,12 +86,13 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
           else if (data) {
             const realId = data.id;
             setBrani(p=>p.map(b=>b.id===tempId?{...f,id:realId}:b));
-            // Sincronizza nella scaletta degli eventi collegati
             if ((f.eventiIds||[]).length>0) await syncBranoInEventi(realId, f.title, f.composer, f.eventiIds);
           }
         }
       } catch(e) { console.warn('[FM] aggiungiBrano exception:', e?.message); }
       showToast("Brano aggiunto");
+      // Aggiorna scaletta concerti se necessario
+      if ((f.eventiIds||[]).length>0 && window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
     };
     const modificaBrano = async (f) => {
       setBrani(p=>p.map(b=>b.id===selBrano.id?{...b,...f}:b));
@@ -306,7 +307,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                                 const primaTonalita = (b.versioni||[])[0]?.tonalita || '';
                                 const nVersioni = (b.versioni||[]).length;
                                 return(
-                                  React.createElement('div', { key: b.id, className: "card-anim", onClick: ()=>setDrawer(b),
+                                  React.createElement('div', { key: b.id, className: "card-anim", onClick: ()=>{setSelBrano(b);setModal('view');},
                                     style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
                                       padding:"15px 17px",cursor:"pointer",transition:"all .15s"},
                                     onMouseEnter: e=>{e.currentTarget.style.borderColor=C.gold+"50";e.currentTarget.style.background=C.surfaceHover;},
@@ -368,7 +369,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                         , filtrati.map((b,i)=>{
                           const primaTonalita = (b.versioni||[])[0]?.tonalita || '';
                           return(
-                            React.createElement('div', { key: b.id, onClick: ()=>setDrawer(b),
+                            React.createElement('div', { key: b.id, onClick: ()=>{setSelBrano(b);setModal('view');},
                               style: {display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 1fr 0.8fr 0.8fr auto",minWidth:560,
                                 padding:"12px 20px",borderBottom:i<filtrati.length-1?`1px solid ${C.border}20`:"none",
                                 alignItems:"center",cursor:"pointer",transition:"background .1s"},
@@ -436,18 +437,48 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
           )
         )
 
-        /* ── DRAWER ── */
-        , drawer&&(
-          React.createElement(BranoDrawer, {
-            brano: drawer,
-            concerti: _concertiRep,
-            onClose: ()=>setDrawer(null),
-            onEdit: (b)=>{setSelBrano(b);setDrawer(null);setModal("edit");},
-            onDelete: (b)=>{setSelBrano(b);setModal("confirm_delete");}}
-          )
-        )
+        /* drawer rimosso — brano aperto come modal */
+
 
         /* ── MODALI ── */
+        , modal==="view"&&selBrano&&(
+          React.createElement(Modal, { title: selBrano.title, onClose: closeModal, wide: true}
+            , React.createElement('div',{style:{display:'flex',flexDirection:'column'}}
+              /* Badges header */
+              , React.createElement('div',{style:{padding:'4px 22px 14px',borderBottom:`1px solid ${C.border}`,display:'flex',gap:6,flexWrap:'wrap'}}
+                , selBrano.strumento && React.createElement('span',{style:{fontSize:11,padding:'3px 10px',borderRadius:20,background:`${C.teal}18`,color:C.teal,border:`1px solid ${C.tealBorder}`}}, '🎵 '+selBrano.strumento)
+                , (selBrano.eventiIds||[]).length>0 && React.createElement('span',{style:{fontSize:11,padding:'3px 10px',borderRadius:20,background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`}}, '🎤 '+( selBrano.eventiIds||[]).length+' event'+(( selBrano.eventiIds||[]).length===1?'o':'i'))
+                , (selBrano.versioni||[]).length>1 && React.createElement('span',{style:{fontSize:11,padding:'3px 10px',borderRadius:20,background:C.bg,color:C.textMuted,border:`1px solid ${C.border}`}}, (selBrano.versioni||[]).length+' versioni')
+              )
+              /* Versioni con toggle */
+              , React.createElement('div',{style:{padding:'16px 22px',maxHeight:'65vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:10}}
+                , selBrano.note && React.createElement('div',{style:{fontSize:13,color:C.textMuted,fontStyle:'italic',marginBottom:4}},selBrano.note)
+                , (selBrano.versioni||[]).map((v,idx)=>{
+                    const fileCount=(v.spartiti||[]).length+(v.allegati||[]).length+(v.link||[]).length;
+                    const label=[selBrano.title,v.strumento||selBrano.strumento,v.tonalita].filter(Boolean).join(' - ')||`Versione ${idx+1}`;
+                    return React.createElement('div',{key:idx,style:{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}
+                      , React.createElement('div',{style:{padding:'12px 16px',background:C.bg,display:'flex',justifyContent:'space-between',alignItems:'center'}}
+                        , React.createElement('span',{style:{fontWeight:600,fontSize:13}},label)
+                        , React.createElement('span',{style:{fontSize:11,color:C.textDim}},`${(v.allievi||[]).length} 👤 · ${fileCount} 📎`)
+                      )
+                      , React.createElement('div',{style:{padding:'12px 16px',display:'flex',flexDirection:'column',gap:8}}
+                        , (v.link||[]).map((l,li)=>React.createElement('a',{key:li,href:l.url,target:'_blank',rel:'noopener noreferrer',style:{fontSize:12,color:C.blue,display:'flex',alignItems:'center',gap:6}},React.createElement(Ic,{n:'link',size:11,stroke:C.blue}),l.label||l.url))
+                        , [...(v.spartiti||[]),...(v.allegati||[])].map((fi,fii)=>React.createElement('a',{key:fi.id||fii,href:fi.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{fontSize:12,color:C.text,display:'flex',alignItems:'center',gap:6,padding:'5px 8px',background:C.surface,borderRadius:6,border:`1px solid ${C.border}`}},React.createElement(Ic,{n:'paperclip',size:11,stroke:C.textMuted}),fi.fileName))
+                        , (v.allievi||[]).length>0 && React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:5,marginTop:4}},
+                            (v.allievi||[]).map(a=>React.createElement('span',{key:a.studentId,style:{fontSize:11,padding:'3px 9px',borderRadius:20,background:`${C.teal}18`,color:C.teal,border:`1px solid ${C.tealBorder}`}},a.studentName))
+                          )
+                      )
+                    );
+                  })
+              )
+              /* Footer */
+              , React.createElement('div',{style:{padding:'14px 22px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between'}}
+                , React.createElement(Btn,{danger:true,onClick:()=>{setModal('confirm_delete');}},React.createElement(Ic,{n:'trash',size:13,stroke:C.red}),'Elimina')
+                , React.createElement(Btn,{variant:'secondary',onClick:()=>setModal('edit')},React.createElement(Ic,{n:'edit',size:13,stroke:C.textMuted}),'Modifica')
+              )
+            )
+          )
+        )
         , modal==="add"&&(
           React.createElement(Modal, { title: "Nuovo brano" , onClose: closeModal, wide: true}
             , React.createElement(BranoForm, { onSave: aggiungiBrano, onClose: closeModal, students: _studBranoRep, concerti: _concertiRep, courses: _propStudentsRep?window.__FM_DATA__&&window.__FM_DATA__.courses||[]:[]})
