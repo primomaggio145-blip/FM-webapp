@@ -3770,7 +3770,10 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:12}},
             'Per default la scuola è chiusa in tutte le festività. Disattiva per segnare che fate lezione.')
         , React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8}}
-          , Object.entries(getItalianHolidays(new Date().getFullYear())).sort((a,b)=>a[0].localeCompare(b[0])).map(([dateStr, h]) => {
+          , Object.entries({
+              ...getItalianHolidays(draft.annoInizioAttivo || new Date().getFullYear()),
+              ...getItalianHolidays((draft.annoInizioAttivo || new Date().getFullYear()) + 1),
+            }).sort((a,b)=>a[0].localeCompare(b[0])).map(([dateStr, h]) => {
               const isAperta = (draft.festivitaConfig||{})[dateStr] === false;
               return React.createElement('div', {key:dateStr, style:{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',borderRadius:8,background:isAperta?C.greenBg:C.redBg,border:`1px solid ${isAperta?C.greenBorder:C.redBorder}`}}
                 , React.createElement('span',{style:{fontSize:16}}, h.emoji)

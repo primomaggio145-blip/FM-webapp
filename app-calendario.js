@@ -6846,7 +6846,7 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
       const sb = window.supabaseClient;
       if (!sb) { setLoading(false); return; }
       const { data, error } = await sb
-        .from("biblioteca")
+        .from("allegati")
         .select("*")
         .order("created_at", { ascending: false });
       if (!error && data) setLibri(data);
@@ -6861,10 +6861,10 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
     try {
       const sb = window.supabaseClient;
       // Rimuovi record DB
-      await sb.from("biblioteca").delete().eq("id", item.id);
+      await sb.from("allegati").delete().eq("id", item.id);
       // Rimuovi file dallo Storage
       if (item.storage_path) {
-        await sb.storage.from("biblioteca").remove([item.storage_path]);
+        await sb.storage.from("allegati").remove([item.storage_path]);
       }
       setLibri(p => p.filter(x => x.id !== item.id));
     } catch(e) { alert("Errore eliminazione: " + e.message); }
@@ -6887,11 +6887,11 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
       try {
         const sb = window.supabaseClient;
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const storagePath = `${Date.now()}_${safeName}`;
+        const storagePath = `biblioteca/${Date.now()}_${safeName}`;
         // Upload file
-        const { error: upErr } = await sb.storage.from("biblioteca").upload(storagePath, file, { upsert: true });
+        const { error: upErr } = await sb.storage.from("allegati").upload(storagePath, file, { upsert: true });
         if (upErr) throw upErr;
-        const { data: urlData } = sb.storage.from("biblioteca").getPublicUrl(storagePath);
+        const { data: urlData } = sb.storage.from("allegati").getPublicUrl(storagePath);
         const fileUrl = urlData?.publicUrl || null;
         // Salva record
         const row = {
@@ -6906,7 +6906,7 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
           storage_path: storagePath,
           caricato_da: (appUser && appUser.nome) || null,
         };
-        const { data: inserted, error: dbErr } = await sb.from("biblioteca").insert(row).select().single();
+        const { data: inserted, error: dbErr } = await sb.from("allegati").insert(row).select().single();
         if (dbErr) throw dbErr;
         setLibri(p => [inserted, ...p]);
         setModal(null);
@@ -9680,20 +9680,23 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
                         // Filtra per lo strumento della versione, poi del brano, poi mostra tutti
                         const strFiltro = v.strumento || f.strumento || '';
                         const allievi = strFiltro
-                          ? studentsList.filter(s => {
-                              // Match sul corso principale (strumento)
-                              if ((s.instrument||'') === strFiltro) return true;
-                              // Match su corso complementare
-                              if ((s.complementaryCourse||'') === strFiltro) return true;
-                              // Match su corsi extra (ensemble, collettivi)
-                              if ((s.extraInstruments||[]).includes(strFiltro)) return true;
-                              // Match tramite iscrizioni_anno (fonte più affidabile)
-                              const iscrizioni = window.__FM_DATA__?.iscrizioniAnno || [];
-                              return iscrizioni.some(i =>
-                                String(i.studentId) === String(s.id) &&
-                                (i.corsoNome === strFiltro || i.corsoId === strFiltro)
-                              );
-                            })
+                          ? (() => {
+                              const allCorsi = window.__FM_DATA__?.courses || [];
+                              const corsoObj = allCorsi.find(c => (c.name||c.nome||'') === strFiltro);
+                              const corsoId = corsoObj ? String(corsoObj.id) : null;
+                              return studentsList.filter(s => {
+                                if ((s.instrument||'') === strFiltro) return true;
+                                const cc = String(s.complementaryCourse||'');
+                                if (cc && (cc === strFiltro || (corsoId && cc === corsoId))) return true;
+                                const extra = (s.extraInstruments||[]).map(String);
+                                if (extra.includes(strFiltro) || (corsoId && extra.includes(corsoId))) return true;
+                                const iscrizioni = window.__FM_DATA__?.iscrizioniAnno || [];
+                                return iscrizioni.some(i =>
+                                  String(i.studentId) === String(s.id) &&
+                                  (i.corsoNome === strFiltro || (corsoId && String(i.corsoId) === corsoId))
+                                );
+                              });
+                            })()
                           : studentsList;
                         if (allievi.length === 0)
                           return React.createElement('div',{style:{fontSize:11,color:C.textDim,fontStyle:'italic'}},'Nessun allievo trovato per questo strumento');
