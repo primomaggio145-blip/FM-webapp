@@ -6846,7 +6846,7 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
       const sb = window.supabaseClient;
       if (!sb) { setLoading(false); return; }
       const { data, error } = await sb
-        .from("allegati")
+        .from("biblioteca")
         .select("*")
         .order("created_at", { ascending: false });
       if (!error && data) setLibri(data);
@@ -6861,10 +6861,10 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
     try {
       const sb = window.supabaseClient;
       // Rimuovi record DB
-      await sb.from("allegati").delete().eq("id", item.id);
+      await sb.from("biblioteca").delete().eq("id", item.id);
       // Rimuovi file dallo Storage
       if (item.storage_path) {
-        await sb.storage.from("allegati").remove([item.storage_path]);
+        await sb.storage.from("biblioteca").remove([item.storage_path]);
       }
       setLibri(p => p.filter(x => x.id !== item.id));
     } catch(e) { alert("Errore eliminazione: " + e.message); }
@@ -6887,7 +6887,7 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
       try {
         const sb = window.supabaseClient;
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const storagePath = `biblioteca/${Date.now()}_${safeName}`;
+        const storagePath = `${Date.now()}_${safeName}`;
         // Upload file
         const { error: upErr } = await sb.storage.from("allegati").upload(storagePath, file, { upsert: true });
         if (upErr) throw upErr;
@@ -9506,8 +9506,23 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
     setF(p => ({...p, versioni: p.versioni.filter((_,i)=>i!==idx)}));
     if (openVersione >= idx) setOpenVersione(Math.max(0, openVersione-1));
   };
+  // eventiVersioni: {[eventoId]: versioneIdx} — quale versione usare per ogni evento
+  const [eventiVersioni, setEventiVersioni] = React.useState(() => {
+    const init = {};
+    (initial?.eventiIds||[]).forEach(id => { init[id] = initial?.eventiVersioni?.[id] ?? 0; });
+    return init;
+  });
   const toggleEvento = (eventoId) => {
-    setF(p => ({...p, eventiIds: (p.eventiIds||[]).includes(eventoId) ? p.eventiIds.filter(x=>x!==eventoId) : [...(p.eventiIds||[]), eventoId]}));
+    setF(p => {
+      const ids = p.eventiIds||[];
+      if (ids.includes(eventoId)) {
+        setEventiVersioni(ev => { const n={...ev}; delete n[eventoId]; return n; });
+        return {...p, eventiIds: ids.filter(x=>x!==eventoId)};
+      } else {
+        setEventiVersioni(ev => ({...ev, [eventoId]: 0}));
+        return {...p, eventiIds: [...ids, eventoId]};
+      }
+    });
   };
   const toggleAllievoVersione = (idx, stu) => {
     const v = f.versioni[idx];
@@ -9525,7 +9540,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
   };
   const handleSave=()=>{
     const e=validate(); if(Object.keys(e).length){setErr(e);return;}
-    onSave(f);
+    onSave({...f, eventiVersioni});
   };
 
   // Allievi filtrabili per lo strumento selezionato (per assegnazione più rapida)
@@ -9548,15 +9563,28 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
 
         /* ── Eventi collegati ── */
         , React.createElement('div', null
-          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}},'🎤 Eventi collegati (facoltativo)')
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}},'🎤 Eventi collegati')
           , concertiList.length === 0
             ? React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}},'Nessun concerto/evento ancora creato')
-            : React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6}}
+            : React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
                 , concertiList.slice().sort((a,b)=>(b.data||'').localeCompare(a.data||'')).map(ev => {
                     const sel = (f.eventiIds||[]).includes(ev.id);
-                    return React.createElement('button',{key:ev.id, onClick:()=>toggleEvento(ev.id),
-                      style:{padding:'5px 12px',borderRadius:20,border:`1px solid ${sel?C.gold:C.border}`,background:sel?C.goldBg:C.bg,color:sel?C.gold:C.textMuted,cursor:'pointer',fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
-                      , (ev.titolo||ev.nome||'(senza titolo)') + (ev.data?' · '+new Date(ev.data+'T00:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'}):'')
+                    const vIdx = eventiVersioni[ev.id] ?? 0;
+                    const label = (ev.titolo||ev.nome||'(senza titolo)') + (ev.data?' · '+new Date(ev.data+'T00:00:00').toLocaleDateString('it-IT',{day:'numeric',month:'short'}):'');
+                    return React.createElement('div',{key:ev.id,style:{border:`1px solid ${sel?C.gold:C.border}`,borderRadius:10,overflow:'hidden'}}
+                      , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:sel?C.goldBg:C.bg,cursor:'pointer'},onClick:()=>toggleEvento(ev.id)}
+                        , React.createElement('input',{type:'checkbox',checked:sel,readOnly:true,style:{width:15,height:15,cursor:'pointer',flexShrink:0}})
+                        , React.createElement('span',{style:{fontSize:13,fontWeight:sel?600:400,color:sel?C.gold:C.textMuted}}, label)
+                      )
+                      , sel && React.createElement('div',{style:{padding:'8px 12px',background:C.surface,borderTop:`1px solid ${C.goldDim}`,display:'flex',alignItems:'center',gap:8}}
+                          , React.createElement('span',{style:{fontSize:11,color:C.textMuted}},'Versione per questo evento:')
+                          , React.createElement('select',{value:vIdx, onChange:e=>setEventiVersioni(p=>({...p,[ev.id]:parseInt(e.target.value)||0})),
+                              style:{flex:1,padding:'5px 10px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+                            , f.versioni.map((v,i)=>React.createElement('option',{key:i,value:i},
+                                [f.title, v.strumento||f.strumento, v.tonalita].filter(Boolean).join(' - ') || `Versione ${i+1}`
+                              ))
+                          )
+                        )
                     );
                   })
               )
