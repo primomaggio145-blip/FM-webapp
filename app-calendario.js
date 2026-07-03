@@ -6889,9 +6889,9 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
         const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
         const storagePath = `${Date.now()}_${safeName}`;
         // Upload file
-        const { error: upErr } = await sb.storage.from("allegati").upload(storagePath, file, { upsert: true });
+        const { error: upErr } = await sb.storage.from("biblioteca").upload(storagePath, file, { upsert: true });
         if (upErr) throw upErr;
-        const { data: urlData } = sb.storage.from("allegati").getPublicUrl(storagePath);
+        const { data: urlData } = sb.storage.from("biblioteca").getPublicUrl(storagePath);
         const fileUrl = urlData?.publicUrl || null;
         // Salva record
         const row = {
@@ -6906,7 +6906,7 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
           storage_path: storagePath,
           caricato_da: (appUser && appUser.nome) || null,
         };
-        const { data: inserted, error: dbErr } = await sb.from("allegati").insert(row).select().single();
+        const { data: inserted, error: dbErr } = await sb.from("biblioteca").insert(row).select().single();
         if (dbErr) throw dbErr;
         setLibri(p => [inserted, ...p]);
         setModal(null);
