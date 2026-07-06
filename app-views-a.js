@@ -6,12 +6,37 @@ var _jsxFileName = ""; function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) 
 const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep, docenti:_propDocentiRep, concerti:_propConcertiRep, quickAction, clearQuickAction, userRuolo:_ruoloRep, appUser:_appUserRep }) => {
   const ruoloRep = _ruoloRep || "admin";
   const _nomeAllievoRep = ruoloRep==="allievo" ? ((_appUserRep&&_appUserRep.nome)||"") : "";
+  const _nomeDocenteRep = ruoloRep==="docente" ? ((_appUserRep&&_appUserRep.nome)||"") : "";
+
+  // Corsi assegnati al docente loggato (per filtrare brani e allievi)
+  const _myDocenteObj = ruoloRep==="docente"
+    ? (_propDocentiRep||[]).find(d =>
+        d.nome?.toLowerCase()===_nomeDocenteRep.toLowerCase() ||
+        d.teacherKey===_nomeDocenteRep ||
+        String(d.id)===String(_appUserRep?.docenteId)
+      )
+    : null;
+
+  const _myCorsiDocente = ruoloRep==="docente" && _myDocenteObj
+    ? (window.__FM_DATA__?.courses||[])
+        .filter(c => (c.docenti||[]).map(String).includes(String(_myDocenteObj.id)))
+        .map(c => c.name||c.nome)
+        .filter(Boolean)
+    : [];
   const isMobile = useIsMobile();
   const [_braniLocal, _setBraniLocal] = useState(INIT_BRANI);
   React.useEffect(()=>{ if(quickAction==="addBrano"){ setModal("add"); if(clearQuickAction)clearQuickAction(); } },[quickAction]);
   const brani    = propBrani    || _braniLocal;
   const setBrani = propSetBrani || _setBraniLocal;
-  const _studBranoRep = (_propStudentsRep||[]).filter(s=>s.status==="attivo"||!s.status);
+  const _studBranoRepAll = (_propStudentsRep||[]).filter(s=>s.status==="attivo"||!s.status);
+  // Docente: vede solo allievi dei suoi corsi; altri ruoli: tutti
+  const _studBranoRep = ruoloRep==="docente" && _myCorsiDocente.length>0
+    ? _studBranoRepAll.filter(s =>
+        _myCorsiDocente.includes(s.instrument||'') ||
+        _myCorsiDocente.includes(s.complementaryCourse||'') ||
+        (s.extraInstruments||[]).some(e=>_myCorsiDocente.includes(e))
+      )
+    : _studBranoRepAll;
   const _lessonsRep   = _propLessonsRep || [];
   const _concertiRep  = _propConcertiRep || [];
   const usageCount    = id => _lessonsRep.filter(l => (l.repertorioIds||[]).includes(id)).length;
@@ -159,14 +184,21 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       } catch(e) { console.warn('[FM] aggiornaVersioni exception:', e?.message); }
     };
   
-    // ── VISIBILITÀ per strumento (allievi vedono solo il proprio + ensemble) ──
+    // ── VISIBILITÀ per ruolo ──
+    // Admin → tutto
+    // Docente → solo brani con strumento in uno dei corsi assegnati (+ ensemble)
+    // Allievo → solo brani del suo strumento + ensemble
     const braniVisibili = useMemo(() => {
-      if (ruoloRep === "docente" || ruoloRep === "admin") return brani; // vedono tutto
+      if (ruoloRep === "admin") return brani;
+      if (ruoloRep === "docente") {
+        if (_myCorsiDocente.length === 0) return brani; // nessun corso assegnato → vede tutto (docente senza profilo)
+        return brani.filter(b => !b.strumento || _myCorsiDocente.includes(b.strumento));
+      }
       if (ruoloRep === "allievo" && _myStrumento) {
         return brani.filter(b => !b.strumento || b.strumento === _myStrumento);
       }
       return brani;
-    }, [brani, ruoloRep, _myStrumento]);
+    }, [brani, ruoloRep, _myCorsiDocente, _myStrumento]);
 
     // ── FILTRI ──
     const tuttiStrumenti = useMemo(() => [...new Set(braniVisibili.map(b=>b.strumento).filter(Boolean))].sort(), [braniVisibili]);
