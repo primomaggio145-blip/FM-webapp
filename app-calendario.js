@@ -2688,8 +2688,18 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
             })
         )
       , React.createElement(CourseManager, {
-        courses: _ruoloCorsi==="docente" && _nomeCorsi
-          ? (()=>{ const myD=(propDocenti||[]).find(d=>d.teacherKey===_nomeCorsi||(d.nome||"").toLowerCase().includes(_nomeCorsi.toLowerCase())); return myD?courses.filter(c=>(c.docenti||[]).includes(myD.id)):courses; })()
+        courses: _ruoloCorsi==="docente"
+          ? (()=>{
+              // Cerca il docente per docenteId (più affidabile) oppure per nome
+              const docenteId = (_aC&&_aC.docenteId) ? String(_aC.docenteId) : null;
+              const myD = docenteId
+                ? (propDocenti||[]).find(d=>String(d.id)===docenteId)
+                : _nomeCorsi
+                  ? (propDocenti||[]).find(d=>d.teacherKey===_nomeCorsi||(d.nome||"").toLowerCase().includes(_nomeCorsi.toLowerCase()))
+                  : null;
+              if (!myD) return []; // docente non trovato → nessun corso (sicurezza)
+              return courses.filter(c=>(c.docenti||[]).map(String).includes(String(myD.id)));
+            })()
           : _ruoloCorsi==="allievo"
           ? (()=>{ const _avId=(_aC&&_aC.allievoId)||null; const me=_avId?students.find(s=>String(s.id)===String(_avId)):students.find(s=>(s.name||s.nome||"").toLowerCase()===_nomeCorsi.toLowerCase()); if(!me) return []; const ids=new Set([...(me.instrument?courses.filter(c=>c.name===me.instrument).map(c=>c.id):[]),...(me.complementaryCourse?[me.complementaryCourse]:[]),...((me.extraInstruments||[]).flatMap(i=>courses.filter(c=>c.name===i).map(c=>c.id)))]); return courses.filter(c=>ids.has(c.id)); })()
           : courses,
