@@ -3240,23 +3240,28 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     return e;
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     const e = validate();
     if(Object.keys(e).length){ setErr(e); return; }
-    // Persisti gli stati dei brani in brani.versioni[vIdx].stato
-    const sb = window.supabaseClient;
-    if (sb && Object.keys(statiBrani).length > 0) {
-      for (const [branoId, {versioneIdx, stato}] of Object.entries(statiBrani)) {
-        const b = repertorio.find(r=>r.id===branoId); if (!b) continue;
-        const nuoveVersioni = (b.versioni||[]).map((v,i) =>
-          i === (parseInt(versioneIdx)||0) ? {...v, stato} : v
-        );
-        try {
-          await sb.from('brani').update({versioni: nuoveVersioni}).eq('id', branoId);
-        } catch(err) { console.warn('[FM] update stato brano:', err?.message); }
+    // Salva subito la lezione — non aspettare l'update degli stati brani
+    onSave({ ...f, _newBrani: newlyCreatedBraniRef.current, _statiBrani: statiBrani });
+    // Aggiorna gli stati dei brani in background (fire-and-forget)
+    if (Object.keys(statiBrani).length > 0) {
+      const sb = window.supabaseClient;
+      if (sb) {
+        (async () => {
+          for (const [branoId, {versioneIdx, stato}] of Object.entries(statiBrani)) {
+            const b = repertorio.find(r=>r.id===branoId); if (!b) continue;
+            const nuoveVersioni = (b.versioni||[]).map((v,i) =>
+              i === (parseInt(versioneIdx)||0) ? {...v, stato} : v
+            );
+            try {
+              await sb.from('brani').update({versioni: nuoveVersioni}).eq('id', branoId);
+            } catch(err2) { console.warn('[FM] update stato brano:', err2?.message); }
+          }
+        })();
       }
     }
-    onSave({ ...f, _newBrani: newlyCreatedBraniRef.current, _statiBrani: statiBrani });
   };
 
   // ATT_STYLES: vedi definizione globale
