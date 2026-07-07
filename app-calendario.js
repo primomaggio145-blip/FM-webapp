@@ -3188,6 +3188,22 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
   const [showBranoForm, setShowBranoForm] = useState(false);
   const [f, setF] = useState(initial || emptyLesson);
   const [err, setErr] = useState({});
+  // statiBrani: {[branoId]: {versioneIdx: number, stato: string}}
+  // Inizializzato dai dati esistenti nel brano se disponibili
+  const [statiBrani, setStatiBrani] = useState(() => {
+    const init = {};
+    (initial?.repertorioIds||[]).forEach(id => {
+      const b = repertorio.find(r=>r.id===id);
+      if (!b) return;
+      // Prendi lo stato della prima versione come default
+      const v0 = (b.versioni||[])[0];
+      init[id] = { versioneIdx: 0, stato: v0?.stato||'in_studio' };
+    });
+    return init;
+  });
+  const setStatoBrano = (branoId, campo, valore) => {
+    setStatiBrani(p => ({...p, [branoId]: {...(p[branoId]||{versioneIdx:0,stato:'in_studio'}), [campo]:valore}}));
+  };
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
 
   const hours = Array.from({length:56}, (_, i) => {
@@ -3224,12 +3240,23 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     return e;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const e = validate();
     if(Object.keys(e).length){ setErr(e); return; }
-    // Allega i brani appena creati al payload così handleAdd può costruire
-    // le entry student.repertorio senza dipendere da window.__repertorio__
-    onSave({ ...f, _newBrani: newlyCreatedBraniRef.current });
+    // Persisti gli stati dei brani in brani.versioni[vIdx].stato
+    const sb = window.supabaseClient;
+    if (sb && Object.keys(statiBrani).length > 0) {
+      for (const [branoId, {versioneIdx, stato}] of Object.entries(statiBrani)) {
+        const b = repertorio.find(r=>r.id===branoId); if (!b) continue;
+        const nuoveVersioni = (b.versioni||[]).map((v,i) =>
+          i === (parseInt(versioneIdx)||0) ? {...v, stato} : v
+        );
+        try {
+          await sb.from('brani').update({versioni: nuoveVersioni}).eq('id', branoId);
+        } catch(err) { console.warn('[FM] update stato brano:', err?.message); }
+      }
+    }
+    onSave({ ...f, _newBrani: newlyCreatedBraniRef.current, _statiBrani: statiBrani });
   };
 
   // ATT_STYLES: vedi definizione globale
@@ -3328,25 +3355,50 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
                       const typeHex = (b.tipo||b.type) === "collettivo" ? C.purple : C.gold;
                       const typeBg  = (b.tipo||b.type) === "collettivo" ? C.purpleBg : "#e8edf5";
                       const typeBd  = (b.tipo||b.type) === "collettivo" ? C.purpleBorder : C.goldDim;
+                      const STATI_BRANO = [
+                        {id:'iniziato',       label:'🟡 Iniziato',       color:'#b45309'},
+                        {id:'in_studio',      label:'🔵 In studio',      color:C.teal},
+                        {id:'completato',     label:'🟢 Completato',     color:'#15803d'},
+                        {id:'non_completato', label:'🔴 Non completato', color:C.red},
+                      ];
+                      const statoB = statiBrani[id] || {versioneIdx:0, stato:'in_studio'};
+                      const versioni = b.versioni||[];
                       return (
-                        React.createElement('div', { key: id, style: {display:"flex", alignItems:"center", gap:10,
-                          padding:"8px 12px", borderRadius:8,
+                        React.createElement('div', { key: id, style: {display:"flex", flexDirection:"column", gap:6,
+                          padding:"10px 12px", borderRadius:8,
                           border:`1px solid ${typeBd}`, background:typeBg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4301}}
-                          , React.createElement(Ic, { n: "note", size: 13, stroke: typeHex, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4304}})
-                          , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4305}}
-                            , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex,
-                              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4306}}, b.title)
-                            , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4308}}
-                              , b.composer, b.tonality ? ` · ${b.tonality}` : ""
+                          , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10}}
+                            , React.createElement(Ic, { n: "note", size: 13, stroke: typeHex, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4304}})
+                            , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4305}}
+                              , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex,
+                                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4306}}, b.title)
+                              , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4308}}
+                                , b.composer, b.tonality ? ` · ${b.tonality}` : ""
+                              )
+                            )
+                            , React.createElement('button', { onClick: () => set("repertorioIds", (f.repertorioIds||[]).filter(i=>i!==id)),
+                              style: {background:"none", border:"none", cursor:"pointer", padding:4,
+                                display:"flex", borderRadius:4, flexShrink:0, color:C.textMuted,
+                                transition:"color 0.12s"},
+                              onMouseEnter: e => e.currentTarget.style.color=C.red,
+                              onMouseLeave: e => e.currentTarget.style.color=C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4312}}
+                              , React.createElement(Ic, { n: "x", size: 14, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4318}})
                             )
                           )
-                          , React.createElement('button', { onClick: () => set("repertorioIds", (f.repertorioIds||[]).filter(i=>i!==id)),
-                            style: {background:"none", border:"none", cursor:"pointer", padding:4,
-                              display:"flex", borderRadius:4, flexShrink:0, color:C.textMuted,
-                              transition:"color 0.12s"},
-                            onMouseEnter: e => e.currentTarget.style.color=C.red,
-                            onMouseLeave: e => e.currentTarget.style.color=C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4312}}
-                            , React.createElement(Ic, { n: "x", size: 14, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4318}})
+                          /* Selettori versione + stato */
+                          , React.createElement('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}}
+                            , versioni.length>1 && React.createElement('select',{value:statoB.versioneIdx,
+                                onChange:e=>setStatoBrano(id,'versioneIdx',parseInt(e.target.value)||0),
+                                style:{fontSize:11,padding:'4px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,color:C.text,flex:'1 1 120px'}}
+                              , versioni.map((v,vi)=>React.createElement('option',{key:vi,value:vi},
+                                  [b.title, v.strumento||b.strumento, v.tonalita].filter(Boolean).join(' - ')||`Versione ${vi+1}`
+                                ))
+                            )
+                            , React.createElement('select',{value:statoB.stato,
+                                onChange:e=>setStatoBrano(id,'stato',e.target.value),
+                                style:{fontSize:11,padding:'4px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,color:C.text,flex:'1 1 140px'}}
+                              , STATI_BRANO.map(s=>React.createElement('option',{key:s.id,value:s.id},s.label))
+                            )
                           )
                         )
                       );
