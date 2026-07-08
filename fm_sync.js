@@ -459,6 +459,7 @@
       ['studenti', 'students', toDB.studenti],
       ['docenti',  'docenti',  toDB.docenti ],
       ['corsi',    'courses',  toDB.corsi   ],
+      ['lezioni',  'lessons',  toDB.lezioni ],  // ← ri-aggiunto: handleAdd non scrive direttamente
       ['quote',    'entrate',  toDB.quote   ],
       ['spese',    'spese',    toDB.spese   ],
       // brani: gestiti direttamente da RepertorioView (no double-insert)
