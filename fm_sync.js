@@ -195,7 +195,8 @@
       return {
         id: s.id, nome: s.name || '', email: s.email || null,
         phone: s.phone || null, strumento: s.instrument || null,
-        docente: s.teacher || null, livello: s.level || 'Principiante',
+        docente: s.teacher || null,
+        codice_fiscale: s.codiceFiscale || null,
         status: s.status || 'attivo', monthly_fee: parseFloat(s.monthlyFee) || 0,
         fee_type: s.feeType || 'fisso', birthdate: s.birthdate || null,
         enroll_date: s.enrollDate || null,
