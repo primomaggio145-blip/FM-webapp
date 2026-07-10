@@ -569,7 +569,7 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
 // ════════════════════════════════════════════════════════════════════════════════
 // FORM ALLIEVO
 // ════════════════════════════════════════════════════════════════════════════════
-const emptyStudent = { name:"",email:"",phone:"",instrument:"",teacher:"",level:"",status:"attivo",monthlyFee:"",nomeRicevuta:"",feeType:"fisso",birthdate:"",enrollDate:"",complementaryCourse:"",notes:"",extraInstruments:[],extraTeachers:{} };
+const emptyStudent = { name:"",email:"",phone:"",instrument:"",teacher:"",status:"attivo",monthlyFee:"",nomeRicevuta:"",codiceFiscale:"",feeType:"fisso",birthdate:"",enrollDate:"",complementaryCourse:"",notes:"",extraInstruments:[],extraTeachers:{} };
 
 const validate = f => {
   const e = {};
@@ -623,6 +623,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
 
           )
         )
+        , React.createElement(Input, { label: "Codice fiscale", value: f.codiceFiscale||"", onChange: e=>set("codiceFiscale",(e.target.value||"").toUpperCase()), placeholder: "RSSMRA85T10A562S", maxLength: 16, style:{textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2954}})
 
         , React.createElement(SectionDivider, { label: "Corsi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2958}})
 
@@ -745,7 +746,6 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
             );
           })()
 
-        , React.createElement(Sel, { label: "Livello", value: f.level, onChange: e=>set("level",e.target.value), options: LEVELS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2998}})
         , React.createElement(Sel, { label: "Stato", value: f.status, onChange: e=>set("status",e.target.value), options: ["attivo","inattivo","sospeso"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 2999}})
 
         , React.createElement(SectionDivider, { label: "Quota", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3001}})

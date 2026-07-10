@@ -33,7 +33,7 @@
         phone:                r.phone                   || '',
         instrument:           r.strumento               || '',
         teacher:              r.docente                 || '',
-        level:                r.livello                 || 'Principiante',
+        codiceFiscale:        r.codice_fiscale          || '',
         status:               r.status                  || 'attivo',
         monthlyFee:           parseFloat(r.monthly_fee) || 0,
         feeType:              r.fee_type                || 'fisso',

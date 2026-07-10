@@ -876,6 +876,7 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
     </div>
     <table>
       ${stile.showNominativo!==false?`<tr><td class="k">Ricevuta da</td><td class="v">${intestatario}</td></tr>`:""}
+      ${student&&student.codiceFiscale?`<tr><td class="k">Codice fiscale</td><td class="v">${student.codiceFiscale}</td></tr>`:""}
       ${nascitaRow}
       ${stile.showDataPagamento!==false?`<tr><td class="k">Data pagamento</td><td class="v">${dataPag}</td></tr>`:""}
       ${stile.showDescrizione!==false?`<tr><td class="k">Descrizione</td><td class="v">${entrata.desc||"Quota mensile"}</td></tr>`:""}
@@ -952,6 +953,7 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
     {k:"Ricevuta n°", v:numRic},
     {k:"Data stampa",  v:dataStampa},
     {k:"Nominativo",   v:intestatario},
+    ...(student&&student.codiceFiscale ? [{k:"Codice fiscale", v:student.codiceFiscale}] : []),
     {k:"Data pagamento", v:dataPag},
     {k:"Descrizione",  v:entrata.desc||"Quota mensile"},
     ...(meseLabel ? [{k:"Competenza", v:meseLabel}] : []),
