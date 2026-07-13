@@ -829,10 +829,9 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
     const firmaImg = stile.firmaPresidenteUrl ? `<img src="${stile.firmaPresidenteUrl}" style="height:42px;max-width:160px;object-fit:contain;display:block;margin:0 auto 4px;" alt="firma">` : `<div class="firma-line"></div>`;
     const firmeHtml = stile.showFirme!==false ? `
       <div class="firma-wrap">
-        <div class="firma-box"><div class="firma-line"></div><div class="firma-lbl">${stile.labelPagante||"Il pagante"}</div></div>
         <div class="firma-box">${firmaImg}<div class="firma-lbl">${stile.labelCassiere||"Il cassiere / responsabile"}</div></div>
       </div>` : "";
-    const footerHtml = stile.showFooter!==false ? `<div class="footer">${cfg.notaRicevuta||"Ricevuta non fiscale"}<br>${cfg.nomeScuola||""} · ${cfg.annoScolastico||""}${stile.noteFooter?"<br>"+stile.noteFooter:""}</div>` : "";
+    const footerHtml = stile.showFooter!==false && stile.noteFooter ? `<div class="footer">${stile.noteFooter}</div>` : "";
 
     return `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Ricevuta ${numRic}</title>
@@ -856,8 +855,8 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
       .importo-box { text-align:center; margin:24px 0; padding:20px; border:2px solid ${ac}; border-radius:8px; background:${ac}12; }
       .importo-val { font-family:'${stile.fontTitle}',Georgia,serif; font-size:44px; font-weight:700; color:${ac}; line-height:1; }
       .importo-lbl { font-size:11px; color:#888; letter-spacing:.12em; text-transform:uppercase; margin-top:4px; }
-      .firma-wrap { display:flex; justify-content:space-between; margin-top:44px; }
-      .firma-box  { text-align:center; width:180px; }
+      .firma-wrap { display:flex; justify-content:flex-end; margin-top:44px; }
+      .firma-box  { text-align:center; width:200px; }
       .firma-line { border-top:1px solid #333; margin-bottom:6px; }
       .firma-lbl  { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:.08em; }
       .footer { font-size:10px; color:#888; text-align:center; margin-top:32px; padding-top:12px; border-top:1px solid #ddd; line-height:1.7; }

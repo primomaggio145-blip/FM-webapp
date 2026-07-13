@@ -3345,7 +3345,6 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         , React.createElement(Input,{label:"IBAN", value:draft.iban||"", onChange:e=>setD("iban",e.target.value), placeholder:"IT..."})
         , React.createElement(Input,{label:"Intestatario conto", value:draft.intestatarioConto||"", onChange:e=>setD("intestatarioConto",e.target.value), placeholder:"..."})
         , React.createElement(Input,{label:"Anno scolastico", value:draft.annoScolastico||"", onChange:e=>setD("annoScolastico",e.target.value), placeholder:"2024/2025"})
-        , React.createElement(Input,{label:"Nota ricevuta", value:draft.notaRicevuta||"", onChange:e=>setD("notaRicevuta",e.target.value), placeholder:"Ricevuta non fiscale..."})
       )
     )
 
@@ -3657,27 +3656,20 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
             , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Oswald"}',sans-serif`,fontSize:18,fontWeight:700,color:ac}}, "€ 120,00")
             , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".1em",marginTop:1}}, "Importo ricevuto")
           )
-          , rs.showFirme!==false && React.createElement('div', {style:{display:"flex",justifyContent:"space-between",marginTop:10}}
-            , [rs.labelPagante||"Il pagante",rs.labelCassiere||"Il cassiere"].map(l=>
-                React.createElement('div', {key:l, style:{textAlign:"center",width:"42%"}}
-                  , React.createElement('div', {style:{borderTop:"1px solid #333",marginBottom:3}})
-                  , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".05em"}}, l)
-                )
+          , rs.showFirme!==false && React.createElement('div', {style:{display:"flex",justifyContent:"flex-end",marginTop:10}}
+            , React.createElement('div', {key:"cassiere", style:{textAlign:"center",width:"42%"}}
+                , React.createElement('div', {style:{borderTop:"1px solid #333",marginBottom:3}})
+                , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".05em"}}, rs.labelCassiere||"Il cassiere")
               )
           )
-          , rs.showFooter!==false && React.createElement('div', {style:{marginTop:6,paddingTop:5,borderTop:"1px solid #eee",textAlign:"center",fontSize:8,color:"#888"}}
-            , draft.notaRicevuta||"Ricevuta non fiscale"
+          , rs.showFooter!==false && rs.noteFooter && React.createElement('div', {style:{marginTop:6,paddingTop:5,borderTop:"1px solid #eee",textAlign:"center",fontSize:8,color:"#888"}}
+            , rs.noteFooter
           )
         )
       )
-      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr",gap:"0 20px"}}
         , React.createElement('div', {style:{marginBottom:14}}
-          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Etichetta firma sinistra")
-          , React.createElement('input', {value:rs.labelPagante||"Il pagante", onChange:e=>setRS("labelPagante",e.target.value),
-              style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 13px",fontFamily:"'Open Sans',sans-serif"}})
-        )
-        , React.createElement('div', {style:{marginBottom:14}}
-          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Etichetta firma destra")
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Etichetta firma cassiere / responsabile")
           , React.createElement('input', {value:rs.labelCassiere||"Il cassiere / responsabile", onChange:e=>setRS("labelCassiere",e.target.value),
               style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 13px",fontFamily:"'Open Sans',sans-serif"}})
         )

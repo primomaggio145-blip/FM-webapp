@@ -8963,7 +8963,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
 };
 
 // Navbar interna alla Contabilità
-const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota, ruoloCV }) => (
+const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota, ruoloCV, isMobile }) => (
   React.createElement('div', { style: {background:C.surface, borderBottom:`1px solid ${C.border}`,
     padding:"0 16px", display:"flex", alignItems:"center", gap:4, flexShrink:0, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6800}}
     , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,paddingRight:20,marginRight:8,
@@ -8972,30 +8972,33 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota, ruoloCV })
       , React.createElement('span', { style: {fontFamily:"'Oswald',sans-serif",fontSize:14,fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6805}}, "Contabilità")
     )
     , [
-      {id:"spese",   label:"Uscite",   icon:"down"},
-      {id:"entrate", label:"Entrate",  icon:"up"},
-      {id:"report",  label:"Report",   icon:"chart"},
+      {id:"report",       label:"Report",                   mobileLabel:"Report",  icon:"chart"},
+      {id:"quote",        label:"Quote sociali",            mobileLabel:"Quote",   icon:"receipt",  adminOnly:false},
+      {id:"altre_entrate",label:"Altre entrate",            mobileLabel:"Entrate", icon:"up",       adminOnly:true},
+      {id:"compensi",     label:"Compensi",                 mobileLabel:"Compensi",icon:"down",     adminOnly:true},
+      {id:"altre_uscite", label:"Altre uscite",             mobileLabel:"Uscite",  icon:"minus",    adminOnly:true},
     ].filter(t => {
-      if(ruoloCV==="allievo") return t.id==="entrate";
-      if(ruoloCV==="docente") return t.id==="spese";
-      return true;
+      if (ruoloCV==="allievo") return t.id==="quote";
+      if (ruoloCV==="docente") return t.id==="compensi" || t.id==="report";
+      return true; // admin vede tutto
     }).map(t=>(
       React.createElement('button', { key: t.id, onClick: ()=>{ setTab(t.id); _optionalChain([onSelDoc, 'optionalCall', _59 => _59()]); },
-        style: {display:"flex",alignItems:"center",gap:6,padding:"0 16px",
+        style: {display:"flex",alignItems:"center",gap:6,padding:"0 12px",
           alignSelf:"stretch",background:"none",border:"none",
           borderBottom:`2px solid ${tab===t.id?C.gold:"transparent"}`,
           color:tab===t.id?C.gold:C.textMuted,cursor:"pointer",
           fontSize:13,fontFamily:"'Open Sans',sans-serif",transition:"all 0.15s",
           minHeight:48}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6813}}
-        , React.createElement(Ic, { n: t.icon, size: 13, stroke: tab===t.id?C.gold:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6820}}), t.label
+        , React.createElement(Ic, { n: t.icon, size: 13, stroke: tab===t.id?C.gold:C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6820}})
+        , isMobile ? t.mobileLabel : t.label
       )
     ))
     , React.createElement('div', { style: {marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6823}}
       , React.createElement(RefreshBtn)
-      , tab==="entrate"  && onSetModalQuota && (
+      , (tab==="quote" || tab==="altre_entrate") && onSetModalQuota && (
         React.createElement(Btn, { small: true, onClick: onSetModalQuota, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6825}}, React.createElement(Ic, { n: "plus", size: 13, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6825}}), "Nuova entrata" )
       )
-      , tab==="spese"  && onSetModal && (
+      , (tab==="compensi" || tab==="altre_uscite") && onSetModal && (
         React.createElement(Btn, { small: true, onClick: onSetModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6828}}, React.createElement(Ic, { n: "plus", size: 13, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6828}}), "Registra spesa" )
       )
     )
@@ -9026,7 +9029,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
   const [_speseLocal, _setSpeseLocal] = useState(INIT_SPESE);
   const spese    = propSpese    || _speseLocal;
   const setSpese = propSetSpese || _setSpeseLocal;
-    const [tab,      setTab]      = useState(ruoloCV==="allievo"?"entrate":"spese");
+    const [tab,      setTab]      = useState(ruoloCV==="allievo"?"quote":ruoloCV==="docente"?"compensi":"report");
     const [modal,    setModal]    = useState(null);
     const [selSpesa, setSelSpesa] = useState(null);
     const [selQuota, setSelQuota] = useState(null);
@@ -9080,6 +9083,11 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       const q=search.toLowerCase();
       if(ruoloCV==="allievo") return false;
       if(ruoloCV==="docente") return myDocIdCV ? String(s.docenteId)===String(myDocIdCV) : false;
+      // Compensi = spese con docenteId o categoria "compenso/rimborso/docente"
+      const catCompensoDef = ["compenso","rimborso","docente","competenza"].includes(s.categoria||"");
+      const isCompensoDef = !!(s.docenteId) || catCompensoDef;
+      if(typeof isCompensi!=="undefined" && isCompensi && !isCompensoDef) return false;
+      if(typeof isCompensi!=="undefined" && !isCompensi && isCompensoDef) return false;
       return s.anno===ANNO_ATT
         &&(!q||s.desc.toLowerCase().includes(q)||(s.note||"").toLowerCase().includes(q))
         &&(!filterCat||s.categoria===filterCat)
@@ -9108,7 +9116,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         React.createElement(React.Fragment, null
           , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 6898}}, G)
           , React.createElement('div', { style: {minHeight:"100vh",background:C.bg,display:"flex",flexDirection:"column"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6899}}
-            , React.createElement(Navbar, { tab: tab, setTab: setTab, onSelDoc: ()=>setSelDoc(null), onSetModalQuota: ruoloCV==="admin"?()=>setModal('addq'):undefined, ruoloCV: ruoloCV, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6900}})
+            , React.createElement(Navbar, { tab: tab, setTab: setTab, onSelDoc: ()=>setSelDoc(null), onSetModal: ruoloCV==="admin"?()=>setModal("add"):undefined, onSetModalQuota: ruoloCV==="admin"?()=>setModal('addq'):undefined, ruoloCV: ruoloCV, isMobile: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6900}})
             , React.createElement('div', { style: {flex:1,padding:24,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6901}}
               , React.createElement(DocenteView, { docente: d, spese: spese, onBack: ()=>setSelDoc(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6902}})
             )
@@ -9254,21 +9262,25 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
               )
             )
 
-                        , tab==="entrate" && (() => {
+                        , (tab==="quote" || tab==="altre_entrate") && (() => {
               const MESI_ALL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
               const curY = new Date().getFullYear(), curM = new Date().getMonth()+1;
+              // Quote sociali: solo quota+iscrizione; Altre entrate: tutto il resto
+              const isQuote = tab==="quote";
               const qFiltrate = sortFnSp(entrate
                 .filter(e=>{
                   const q = searchQ.toLowerCase();
-                  // docente non vede le entrate (quote degli allievi — dati contabili riservati)
                   if(ruoloCV==="docente") return false;
-                  // allievo vede solo i propri pagamenti
                   if(ruoloCV==="allievo"){
                     const myId = (_appUserCV&&_appUserCV.allievoId)||null;
                     const myName = (_appUserCV&&_appUserCV.nome)||(typeof window!=="undefined"&&window.__currentUserName__)||"";
                     if(myId) return String(e.studentId)===String(myId);
                     return myName ? (e.studentName||"").toLowerCase().includes(myName.toLowerCase()) : true;
                   }
+                  // Filtro per tab: quote→solo quota/iscrizione, altre_entrate→tutto tranne quota/iscrizione
+                  const catQuota = ["quota","iscrizione"].includes(e.categoria||"quota");
+                  if(isQuote && !catQuota) return false;
+                  if(!isQuote && catQuota) return false;
                   return (!q||((e.studentName||"").toLowerCase().includes(q)||(e.desc||"").toLowerCase().includes(q)))
                     && (!filterQMese||Number(filterQMese)===e.mese);
                 }), (e,k) => {
