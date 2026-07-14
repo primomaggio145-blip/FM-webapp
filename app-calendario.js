@@ -9152,7 +9152,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
           , React.createElement('div', { style: {flex:1,padding:24,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6933}}
 
             /* TAB SPESE */
-            , tab==="spese" && (
+            , (tab==="compensi" || tab==="altre_uscite") && (
               React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6937}}
 
                 /* Banner info per docente */
@@ -9266,7 +9266,6 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
               const MESI_ALL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
               const curY = new Date().getFullYear(), curM = new Date().getMonth()+1;
               // Quote sociali: solo quota+iscrizione; Altre entrate: tutto il resto
-              const isQuote = tab==="quote";
               const qFiltrate = sortFnSp(entrate
                 .filter(e=>{
                   const q = searchQ.toLowerCase();
