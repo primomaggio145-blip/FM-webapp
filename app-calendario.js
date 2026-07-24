@@ -293,7 +293,10 @@ const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, o
   const bord = isIndividuale ? C.goldDim: C.purpleBorder;
 
   const enrolled = isIndividuale
-    ? students.filter(s => s.instrument === course.name)
+    ? students.filter(s => {
+      const cn = course.name||'';
+      return s.instrument===cn || (s.complementaryCourse||'')=== cn || (s.extraInstruments||[]).includes(cn);
+    })
     : students.filter(s => s.complementaryCourse === course.id);
 
   const attivi   = enrolled.filter(s=>s.status==="attivo").length;
@@ -444,7 +447,10 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
   const collettivi  = courses.filter(c=>c.type==="collettivo");
 
   const studentsIn = c => c.type === "individuale"
-    ? students.filter(s => s.instrument === c.name).length
+    ? students.filter(s => {
+      const cn = c.name||'';
+      return s.instrument===cn || (s.complementaryCourse||'')=== cn || (s.extraInstruments||[]).includes(cn);
+    }).length
     : students.filter(s => s.complementaryCourse === c.id).length;
 
   // Se un corso selezionato viene eliminato, torna alla lista
@@ -667,7 +673,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
             })
           )
           , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:4}}
-            , "Il primo selezionato (★) è il corso principale. Puoi selezionare più corsi."
+            , "Il primo selezionato (★) è il corso individuale. Puoi selezionare più corsi."
           )
           , errors.instrument && React.createElement('span', { style: {fontSize:11,color:C.red,marginTop:4,display:"block"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2973}}, errors.instrument)
         )
@@ -2022,7 +2028,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 
       , showFilters && (
         React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,padding:"12px 14px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,animation:"fadeIn 0.2s ease",alignItems:"end"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3772}}
-          , React.createElement(Sel, { label: "Strumento", value: filterInstrument, onChange: e=>setFI(e.target.value), options: strumentiPresenti.map(i=>({value:i,label:i})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3773}})
+          , React.createElement(Sel, { label: "Corso individuale", value: filterInstrument, onChange: e=>setFI(e.target.value), options: strumentiPresenti.map(i=>({value:i,label:i})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3773}})
           , React.createElement(Sel, { label: "Stato", value: filterStatus, onChange: e=>setFS(e.target.value), options: ["attivo","inattivo","sospeso"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3774}})
           , React.createElement(Sel, { label: "Corso complementare" , value: filterCourse, onChange: e=>setFC(e.target.value), options: corsiComplementariPresenti.map(c=>({value:c.id,label:c.name})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3775}})
           , React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setFI("");setFS("");setFC("");}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3776}}, "Reset")
@@ -2039,7 +2045,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
               , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3787}}
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3788}}
                   , React.createElement(SortTh, {label:"Allievo",        sortKey:"name",       currentKey:sortKey, dir:sortDir, onSort:handleSort})
-                  , React.createElement(SortTh, {label:"Corso principale",sortKey:"instrument", currentKey:sortKey, dir:sortDir, onSort:handleSort})
+                  , React.createElement(SortTh, {label:"Corso individuale",sortKey:"instrument", currentKey:sortKey, dir:sortDir, onSort:handleSort})
                   , React.createElement(SortTh, {label:"Corso complem.", sortKey:"complem",    currentKey:sortKey, dir:sortDir, onSort:handleSort, className:"hide-mobile"})
                   , React.createElement(SortTh, {label:"Insegnante",     sortKey:"teacher",    currentKey:sortKey, dir:sortDir, onSort:handleSort, className:"hide-mobile"})
                   , ...(slRuolo!=="docente" ? [React.createElement(SortTh, {key:"quota",label:"Quota",sortKey:"monthlyFee",currentKey:sortKey,dir:sortDir,onSort:handleSort})] : [])
@@ -3286,8 +3292,8 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
           ? React.createElement(Sel, { label: "Allievo *", value: f.student, onChange: e => set("student", e.target.value), options: dynamicStudents.length > 0 ? dynamicStudents : STUDENTS_LIST, error: err.student })
           : React.createElement(Input, { label: "Allievo", value: f.student || "—", readOnly: true })
         , roleLF !== "docente"
-          ? React.createElement(Sel, { label: "Strumento *", value: f.instrument, onChange: e => set("instrument", e.target.value), options: dynamicInstruments, error: err.instrument })
-          : React.createElement(Input, { label: "Strumento", value: f.instrument || "—", readOnly: true })
+          ? React.createElement(Sel, { label: "Corso individuale *", value: f.instrument, onChange: e => set("instrument", e.target.value), options: dynamicInstruments, error: err.instrument })
+          : React.createElement(Input, { label: "Corso individuale", value: f.instrument || "—", readOnly: true })
         , roleLF !== "docente"
           ? React.createElement(Sel, { label: "Insegnante *", value: f.teacher, onChange: e => set("teacher", e.target.value), options: _teacherOptsLes.length>0 ? _teacherOptsLes : TEACHERS, error: err.teacher })
           : React.createElement(Input, { label: "Insegnante", value: f.teacher || "—", readOnly: true })
@@ -6156,7 +6162,7 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
                   , React.createElement(SortTh,{label:'Data', sortKey:'date', currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
                   , React.createElement(SortTh,{label:'Allievo', sortKey:'student', currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
                   , React.createElement(SortTh,{label:'Docente', sortKey:'teacher', currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
-                  , React.createElement(SortTh,{label:'Strumento', sortKey:'instrument', currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
+                  , React.createElement(SortTh,{label:'Corso individuale', sortKey:'instrument', currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
                   , React.createElement(SortTh,{label:'Scadenza', sortKey:'recuperoScadenza', currentKey:sortKeyR, dir:sortDirR, onSort:handleSortR})
                   , React.createElement('th',{style:{padding:'10px 14px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},'Stato')
                   , React.createElement('th',{style:{padding:'10px 14px'}})
@@ -6256,7 +6262,7 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
             , React.createElement(SortTh,{label:'Ora',       sortKey:'hour',       currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
             , React.createElement(SortTh,{label:'Allievo',   sortKey:'student',    currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
             , React.createElement(SortTh,{label:'Docente',   sortKey:'teacher',    currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
-            , React.createElement(SortTh,{label:'Strumento', sortKey:'instrument', currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
+            , React.createElement(SortTh,{label:'Corso individuale', sortKey:'instrument', currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
             , React.createElement(SortTh,{label:'Argomento', sortKey:'topic',      currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
             , React.createElement(SortTh,{label:'Presenza',  sortKey:'attendance', currentKey:sortKeyLA,dir:sortDirLA,onSort:handleSortLA})
             , React.createElement('th',{style:{padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em'}},'Azioni')
@@ -9013,6 +9019,8 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         || (()=>{ const d=(propDocentiCV||[]).find(x=>x.teacherKey===_loginNomeCV||(x.nome||"").toLowerCase().includes(_loginNomeCV.toLowerCase())); return d?d.id:null; })())
     : null;
   const [catSpese,   setCatSpese]   = useState(CATEGORIE_DEFAULT);
+  const isCompensi    = tab === "compensi";
+  const isAltraUscita = tab === "altre_uscite";
   const [catEntrate, setCatEntrate] = useState(CAT_ENTRATE_DEFAULT);
   // Handle quick action from dashboard
   React.useEffect(()=>{
@@ -9276,10 +9284,10 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                     if(myId) return String(e.studentId)===String(myId);
                     return myName ? (e.studentName||"").toLowerCase().includes(myName.toLowerCase()) : true;
                   }
-                  // Filtro per tab: quote→solo quota/iscrizione, altre_entrate→tutto tranne quota/iscrizione
+                  // Filtro per tab: quote→solo quota/iscrizione, altre_entrate→tutto tranne
                   const catQuota = ["quota","iscrizione"].includes(e.categoria||"quota");
-                  if(isQuote && !catQuota) return false;
-                  if(!isQuote && catQuota) return false;
+                  if(tab==="quote" && !catQuota) return false;
+                  if(tab==="altre_entrate" && catQuota) return false;
                   return (!q||((e.studentName||"").toLowerCase().includes(q)||(e.desc||"").toLowerCase().includes(q)))
                     && (!filterQMese||Number(filterQMese)===e.mese);
                 }), (e,k) => {
@@ -9635,7 +9643,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
             , React.createElement(Input, { label: "Titolo *" , value: f.title, onChange: e=>set("title",e.target.value), error: err.title, placeholder: "Es. Jingle Bells" })
           )
           , React.createElement(Input, { label: "Compositore" , value: f.composer, onChange: e=>set("composer",e.target.value), placeholder: "Es. James Pierpont" })
-          , React.createElement(Sel, { label: "Strumento", value: f.strumento, onChange: e=>set("strumento",e.target.value),
+          , React.createElement(Sel, { label: "Corso individuale", value: f.strumento, onChange: e=>set("strumento",e.target.value),
             options: strumentiDisp.map(i=>({value:i,label:i})) })
         )
 

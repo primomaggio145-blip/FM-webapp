@@ -155,7 +155,15 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     return tf === key || tf === nom || tf.includes(key) || key.includes(tf)
         || tf.includes(nom) || nom.includes(tf);
   };
-  const allievi  = (d) => students.filter(s => matchTeacher(d, s.teacher));
+  const allievi  = (d) => students.filter(s => {
+    // Corso individuale
+    if (matchTeacher(d, s.teacher)) return true;
+    // Corsi secondari (extraTeachers: {corsoNome: nomeDocente})
+    if (s.extraTeachers && typeof s.extraTeachers === 'object') {
+      return Object.values(s.extraTeachers).some(t => matchTeacher(d, t));
+    }
+    return false;
+  });
   const lezioniD = (d) => lessons.filter(l => l.date && matchTeacher(d, l.teacher) && l.attendance !== 'recuperata');
 
   // Calcoli mensili basati su lezioni effettive
@@ -1469,7 +1477,7 @@ if ('serviceWorker' in navigator) {
 const PWA_PERMS = {
   admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:true },
   docente: {dashboard:true, allievi:false,docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
   band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true },
 };
 

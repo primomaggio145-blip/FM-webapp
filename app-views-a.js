@@ -2922,7 +2922,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
               , React.createElement('tr', { style: {background:C.bg, borderBottom:`1px solid ${C.border}`}}
                 , React.createElement(SortTh, {label:"Allegato",    sortKey:"fileName",    currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})
                 , React.createElement(SortTh, {label:"Descrizione", sortKey:"descrizione", currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})
-                , React.createElement(SortTh, {label:"Strumento",   sortKey:"corso",       currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})
+                , React.createElement(SortTh, {label:"Corso individuale",   sortKey:"corso",       currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})
                 , React.createElement(SortTh, {label:"Lezione",     sortKey:null,          currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})
                 , React.createElement(SortTh, {label:"Allievo",     sortKey:"allievoNome", currentKey:sortKeyAl, dir:sortDirAl, onSort:handleSortAl})
                 , React.createElement('th', {style:{padding:"10px 16px"}})
