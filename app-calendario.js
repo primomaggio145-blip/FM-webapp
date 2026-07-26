@@ -1991,7 +1991,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
     const q    = search.toLowerCase();
     const comp = courses.find(c=>c.id===s.complementaryCourse);
     const allInstruments = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean);
-    return (!q || s.name.toLowerCase().includes(q) || s.instrument.toLowerCase().includes(q) || _optionalChain([s, 'access', _33 => _33.email, 'optionalAccess', _34 => _34.toLowerCase, 'call', _35 => _35(), 'access', _36 => _36.includes, 'call', _37 => _37(q)]) || _optionalChain([comp, 'optionalAccess', _38 => _38.name, 'access', _39 => _39.toLowerCase, 'call', _40 => _40(), 'access', _41 => _41.includes, 'call', _42 => _42(q)]))
+    return (!q || s.name.toLowerCase().includes(q) || allInstruments.some(ins=>ins.toLowerCase().includes(q)) || _optionalChain([s, 'access', _33 => _33.email, 'optionalAccess', _34 => _34.toLowerCase, 'call', _35 => _35(), 'access', _36 => _36.includes, 'call', _37 => _37(q)]) || _optionalChain([comp, 'optionalAccess', _38 => _38.name, 'access', _39 => _39.toLowerCase, 'call', _40 => _40(), 'access', _41 => _41.includes, 'call', _42 => _42(q)]))
       && (!filterInstrument || allInstruments.includes(filterInstrument))
       && (!filterStatus     || s.status===filterStatus)
       && (!filterCourse     || s.complementaryCourse===filterCourse);
@@ -1999,8 +1999,8 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 
   const sorted = sortFn(filtered, (s, k) => {
     if (k === "name")       return s.name || "";
-    if (k === "instrument") return s.instrument || "";
-    if (k === "teacher")    return s.teacher || "";
+    if (k === "instrument") return [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).join(", ");
+    if (k === "teacher")    return [s.teacher, ...Object.values(s.extraTeachers||{})].filter(Boolean).join(", ");
     if (k === "monthlyFee") return Number(s.monthlyFee) || 0;
     if (k === "status")     return s.status || "";
     if (k === "complem")    return (courses.find(c=>c.id===s.complementaryCourse)||{}).name || "";
@@ -2065,6 +2065,8 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
                 , sorted.map((s,i)=>{
                   const ic   = INS_COLORS[s.instrument]||C.gold;
                   const comp = courses.find(c=>c.id===s.complementaryCourse);
+                  const tuttiStrumenti = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean);
+                  const tuttiInsegnanti = [s.teacher, ...Object.values(s.extraTeachers||{})].filter(Boolean);
                   return (
                     React.createElement('tr', { key: s.id, style: {borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",cursor:"pointer",transition:"background 0.12s"},
                       onMouseEnter: e=>e.currentTarget.style.background=C.surfaceHover,
@@ -2080,9 +2082,13 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
                           )
                         )
                       )
-                      , React.createElement('td', { style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3821}}, React.createElement(Badge, { label: s.instrument, color: "gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3821}}))
+                      , React.createElement('td', { style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3821}}
+                        , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:4}}
+                          , tuttiStrumenti.map(ins => React.createElement(Badge, { key: ins, label: ins, color: "gold" }))
+                        )
+                      )
                       , React.createElement('td', { className: "hide-mobile", style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}, comp?React.createElement(Badge, { label: comp.name, color: "purple", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}):React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}, "—"))
-                      , React.createElement('td', { className: "hide-mobile", style: {padding:"13px 16px",fontSize:13,color:C.textMuted}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3823}}, s.teacher)
+                      , React.createElement('td', { className: "hide-mobile", style: {padding:"13px 16px",fontSize:13,color:C.textMuted}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3823}}, tuttiInsegnanti.join(" · "))
                       , slRuolo!=="docente" && React.createElement('td', { style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3824}}
                         , React.createElement('div', { style: {fontSize:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3825}}, "€ " , s.monthlyFee)
                         , React.createElement('div', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3826}}, s.feeType)

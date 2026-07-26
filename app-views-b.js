@@ -156,15 +156,23 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     return tf === key || tf === nom || tf.includes(key) || key.includes(tf)
         || tf.includes(nom) || nom.includes(tf);
   };
-  const allievi  = (d) => students.filter(s => {
-    // Corso individuale
-    if (matchTeacher(d, s.teacher)) return true;
-    // Corsi secondari (extraTeachers: {corsoNome: nomeDocente})
+  // Restituisce, per ogni allievo assegnato a questo docente, l'elenco dei corsi
+  // individuali che QUESTO docente gli insegna — corso principale (★) ed extra
+  // sono trattati ESATTAMENTE allo stesso livello: entrambi contano, e viene
+  // mostrato il corso giusto per il docente giusto (non sempre il ★).
+  const corsiConDocente = (d, s) => {
+    const corsi = [];
+    if (s.instrument && matchTeacher(d, s.teacher)) corsi.push(s.instrument);
     if (s.extraTeachers && typeof s.extraTeachers === 'object') {
-      return Object.values(s.extraTeachers).some(t => matchTeacher(d, t));
+      Object.entries(s.extraTeachers).forEach(([corso, teacherName]) => {
+        if (corso && matchTeacher(d, teacherName)) corsi.push(corso);
+      });
     }
-    return false;
-  });
+    return corsi;
+  };
+  const allievi = (d) => students
+    .map(s => ({ ...s, _corsiConDocente: corsiConDocente(d, s) }))
+    .filter(s => s._corsiConDocente.length > 0);
   const lezioniD = (d) => lessons.filter(l => l.date && matchTeacher(d, l.teacher) && l.attendance !== 'recuperata');
 
   // Calcoli mensili basati su lezioni effettive
@@ -356,9 +364,21 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           : (() => {
               const tuttiDocenti = docenti||[];
               const iscrAnno = _propIscrizioniDV||[];
-              const docConIscrizioni = new Set(
-                iscrAnno.filter(i=>String(i.annoInizio)===String(annoSelDoc)).map(i=>i.docenteNome).filter(Boolean)
-              );
+              const iscrittiAnnoCorrente = iscrAnno.filter(i=>String(i.annoInizio)===String(annoSelDoc));
+              const docConIscrizioni = new Set();
+              iscrittiAnnoCorrente.forEach(i => {
+                if (i.docenteNome) docConIscrizioni.add(i.docenteNome);
+                // La riga di iscrizione registra un solo corso/docente per allievo/anno:
+                // recupera anche i docenti di TUTTI i corsi individuali attuali dell'allievo
+                // (principale + extra), così un docente "secondario" non sparisce dalla vista.
+                const stu = students.find(s => String(s.id)===String(i.studentId));
+                if (stu) {
+                  if (stu.teacher) docConIscrizioni.add(stu.teacher);
+                  if (stu.extraTeachers && typeof stu.extraTeachers === 'object') {
+                    Object.values(stu.extraTeachers).forEach(t => { if (t) docConIscrizioni.add(t); });
+                  }
+                }
+              });
               if (docConIscrizioni.size > 0) {
                 return tuttiDocenti.filter(d => docConIscrizioni.has(d.nome||'') || docConIscrizioni.has(d.teacherKey||''));
               }
@@ -659,7 +679,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                     , React.createElement(Avatar, {initials:s.name.split(" ").map(p=>p[0]).join("").slice(0,2), hex:selected.colore, size:36})
                     , React.createElement('div', {style:{flex:1}}
                       , React.createElement('div', {style:{fontSize:14,fontWeight:500}}, s.name)
-                      , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}, s.instrument, s.level?" · "+s.level:"")
+                      , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}, (s._corsiConDocente||[]).join(" · ")||s.instrument, s.level?" · "+s.level:"")
                     )
                     , React.createElement(Badge, {stato:s.status})
                   )
