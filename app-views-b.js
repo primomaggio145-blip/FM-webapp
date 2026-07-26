@@ -7,11 +7,12 @@ const INIT_DOCENTI_EXT = [
   { id:"d4", corsi:["c9","c10"], nome:"Prof.ssa Lia Marino", teacherKey:"Prof. Marino",  email:"l.marino@accademia.it",   phone:"366 3344556", strumenti:"Canto · Solfeggio",      bio:"Soprano lirico, docente di tecnica vocale e teoria musicale.",  tariffaOra:35, contratto:"Tempo indeterminato", dataInizio:"2017-09-01", colore:C.purple  },
 ];
 
-const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV }) => {
+const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV, spese:_speseDocView }) => {
   const ruoloDocView = _ruoloDocView || "admin";
   const isMobile = useIsMobile();
   const students = _studentsRaw || [];
   const lessons = _lessonsRaw || [];
+  const spese = _speseDocView || [];
 
   // Auto-seleziona il proprio record se loggato come docente
   const _myDocRecord = React.useMemo(() => {
@@ -185,7 +186,19 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     return ly===y && lm===m;
   });
   // Nota: lezioniMese già funziona per collettive perché l.teacher è sempre valorizzato
-  const stipendioMese = (d, m=curMonth, y=curYear) => lezioniMese(d,m,y).length * d.tariffaOra;
+
+  // Altre competenze registrate per il docente (spese con docenteId collegato:
+  // es. compensi extra, rimborsi, bonus) — DIVERSE dal calcolo automatico lezioni×tariffa.
+  // Nota: in "spese" il campo mese è 0-indexed (getMonth()), qui usiamo 1-indexed → +1
+  const altreCompetenzeMese = (d, m, y) => spese.filter(s => {
+    if (!s || String(s.docenteId) !== String(d.id)) return false;
+    const sMese = (Number(s.mese)||0) + 1;
+    return sMese === m && Number(s.anno) === y;
+  });
+  const totaleAltreCompetenzeMese = (d, m, y) => altreCompetenzeMese(d,m,y).reduce((t,s)=>t+(Number(s.importo)||0), 0);
+
+  // Compenso mensile = lezioni (presente/assente) × tariffa oraria + altre competenze registrate nel mese
+  const stipendioMese = (d, m=curMonth, y=curYear) => lezioniMese(d,m,y).length * d.tariffaOra + totaleAltreCompetenzeMese(d,m,y);
 
   // Tutte le lezioni del mese di un docente (per conteggio totale)
   const tutteLezioniMese = (d, m, y) => lessons.filter(l => {
@@ -434,14 +447,21 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const lezPrevM = selMese.m===1 ? 12 : selMese.m-1;
   const lezPrevY = selMese.m===1 ? selMese.y-1 : selMese.y;
   const lezPrev  = lezioniMese(selected, lezPrevM, lezPrevY);
-  const stipSel  = lezSel.length * selected.tariffaOra;
-  const stipPrev = lezPrev.length * selected.tariffaOra;
+  const altreSel   = altreCompetenzeMese(selected, selMese.m, selMese.y);
+  const altrePrev  = altreCompetenzeMese(selected, lezPrevM, lezPrevY);
+  const totAltreSel  = altreSel.reduce((t,s)=>t+(Number(s.importo)||0), 0);
+  const totAltrePrev = altrePrev.reduce((t,s)=>t+(Number(s.importo)||0), 0);
+  const stipLezSel  = lezSel.length * selected.tariffaOra;
+  const stipSel  = stipLezSel + totAltreSel;
+  const stipPrev = lezPrev.length * selected.tariffaOra + totAltrePrev;
   const lezSelAll = tutteLezioniMese(selected, selMese.m, selMese.y);
 
   // andamento anno scolastico (tutte le lezioni per il grafico)
   const andamento = MESI_AS.map(x => {
     const n = tutteLezioniMese(selected, x.m, x.y).length;
-    return { label:MESI_LABEL_S[x.m-1], n, comp:n*selected.tariffaOra, m:x.m, y:x.y,
+    const nComp = lezioniMese(selected, x.m, x.y).length;
+    const comp = nComp*selected.tariffaOra + totaleAltreCompetenzeMese(selected, x.m, x.y);
+    return { label:MESI_LABEL_S[x.m-1], n, comp, m:x.m, y:x.y,
              isSel: x.m===selMese.m && x.y===selMese.y, isFut: isFuture(x) };
   });
   const maxN = Math.max(...andamento.map(x=>x.n), 1);
@@ -824,7 +844,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                hex:selected.colore},
               {label:`Compenso ${MESI_LABEL_S[selMese.m-1]}`,
                value:`€${stipSel.toLocaleString("it-IT")}`,
-               desc:`mese prec.: €${stipPrev.toLocaleString("it-IT")}`,
+               desc: totAltreSel!==0
+                 ? `di cui €${totAltreSel.toLocaleString("it-IT")} altre competenze`
+                 : `mese prec.: €${stipPrev.toLocaleString("it-IT")}`,
                hex:C.green},
             ].map(k=>(
               React.createElement('div', { key: k.label, style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 20px",borderTop:`3px solid ${k.hex}30`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10440}}
@@ -840,7 +862,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               , React.createElement('span', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10450}}, "Dettaglio "
                  , MESI_LABEL_L[selMese.m-1], " " , selMese.y
               )
-              , React.createElement('span', { style: {fontSize:13,color:C.green,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10453}}, "€", stipSel.toLocaleString("it-IT"))
+              , React.createElement('span', { style: {fontSize:13,color:C.green,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10453}}, "€", stipLezSel.toLocaleString("it-IT"))
             )
             , lezSel.length===0 ? (
               React.createElement('div', { style: {textAlign:"center",padding:"32px 0",color:C.textDim,fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10456}}
@@ -865,6 +887,32 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               ))
             )
           )
+          /* Altre competenze registrate nel mese selezionato (spese collegate al docente, es. rimborsi/bonus) */
+          , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",marginBottom:16}, __self: this }
+            , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}, __self: this }
+              , React.createElement('span', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase"}, __self: this }, "Altre competenze " , MESI_LABEL_L[selMese.m-1], " " , selMese.y)
+              , React.createElement('span', { style: {fontSize:13,color:C.green,fontWeight:600}, __self: this }, "€", totAltreSel.toLocaleString("it-IT"))
+            )
+            , altreSel.length===0 ? (
+              React.createElement('div', { style: {textAlign:"center",padding:"24px 0",color:C.textDim,fontSize:13}, __self: this }
+                , "Nessuna altra competenza registrata questo mese"
+              )
+            ) : (
+              altreSel.slice().sort((a,b)=>(a.data||"").localeCompare(b.data||"")).map((s,i)=>(
+                React.createElement('div', { key: s.id, style: {display:"grid",gridTemplateColumns:"90px 1fr auto",gap:12,alignItems:"center",
+                  padding:"11px 20px",borderBottom:i<altreSel.length-1?`1px solid ${C.border}`:"none"}, __self: this }
+                  , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this }
+                    , s.data ? new Date(s.data+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"}) : "—"
+                  )
+                  , React.createElement('div', {__self: this }
+                    , React.createElement('div', { style: {fontSize:13,fontWeight:500}, __self: this }, s.desc || "Competenza")
+                    , React.createElement('div', { style: {fontSize:11,color:C.textMuted}, __self: this }, s.categoria||"—")
+                  )
+                  , React.createElement('div', { style: {textAlign:"right",fontSize:13,fontWeight:600,color:C.green}, __self: this }, "€", (Number(s.importo)||0).toLocaleString("it-IT"))
+                )
+              ))
+            )
+          )
           /* Tabella compensi anno scolastico */
           , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10479}}
             , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10480}}
@@ -884,7 +932,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   const pm = x.m===1?12:x.m-1, py = x.m===1?x.y-1:x.y;
                   const n  = lezioniMese(selected,x.m,x.y).length;
                   const np = lezioniMese(selected,pm,py).length;
-                  const c  = n * selected.tariffaOra;
+                  const c  = n * selected.tariffaOra + totaleAltreCompetenzeMese(selected, x.m, x.y);
                   const delta = n - np;
                   return { x, i, n, np, c, delta, mese: x.y*100+x.m };
                 }), (r,k) => {
