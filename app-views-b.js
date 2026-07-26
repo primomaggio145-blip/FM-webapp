@@ -164,8 +164,13 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     const corsi = [];
     if (s.instrument && matchTeacher(d, s.teacher)) corsi.push(s.instrument);
     if (s.extraTeachers && typeof s.extraTeachers === 'object') {
+      // Considera SOLO le voci di extraTeachers che corrispondono a un corso
+      // ancora effettivamente presente in extraInstruments: se un corso è stato
+      // rimosso dall'allievo, la sua voce in extraTeachers non deve più contare
+      // (protegge anche eventuali dati salvati prima di questa correzione).
+      const extraAttivi = new Set(s.extraInstruments||[]);
       Object.entries(s.extraTeachers).forEach(([corso, teacherName]) => {
-        if (corso && matchTeacher(d, teacherName)) corsi.push(corso);
+        if (corso && extraAttivi.has(corso) && matchTeacher(d, teacherName)) corsi.push(corso);
       });
     }
     return corsi;
@@ -375,7 +380,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                 if (stu) {
                   if (stu.teacher) docConIscrizioni.add(stu.teacher);
                   if (stu.extraTeachers && typeof stu.extraTeachers === 'object') {
-                    Object.values(stu.extraTeachers).forEach(t => { if (t) docConIscrizioni.add(t); });
+                    const extraAttivi = new Set(stu.extraInstruments||[]);
+                    Object.entries(stu.extraTeachers).forEach(([corso, t]) => { if (t && extraAttivi.has(corso)) docConIscrizioni.add(t); });
                   }
                 }
               });
