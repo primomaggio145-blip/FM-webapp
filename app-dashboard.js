@@ -1910,6 +1910,9 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
       ? _students.filter(s=>{ const t=(s.teacher||"").toLowerCase().trim(); const k=myDocTeacherKey.toLowerCase().trim(); return t===k||t.includes(k)||k.includes(t); })
       : _students;
     const allieviAttivi    = _myStudentsForDash.filter(a=>a.status==="attivo"||a.stato==="attivo").length;
+    const corsiIndividualiAttivi = _myStudentsForDash
+      .filter(a=>a.status==="attivo"||a.stato==="attivo")
+      .reduce((tot,a)=> tot + (a.instrument?1:0) + ((a.extraInstruments||[]).length), 0);
     const morosi           = ruolo==="docente" ? 0 : _students.filter(a=>a.status==="scaduto"||a.stato==="scaduto").length;
     const oraNum  = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
     const nowMins = dashNow.getHours()*60+dashNow.getMinutes();
@@ -2262,6 +2265,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       // KPI cards configurabili — ordine salvato in panels.kpiOrder
                       const ALL_KPI = [
                         { id:'allievi',  icon:"users",    label:"Allievi attivi",  value: allieviAttivi, sub: `${_students.length} totali`, hex: C.gold },
+                        { id:'corsiIndividuali', icon:"music", label:"Corsi individuali attivi", value: corsiIndividualiAttivi, sub: "strumenti principali + extra", hex: C.blue },
                         { id:'lezioni',  icon:"calendar", label:"Lezioni oggi",    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal },
                         { id:'entrate',  icon:"up",       label:"Entrate mese",    value: fmt(entrMeseLiveLive), hex: C.green, trend:+8, hideAmounts:!showAmounts },
                         { id:'uscite',   icon:"down",     label:"Uscite mese",     value: fmt(uscMeseLiveLive),  hex: C.red,   trend:+12, hideAmounts:!showAmounts },
