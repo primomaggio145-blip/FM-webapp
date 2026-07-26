@@ -2202,7 +2202,17 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       value: (()=>{ const p=_lessons.filter(l=>matchDocLezione(l)&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0]; return p?new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}):"—"; })(),
                       sub: "data più vicina", hex: C.gold})
                   , React.createElement(KpiCard, { icon: "euro", label: "Compenso mese",
-                      value: fmt((()=>{ const m=oggi.getMonth()+1, y=oggi.getFullYear(); return _lessons.filter(l=>matchDocLezione(l)&&(l.attendance==="presente"||l.attendance==="assente")&&l.date&&new Date(l.date+"T00:00:00").getMonth()+1===m&&new Date(l.date+"T00:00:00").getFullYear()===y).length * (myDocRecord?myDocRecord.tariffaOra||0:0); })()),
+                      value: fmt((()=>{
+                        const m=oggi.getMonth()+1, y=oggi.getFullYear();
+                        // Compenso da lezioni (presente/assente) × tariffa oraria
+                        const compensoLezioni = _lessons.filter(l=>matchDocLezione(l)&&(l.attendance==="presente"||l.attendance==="assente")&&l.date&&new Date(l.date+"T00:00:00").getMonth()+1===m&&new Date(l.date+"T00:00:00").getFullYear()===y).length * (myDocRecord?myDocRecord.tariffaOra||0:0);
+                        // + Altre competenze registrate nel mese (spese con docenteId collegato: compensi extra, rimborsi, bonus)
+                        // stessa logica di stipendioMese() nell'Anagrafica Docenti — campo "mese" nelle spese è 0-indexed
+                        const altreCompetenze = myDocRecord
+                          ? _spese.filter(s=>s && String(s.docenteId)===String(myDocRecord.id) && (Number(s.mese)||0)+1===m && Number(s.anno)===y).reduce((t,s)=>t+(Number(s.importo)||0),0)
+                          : 0;
+                        return compensoLezioni + altreCompetenze;
+                      })()),
                       sub: "mese corrente", hex: C.green, hideAmounts: !showAmounts})
                 )
               : ruolo==="allievo" ? React.createElement(React.Fragment, null
