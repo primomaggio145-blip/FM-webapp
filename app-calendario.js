@@ -9110,11 +9110,20 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       return s[k]||"";
     });
   
-    // Report: ogni ruolo vede solo le proprie competenze, solo admin vede il report globale
-    const reportSpese = ruoloCV==="admin" ? spese
-      : ruoloCV==="docente" ? spese.filter(s=>myDocIdCV?String(s.docenteId)===String(myDocIdCV):false)
+    // Report: ogni ruolo vede solo le proprie competenze, solo admin vede il report globale.
+    // Per il docente i propri compensi sono un'ENTRATA (escono dall'associazione ed entrano al docente),
+    // quindi vanno mostrati come entrate e non come uscite.
+    // Nota: in "spese" il campo mese è 0-indexed (getMonth()), in "entrate" è 1-indexed:
+    // va convertito per allineare correttamente il grafico mensile del Report.
+    const misCompensi = myDocIdCV
+      ? spese.filter(s=>String(s.docenteId)===String(myDocIdCV)).map(s=>({...s, mese:(Number(s.mese)||0)+1}))
       : [];
-    const reportEntrate = ruoloCV==="admin" ? entrate : [];
+    const reportSpese = ruoloCV==="admin" ? spese
+      : ruoloCV==="docente" ? []
+      : [];
+    const reportEntrate = ruoloCV==="admin" ? entrate
+      : ruoloCV==="docente" ? misCompensi
+      : [];
 
     // Aggregato docenti
     const docenteStats = useMemo(()=>DOCENTI.map(d=>({
