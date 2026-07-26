@@ -3194,6 +3194,26 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
   const [showBranoForm, setShowBranoForm] = useState(false);
   const [f, setF] = useState(initial || emptyLesson);
   const [err, setErr] = useState({});
+
+  // Corsi individuali dell'allievo selezionato — corso ★ (principale) + corsi extra,
+  // trattati TUTTI allo stesso livello, ciascuno con il proprio insegnante collegato.
+  const studentIndividualCourses = useMemo(() => {
+    if (!f.student || !_studentsRaw) return [];
+    const st = (_studentsRaw||[]).find(s => (s.name||s.nome||'') === f.student);
+    if (!st) return [];
+    const list = [];
+    if (st.instrument) list.push({ instrument: st.instrument, teacher: st.teacher || '' });
+    (st.extraInstruments||[]).forEach(ins => {
+      if (ins) list.push({ instrument: ins, teacher: (st.extraTeachers||{})[ins] || '' });
+    });
+    return list;
+  }, [f.student, _studentsRaw]);
+
+  // Opzioni per il selettore "Corso individuale": se l'allievo ha corsi propri,
+  // mostra SOLO quelli (principale + extra, stesso livello); altrimenti fallback al catalogo completo.
+  const instrumentOptionsForm = studentIndividualCourses.length > 0
+    ? studentIndividualCourses.map(c => c.instrument)
+    : dynamicInstruments;
   // statiBrani: {[branoId]: {versioneIdx: number, stato: string}}
   // Inizializzato dai dati esistenti nel brano se disponibili
   const [statiBrani, setStatiBrani] = useState(() => {
@@ -3218,22 +3238,33 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     return `${h.toString().padStart(2,"0")}:${m.toString().padStart(2,"0")}`;
   }).filter(h => h <= "21:45");
 
-  // Auto-compila strumento e insegnante quando si seleziona un allievo
+  // Auto-compila strumento e insegnante quando si seleziona un allievo o si cambia corso.
+  // Tutti i corsi individuali dell'allievo (principale ★ + extra) sono allo STESSO LIVELLO:
+  // qualunque corso venga selezionato, l'insegnante collegato a QUEL corso viene applicato.
   useEffect(() => {
     if (!f.student || !_studentsRaw) return;
     const st = (_studentsRaw || []).find(s => (s.name || s.nome || '') === f.student);
     if (!st) return;
-    // Strumento principale dell'allievo → pre-seleziona strumento lezione
-    const instr = st.instrument || st.strumento || '';
-    // Docente principale dell'allievo → pre-seleziona insegnante
-    const teacher = st.teacher || st.docente || st.teacherName || '';
-    setF(prev => ({
-      ...prev,
-      instrument: prev.instrument || instr,
-      teacher:    prev.teacher    || teacher,
-    }));
+    const corsi = [
+      ...(st.instrument ? [{ instrument: st.instrument, teacher: st.teacher || st.docente || st.teacherName || '' }] : []),
+      ...((st.extraInstruments||[]).map(ins => ({ instrument: ins, teacher: (st.extraTeachers||{})[ins] || '' }))),
+    ];
+    setF(prev => {
+      // Nessun corso ancora selezionato → precompila col corso principale (★)
+      if (!prev.instrument) {
+        const primario = corsi[0];
+        return primario ? { ...prev, instrument: primario.instrument, teacher: primario.teacher } : prev;
+      }
+      // Corso già selezionato: se corrisponde a uno dei corsi dell'allievo (principale o extra),
+      // allinea sempre l'insegnante correttamente assegnato a QUEL corso specifico.
+      const match = corsi.find(c => c.instrument === prev.instrument);
+      if (match && match.teacher && prev.teacher !== match.teacher) {
+        return { ...prev, teacher: match.teacher };
+      }
+      return prev;
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [f.student]);
+  }, [f.student, f.instrument, _studentsRaw]);
 
   const validate = () => {
     const e = {};
@@ -3292,7 +3323,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
           ? React.createElement(Sel, { label: "Allievo *", value: f.student, onChange: e => set("student", e.target.value), options: dynamicStudents.length > 0 ? dynamicStudents : STUDENTS_LIST, error: err.student })
           : React.createElement(Input, { label: "Allievo", value: f.student || "—", readOnly: true })
         , roleLF !== "docente"
-          ? React.createElement(Sel, { label: "Corso individuale *", value: f.instrument, onChange: e => set("instrument", e.target.value), options: dynamicInstruments, error: err.instrument })
+          ? React.createElement(Sel, { label: "Corso individuale *", value: f.instrument, onChange: e => set("instrument", e.target.value), options: instrumentOptionsForm, error: err.instrument })
           : React.createElement(Input, { label: "Corso individuale", value: f.instrument || "—", readOnly: true })
         , roleLF !== "docente"
           ? React.createElement(Sel, { label: "Insegnante *", value: f.teacher, onChange: e => set("teacher", e.target.value), options: _teacherOptsLes.length>0 ? _teacherOptsLes : TEACHERS, error: err.teacher })
