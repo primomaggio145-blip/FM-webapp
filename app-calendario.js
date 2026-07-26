@@ -581,8 +581,15 @@ const validate = f => {
   const e = {};
   if(!f.name.trim()) e.name="Nome obbligatorio";
   if(f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email="Email non valida";
-  if(!f.instrument) e.instrument="Strumento obbligatorio";
+  if(!f.instrument) e.instrument="Corso individuale obbligatorio";
   if(!f.teacher)    e.teacher="Insegnante obbligatorio";
+  // Ogni corso individuale extra richiede un insegnante assegnato, esattamente come il corso principale:
+  // tutti i corsi individuali sono allo stesso livello.
+  const extraTeacherErrors = {};
+  (f.extraInstruments||[]).forEach(ins => {
+    if (!(f.extraTeachers||{})[ins]) extraTeacherErrors[ins] = "Insegnante obbligatorio";
+  });
+  if (Object.keys(extraTeacherErrors).length > 0) e.extraTeachers = extraTeacherErrors;
   if(!f.monthlyFee || isNaN(f.monthlyFee) || Number(f.monthlyFee)<=0) e.monthlyFee="Importo non valido";
   return e;
 };
@@ -633,16 +640,16 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
 
         , React.createElement(SectionDivider, { label: "Corsi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2958}})
 
-        /* Corsi principali — strumenti multipli */
+        /* Corsi individuali — tutti allo stesso livello, nessuna priorità tra loro */
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2961}}
-          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2962}}, "Corsi principali — strumenti *"    )
+          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2962}}, "Corsi individuali — strumenti *"    )
           , React.createElement('div', { style: {display:"flex",flexWrap:"wrap",gap:8,marginBottom:8} }
             , strumentiDisponibili.map(i => {
               const isSelected = f.instrument === i || (f.extraInstruments||[]).includes(i);
               return React.createElement('button', { key:i,
                 onClick: () => {
                   if(i === f.instrument) {
-                    // Rimuovi strumento principale — promuovi il primo extra se esiste
+                    // Rimuovi corso — promuovi il primo degli altri corsi se esiste (nessuna gerarchia, solo storage interno)
                     const extras = f.extraInstruments||[];
                     if(extras.length > 0) {
                       set("instrument", extras[0]);
@@ -651,32 +658,32 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
                       set("instrument", "");
                     }
                   } else if((f.extraInstruments||[]).includes(i)) {
-                    // Rimuovi da extra
+                    // Rimuovi il corso
                     set("extraInstruments", (f.extraInstruments||[]).filter(x=>x!==i));
                   } else if(!f.instrument) {
-                    // Imposta come principale
+                    // Primo corso selezionato
                     set("instrument", i);
                   } else {
-                    // Aggiungi agli extra
+                    // Aggiungi un ulteriore corso individuale — stesso livello degli altri
                     set("extraInstruments", [...(f.extraInstruments||[]), i]);
                   }
                 },
                 style:{padding:"6px 14px",borderRadius:20,cursor:"pointer",fontSize:12,
                   fontFamily:"'Open Sans',sans-serif",transition:"all 0.12s",
-                  border:`2px solid ${i===f.instrument?C.gold:(f.extraInstruments||[]).includes(i)?C.teal:C.border}`,
-                  background:i===f.instrument?C.goldBg:(f.extraInstruments||[]).includes(i)?C.tealBg:C.bg,
-                  color:i===f.instrument?C.gold:(f.extraInstruments||[]).includes(i)?C.teal:C.textMuted,
+                  border:`2px solid ${isSelected?C.gold:C.border}`,
+                  background:isSelected?C.goldBg:C.bg,
+                  color:isSelected?C.gold:C.textMuted,
                   fontWeight:isSelected?600:400}}
                 , i
-                , i===f.instrument && React.createElement('span',{style:{marginLeft:4,fontSize:10,opacity:0.7}},"★")
               );
             })
           )
           , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:4}}
-            , "Il primo selezionato (★) è il corso individuale. Puoi selezionare più corsi."
+            , "Puoi selezionare più corsi individuali: sono tutti allo stesso livello e vengono conteggiati sia per l'allievo sia per il rispettivo insegnante."
           )
           , errors.instrument && React.createElement('span', { style: {fontSize:11,color:C.red,marginTop:4,display:"block"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2973}}, errors.instrument)
         )
+
 
         /* Corso complementare — pill selector */
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2977}}
@@ -700,9 +707,9 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
 
         , React.createElement(SectionDivider, { label: "Didattica", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2996}})
 
-        /* Docente per ogni corso selezionato */
+        /* Docente per ogni corso individuale selezionato — tutti allo stesso livello */
         , (() => {
-            // Tutti i corsi selezionati: principale + extra
+            // Tutti i corsi selezionati: nessuna gerarchia tra loro
             const tuttiCorsi = [
               ...(f.instrument ? [{ strumento: f.instrument, isPrincipale: true }] : []),
               ...((f.extraInstruments||[]).map(s => ({ strumento: s, isPrincipale: false }))),
@@ -717,9 +724,10 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
             return React.createElement(React.Fragment, null,
               tuttiCorsi.map(({ strumento, isPrincipale }) => {
                 const val = isPrincipale ? (f.teacher||"") : ((f.extraTeachers||{})[strumento]||"");
-                const label = `Insegnante ${strumento}${isPrincipale ? " ★" : ""}${tuttiCorsi.length > 1 ? "" : " *"}`;
+                const label = `Insegnante ${strumento} *`;
                 const baseOpts = _teacherOpts.length > 0 ? _teacherOpts : TEACHERS;
                 const opts = [{ value:"", label:"— seleziona docente —" }, ...baseOpts];
+                const fieldError = isPrincipale ? errors.teacher : (errors.extraTeachers||{})[strumento];
                 return React.createElement('div', { key: strumento, style: { gridColumn:"1/-1" } },
                   React.createElement('label', { style: {
                     fontSize:12, color: C.textMuted, letterSpacing:"0.06em",
@@ -727,7 +735,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
                     gap:6, marginBottom:6 }}
                     , React.createElement('div', { style: {
                         width:10, height:10, borderRadius:"50%", flexShrink:0,
-                        background: isPrincipale ? C.gold : C.teal }})
+                        background: C.gold }})
                     , label
                   )
                   , React.createElement('select', {
@@ -739,14 +747,14 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
                           set("extraTeachers", { ...(f.extraTeachers||{}), [strumento]: e.target.value });
                         }
                       },
-                      style: { width:"100%", background:C.bg, border:`1px solid ${isPrincipale&&errors.teacher?C.red:C.border}`,
+                      style: { width:"100%", background:C.bg, border:`1px solid ${fieldError?C.red:C.border}`,
                         borderRadius:8, color:val?C.text:C.textMuted, fontSize:13, padding:"9px 12px",
                         fontFamily:"'Open Sans',sans-serif", appearance:"none", cursor:"pointer",
                         boxSizing:"border-box" }}
                     , opts.map(o => React.createElement('option', { key: o.value, value: o.value }, o.label))
                   )
-                  , isPrincipale && errors.teacher && React.createElement('span', {
-                      style: { fontSize:11, color:C.red, marginTop:4, display:"block" }}, errors.teacher)
+                  , fieldError && React.createElement('span', {
+                      style: { fontSize:11, color:C.red, marginTop:4, display:"block" }}, fieldError)
                 );
               })
             );
@@ -1141,21 +1149,21 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3212}}
               , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600,marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3213}}, student.name)
               , React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3214}}
-                /* Strumento principale (stella) */
-                , React.createElement('span', {style:{display:"inline-flex",alignItems:"center",gap:4}}
-                  , React.createElement('span',{style:{color:C.gold,fontSize:11}}, "★")
+                /* Corsi individuali dell'allievo — tutti allo stesso livello, ciascuno col proprio insegnante */
+                , student.instrument && React.createElement('span', {style:{display:"inline-flex",alignItems:"center",gap:4}}
                   , React.createElement(Badge, { label: student.instrument, accentHex: "gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3215}})
+                  , student.teacher && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + student.teacher + ")")
                 )
-                /* Strumenti extra */
                 , (student.extraInstruments||[]).map(ins =>
-                    React.createElement(Badge, {key:ins, label:ins, accentHex:"teal"})
+                    React.createElement('span', {key:ins, style:{display:"inline-flex",alignItems:"center",gap:4}}
+                      , React.createElement(Badge, {label:ins, accentHex:"gold"})
+                      , (student.extraTeachers||{})[ins] && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + (student.extraTeachers||{})[ins] + ")")
+                    )
                   )
                 /* Corso complementare */
                 , comp && React.createElement('span', {style:{display:"inline-flex",alignItems:"center",gap:4}}
                     , React.createElement(Badge, { label: comp.name, accentHex: "purple", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3216}})
                   )
-                , React.createElement('span', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3217}}, "·")
-                , React.createElement('span', { style: {fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3218}}, student.teacher)
                 , React.createElement('span', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3219}}, "·")
                 , React.createElement(Badge, { label: student.status, accentHex: student.status==="attivo"?"green":student.status==="sospeso"?"gold":"red", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3220}})
               )
