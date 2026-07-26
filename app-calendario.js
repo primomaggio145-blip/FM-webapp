@@ -9110,6 +9110,12 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       return s[k]||"";
     });
   
+    // Report: ogni ruolo vede solo le proprie competenze, solo admin vede il report globale
+    const reportSpese = ruoloCV==="admin" ? spese
+      : ruoloCV==="docente" ? spese.filter(s=>myDocIdCV?String(s.docenteId)===String(myDocIdCV):false)
+      : [];
+    const reportEntrate = ruoloCV==="admin" ? entrate : [];
+
     // Aggregato docenti
     const docenteStats = useMemo(()=>DOCENTI.map(d=>({
       ...d,
@@ -9476,7 +9482,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
           );
         })()
 
-        , tab==="report" && React.createElement(ReportErrorBoundary, null, React.createElement(ReportView, { spese: spese||[], entrate: entrate||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 7226}}))
+        , tab==="report" && React.createElement(ReportErrorBoundary, null, React.createElement(ReportView, { spese: reportSpese||[], entrate: reportEntrate||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 7226}}))
           )
         )
 
