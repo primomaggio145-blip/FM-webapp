@@ -649,17 +649,27 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
               return React.createElement('button', { key:i,
                 onClick: () => {
                   if(i === f.instrument) {
-                    // Rimuovi corso — promuovi il primo degli altri corsi se esiste (nessuna gerarchia, solo storage interno)
+                    // Rimuovi il corso principale — promuovi il primo degli altri corsi (se esiste)
+                    // portando con sé il SUO insegnante, e ripulisce extraTeachers per non
+                    // lasciare residui che continuerebbero a essere conteggiati.
                     const extras = f.extraInstruments||[];
                     if(extras.length > 0) {
-                      set("instrument", extras[0]);
-                      set("extraInstruments", extras.slice(1));
+                      const promosso = extras[0];
+                      const restanti = extras.slice(1);
+                      const restEt = {...(f.extraTeachers||{})};
+                      const teacherPromosso = restEt[promosso] || '';
+                      delete restEt[promosso];
+                      setF(p => ({...p, instrument: promosso, teacher: teacherPromosso, extraInstruments: restanti, extraTeachers: restEt}));
                     } else {
-                      set("instrument", "");
+                      setF(p => ({...p, instrument: "", teacher: ""}));
                     }
                   } else if((f.extraInstruments||[]).includes(i)) {
-                    // Rimuovi il corso
-                    set("extraInstruments", (f.extraInstruments||[]).filter(x=>x!==i));
+                    // Rimuovi il corso extra — elimina anche l'insegnante associato,
+                    // altrimenti resterebbe "orfano" in extraTeachers e continuerebbe a
+                    // essere conteggiato nella scheda del docente anche dopo la rimozione.
+                    const restEt = {...(f.extraTeachers||{})};
+                    delete restEt[i];
+                    setF(p => ({...p, extraInstruments: (p.extraInstruments||[]).filter(x=>x!==i), extraTeachers: restEt}));
                   } else if(!f.instrument) {
                     // Primo corso selezionato
                     set("instrument", i);
@@ -2000,7 +2010,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
   const sorted = sortFn(filtered, (s, k) => {
     if (k === "name")       return s.name || "";
     if (k === "instrument") return [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).join(", ");
-    if (k === "teacher")    return [s.teacher, ...Object.values(s.extraTeachers||{})].filter(Boolean).join(", ");
+    if (k === "teacher")    return [s.teacher, ...(s.extraInstruments||[]).map(ins=>(s.extraTeachers||{})[ins]).filter(Boolean)].filter(Boolean).join(", ");
     if (k === "monthlyFee") return Number(s.monthlyFee) || 0;
     if (k === "status")     return s.status || "";
     if (k === "complem")    return (courses.find(c=>c.id===s.complementaryCourse)||{}).name || "";
@@ -2066,7 +2076,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
                   const ic   = INS_COLORS[s.instrument]||C.gold;
                   const comp = courses.find(c=>c.id===s.complementaryCourse);
                   const tuttiStrumenti = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean);
-                  const tuttiInsegnanti = [s.teacher, ...Object.values(s.extraTeachers||{})].filter(Boolean);
+                  const tuttiInsegnanti = [s.teacher, ...(s.extraInstruments||[]).map(ins=>(s.extraTeachers||{})[ins]).filter(Boolean)].filter(Boolean);
                   return (
                     React.createElement('tr', { key: s.id, style: {borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",cursor:"pointer",transition:"background 0.12s"},
                       onMouseEnter: e=>e.currentTarget.style.background=C.surfaceHover,
