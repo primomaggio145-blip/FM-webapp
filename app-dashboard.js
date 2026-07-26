@@ -2593,8 +2593,18 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                                 (l.attendance==="presente"||l.attendance==="assente") &&
                                 l.date && new Date(l.date+"T00:00:00").getFullYear()===annoC
                               );
-                              const compMese = lezMeseDoc.length * (myDocRecord ? myDocRecord.tariffaOra||0 : 0);
-                              const compAnno = lezAnnoDoc.length * (myDocRecord ? myDocRecord.tariffaOra||0 : 0);
+                              const compensoLezMese = lezMeseDoc.length * (myDocRecord ? myDocRecord.tariffaOra||0 : 0);
+                              const compensoLezAnno = lezAnnoDoc.length * (myDocRecord ? myDocRecord.tariffaOra||0 : 0);
+                              // Altre competenze registrate (spese con docenteId collegato: compensi extra, rimborsi, bonus)
+                              // stessa logica di stipendioMese() nell'Anagrafica Docenti — campo "mese" nelle spese è 0-indexed
+                              const altreCompetenzeMese = myDocRecord
+                                ? (_spese||[]).filter(s=>s && String(s.docenteId)===String(myDocRecord.id) && (Number(s.mese)||0)+1===meseC && Number(s.anno)===annoC).reduce((t,s)=>t+(Number(s.importo)||0),0)
+                                : 0;
+                              const altreCompetenzeAnno = myDocRecord
+                                ? (_spese||[]).filter(s=>s && String(s.docenteId)===String(myDocRecord.id) && Number(s.anno)===annoC).reduce((t,s)=>t+(Number(s.importo)||0),0)
+                                : 0;
+                              const compMese = compensoLezMese + altreCompetenzeMese;
+                              const compAnno = compensoLezAnno + altreCompetenzeAnno;
                               const MESI_N = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
                               return React.createElement(React.Fragment, null
                                 /* KPI strip */
