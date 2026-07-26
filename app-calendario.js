@@ -9019,8 +9019,6 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         || (()=>{ const d=(propDocentiCV||[]).find(x=>x.teacherKey===_loginNomeCV||(x.nome||"").toLowerCase().includes(_loginNomeCV.toLowerCase())); return d?d.id:null; })())
     : null;
   const [catSpese,   setCatSpese]   = useState(CATEGORIE_DEFAULT);
-  const isCompensi    = tab === "compensi";
-  const isAltraUscita = tab === "altre_uscite";
   const [catEntrate, setCatEntrate] = useState(CAT_ENTRATE_DEFAULT);
   // Handle quick action from dashboard
   React.useEffect(()=>{
@@ -9038,6 +9036,8 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
   const spese    = propSpese    || _speseLocal;
   const setSpese = propSetSpese || _setSpeseLocal;
     const [tab,      setTab]      = useState(ruoloCV==="allievo"?"quote":ruoloCV==="docente"?"compensi":"report");
+    const isCompensi    = tab === "compensi";
+    const isAltraUscita = tab === "altre_uscite";
     const [modal,    setModal]    = useState(null);
     const [selSpesa, setSelSpesa] = useState(null);
     const [selQuota, setSelQuota] = useState(null);
