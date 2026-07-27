@@ -160,6 +160,16 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         }
       } catch(e) { console.warn('[FM] aggiungiBrano exception:', e?.message); }
       showToast("Brano aggiunto");
+      // Notifica campanella/push: nuovo brano nel catalogo repertorio (admin + tutti i docenti)
+      if (window.FM_NOTIFY) {
+        window.FM_NOTIFY({
+          tipo:      'repertorio_aggiunto',
+          titolo:    '🎵 Nuovo brano in repertorio',
+          messaggio: (f.title || 'Brano') + (f.composer ? ' — ' + f.composer : '') + ' aggiunto al catalogo repertorio',
+          broadcastRoles: ['docente'],
+          meta: { titolo: f.title, compositore: f.composer },
+        });
+      }
       // Aggiorna scaletta concerti se necessario
       if ((f.eventiIds||[]).length>0 && window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
     };
@@ -176,6 +186,16 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         }
       } catch(e) { console.warn('[FM] modificaBrano exception:', e?.message); }
       showToast("Brano aggiornato");
+      // Notifica campanella/push: brano di repertorio aggiornato (admin + tutti i docenti)
+      if (window.FM_NOTIFY) {
+        window.FM_NOTIFY({
+          tipo:      'repertorio_aggiunto',
+          titolo:    '🎵 Brano in repertorio aggiornato',
+          messaggio: (f.title || 'Brano') + (f.composer ? ' — ' + f.composer : '') + ' è stato modificato',
+          broadcastRoles: ['docente'],
+          meta: { titolo: f.title, compositore: f.composer, branoId: selBrano.id },
+        });
+      }
     };
     const eliminaBrano = async () => {
       const id = selBrano.id;

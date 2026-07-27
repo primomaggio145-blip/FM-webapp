@@ -370,7 +370,15 @@ function App() {
         const { data } = await sb.from('notifiche_config').select('*');
         if (data && data.length > 0) {
           const map = {};
-          data.forEach(r => { map[r.id] = { attivo: r.attivo !== false, anticipo_min: r.anticipo_min ?? 60 }; });
+          data.forEach(r => {
+            let dest = r.destinatari;
+            if (typeof dest === 'string') { try { dest = JSON.parse(dest); } catch(e) { dest = null; } }
+            if (!Array.isArray(dest)) {
+              const tipoDef = NOTIFICHE_CONFIG_TYPES.find(t => t.id === r.id);
+              dest = tipoDef ? tipoDef.defaultDest : null;
+            }
+            map[r.id] = { attivo: r.attivo !== false, anticipo_min: r.anticipo_min ?? 60, destinatari: dest };
+          });
           window.__FM_NOTIFICHE_CONFIG__ = map;
           console.log('[FM] notifiche_config caricate:', Object.keys(map));
         }
@@ -1663,6 +1671,61 @@ const NOTIFICHE_CONFIG_TYPES = [
     desc: 'Notifica push quando arriva una nuova richiesta di prenotazione sala prove',
     defaultAnticipoMin: 0,
     defaultDest: ['band', 'admin'],
+  },
+  {
+    id: 'lezione_creata',
+    label: 'Lezione aggiunta',
+    icon: 'calendar',
+    color: C.teal,
+    colorBg: C.tealBg,
+    colorBorder: C.tealBorder,
+    desc: 'Notifica quando viene aggiunta una nuova lezione in calendario',
+    defaultAnticipoMin: 0,
+    defaultDest: ['allievo', 'docente', 'admin'],
+  },
+  {
+    id: 'lezione_eliminata',
+    label: 'Lezione eliminata',
+    icon: 'trash',
+    color: C.red,
+    colorBg: C.redBg,
+    colorBorder: C.redBorder,
+    desc: 'Notifica quando una lezione viene eliminata dal calendario',
+    defaultAnticipoMin: 0,
+    defaultDest: ['allievo', 'docente', 'admin'],
+  },
+  {
+    id: 'presenza_variata',
+    label: 'Variazione presenza',
+    icon: 'user',
+    color: C.green,
+    colorBg: C.greenBg,
+    colorBorder: C.greenBorder,
+    desc: 'Notifica quando viene registrata o modificata la presenza di una lezione',
+    defaultAnticipoMin: 0,
+    defaultDest: ['allievo', 'docente', 'admin'],
+  },
+  {
+    id: 'repertorio_aggiunto',
+    label: 'Brani in repertorio',
+    icon: 'music',
+    color: C.purple,
+    colorBg: C.purpleBg,
+    colorBorder: 'rgba(139,92,246,.3)',
+    desc: 'Notifica quando viene aggiunto un brano in repertorio (da lezione o dalla scheda Repertorio)',
+    defaultAnticipoMin: 0,
+    defaultDest: ['allievo', 'docente', 'admin'],
+  },
+  {
+    id: 'concerto_evento',
+    label: 'Concerti ed eventi',
+    icon: 'mic',
+    color: C.gold,
+    colorBg: C.goldBg,
+    colorBorder: C.border,
+    desc: 'Notifica quando viene aggiunto un nuovo concerto o evento',
+    defaultAnticipoMin: 0,
+    defaultDest: ['allievo', 'docente', 'admin'],
   },
 ];
 

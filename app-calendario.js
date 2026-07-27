@@ -7307,6 +7307,27 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
   
     // Espone il repertorio globalmente per il modal dettaglio (workaround senza prop drilling)
     window.__repertorio__ = repertorio;
+
+    // Notifica campanella/push quando vengono assegnati nuovi brani in repertorio
+    // da questo modal (Nuova Lezione / Modifica Lezione / Nuova Collettiva)
+    const notifyRepertorioAggiunto = (studentNameOrList, teacherName, titoli) => {
+      if (!titoli || titoli.length === 0 || !window.FM_NOTIFY) return;
+      const nomi = Array.isArray(studentNameOrList) ? studentNameOrList : [studentNameOrList];
+      const studentIds = [], studentNames = [];
+      nomi.filter(Boolean).forEach(nome => {
+        const stu = propStudents.find(s => (s.name || s.nome || '') === nome);
+        if (stu) studentIds.push(stu.id); else studentNames.push(nome);
+      });
+      if (!studentIds.length && !studentNames.length) return;
+      window.FM_NOTIFY({
+        tipo:      'repertorio_aggiunto',
+        titolo:    '🎵 Nuovo brano in repertorio',
+        messaggio: titoli.join(', ') + (teacherName ? ' — assegnato da ' + teacherName : ''),
+        studentIds, studentNames,
+        teacherNames: teacherName ? [teacherName] : [],
+        meta: { brani: titoli },
+      });
+    };
   
     const [nextLessonCreated, setNextLessonCreated] = useState(null);
 
@@ -7347,6 +7368,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
       // ── 2. Propaga tutti i brani selezionati al repertorio dello studente ──
       if (data.repertorioIds && data.repertorioIds.length > 0 && data.student) {
+        const _stuBefore   = propStudents.find(s => (s.name || s.nome || '') === data.student);
+        const _existingIds = ((_stuBefore && _stuBefore.repertorio) || []).map(r => r.id);
         propSetStudents && propSetStudents(allStudents =>
           allStudents.map(stu => {
             const stuName = stu.name || stu.nome || '';
@@ -7375,6 +7398,16 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             return { ...stu, repertorio: [...(stu.repertorio || []), ...toAdd] };
           })
         );
+        // Notifica: stessa logica di dedup dell'updater, calcolata sullo snapshot pre-modifica
+        const _titoliNuovi = data.repertorioIds
+          .filter(id => !_existingIds.includes(id))
+          .map(id => {
+            const fresh = data._newBrani && data._newBrani[id];
+            const b = fresh || (window.__repertorio__ || []).find(r => r.id === id);
+            return b ? (b.title || b.titolo || '') : null;
+          })
+          .filter(Boolean);
+        notifyRepertorioAggiunto(data.student, data.teacher, _titoliNuovi);
       }
 
       // ── 3. Salva allegati della lezione con il nuovo lessonId ──
@@ -7429,6 +7462,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             return { ...stu, repertorio: [...(stu.repertorio || []), ...toAdd] };
           })
         );
+        const _titoliColl = lesson.repertorioIds
+          .map(id => { const b = (window.__repertorio__ || []).find(r => r.id === id); return b ? (b.title || b.titolo || '') : null; })
+          .filter(Boolean);
+        notifyRepertorioAggiunto(lesson.students.map(s => s.name), lesson.teacher, _titoliColl);
       }
 
       closeModal();
@@ -7534,6 +7571,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
       // ── 2. Propaga eventuali nuovi brani al repertorio dello studente ──
       if (data.repertorioIds && data.repertorioIds.length > 0 && data.student) {
+        const _stuBefore2   = propStudents.find(s => (s.name || s.nome || '') === data.student);
+        const _existingIds2 = ((_stuBefore2 && _stuBefore2.repertorio) || []).map(r => r.id);
         propSetStudents && propSetStudents(allStudents =>
           allStudents.map(stu => {
             const stuName = stu.name || stu.nome || '';
@@ -7562,6 +7601,15 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             return { ...stu, repertorio: [...(stu.repertorio || []), ...toAdd] };
           })
         );
+        const _titoliNuovi2 = data.repertorioIds
+          .filter(id => !_existingIds2.includes(id))
+          .map(id => {
+            const fresh = data._newBrani && data._newBrani[id];
+            const b = fresh || (window.__repertorio__ || []).find(r => r.id === id);
+            return b ? (b.title || b.titolo || '') : null;
+          })
+          .filter(Boolean);
+        notifyRepertorioAggiunto(data.student, data.teacher, _titoliNuovi2);
       }
 
       // ── Crea lezione successiva se ricorrente e viene segnata presenza ──

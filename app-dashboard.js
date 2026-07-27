@@ -1572,6 +1572,8 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     return false;
   });
 
+  const TIPI_LEZIONE  = new Set(['lezione_creata', 'lezione_eliminata', 'presenza_variata']);
+
   myNotifiche.forEach(function(n) {
     // Routing per tipo notifica
     var actionFn = function() {
@@ -1592,6 +1594,12 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
                  tipo === 'recupero_rifiutato') {
         // Allievo: vai al profilo (schermata allievi)
         onNavigate('allievi');
+      } else if (TIPI_LEZIONE.has(tipo)) {
+        onNavigate('calendario');
+      } else if (tipo === 'repertorio_aggiunto') {
+        onNavigate('repertorio');
+      } else if (tipo === 'concerto_evento') {
+        onNavigate('concerti');
       } else {
         // Default per altri tipi
         onNavigate('dashboard');
@@ -1603,11 +1611,25 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     else if (n.tipo === 'recupero_approvato_docente') actionLabel = 'Conferma ufficialmente';
     else if (n.tipo === 'recupero_confermato_docente' || n.tipo === 'recupero_ufficiale') actionLabel = 'Vedi dettagli';
     else if (n.tipo === 'recupero_rifiutato')     actionLabel = 'Vedi dettagli';
+    else if (n.tipo === 'lezione_creata')         actionLabel = 'Vedi calendario';
+    else if (n.tipo === 'lezione_eliminata')      actionLabel = 'Vedi calendario';
+    else if (n.tipo === 'presenza_variata')       actionLabel = 'Vedi calendario';
+    else if (n.tipo === 'repertorio_aggiunto')    actionLabel = 'Vedi repertorio';
+    else if (n.tipo === 'concerto_evento')        actionLabel = 'Vedi eventi';
+
+    var iconTipo = 'calendar', colorTipo = C.purple;
+    if (n.tipo === 'lezione_creata')         { iconTipo = 'calendar'; colorTipo = C.teal; }
+    else if (n.tipo === 'lezione_eliminata') { iconTipo = 'trash';    colorTipo = C.red; }
+    else if (n.tipo === 'presenza_variata')  { iconTipo = 'user';     colorTipo = C.green; }
+    else if (n.tipo === 'repertorio_aggiunto') { iconTipo = 'music';  colorTipo = C.purple; }
+    else if (n.tipo === 'concerto_evento')   { iconTipo = 'mic';      colorTipo = C.gold; }
+    else if (n.tipo === 'recupero_richiesto' || n.tipo === 'recupero_approvato_docente') { iconTipo = 'calendar'; colorTipo = C.orange; }
+
     notifs.push({
       id: 'notifica_' + n.id,
       tipo: (n.tipo === 'recupero_richiesto' || n.tipo === 'recupero_approvato_docente') ? 'warning' : 'info',
-      icon: 'calendar',
-      color: (n.tipo === 'recupero_richiesto' || n.tipo === 'recupero_approvato_docente') ? C.orange : C.purple,
+      icon: iconTipo,
+      color: colorTipo,
       titolo: n.titolo || 'Notifica',
       desc: n.messaggio || '',
       action: actionFn,

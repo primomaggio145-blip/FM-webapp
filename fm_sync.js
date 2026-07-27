@@ -448,6 +448,167 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  //  NOTIFICHE AUTOMATICHE — campanella (tabella `notifiche`) + push PWA
+  //
+  //  Ogni riga inserita in `notifiche` appare sulla campanella del destinatario
+  //  e — se il destinatario ha la PWA installata con push attivo — genera anche
+  //  una notifica push nativa (stessa infrastruttura già usata per recuperi/pagamenti).
+  //  Rispetta il toggle "attivo" configurato in Impostazioni Notifiche (admin),
+  //  se presente per il tipo (window.__FM_NOTIFICHE_CONFIG__).
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Esposto su window così può essere richiamato anche dagli altri file dell'app
+  // (es. RepertorioView, modal Modifica Lezione) per gli eventi che non passano
+  // dal diff automatico di questo file.
+  window.FM_NOTIFY = async function(opts) {
+    const sb = window.supabaseClient;
+    if (!sb || !opts || !opts.tipo) return;
+    const cfg = (window.__FM_NOTIFICHE_CONFIG__ || {})[opts.tipo];
+    if (cfg && cfg.attivo === false) return; // rispetta il toggle admin, se configurato
+    // Ruoli effettivamente abilitati per questo tipo (se l'admin ha configurato i destinatari
+    // in Impostazioni Notifiche, altrimenti nessun filtro: si usano i destinatari passati alla chiamata)
+    const ruoliAbilitati = (cfg && Array.isArray(cfg.destinatari)) ? cfg.destinatari : null;
+
+    const now  = new Date().toISOString();
+    const meta = opts.meta ? JSON.stringify(opts.meta) : null;
+    const rows = [];
+    const seen = new Set();
+    const pushRow = (ruolo, id, nome) => {
+      if (ruoliAbilitati && !ruoliAbilitati.includes(ruolo)) return; // ruolo escluso dall'admin → nessuna notifica
+      const key = ruolo + ':' + (id != null ? 'id:' + id : 'nome:' + String(nome || '').toLowerCase());
+      if (seen.has(key)) return;
+      seen.add(key);
+      rows.push({
+        destinatario_ruolo: ruolo,
+        destinatario_id:    id != null ? String(id) : null,
+        destinatario_nome:  nome || null,
+        tipo:               opts.tipo,
+        titolo:             opts.titolo,
+        messaggio:          opts.messaggio,
+        letto:              false,
+        created_at:         now,
+        meta:               meta,
+      });
+    };
+    (opts.studentIds    || []).forEach(id   => { if (id != null) pushRow('allievo', id, null); });
+    (opts.studentNames  || []).forEach(nome => { if (nome) pushRow('allievo', null, nome); });
+    (opts.teacherNames  || []).forEach(nome => { if (nome) pushRow('docente', null, nome); });
+    // Broadcast: notifica l'intero ruolo (nessun destinatario_id/nome → visibile a tutti quelli del ruolo)
+    (opts.broadcastRoles || []).forEach(ruolo => pushRow(ruolo, null, null));
+    if (opts.includeAdmin !== false) pushRow('admin', null, null);
+
+    if (!rows.length) return;
+    try {
+      const { error } = await sb.from('notifiche').insert(rows);
+      if (error) warn('FM_NOTIFY insert error:', error.message);
+    } catch(e) { warn('FM_NOTIFY exception:', e && e.message); }
+  };
+
+  // Estrae allievo/i e docente destinatari di una lezione (gestisce sia
+  // individuali — student/studentId/teacher — sia collettive — students[]/teacher)
+  function _lezioneDestinatari(l) {
+    const teacherNames = l.teacher ? [l.teacher] : [];
+    let studentIds = [], studentNames = [];
+    if (Array.isArray(l.students) && l.students.length > 0) {
+      studentIds   = l.students.map(s => s && s.id).filter(v => v != null);
+      studentNames = l.students.map(s => s && s.name).filter(Boolean);
+    } else if (l.studentId != null) {
+      studentIds = [l.studentId];
+    } else if (l.student) {
+      studentNames = [l.student];
+    }
+    return { teacherNames, studentIds, studentNames };
+  }
+
+  function _fmtDataOraLezione(l) {
+    let d = l.date || l.data || '';
+    if (d) { try { d = new Date(d + 'T00:00:00').toLocaleDateString('it-IT', { day:'2-digit', month:'2-digit' }); } catch(e) {} }
+    return (d || '') + (l.hour ? ' ore ' + l.hour : '');
+  }
+
+  const ATTENDANCE_LABEL = {
+    presente:    'Presente',
+    assente:     'Assente',
+    recuperata:  'Recuperata',
+    in_recupero: 'In attesa di recupero',
+    recupero:    'Lezione di recupero',
+  };
+
+  // Tipi di lezione con un proprio flusso di notifiche dedicato già esistente
+  // (sala prove ha già le sue notifiche di richiesta/approvazione) → esclusi qui
+  const LEZIONI_TIPI_ESCLUSI = new Set(['sala_prove']);
+
+  async function notifyLezioniChanges(d, prevMap) {
+    if (!d) return;
+
+    for (const l of d.added) {
+      if (LEZIONI_TIPI_ESCLUSI.has(l.tipo)) continue;
+      const { teacherNames, studentIds, studentNames } = _lezioneDestinatari(l);
+      if (!teacherNames.length && !studentIds.length && !studentNames.length) continue;
+      const nomeCorso = l.courseName || l.instrument || 'Lezione';
+      await window.FM_NOTIFY({
+        tipo:      'lezione_creata',
+        titolo:    '📅 Nuova lezione in calendario',
+        messaggio: nomeCorso + ' — ' + _fmtDataOraLezione(l) + (teacherNames[0] ? ' con ' + teacherNames[0] : ''),
+        studentIds, studentNames, teacherNames,
+        meta: { lezioneId: l.id },
+      });
+    }
+
+    for (const id of d.deleted) {
+      const l = prevMap.get(String(id));
+      if (!l || LEZIONI_TIPI_ESCLUSI.has(l.tipo)) continue;
+      const { teacherNames, studentIds, studentNames } = _lezioneDestinatari(l);
+      if (!teacherNames.length && !studentIds.length && !studentNames.length) continue;
+      const nomeCorso = l.courseName || l.instrument || 'Lezione';
+      await window.FM_NOTIFY({
+        tipo:      'lezione_eliminata',
+        titolo:    '🗑️ Lezione eliminata',
+        messaggio: nomeCorso + ' — ' + _fmtDataOraLezione(l) + (teacherNames[0] ? ' con ' + teacherNames[0] : ''),
+        studentIds, studentNames, teacherNames,
+        meta: { lezioneId: id },
+      });
+    }
+
+    for (const l of d.updated) {
+      if (LEZIONI_TIPI_ESCLUSI.has(l.tipo)) continue;
+      const prevL  = prevMap.get(String(l.id));
+      const attNew = l.attendance || '';
+      const attOld = (prevL && prevL.attendance) || '';
+      if (!attNew || attNew === attOld) continue; // nessuna variazione di presenza reale
+      const { teacherNames, studentIds, studentNames } = _lezioneDestinatari(l);
+      if (!teacherNames.length && !studentIds.length && !studentNames.length) continue;
+      const nomeCorso = l.courseName || l.instrument || 'Lezione';
+      const label = ATTENDANCE_LABEL[attNew] || attNew;
+      await window.FM_NOTIFY({
+        tipo:      'presenza_variata',
+        titolo:    '✔️ Presenza registrata',
+        messaggio: nomeCorso + ' — ' + _fmtDataOraLezione(l) + ': ' + label,
+        studentIds, studentNames, teacherNames,
+        meta: { lezioneId: l.id, attendance: attNew },
+      });
+    }
+  }
+
+  async function notifyConcertiChanges(d) {
+    if (!d) return;
+    for (const c of d.added) {
+      const studentIds   = (c.partecipanti || []).map(p => p && p.studentId).filter(v => v != null);
+      const studentNames = (c.partecipanti || []).map(p => p && p.studentName).filter(Boolean);
+      let dataFmt = c.data || '';
+      try { if (dataFmt) dataFmt = new Date(dataFmt + 'T00:00:00').toLocaleDateString('it-IT', { day:'2-digit', month:'2-digit', year:'numeric' }); } catch(e) {}
+      await window.FM_NOTIFY({
+        tipo:      'concerto_evento',
+        titolo:    '🎤 Nuovo evento: ' + (c.titolo || 'Concerto'),
+        messaggio: (dataFmt || '') + (c.luogo ? ' — ' + c.luogo : ''),
+        studentIds, studentNames,
+        broadcastRoles: ['docente'], // tutti i docenti vengono informati dei nuovi eventi
+        meta: { concertoId: c.id },
+      });
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   //  SYNC — confronta _prev con lo stato corrente e scrive le differenze
   // ═══════════════════════════════════════════════════════════════════════════
   async function syncState(state) {
@@ -469,10 +630,16 @@
       ['prenotazioni_sala', 'prenotazioni_sala', toDB.prenotazioni_sala],
     ];
 
+    // Snapshot pre-scrittura di prev.lessons: serve a notifyLezioniChanges per
+    // recuperare i dati di una lezione eliminata e il vecchio valore di "attendance"
+    const prevLezioniMap = new Map((_prev.lessons || []).map(l => [String(l.id), l]));
+    const diffsByKey = {};
+
     let totalChanges = 0;
     const tasks = MAP.map(([table, key, adapter]) => {
       if (!state[key] || _prev[key] === undefined) return Promise.resolve();
       const d = diff(_prev[key], state[key]);
+      diffsByKey[key] = d;
       const n = d.added.length + d.updated.length + d.deleted.length;
       if (n === 0) return Promise.resolve();
       totalChanges += n;
@@ -481,6 +648,12 @@
     });
 
     await Promise.all(tasks);
+
+    // ── Notifiche automatiche (campanella + push PWA) ────────────────────────
+    try {
+      if (diffsByKey.lessons)  await notifyLezioniChanges(diffsByKey.lessons, prevLezioniMap);
+      if (diffsByKey.concerti) await notifyConcertiChanges(diffsByKey.concerti);
+    } catch(e) { warn('Errore notifiche automatiche:', e && e.message); }
 
     if (totalChanges > 0) {
       // Aggiorna snapshot
