@@ -1336,7 +1336,7 @@ const CONFIG_DEFAULT = {
 
 
 // ─── NOTIFICATION BELL ────────────────────────────────────────────────────────
-const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB, notifiche:_notificheNB, onQuickAction:_onQANB, config:_configNB }) => {
+const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB, notifiche:_notificheNB, setNotifiche:_setNotificheNB, onQuickAction:_onQANB, config:_configNB }) => {
   const ruoloNB = _ruoloNB || "admin";
   const [open, setOpen] = useState(false);
   const ref = React.useRef(null);
@@ -1577,11 +1577,16 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
   myNotifiche.forEach(function(n) {
     // Routing per tipo notifica
     var actionFn = function() {
-      // Segna come letta su Supabase (fire-and-forget)
+      // Segna come letta su Supabase e aggiorna subito lo stato condiviso
+      // (senza questo la notifica restava "non letta" in campanella finché non
+      // arrivava il prossimo poll a sovrascrivere sharedNotifiche)
       var sb = window.supabaseClient;
       if (sb && n.id) {
         sb.from('notifiche').update({letto: true}).eq('id', n.id)
           .then(function(){});
+      }
+      if (_setNotificheNB) {
+        _setNotificheNB(function(p){ return (p||[]).map(function(x){ return x.id===n.id ? Object.assign({}, x, {letto:true}) : x; }); });
       }
       // Naviga alla schermata corretta
       var tipo = n.tipo || '';
@@ -1832,7 +1837,7 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
   );
 };
 
-const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, notifiche:propNotifiche, panels:propPanels, setPanels:propSetPanels, onQuickAction }) => {
+const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, notifiche:propNotifiche, setNotifiche:propSetNotifiche, panels:propPanels, setPanels:propSetPanels, onQuickAction }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Clock live: aggiorna ogni 60s per far scorrere la progressbar e la timeline
   const [dashNow, setDashNow] = useState(new Date());
@@ -2134,6 +2139,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   lessons: _lessons,
                   richieste: propRichieste||[],
                   notifiche: propNotifiche||[],
+                  setNotifiche: propSetNotifiche,
                   onNavigate: onNavigate,
                   onQuickAction: onQuickAction,
                   ruolo: ruolo,
