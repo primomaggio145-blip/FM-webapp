@@ -2240,7 +2240,8 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       background:"#fffbeb", border:"1px solid #f59e0b",
                       borderRadius:12, padding:"14px 18px",
                       display:"flex", alignItems:"flex-start", gap:12,
-                      marginBottom:4, animation:"fadeUp 0.5s ease both"
+                      marginBottom:4, animation:"fadeUp 0.5s ease both",
+                      gridColumn:"1 / -1" // occupa sempre l'intera riga della griglia KPI (fix visibilità su PWA/mobile: senza questo, su viewport stretti la griglia auto-fit lo schiacciava in una colonna da ~150px)
                     }}
                       , React.createElement('div', { style:{
                           width:36, height:36, borderRadius:10,
