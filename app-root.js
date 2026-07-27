@@ -56,7 +56,9 @@ function App() {
         if(session?.user){
           const profilo = await window.FM_AUTH.getProfilo(session.user.id);
           if(profilo && profilo.stato!=='sospeso'){
-            setUser({email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null});
+            const _userObj0 = {email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null};
+            setUser(_userObj0);
+            try{ window.__currentUser__ = _userObj0; }catch(e){}
             setSharedRuolo(profilo.ruolo||"admin");
             try{ window.__currentUserName__=profilo.nome||""; }catch(e){}
             setSchermata("app");
@@ -677,7 +679,7 @@ function App() {
                 React.createElement(FormLogin, {
                   onSuccess: u=>{
                     setUser(u);setSharedRuolo(u.ruolo||"admin");setView(u.ruolo==="band"?"sala_prove":"dashboard");
-                    try{window.__currentUserName__=u.nome||"";}catch(e){};
+                    try{window.__currentUserName__=u.nome||""; window.__currentUser__=u;}catch(e){};
                     if(u.ruolo==="admin"&&window.FM_AUTH&&window.FM_AUTH.getRichieste){window.FM_AUTH.getRichieste().then(r=>setSharedRichieste(r||[])).catch(()=>{});}
                     // Carica notifiche non lette al login — filtrate per ruolo/utente
                     const sbLogin = window.supabaseClient;
@@ -724,7 +726,9 @@ function App() {
                         if (profilo) {
                           // Aggiorna profilo da invitato ad attivo
                           await sb.from('profili').update({ stato: 'attivo' }).eq('id', session.user.id);
-                          setUser({email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null});
+                          const _userObj1 = {email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null};
+                          setUser(_userObj1);
+                          try{ window.__currentUser__ = _userObj1; }catch(e){}
                           setSharedRuolo(profilo.ruolo||"admin");
                           try{ window.__currentUserName__=profilo.nome||""; }catch(e){}
                           setSchermata("app");
@@ -745,7 +749,7 @@ function App() {
   // ad ogni render di App (ogni cambio stato), causando il reset dei setInterval interni
   const renderCurrentView = () => {
     switch(view) {
-      case 'dashboard':   return React.createElement(DashboardView, { appUser: user, onNavigate: setView, config: sharedConfig, setConfig: setSharedConfig, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, docenti: sharedDocenti, lessons: sharedLessons, concerti: sharedConcerti, richieste: sharedRichieste, notifiche: sharedNotifiche, panels: sharedPanels, setPanels: setSharedPanels, onQuickAction: (action)=>setSharedQuickAction(action)});
+      case 'dashboard':   return React.createElement(DashboardView, { appUser: user, onNavigate: setView, config: sharedConfig, setConfig: setSharedConfig, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, docenti: sharedDocenti, lessons: sharedLessons, concerti: sharedConcerti, richieste: sharedRichieste, notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, panels: sharedPanels, setPanels: setSharedPanels, onQuickAction: (action)=>setSharedQuickAction(action)});
       case 'allievi':     return React.createElement(AllieviView, { students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, iscrizioniAnno: sharedIscrizioniAnno, setIscrizioniAnno: setSharedIscrizioniAnno, anniScolastici: sharedAnniScolastici});
       case 'docenti':     return React.createElement(DocentiView, { students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user, annoInizioAttivo: sharedConfig.annoInizioAttivo, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), iscrizioniAnno: sharedIscrizioniAnno, anniScolastici: sharedAnniScolastici, spese: sharedSpese});
       case 'corsi':       return React.createElement(CorsiView, { courses: sharedCourses, setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user, iscrizioniAnno: sharedIscrizioniAnno, annoInizioAttivo: sharedConfig.annoInizioAttivo, anniScolastici: sharedAnniScolastici});
@@ -780,7 +784,7 @@ function App() {
     try { if(window.FM_AUTH) await window.FM_AUTH.signOut(); } catch(e) {}
     setUser(null); setSharedRuolo("admin"); setView("dashboard");
     setSchermata("login"); setPanKey(p=>p+1);
-    try{window.__currentUserName__="";}catch(e){}
+    try{window.__currentUserName__=""; window.__currentUser__=null;}catch(e){}
     window.__FM_NOTIF_COUNT__ = 0;
   };
 
