@@ -247,7 +247,7 @@ const LessonTimeline = ({ lezioni, onLessonClick }) => {
             )
             /* Contenuto */
             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 1360}}
-              , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:6,marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1361}}
+              , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap",rowGap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1361}}
                 , React.createElement('span', { style: {fontSize:13,fontWeight:500,color:inCorso?C.gold:C.text,
                   overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1362}}
                   , l.tipo==="collettivo"
