@@ -3709,7 +3709,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali }) => {
+const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction }) => {
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
   const hex = lessonHex(lesson);
@@ -4088,12 +4088,31 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                 )
                 , React.createElement('span',{style:{fontSize:10,color:C.textDim,marginLeft:'auto'}},'(sola lettura)')
               )
+            /* Recupero ufficialmente approvato e fissato — presenza sola lettura, non modificabile */
+            : lesson.tipo === 'recupero'
+            ? React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:C.blueBg,border:'1px solid '+C.blueBorder,borderRadius:8}}
+                , React.createElement(Ic,{n:'calendar',size:15,stroke:C.blue})
+                , React.createElement('div',null
+                  , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.blue}},'🔄 RECUPERO')
+                  , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2}}, lesson.notes || 'Lezione di recupero confermata ufficialmente')
+                )
+                , React.createElement('span',{style:{fontSize:10,color:C.textDim,marginLeft:'auto'}},'(sola lettura)')
+              )
             : React.createElement(React.Fragment, null
-                /* Banner informativo per lezione di recupero fissata — NON blocca i pulsanti */
-                , lesson.tipo === 'recupero' && (
-                  React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:C.blueBg,border:'1px solid '+C.blueBorder,borderRadius:8,marginBottom:10}}
-                    , React.createElement(Ic,{n:'calendar',size:14,stroke:C.blue})
-                    , React.createElement('div',{style:{fontSize:12,fontWeight:600,color:C.blue}},'Lezione di recupero · segna la presenza qui sotto')
+                /* Pulsante "Prenota Recupero" lato allievo — quando il docente ha segnato la presenza come "In Recupero" */
+                , !isRecuperoScaduto && (lesson.inRecupero || lesson.attendance === 'in_recupero') && role === 'allievo' && (
+                  React.createElement('div', {style:{marginBottom:10,padding:'10px 14px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.35)',borderRadius:10,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}
+                    , React.createElement(Ic,{n:'clock',size:15,stroke:'#f59e0b'})
+                    , React.createElement('div',{style:{flex:1,fontSize:12,color:'#f59e0b',fontWeight:600}}
+                      , 'Lezione in recupero', lesson.recuperoScadenza ? (' · scade il ' + lesson.recuperoScadenza) : '')
+                    , React.createElement('button', {
+                        onClick: () => {
+                          if (onClose) onClose();
+                          if (onNavigate) onNavigate('allievi');
+                          if (onQuickAction) setTimeout(() => onQuickAction('openRecuperoModal'), 120);
+                        },
+                        style:{padding:'7px 14px',borderRadius:8,border:'none',background:'#f59e0b',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}
+                      }, '📅 Prenota Recupero')
                   )
                 )
                 , isRecuperoScaduto && (
@@ -5992,8 +6011,8 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
         corso_nome: corsoNome,
         room:       roomOrig,
         topic:      null,    // argomento libero — il docente lo compila a lezione
-        attendance: null,    // segnabile normalmente
-        tipo:       'individuale',
+        attendance: 'recupero', // presenza fissata in sola lettura come "RECUPERO"
+        tipo:       'recupero',
         recurrence: 'Nessuna',
         notes:      '🔄 Recupero del ' + dLOrigine + ' — Richiesta #'+(selRich.id||''),
         in_recupero: false,
@@ -7229,7 +7248,7 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
   );
 };
 
-const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV, config:calConfig }) => {
+const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV, config:calConfig, onNavigate, onQuickAction }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
   const propStudents = _propStudentsRaw || [];
@@ -8243,6 +8262,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             students: propStudents,
             nextLessonDate: _optionalChain([selLesson, 'optionalAccess', _55 => _55.recurrence]) && selLesson.recurrence !== 'Nessuna' ? nextLessonCreated : null,
             onClose: closeModal,
+            onNavigate: onNavigate,
+            onQuickAction: onQuickAction,
             role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6146}})
         )
         , modal === "delete" && selLesson && (
