@@ -3027,6 +3027,24 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
     setNotifiche(updater);
   };
 
+  // Elimina una notifica (disponibile per tutti i ruoli). Per le notifiche "live"
+  // (calcolate al volo, non su DB) equivale a un dismiss solo locale.
+  const deleteOne = async (n, ev) => {
+    if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+    if (n._isLive) {
+      setDismissedLiveIds(prev => new Set([...prev, n.id]));
+      return;
+    }
+    const sb = window.supabaseClient;
+    if (sb) {
+      const { error } = await sb.from('notifiche').delete().eq('id', n.id);
+      if (error) { console.warn('[FM] errore eliminazione notifica:', error.message); return; }
+    }
+    const updater = p => (p||[]).filter(x => x.id !== n.id);
+    setAllNotifiche(updater);
+    setNotifiche(updater);
+  };
+
   const tipoIcon = (tipo) => {
     if (!tipo) return '🔔';
     if (tipo.includes('recupero')) return '🔄';
@@ -3044,12 +3062,28 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
         , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}},
             nonLette.length > 0 ? `${nonLette.length} non lette su ${mieNotifiche.length} totali` : `${mieNotifiche.length} notifiche · tutte lette`)
       )
-      , nonLette.length > 0 && React.createElement('button', {
-          onClick: markAllRead, disabled: marking,
-          style:{padding:'9px 18px',borderRadius:8,border:'none',background:C.green,color:'#fff',
-            fontSize:13,fontWeight:600,cursor:marking?'wait':'pointer',fontFamily:"'Open Sans',sans-serif",opacity:marking?0.7:1}}
-        , marking ? '...' : `✓ Segna tutte come lette (${nonLette.length})`
-      )
+      , React.createElement('div', {style:{display:'flex',gap:8,flexShrink:0}}
+          , nonLette.length > 0 && React.createElement('button', {
+              onClick: markAllRead, disabled: marking,
+              style:{padding:'9px 18px',borderRadius:8,border:'none',background:C.green,color:'#fff',
+                fontSize:13,fontWeight:600,cursor:marking?'wait':'pointer',fontFamily:"'Open Sans',sans-serif",opacity:marking?0.7:1}}
+            , marking ? '...' : `✓ Segna tutte come lette (${nonLette.length})`
+          )
+          , mieNotifiche.some(n => n.letto && !n._isLive) && React.createElement('button', {
+              onClick: async () => {
+                if (!window.confirm('Eliminare tutte le notifiche già lette? L\'azione è definitiva.')) return;
+                const sb = window.supabaseClient;
+                const idsLette = mieNotifiche.filter(n => n.letto && !n._isLive).map(n => n.id);
+                if (sb && idsLette.length > 0) await sb.from('notifiche').delete().in('id', idsLette);
+                const updater = p => (p||[]).filter(x => !idsLette.includes(x.id));
+                setAllNotifiche(updater);
+                setNotifiche(updater);
+              },
+              style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.textMuted,
+                fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
+            , '🗑️ Elimina lette'
+          )
+        )
     )
     // Filter tabs
     , React.createElement('div', {style:{display:'flex',gap:4,marginBottom:16,background:C.surface,borderRadius:10,padding:4,border:`1px solid ${C.border}`,width:'fit-content'}}
@@ -3092,6 +3126,17 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
               , n.messaggio && React.createElement('div', {style:{fontSize:12,color:C.textMuted,lineHeight:1.5}}, n.messaggio)
               , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:4}},
                   n.created_at ? new Date(n.created_at).toLocaleString('it-IT',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '')
+            )
+            , React.createElement('button', {
+                title: 'Elimina notifica',
+                onClick: ev => deleteOne(n, ev),
+                style:{flexShrink:0,width:26,height:26,borderRadius:7,border:`1px solid ${C.border}`,
+                  background:C.surface,color:C.textDim,cursor:'pointer',display:'flex',
+                  alignItems:'center',justifyContent:'center',padding:0,transition:'all .12s'},
+                onMouseEnter: e=>{e.currentTarget.style.background=C.redBg;e.currentTarget.style.borderColor=C.redBorder;e.currentTarget.style.color=C.red;},
+                onMouseLeave: e=>{e.currentTarget.style.background=C.surface;e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textDim;},
+              }
+              , React.createElement(Ic, {n:'x', size:13, stroke:'currentColor'})
             )
           ))
         )

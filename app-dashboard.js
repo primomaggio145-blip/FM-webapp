@@ -1339,7 +1339,26 @@ const CONFIG_DEFAULT = {
 const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB, notifiche:_notificheNB, setNotifiche:_setNotificheNB, onQuickAction:_onQANB, config:_configNB }) => {
   const ruoloNB = _ruoloNB || "admin";
   const [open, setOpen] = useState(false);
+  const [dismissedIds, setDismissedIds] = useState(function(){ return new Set(); });
   const ref = React.useRef(null);
+
+  // Elimina una notifica (disponibile per tutti i ruoli). Le notifiche "vive"
+  // (calcolate al volo da dati esistenti, non salvate su DB) vengono solo
+  // nascoste per la sessione corrente; quelle da tabella `notifiche` vengono
+  // eliminate definitivamente.
+  const deleteNotif = function(notifId, ev) {
+    if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+    if (String(notifId).indexOf('notifica_') === 0) {
+      var realId = String(notifId).slice('notifica_'.length);
+      var sb = window.supabaseClient;
+      if (sb) { sb.from('notifiche').delete().eq('id', realId).then(function(r){ if (r && r.error) console.warn('[FM] errore eliminazione notifica:', r.error.message); }); }
+      if (_setNotificheNB) {
+        _setNotificheNB(function(p){ return (p||[]).filter(function(x){ return String(x.id) !== String(realId); }); });
+      }
+    } else {
+      setDismissedIds(function(prev){ var next = new Set(prev); next.add(notifId); return next; });
+    }
+  };
 
   // Chiudi cliccando fuori
   useEffect(() => {
@@ -1669,7 +1688,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     });
   });
 
-  const count = notifs.length;
+  const count = notifs.filter(function(n){ return !dismissedIds.has(n.id); }).length;
   // Esponi il conteggio globalmente così handleLogout può leggerlo
   window.__FM_NOTIF_COUNT__ = count;
 
@@ -1725,7 +1744,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
                 , React.createElement(Ic, {n:'check',size:28,stroke:C.green})
                 , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:10}}, 'Nessuna notifica attiva')
               )
-            : notifs.map(n => {
+            : notifs.filter(function(n){ return !dismissedIds.has(n.id); }).map(n => {
                 const tc = TIPO_COLORS[n.tipo] || TIPO_COLORS.info;
                 return React.createElement('div', {key:n.id, style:{
                     padding:'12px 16px',
@@ -1753,6 +1772,17 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
                           , n.actionLabel, ' →'
                         )
                     )
+                    , React.createElement('button', {
+                          title:'Elimina notifica',
+                          onClick: ev => deleteNotif(n.id, ev),
+                          style:{flexShrink:0,width:22,height:22,borderRadius:6,border:'none',
+                            background:'transparent',color:C.textDim,cursor:'pointer',display:'flex',
+                            alignItems:'center',justifyContent:'center',padding:0,marginTop:1},
+                          onMouseEnter: e=>{e.currentTarget.style.color=C.red;},
+                          onMouseLeave: e=>{e.currentTarget.style.color=C.textDim;},
+                        }
+                        , React.createElement(Ic, {n:'x', size:12, stroke:'currentColor'})
+                      )
                   )
                 );
               })
@@ -2322,9 +2352,6 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                         return p ? new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}) : "—";
                       })(),
                       sub: "data più vicina", hex: C.gold})
-                  , React.createElement(KpiCard, { icon: "receipt", label: "Tot. versato",
-                      value: fmt(_entrate.filter(e=>myStudentId?e.studentId===myStudentId:(e.studentName||"").toLowerCase().includes(myNome.toLowerCase())).reduce((t,e)=>t+(e.importo||0),0)),
-                      sub: "pagamenti registrati", hex: C.green, hideAmounts: !showAmounts})
                 )
               : React.createElement(React.Fragment, null
                   , (() => {
