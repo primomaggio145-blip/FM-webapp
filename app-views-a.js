@@ -167,6 +167,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
           titolo:    '🎵 Nuovo brano in repertorio',
           messaggio: (f.title || 'Brano') + (f.composer ? ' — ' + f.composer : '') + ' aggiunto al catalogo repertorio',
           broadcastRoles: ['docente'],
+          push: false, // solo campanella, nessuna notifica push
           meta: { titolo: f.title, compositore: f.composer },
         });
       }
@@ -193,6 +194,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
           titolo:    '🎵 Brano in repertorio aggiornato',
           messaggio: (f.title || 'Brano') + (f.composer ? ' — ' + f.composer : '') + ' è stato modificato',
           broadcastRoles: ['docente'],
+          push: false, // solo campanella, nessuna notifica push
           meta: { titolo: f.title, compositore: f.composer, branoId: selBrano.id },
         });
       }

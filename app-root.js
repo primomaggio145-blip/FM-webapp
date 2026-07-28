@@ -716,7 +716,7 @@ function App() {
       case 'allievi':     return React.createElement(AllieviView, { students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, iscrizioniAnno: sharedIscrizioniAnno, setIscrizioniAnno: setSharedIscrizioniAnno, anniScolastici: sharedAnniScolastici});
       case 'docenti':     return React.createElement(DocentiView, { students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user, annoInizioAttivo: sharedConfig.annoInizioAttivo, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), iscrizioniAnno: sharedIscrizioniAnno, anniScolastici: sharedAnniScolastici, spese: sharedSpese});
       case 'corsi':       return React.createElement(CorsiView, { courses: sharedCourses, setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, userRuolo: user?.ruolo||"admin", appUser: user, iscrizioniAnno: sharedIscrizioniAnno, annoInizioAttivo: sharedConfig.annoInizioAttivo, anniScolastici: sharedAnniScolastici});
-      case 'calendario':  return React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, config: sharedConfig, onNavigate: setView, onQuickAction: (action)=>setSharedQuickAction(action)});
+      case 'calendario':  return React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, config: sharedConfig});
       case 'contabilita': return React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
       case 'repertorio':  return React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, concerti: sharedConcerti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
       case 'allegati':    return React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user});
@@ -1638,61 +1638,6 @@ const NOTIFICHE_CONFIG_TYPES = [
     desc: 'Notifica push quando arriva una nuova richiesta di prenotazione sala prove',
     defaultAnticipoMin: 0,
     defaultDest: ['band', 'admin'],
-  },
-  {
-    id: 'lezione_creata',
-    label: 'Lezione aggiunta',
-    icon: 'calendar',
-    color: C.teal,
-    colorBg: C.tealBg,
-    colorBorder: C.tealBorder,
-    desc: 'Notifica quando viene aggiunta una nuova lezione in calendario',
-    defaultAnticipoMin: 0,
-    defaultDest: ['allievo', 'docente', 'admin'],
-  },
-  {
-    id: 'lezione_eliminata',
-    label: 'Lezione eliminata',
-    icon: 'trash',
-    color: C.red,
-    colorBg: C.redBg,
-    colorBorder: C.redBorder,
-    desc: 'Notifica quando una lezione viene eliminata dal calendario',
-    defaultAnticipoMin: 0,
-    defaultDest: ['allievo', 'docente', 'admin'],
-  },
-  {
-    id: 'presenza_variata',
-    label: 'Variazione presenza',
-    icon: 'user',
-    color: C.green,
-    colorBg: C.greenBg,
-    colorBorder: C.greenBorder,
-    desc: 'Notifica quando viene registrata o modificata la presenza di una lezione',
-    defaultAnticipoMin: 0,
-    defaultDest: ['allievo', 'docente', 'admin'],
-  },
-  {
-    id: 'repertorio_aggiunto',
-    label: 'Brani in repertorio',
-    icon: 'music',
-    color: C.purple,
-    colorBg: C.purpleBg,
-    colorBorder: 'rgba(139,92,246,.3)',
-    desc: 'Notifica quando viene aggiunto un brano in repertorio (da lezione o dalla scheda Repertorio)',
-    defaultAnticipoMin: 0,
-    defaultDest: ['allievo', 'docente', 'admin'],
-  },
-  {
-    id: 'concerto_evento',
-    label: 'Concerti ed eventi',
-    icon: 'mic',
-    color: C.gold,
-    colorBg: C.goldBg,
-    colorBorder: C.border,
-    desc: 'Notifica quando viene aggiunto un nuovo concerto o evento',
-    defaultAnticipoMin: 0,
-    defaultDest: ['allievo', 'docente', 'admin'],
   },
 ];
 

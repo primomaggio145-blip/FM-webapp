@@ -473,6 +473,7 @@
     const meta = opts.meta ? JSON.stringify(opts.meta) : null;
     const rows = [];
     const seen = new Set();
+    const pushEnabled = opts.push !== false; // default true — solo i tipi che passano push:false lo disattivano
     const pushRow = (ruolo, id, nome) => {
       if (ruoliAbilitati && !ruoliAbilitati.includes(ruolo)) return; // ruolo escluso dall'admin → nessuna notifica
       const key = ruolo + ':' + (id != null ? 'id:' + id : 'nome:' + String(nome || '').toLowerCase());
@@ -486,6 +487,7 @@
         titolo:             opts.titolo,
         messaggio:          opts.messaggio,
         letto:              false,
+        push:               pushEnabled, // false = solo campanella, nessuna notifica push
         created_at:         now,
         meta:               meta,
       });
@@ -566,6 +568,7 @@
         titolo:    '📅 Nuova lezione in calendario',
         messaggio: nomeCorso + ' — ' + _fmtDataOraLezione(l) + (l.teacher ? ' con ' + l.teacher : ''),
         studentIds, studentNames, teacherIds, teacherNames,
+        push: false, // solo campanella, nessuna notifica push (richiesta esplicita)
         meta: { lezioneId: l.id },
       });
     }
@@ -581,6 +584,7 @@
         titolo:    '🗑️ Lezione eliminata',
         messaggio: nomeCorso + ' — ' + _fmtDataOraLezione(l) + (l.teacher ? ' con ' + l.teacher : ''),
         studentIds, studentNames, teacherIds, teacherNames,
+        push: false, // solo campanella, nessuna notifica push
         meta: { lezioneId: id },
       });
     }
@@ -600,6 +604,7 @@
         titolo:    '✔️ Presenza registrata',
         messaggio: nomeCorso + ' — ' + _fmtDataOraLezione(l) + ': ' + label,
         studentIds, studentNames, teacherIds, teacherNames,
+        push: false, // solo campanella, nessuna notifica push
         meta: { lezioneId: l.id, attendance: attNew },
       });
     }
@@ -618,6 +623,7 @@
         messaggio: (dataFmt || '') + (c.luogo ? ' — ' + c.luogo : ''),
         studentIds, studentNames,
         broadcastRoles: ['docente'], // tutti i docenti vengono informati dei nuovi eventi
+        push: false, // solo campanella, nessuna notifica push
         meta: { concertoId: c.id },
       });
     }
