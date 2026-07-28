@@ -492,6 +492,7 @@
     };
     (opts.studentIds    || []).forEach(id   => { if (id != null) pushRow('allievo', id, null); });
     (opts.studentNames  || []).forEach(nome => { if (nome) pushRow('allievo', null, nome); });
+    (opts.teacherIds    || []).forEach(id   => { if (id != null) pushRow('docente', id, null); });
     (opts.teacherNames  || []).forEach(nome => { if (nome) pushRow('docente', null, nome); });
     // Broadcast: notifica l'intero ruolo (nessun destinatario_id/nome → visibile a tutti quelli del ruolo)
     (opts.broadcastRoles || []).forEach(ruolo => pushRow(ruolo, null, null));
@@ -505,19 +506,33 @@
   };
 
   // Estrae allievo/i e docente destinatari di una lezione (gestisce sia
-  // individuali — student/studentId/teacher — sia collettive — students[]/teacher)
-  function _lezioneDestinatari(l) {
-    const teacherNames = l.teacher ? [l.teacher] : [];
+  // individuali — student/studentId/teacher — sia collettive — students[]/teacher).
+  // Quando possibile risolve il NOME al vero ID (studenti/docenti) così il match a
+  // valle (bell/tab notifiche) è per id e non per confronto testuale del nome,
+  // che può differire tra profili.nome e studenti.nome/docenti.nome.
+  function _lezioneDestinatari(l, studentsList, docentiList) {
+    let teacherIds = [], teacherNames = [];
+    if (l.teacher) {
+      const doc = (docentiList || []).find(d => (d.name || d.nome || '').toLowerCase().trim() === String(l.teacher).toLowerCase().trim());
+      if (doc && doc.id != null) teacherIds = [doc.id]; else teacherNames = [l.teacher];
+    }
     let studentIds = [], studentNames = [];
     if (Array.isArray(l.students) && l.students.length > 0) {
-      studentIds   = l.students.map(s => s && s.id).filter(v => v != null);
-      studentNames = l.students.map(s => s && s.name).filter(Boolean);
+      l.students.forEach(s => {
+        if (!s) return;
+        if (s.id != null) { studentIds.push(s.id); return; }
+        if (s.name) {
+          const stu = (studentsList || []).find(st => (st.name || st.nome || '').toLowerCase().trim() === String(s.name).toLowerCase().trim());
+          if (stu && stu.id != null) studentIds.push(stu.id); else studentNames.push(s.name);
+        }
+      });
     } else if (l.studentId != null) {
       studentIds = [l.studentId];
     } else if (l.student) {
-      studentNames = [l.student];
+      const stu = (studentsList || []).find(st => (st.name || st.nome || '').toLowerCase().trim() === String(l.student).toLowerCase().trim());
+      if (stu && stu.id != null) studentIds = [stu.id]; else studentNames = [l.student];
     }
-    return { teacherNames, studentIds, studentNames };
+    return { teacherIds, teacherNames, studentIds, studentNames };
   }
 
   function _fmtDataOraLezione(l) {
@@ -538,19 +553,19 @@
   // (sala prove ha già le sue notifiche di richiesta/approvazione) → esclusi qui
   const LEZIONI_TIPI_ESCLUSI = new Set(['sala_prove']);
 
-  async function notifyLezioniChanges(d, prevMap) {
+  async function notifyLezioniChanges(d, prevMap, studentsList, docentiList) {
     if (!d) return;
 
     for (const l of d.added) {
       if (LEZIONI_TIPI_ESCLUSI.has(l.tipo)) continue;
-      const { teacherNames, studentIds, studentNames } = _lezioneDestinatari(l);
-      if (!teacherNames.length && !studentIds.length && !studentNames.length) continue;
+      const { teacherIds, teacherNames, studentIds, studentNames } = _lezioneDestinatari(l, studentsList, docentiList);
+      if (!teacherIds.length && !teacherNames.length && !studentIds.length && !studentNames.length) continue;
       const nomeCorso = l.courseName || l.instrument || 'Lezione';
       await window.FM_NOTIFY({
         tipo:      'lezione_creata',
         titolo:    '📅 Nuova lezione in calendario',
-        messaggio: nomeCorso + ' — ' + _fmtDataOraLezione(l) + (teacherNames[0] ? ' con ' + teacherNames[0] : ''),
-        studentIds, studentNames, teacherNames,
+        messaggio: nomeCorso + ' — ' + _fmtDataOraLezione(l) + (l.teacher ? ' con ' + l.teacher : ''),
+        studentIds, studentNames, teacherIds, teacherNames,
         meta: { lezioneId: l.id },
       });
     }
@@ -558,14 +573,14 @@
     for (const id of d.deleted) {
       const l = prevMap.get(String(id));
       if (!l || LEZIONI_TIPI_ESCLUSI.has(l.tipo)) continue;
-      const { teacherNames, studentIds, studentNames } = _lezioneDestinatari(l);
-      if (!teacherNames.length && !studentIds.length && !studentNames.length) continue;
+      const { teacherIds, teacherNames, studentIds, studentNames } = _lezioneDestinatari(l, studentsList, docentiList);
+      if (!teacherIds.length && !teacherNames.length && !studentIds.length && !studentNames.length) continue;
       const nomeCorso = l.courseName || l.instrument || 'Lezione';
       await window.FM_NOTIFY({
         tipo:      'lezione_eliminata',
         titolo:    '🗑️ Lezione eliminata',
-        messaggio: nomeCorso + ' — ' + _fmtDataOraLezione(l) + (teacherNames[0] ? ' con ' + teacherNames[0] : ''),
-        studentIds, studentNames, teacherNames,
+        messaggio: nomeCorso + ' — ' + _fmtDataOraLezione(l) + (l.teacher ? ' con ' + l.teacher : ''),
+        studentIds, studentNames, teacherIds, teacherNames,
         meta: { lezioneId: id },
       });
     }
@@ -576,15 +591,15 @@
       const attNew = l.attendance || '';
       const attOld = (prevL && prevL.attendance) || '';
       if (!attNew || attNew === attOld) continue; // nessuna variazione di presenza reale
-      const { teacherNames, studentIds, studentNames } = _lezioneDestinatari(l);
-      if (!teacherNames.length && !studentIds.length && !studentNames.length) continue;
+      const { teacherIds, teacherNames, studentIds, studentNames } = _lezioneDestinatari(l, studentsList, docentiList);
+      if (!teacherIds.length && !teacherNames.length && !studentIds.length && !studentNames.length) continue;
       const nomeCorso = l.courseName || l.instrument || 'Lezione';
       const label = ATTENDANCE_LABEL[attNew] || attNew;
       await window.FM_NOTIFY({
         tipo:      'presenza_variata',
         titolo:    '✔️ Presenza registrata',
         messaggio: nomeCorso + ' — ' + _fmtDataOraLezione(l) + ': ' + label,
-        studentIds, studentNames, teacherNames,
+        studentIds, studentNames, teacherIds, teacherNames,
         meta: { lezioneId: l.id, attendance: attNew },
       });
     }
@@ -651,7 +666,7 @@
 
     // ── Notifiche automatiche (campanella + push PWA) ────────────────────────
     try {
-      if (diffsByKey.lessons)  await notifyLezioniChanges(diffsByKey.lessons, prevLezioniMap);
+      if (diffsByKey.lessons)  await notifyLezioniChanges(diffsByKey.lessons, prevLezioniMap, state.students, state.docenti);
       if (diffsByKey.concerti) await notifyConcertiChanges(diffsByKey.concerti);
     } catch(e) { warn('Errore notifiche automatiche:', e && e.message); }
 
