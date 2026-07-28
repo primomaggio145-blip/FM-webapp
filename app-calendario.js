@@ -7319,12 +7319,17 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         if (stu) studentIds.push(stu.id); else studentNames.push(nome);
       });
       if (!studentIds.length && !studentNames.length) return;
+      const teacherIds = [], teacherNames = [];
+      if (teacherName) {
+        const doc = propDocenti.find(d => (d.name || d.nome || '') === teacherName);
+        if (doc) teacherIds.push(doc.id); else teacherNames.push(teacherName);
+      }
       window.FM_NOTIFY({
         tipo:      'repertorio_aggiunto',
         titolo:    '🎵 Nuovo brano in repertorio',
         messaggio: titoli.join(', ') + (teacherName ? ' — assegnato da ' + teacherName : ''),
         studentIds, studentNames,
-        teacherNames: teacherName ? [teacherName] : [],
+        teacherIds, teacherNames,
         meta: { brani: titoli },
       });
     };

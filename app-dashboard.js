@@ -1368,6 +1368,16 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
   })();
   const myAllievoId   = ruoloNB === "allievo" ? ((_appUserNB && _appUserNB.allievoId) || null) : null;
   const myAllievoNome = ruoloNB === "allievo" ? ((_appUserNB && _appUserNB.nome) || "") : "";
+  // Speculare al teacherKey del docente: risolve il nome "ufficiale" dello studente
+  // (tabella studenti) invece di affidarsi solo al nome del profilo di login
+  const myAllievoKey = (function() {
+    if (ruoloNB !== "allievo") return "";
+    var allStu = (students && students.length ? students : ((window.__FM_DATA__ && window.__FM_DATA__.students) || []));
+    var rec = myAllievoId
+      ? allStu.find(function(s){ return String(s.id) === String(myAllievoId); })
+      : allStu.find(function(s){ return (s.name||s.nome||"").toLowerCase() === myAllievoNome.toLowerCase(); });
+    return rec ? (rec.name || rec.nome || myAllievoNome) : myAllievoNome;
+  })();
 
   const myLessons = ruoloNB === "docente"
     ? (lessons||[]).filter(l => myDocenteNome && (l.teacher||"").toLowerCase().includes(myDocenteNome.toLowerCase()))
@@ -1560,10 +1570,10 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
       if (ruoloNB === 'allievo') {
         if (!n.destinatario_id && !n.destinatario_nome) return true; // broadcast allievo
         if (myAllievoId && n.destinatario_id && String(n.destinatario_id) === String(myAllievoId)) return true;
-        if (myAllievoNome && n.destinatario_nome) {
+        if (n.destinatario_nome) {
           var dn = (n.destinatario_nome||'').toLowerCase().trim();
-          var an = myAllievoNome.toLowerCase().trim();
-          return dn === an || dn.includes(an) || an.includes(dn);
+          var nomiMiei = [myAllievoNome, myAllievoKey].filter(Boolean).map(function(s){ return s.toLowerCase().trim(); });
+          return nomiMiei.some(function(mn){ return dn === mn || dn.includes(mn) || mn.includes(dn); });
         }
         return false;
       }
@@ -1571,6 +1581,23 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     }
     return false;
   });
+
+  // ── DIAGNOSTICA TEMPORANEA (rimuovere una volta risolto) ──────────────────
+  // Apri la Console del browser (F12) per vedere questi valori quando la campanella
+  // risulta vuota: dicono se il problema è "i dati non arrivano" o "il filtro li scarta".
+  if (typeof window !== 'undefined' && window.console) {
+    console.log('[FM_BELL_DEBUG]', {
+      ruoloNB: ruoloNB,
+      appUserNome: _appUserNB && _appUserNB.nome,
+      appUserAllievoId: _appUserNB && _appUserNB.allievoId,
+      appUserDocenteId: _appUserNB && _appUserNB.docenteId,
+      totaleNotificheRicevutePropTot: notificheArr.length,
+      totaleNotificheDopoFiltro: myNotifiche.length,
+      primeRigheGrezze: notificheArr.slice(0, 5).map(function(n){
+        return { destinatario_ruolo: n.destinatario_ruolo, destinatario_id: n.destinatario_id, destinatario_nome: n.destinatario_nome, tipo: n.tipo, letto: n.letto };
+      }),
+    });
+  }
 
   const TIPI_LEZIONE  = new Set(['lezione_creata', 'lezione_eliminata', 'presenza_variata']);
 

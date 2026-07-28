@@ -75,23 +75,12 @@ function App() {
                 const _cu = window.__currentUser__;
                 if (_cu && _cu.ruolo) {
                   const _r0 = _cu.ruolo;
-                  const _i0 = _cu.allievoId || _cu.docenteId || null;
-                  const _n0 = _cu.nome || '';
                   const { data: nn } = await sb0.from('notifiche').select('*')
                     .eq('letto', false).eq('destinatario_ruolo', _r0)
                     .order('created_at', {ascending:false}).limit(50);
-                  if (nn) {
-                    let filtered = nn;
-                    if (_r0 !== 'admin') {
-                      filtered = nn.filter(function(n){
-                        if(!n.destinatario_id && !n.destinatario_nome) return true;
-                        if(_i0 && n.destinatario_id && String(n.destinatario_id)===String(_i0)) return true;
-                        if(_n0 && n.destinatario_nome){const dn=(n.destinatario_nome||'').toLowerCase();const mn=_n0.toLowerCase();return dn===mn||dn.includes(mn)||mn.includes(dn);}
-                        return false;
-                      });
-                    }
-                    setSharedNotifiche(filtered);
-                  }
+                  // Nessun ri-filtro per nome qui: il match preciso per persona lo fa
+                  // NotificationBell/NotificheView (risoluzione più robusta via docenti/studenti)
+                  if (nn) setSharedNotifiche(nn);
                 }
               } catch(e){}
               try {
@@ -437,27 +426,17 @@ function App() {
           window.__FM_RELOAD__({ lessons: mergedLessons });
         }
 
-        // 2. Notifiche non lette — filtrate per utente corrente
+        // 2. Notifiche non lette — per ruolo corrente (il match preciso per persona
+        //    (id/nome/teacherKey) viene fatto a valle da NotificationBell/NotificheView,
+        //    che hanno una risoluzione più robusta — qui NON ri-filtriamo per nome
+        //    per evitare che una notifica valida venga scartata prima di arrivare al bell)
         try {
           const _pu = window.__currentUser__;
           const _pr = (_pu && _pu.ruolo) || 'admin';
-          const _pi = (_pu && (_pu.allievoId || _pu.docenteId)) || null;
-          const _pn = (_pu && _pu.nome) || '';
           const { data: nn } = await sb.from('notifiche').select('*')
             .eq('letto', false).eq('destinatario_ruolo', _pr)
             .order('created_at', {ascending:false}).limit(50);
-          if (nn) {
-            let filtered = nn;
-            if (_pr !== 'admin') {
-              filtered = nn.filter(function(n){
-                if(!n.destinatario_id && !n.destinatario_nome) return true;
-                if(_pi && n.destinatario_id && String(n.destinatario_id)===String(_pi)) return true;
-                if(_pn && n.destinatario_nome){const dn=(n.destinatario_nome||'').toLowerCase();const mn=_pn.toLowerCase();return dn===mn||dn.includes(mn)||mn.includes(dn);}
-                return false;
-              });
-            }
-            setSharedNotifiche(filtered);
-          }
+          if (nn) setSharedNotifiche(nn);
         } catch(e) {}
 
         // 3. Richieste recupero recenti
@@ -681,29 +660,13 @@ function App() {
                     setUser(u);setSharedRuolo(u.ruolo||"admin");setView(u.ruolo==="band"?"sala_prove":"dashboard");
                     try{window.__currentUserName__=u.nome||""; window.__currentUser__=u;}catch(e){};
                     if(u.ruolo==="admin"&&window.FM_AUTH&&window.FM_AUTH.getRichieste){window.FM_AUTH.getRichieste().then(r=>setSharedRichieste(r||[])).catch(()=>{});}
-                    // Carica notifiche non lette al login — filtrate per ruolo/utente
+                    // Carica notifiche non lette al login — per ruolo (match preciso per
+                    // persona demandato a NotificationBell/NotificheView)
                     const sbLogin = window.supabaseClient;
                     if(sbLogin){
                       const ruoloLogin = u.ruolo || 'admin';
-                      const idLogin = u.allievoId || u.docenteId || null;
-                      const nomeLogin = u.nome || '';
                       sbLogin.from('notifiche').select('*').eq('letto',false).eq('destinatario_ruolo', ruoloLogin).order('created_at',{ascending:false}).limit(50).then(function(r){
-                        if(r.data){
-                          let nn = r.data;
-                          if(ruoloLogin !== 'admin'){
-                            nn = r.data.filter(function(n){
-                              if(!n.destinatario_id && !n.destinatario_nome) return true;
-                              if(idLogin && n.destinatario_id && String(n.destinatario_id)===String(idLogin)) return true;
-                              if(nomeLogin && n.destinatario_nome){
-                                const dn=(n.destinatario_nome||'').toLowerCase().trim();
-                                const mn=nomeLogin.toLowerCase().trim();
-                                return dn===mn||dn.includes(mn)||mn.includes(dn);
-                              }
-                              return false;
-                            });
-                          }
-                          setSharedNotifiche(nn);
-                        }
+                        if(r.data) setSharedNotifiche(r.data);
                       });
                     }
                   },
@@ -2876,6 +2839,18 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
     return rec ? (rec.teacherKey || rec.nome || myNome) : myNome;
   }, [myRuolo, myId, myNome]);
 
+  // Speculare al teacherKey del docente: risolve il nome "ufficiale" dello studente
+  // (tabella studenti) invece di affidarsi solo al nome del profilo di login, che
+  // potrebbe differire (es. account creato dal genitore con un nome diverso)
+  const myAllievoKey = React.useMemo(function() {
+    if (myRuolo !== 'allievo') return '';
+    var allStu = (window.__FM_DATA__ && window.__FM_DATA__.students) || [];
+    var rec = myId
+      ? allStu.find(function(s){ return String(s.id) === String(myId); })
+      : allStu.find(function(s){ return (s.name||s.nome||'').toLowerCase() === myNome.toLowerCase(); });
+    return rec ? (rec.name || rec.nome || myNome) : myNome;
+  }, [myRuolo, myId, myNome]);
+
   // Funzione di matching notifica → utente corrente
   const matchNotifica = function(n) {
     // 1. Filtra per ruolo — deve corrispondere esattamente
@@ -2891,9 +2866,9 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
     if (!n.destinatario_id && !n.destinatario_nome) return true;
     // 5. Match per ID specifico
     if (myId && n.destinatario_id && String(n.destinatario_id) === String(myId)) return true;
-    // 6. Match per nome (docente: confronto con teacherKey e nome)
+    // 6. Match per nome (docente: confronto con teacherKey e nome; allievo: idem con allievoKey)
     const destNome = (n.destinatario_nome||'').toLowerCase().trim();
-    const mieiNomi = [myNome, myDocenteTeacherKey].filter(Boolean).map(s=>s.toLowerCase().trim());
+    const mieiNomi = [myNome, myDocenteTeacherKey, myAllievoKey].filter(Boolean).map(s=>s.toLowerCase().trim());
     return mieiNomi.some(function(mn) {
       return destNome === mn || destNome.includes(mn) || mn.includes(destNome);
     });
