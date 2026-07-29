@@ -1597,13 +1597,11 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
     { id:"scuola",   label:"Scuola",                icon:"graduation", items:["allievi","docenti","corsi","calendario"] },
     { id:"risorse",  label:"Risorse & Libri",        icon:"book",       items:["allegati","repertorio","biblioteca"] },
     { id:"notif",    label:"Notifiche & Reminders",  icon:"bell",       items:["notifiche","notifiche_settings","reminders"] },
-    { id:"config",   label:"Impostazioni",           icon:"settings",   items:["utenti","schedaScuola","modulistica","impostazioni"] },
   ];
   // Auto-apri il gruppo che contiene la voce attiva
   const initOpen = () => {
     const o = {};
     SIDEBAR_GROUPS.forEach(g => { if(g.items.includes(current)) o[g.id] = true; });
-    if(current === 'impostazioni') o["config"] = true;
     return o;
   };
   const [openGroups, setOpenGroups] = useState(initOpen);
@@ -1613,7 +1611,6 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
     SIDEBAR_GROUPS.forEach(g => {
       if(g.items.includes(current)) setOpenGroups(p => ({...p, [g.id]: true}));
     });
-    if(current === 'impostazioni') setOpenGroups(p => ({...p, config: true}));
   }, [current]);
 
   return (
@@ -1742,31 +1739,25 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                   /* Separatore */
                   , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
 
-                  /* ── Gruppo IMPOSTAZIONI ── */
-                  , GroupHdr({id:"config", label:"Impostazioni", icon:"settings"})
-                  , openGroups.config && React.createElement(React.Fragment, null
-                      /* Impostazioni generali → pagina full-screen */
-                      , NavBtn({id:"impostazioni", label:"Impostazioni generali", icon:"settings", indent:true})
-                      , NavBtn({id:"utenti",        label:"Utenti",               icon:"shield",   indent:true})
-                      , NavBtn({id:"schedaScuola",   label:"Scheda scuola",        icon:"flag",     indent:true})
-                      , NavBtn({id:"modulistica",    label:"Modulistica",          icon:"file",     indent:true})
-                      /* Sito Web */
-                      , React.createElement('a', {
-                          key:"sito-web",
-                          href:"index.html", target:"_blank",
-                          style:{width:"100%",display:"flex",alignItems:"center",gap:10,
-                            padding:"7px 10px 7px 26px",borderRadius:0,border:"none",cursor:"pointer",
-                            background:"transparent",color:"rgba(255,255,255,0.65)",
-                            fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:400,
-                            textAlign:"left",textDecoration:"none",transition:"all .15s",
-                            borderLeft:"3px solid rgba(255,255,255,0.1)"},
-                          onMouseEnter:e=>{e.currentTarget.style.color="#fff";},
-                          onMouseLeave:e=>{e.currentTarget.style.color="rgba(255,255,255,0.65)";}}
-                        , React.createElement(Ic,{n:"globe",size:12,stroke:"rgba(255,255,255,0.5)"})
-                        , "Sito Web"
-                        , React.createElement('span',{style:{marginLeft:"auto",fontSize:9,opacity:0.5}},"↗")
-                      )
-                    )
+                  /* ── Impostazioni (ora vista unica con tab interne per Scuola, Anno, Utenti) ── */
+                  , NavBtn({id:"impostazioni", label:"Impostazioni", icon:"settings"})
+
+                  /* Sito Web */
+                  , React.createElement('a', {
+                      key:"sito-web",
+                      href:"index.html", target:"_blank",
+                      style:{width:"100%",display:"flex",alignItems:"center",gap:10,
+                        padding:"9px 12px",borderRadius:0,border:"none",cursor:"pointer",
+                        background:"transparent",color:C.sidebarText,
+                        fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:400,
+                        textAlign:"left",textDecoration:"none",transition:"all .15s",
+                        borderLeft:"3px solid transparent"},
+                      onMouseEnter:e=>{e.currentTarget.style.color="#fff";},
+                      onMouseLeave:e=>{e.currentTarget.style.color=C.sidebarText;}}
+                    , React.createElement(Ic,{n:"globe",size:15,stroke:C.sidebarText})
+                    , "Sito Web"
+                    , React.createElement('span',{style:{marginLeft:"auto",fontSize:9,opacity:0.5}},"↗")
+                  )
                 );
               }
 

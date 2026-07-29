@@ -722,10 +722,10 @@ function App() {
       case 'allegati':    return React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user});
       case 'biblioteca':  return React.createElement(BibliotecaView, { userRuolo: user?.ruolo||"admin", appUser: user});
       case 'concerti':    return React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, docenti: sharedDocenti});
-      case 'utenti':      return (user?.ruolo||"admin")==="admin" ? React.createElement(UtentiView, { students: sharedStudents, docenti: sharedDocenti}) : null;
-      case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno});
-      case 'schedaScuola':return React.createElement(SchedaScuolaView, { config: sharedConfig});
-      case 'modulistica': return React.createElement(ModulisticaView, {});
+      case 'utenti':      return (user?.ruolo||"admin")==="admin" ? React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno, students: sharedStudents, docenti: sharedDocenti, initialTab:'utenti'}) : null;
+      case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno, students: sharedStudents, docenti: sharedDocenti, initialTab:'generale'});
+      case 'schedaScuola':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno, students: sharedStudents, docenti: sharedDocenti, initialTab:'scuola'});
+      case 'modulistica': return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno, students: sharedStudents, docenti: sharedDocenti, initialTab:'scuola'});
       case 'messaggi':            return React.createElement(MessaggiView, { appUser: user, ruolo: user?.ruolo||'admin', students: sharedStudents, docenti: sharedDocenti });
       case 'notifiche':          return React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste});
       case 'notifiche_settings': return React.createElement(NotificheSettingsView, { ruolo: user?.ruolo||"admin" });
@@ -3233,7 +3233,7 @@ const ResetDatiSection = () => {
   );
 };
 
-const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: propSetPanels, ruolo: propRuolo, setRuolo: propSetRuolo, anniScolastici: propAnni, setAnniScolastici: propSetAnni, setIscrizioniAnno: propSetIscrizioniAnno }) => {
+const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: propSetPanels, ruolo: propRuolo, setRuolo: propSetRuolo, anniScolastici: propAnni, setAnniScolastici: propSetAnni, setIscrizioniAnno: propSetIscrizioniAnno, students: propStudents, docenti: propDocenti, initialTab: propInitialTab }) => {
   const [draft, setDraft] = useState(config||CONFIG_DEFAULT);
   // NON aggiornare draft quando config cambia dall'esterno — altrimenti handleSave viene interrotto
   // Il draft viene aggiornato solo dall'utente che modifica i campi
@@ -3250,6 +3250,22 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
   const setPanels = propSetPanels !== undefined ? propSetPanels : _setLPanels;
   const ruolo     = propRuolo     !== undefined ? propRuolo     : _lRuolo;
   const setRuolo  = propSetRuolo  !== undefined ? propSetRuolo  : _setLRuolo;
+
+  // ── Tab del menu Impostazioni ──
+  const isAdminImp = (propRuolo==="admin" || !propRuolo);
+  const IMPOSTAZIONI_TABS = [
+    { id:"generale", label:"Generale",        icon:"grid"     },
+    { id:"scuola",   label:"Scuola",          icon:"flag"     },
+    { id:"anno",     label:"Anno & Ricevute", icon:"cal"      },
+    ...(isAdminImp ? [{ id:"utenti", label:"Utenti", icon:"users" }] : []),
+  ];
+  const [activeTab, setActiveTab] = useState(propInitialTab || "generale");
+  // Se il componente resta montato ma cambia la vista di provenienza (es. dal menu
+  // laterale che punta ancora alle vecchie voci utenti/schedaScuola/modulistica),
+  // sincronizza la tab attiva.
+  useEffect(() => {
+    if (propInitialTab) setActiveTab(propInitialTab);
+  }, [propInitialTab]);
 
   // Popup DOM nativo
   const showPopup = (ok, msg) => {
@@ -3349,7 +3365,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     }
   };
 
-  return React.createElement('div', {style:{maxWidth:800,margin:"0 auto",padding:"24px 24px"}}
+  return React.createElement('div', {style:{maxWidth:activeTab==="utenti"?1100:800,margin:"0 auto",padding:"24px 24px"}}
     , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}
       , React.createElement('div', null
         , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,margin:0}}, "Impostazioni")
@@ -3364,7 +3380,22 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     )
     )
 
-    , React.createElement(ImpSection, {title:"Identità scuola", icon:"flag"}
+    /* ── Tab bar Impostazioni ─────────────────────────────────────────────── */
+    , React.createElement('div', {style:{display:"flex",gap:4,marginBottom:22,borderBottom:`1px solid ${C.border}`,flexWrap:"wrap"}}
+      , IMPOSTAZIONI_TABS.map(t =>
+          React.createElement('button', {key:t.id, onClick:()=>setActiveTab(t.id),
+            style:{display:"flex",alignItems:"center",gap:7,padding:"10px 16px",
+              border:"none",borderBottom:activeTab===t.id?`2px solid ${C.gold}`:"2px solid transparent",
+              background:"transparent",cursor:"pointer",marginBottom:-1,
+              color:activeTab===t.id?C.gold:C.textMuted,
+              fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:activeTab===t.id?600:400}}
+            , React.createElement(Ic,{n:t.icon,size:14,stroke:activeTab===t.id?C.gold:C.textMuted})
+            , t.label
+          )
+        )
+    )
+
+    , activeTab==="scuola" && React.createElement(ImpSection, {title:"Identità scuola", icon:"flag"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
         , React.createElement(Input,{label:"Nome scuola", value:draft.nomeScuola||"", onChange:e=>setD("nomeScuola",e.target.value), placeholder:"Accademia Musicale"})
         , React.createElement(Input,{label:"Tipo ente", value:draft.tipoEnte||"", onChange:e=>setD("tipoEnte",e.target.value), placeholder:"Associazione no-profit"})
@@ -3381,7 +3412,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     )
 
     /* ── Sale lezioni ──────────────────────────────────────────────────────── */
-    , React.createElement(ImpSection, {title:"Sale e aule", icon:"home"}
+    , activeTab==="scuola" && React.createElement(ImpSection, {title:"Sale e aule", icon:"home"}
       , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
           'Gestisci le sale dove si svolgono le lezioni. Le sale appaiono nel form di creazione lezione.')
       , React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8,marginBottom:10}}
@@ -3402,8 +3433,18 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
       )
     )
 
+    /* ── Scheda Scuola (embed) ─────────────────────────────────────────────── */
+    , activeTab==="scuola" && React.createElement('div', {style:{margin:"0 0 20px",padding:0}}
+      , React.createElement(SchedaScuolaView, {config})
+    )
+
+    /* ── Modulistica (embed) ──────────────────────────────────────────────── */
+    , activeTab==="scuola" && React.createElement('div', {style:{margin:"0 0 20px",padding:0}}
+      , React.createElement(ModulisticaView, {})
+    )
+
     /* ── Anni scolastici ────────────────────────────────────────────────────── */
-    , React.createElement(ImpSection, {title:"Archivio anni scolastici", icon:"cal"}
+    , activeTab==="anno" && React.createElement(ImpSection, {title:"Archivio anni scolastici", icon:"cal"}
       , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
           'Gestisci gli anni scolastici. Imposta quello attivo e i mesi in cui si svolgono le lezioni.')
       , (() => {
@@ -3550,7 +3591,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     )
 
     /* ── Contatore ricevute ─────────────────────────────────────────────────── */
-    , React.createElement(ImpSection, {title:"Contatore ricevute", icon:"receipt"}
+    , activeTab==="anno" && React.createElement(ImpSection, {title:"Contatore ricevute", icon:"receipt"}
       , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
           'Il contatore si azzera automaticamente ogni 1° gennaio. Puoi impostare il numero di partenza per l\'anno corrente.')
       , (() => {
@@ -3588,9 +3629,9 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     )
 
     /* ── Reset dati (solo admin) ──────────────────────────────────────────── */
-    , (propRuolo==="admin"||!propRuolo) && React.createElement(ResetDatiSection)
+    , activeTab==="anno" && (propRuolo==="admin"||!propRuolo) && React.createElement(ResetDatiSection)
 
-    , React.createElement(ImpSection, {title:"Stile grafico app", icon:"palette"}
+    , activeTab==="generale" && React.createElement(ImpSection, {title:"Stile grafico app", icon:"palette"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
         , React.createElement('div', {style:{marginBottom:14}}
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Colore accento principale")
@@ -3621,7 +3662,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
       )
     )
 
-    , React.createElement(ImpSection, {title:"Impostazioni ricevuta", icon:"receipt"}
+    , activeTab==="anno" && React.createElement(ImpSection, {title:"Impostazioni ricevuta", icon:"receipt"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px",marginBottom:16}}
         , React.createElement('div', {style:{marginBottom:14}}
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Colore accento ricevuta")
@@ -3732,7 +3773,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     )
 
     /* ── Pannelli Dashboard ── */
-    , React.createElement(ImpSection, {title:"Pannelli Dashboard", icon:"grid"}
+    , activeTab==="generale" && React.createElement(ImpSection, {title:"Pannelli Dashboard", icon:"grid"}
       , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Scegli quali sezioni mostrare nella dashboard. Le KPI card sono sempre visibili.")
       , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:6}}
         , PANNELLI_DEF.map(function(p){
@@ -3757,37 +3798,15 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
       )
     )
 
-    /* ── Simulazione Ruolo ── */
-    , React.createElement(ImpSection, {title:"Simulazione Ruolo", icon:"shield"}
-      , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Simula la vista per un ruolo diverso. Le voci del menu laterale vengono filtrate di conseguenza.")
-      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8},className:"form-2col"}
-        , DASH_RUOLI.map(function(r){
-          return React.createElement('button', {key:r.id, onClick:function(){ setRuolo(r.id); },
-            style:{padding:"12px 14px",borderRadius:10,textAlign:"left",cursor:"pointer",
-              fontFamily:"'Open Sans',sans-serif",transition:"all .15s",
-              background:ruolo===r.id?`${r.hex}18`:C.bg,
-              border:`1.5px solid ${ruolo===r.id?r.hex:C.border}`}},
-            React.createElement('div',{style:{fontSize:13,fontWeight:500,color:ruolo===r.id?r.hex:C.text}}, r.label),
-            React.createElement('div',{style:{fontSize:10,color:C.textDim,marginTop:3}}, r.desc)
-          );
-        })
-      )
-      , React.createElement('div',{style:{marginTop:12,padding:"8px 12px",borderRadius:8,background:C.goldBg,border:`1px solid ${C.goldDim}`,fontSize:12,color:C.gold}},
-        "► Ruolo attivo: ",
-        React.createElement('strong',null, (DASH_RUOLI.find(function(r){ return r.id===ruolo; })||{label:"—"}).label),
-        " — le voci del menu cambieranno di conseguenza."
-      )
-    )
-
     /* ── Google Calendar ─────────────────────────────────────────────────── */
-    , React.createElement(ImpSection, {title:"Google Calendar", icon:"calendar"}
+    , activeTab==="generale" && React.createElement(ImpSection, {title:"Google Calendar", icon:"calendar"}
       , typeof GoogleCalendarSection !== 'undefined'
         ? React.createElement(GoogleCalendarSection, {appUser: window.__appUser__||null})
         : React.createElement('div', {style:{fontSize:13,color:C.textMuted}}, '⏳ Caricamento modulo Google Calendar...')
     )
 
     /* ── Chiusure personalizzate ──────────────────────────────────────────── */
-    , React.createElement(ImpSection, {title:"Chiusure e festività", icon:"cal"}
+    , activeTab==="anno" && React.createElement(ImpSection, {title:"Chiusure e festività", icon:"cal"}
       // Festività nazionali con toggle aperto/chiuso
       , React.createElement('div', {style:{marginBottom:20}}
         , React.createElement('div', {style:{fontSize:13,fontWeight:600,color:C.text,marginBottom:10}}, '🇮🇹 Festività nazionali')
@@ -3855,6 +3874,11 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         )
       )
     )   /* end React.createElement(ImpSection,...) */
+
+    /* ── Utenti (embed, solo admin) ────────────────────────────────────────── */
+    , activeTab==="utenti" && isAdminImp && React.createElement('div', {style:{margin:"0 0 20px",padding:0}}
+      , React.createElement(UtentiView, {students: propStudents, docenti: propDocenti})
+    )
 
   );
 };
