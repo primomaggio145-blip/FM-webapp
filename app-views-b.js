@@ -580,7 +580,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             )
           )
           , React.createElement('div', { style: {display:"flex",gap:8,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10136}}
-            , ruoloDocView==="docente" && React.createElement('button', {
+            , React.createElement('button', {
                 onClick: ()=>setShowAmountsDoc(p=>!p),
                 title: showAmountsDoc ? "Nascondi importi" : "Mostra importi",
                 style:{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",
