@@ -187,14 +187,14 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const prevMonth = curMonth===1 ? 12 : curMonth-1;
   const prevYear  = curMonth===1 ? curYear-1 : curYear;
 
-  // Lezioni del mese di un docente: SOLO presenza "presente" o "assente" contano per il compenso
-  // (giustificato, recupero, in_recupero, vuoto → non retribuiti)
-  // Lezioni del mese di un docente che contano per il COMPENSO: presenza presente|assente
+  // Lezioni del mese di un docente: la presenza "presente", "assente" o "recupero" contano per il compenso
+  // (giustificato, in_recupero, vuoto → non retribuiti)
+  // Lezioni del mese di un docente che contano per il COMPENSO: presenza presente|assente|recupero
   const lezioniMese = (d, m, y) => lessons.filter(l => {
     if(l.attendance === 'recuperata') return false;
     if(!matchTeacher(d, l.teacher)) return false;
     const att = l.attendance || '';
-    if(att !== 'presente' && att !== 'assente') return false;
+    if(att !== 'presente' && att !== 'assente' && att !== 'recupero') return false;
     const [ly,lm] = (l.date||'').split("-").map(Number);
     return ly===y && lm===m;
   });
@@ -210,7 +210,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   });
   const totaleAltreCompetenzeMese = (d, m, y) => altreCompetenzeMese(d,m,y).reduce((t,s)=>t+(Number(s.importo)||0), 0);
 
-  // Compenso mensile = lezioni (presente/assente) × tariffa oraria + altre competenze registrate nel mese
+  // Compenso mensile = lezioni (presente/assente/recupero) × tariffa oraria + altre competenze registrate nel mese
   const stipendioMese = (d, m=curMonth, y=curYear) => lezioniMese(d,m,y).length * d.tariffaOra + totaleAltreCompetenzeMese(d,m,y);
 
   // Tutte le lezioni del mese di un docente (per conteggio totale)
@@ -467,7 +467,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 
 
   // Dati del mese selezionato
-  // lezSel/lezPrev = solo presente+assente → usate per il compenso
+  // lezSel/lezPrev = presente+assente+recupero → usate per il compenso
   // lezSelAll       = tutte le lezioni      → usate per il tab Lezioni
   const lezSel   = lezioniMese(selected, selMese.m, selMese.y);
   const lezPrevM = selMese.m===1 ? 12 : selMese.m-1;
@@ -1597,11 +1597,13 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
     { id:"scuola",   label:"Scuola",                icon:"graduation", items:["allievi","docenti","corsi","calendario"] },
     { id:"risorse",  label:"Risorse & Libri",        icon:"book",       items:["allegati","repertorio","biblioteca"] },
     { id:"notif",    label:"Notifiche & Reminders",  icon:"bell",       items:["notifiche","notifiche_settings","reminders"] },
+    { id:"config",   label:"Impostazioni",           icon:"settings",   items:["utenti","schedaScuola","modulistica","impostazioni"] },
   ];
   // Auto-apri il gruppo che contiene la voce attiva
   const initOpen = () => {
     const o = {};
     SIDEBAR_GROUPS.forEach(g => { if(g.items.includes(current)) o[g.id] = true; });
+    if(current === 'impostazioni') o["config"] = true;
     return o;
   };
   const [openGroups, setOpenGroups] = useState(initOpen);
@@ -1611,6 +1613,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
     SIDEBAR_GROUPS.forEach(g => {
       if(g.items.includes(current)) setOpenGroups(p => ({...p, [g.id]: true}));
     });
+    if(current === 'impostazioni') setOpenGroups(p => ({...p, config: true}));
   }, [current]);
 
   return (
@@ -1739,25 +1742,31 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                   /* Separatore */
                   , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
 
-                  /* ── Impostazioni (ora vista unica con tab interne per Scuola, Anno, Utenti) ── */
-                  , NavBtn({id:"impostazioni", label:"Impostazioni", icon:"settings"})
-
-                  /* Sito Web */
-                  , React.createElement('a', {
-                      key:"sito-web",
-                      href:"index.html", target:"_blank",
-                      style:{width:"100%",display:"flex",alignItems:"center",gap:10,
-                        padding:"9px 12px",borderRadius:0,border:"none",cursor:"pointer",
-                        background:"transparent",color:C.sidebarText,
-                        fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:400,
-                        textAlign:"left",textDecoration:"none",transition:"all .15s",
-                        borderLeft:"3px solid transparent"},
-                      onMouseEnter:e=>{e.currentTarget.style.color="#fff";},
-                      onMouseLeave:e=>{e.currentTarget.style.color=C.sidebarText;}}
-                    , React.createElement(Ic,{n:"globe",size:15,stroke:C.sidebarText})
-                    , "Sito Web"
-                    , React.createElement('span',{style:{marginLeft:"auto",fontSize:9,opacity:0.5}},"↗")
-                  )
+                  /* ── Gruppo IMPOSTAZIONI ── */
+                  , GroupHdr({id:"config", label:"Impostazioni", icon:"settings"})
+                  , openGroups.config && React.createElement(React.Fragment, null
+                      /* Impostazioni generali → pagina full-screen */
+                      , NavBtn({id:"impostazioni", label:"Impostazioni generali", icon:"settings", indent:true})
+                      , NavBtn({id:"utenti",        label:"Utenti",               icon:"shield",   indent:true})
+                      , NavBtn({id:"schedaScuola",   label:"Scheda scuola",        icon:"flag",     indent:true})
+                      , NavBtn({id:"modulistica",    label:"Modulistica",          icon:"file",     indent:true})
+                      /* Sito Web */
+                      , React.createElement('a', {
+                          key:"sito-web",
+                          href:"index.html", target:"_blank",
+                          style:{width:"100%",display:"flex",alignItems:"center",gap:10,
+                            padding:"7px 10px 7px 26px",borderRadius:0,border:"none",cursor:"pointer",
+                            background:"transparent",color:"rgba(255,255,255,0.65)",
+                            fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:400,
+                            textAlign:"left",textDecoration:"none",transition:"all .15s",
+                            borderLeft:"3px solid rgba(255,255,255,0.1)"},
+                          onMouseEnter:e=>{e.currentTarget.style.color="#fff";},
+                          onMouseLeave:e=>{e.currentTarget.style.color="rgba(255,255,255,0.65)";}}
+                        , React.createElement(Ic,{n:"globe",size:12,stroke:"rgba(255,255,255,0.5)"})
+                        , "Sito Web"
+                        , React.createElement('span',{style:{marginLeft:"auto",fontSize:9,opacity:0.5}},"↗")
+                      )
+                    )
                 );
               }
 
