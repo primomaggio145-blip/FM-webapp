@@ -581,15 +581,8 @@ const validate = f => {
   const e = {};
   if(!f.name.trim()) e.name="Nome obbligatorio";
   if(f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email="Email non valida";
-  if(!f.instrument) e.instrument="Corso individuale obbligatorio";
+  if(!f.instrument) e.instrument="Strumento obbligatorio";
   if(!f.teacher)    e.teacher="Insegnante obbligatorio";
-  // Ogni corso individuale extra richiede un insegnante assegnato, esattamente come il corso principale:
-  // tutti i corsi individuali sono allo stesso livello.
-  const extraTeacherErrors = {};
-  (f.extraInstruments||[]).forEach(ins => {
-    if (!(f.extraTeachers||{})[ins]) extraTeacherErrors[ins] = "Insegnante obbligatorio";
-  });
-  if (Object.keys(extraTeacherErrors).length > 0) e.extraTeachers = extraTeacherErrors;
   if(!f.monthlyFee || isNaN(f.monthlyFee) || Number(f.monthlyFee)<=0) e.monthlyFee="Importo non valido";
   return e;
 };
@@ -640,60 +633,50 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
 
         , React.createElement(SectionDivider, { label: "Corsi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2958}})
 
-        /* Corsi individuali — tutti allo stesso livello, nessuna priorità tra loro */
+        /* Corsi principali — strumenti multipli */
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2961}}
-          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2962}}, "Corsi individuali — strumenti *"    )
+          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2962}}, "Corsi principali — strumenti *"    )
           , React.createElement('div', { style: {display:"flex",flexWrap:"wrap",gap:8,marginBottom:8} }
             , strumentiDisponibili.map(i => {
               const isSelected = f.instrument === i || (f.extraInstruments||[]).includes(i);
               return React.createElement('button', { key:i,
                 onClick: () => {
                   if(i === f.instrument) {
-                    // Rimuovi il corso principale — promuovi il primo degli altri corsi (se esiste)
-                    // portando con sé il SUO insegnante, e ripulisce extraTeachers per non
-                    // lasciare residui che continuerebbero a essere conteggiati.
+                    // Rimuovi strumento principale — promuovi il primo extra se esiste
                     const extras = f.extraInstruments||[];
                     if(extras.length > 0) {
-                      const promosso = extras[0];
-                      const restanti = extras.slice(1);
-                      const restEt = {...(f.extraTeachers||{})};
-                      const teacherPromosso = restEt[promosso] || '';
-                      delete restEt[promosso];
-                      setF(p => ({...p, instrument: promosso, teacher: teacherPromosso, extraInstruments: restanti, extraTeachers: restEt}));
+                      set("instrument", extras[0]);
+                      set("extraInstruments", extras.slice(1));
                     } else {
-                      setF(p => ({...p, instrument: "", teacher: ""}));
+                      set("instrument", "");
                     }
                   } else if((f.extraInstruments||[]).includes(i)) {
-                    // Rimuovi il corso extra — elimina anche l'insegnante associato,
-                    // altrimenti resterebbe "orfano" in extraTeachers e continuerebbe a
-                    // essere conteggiato nella scheda del docente anche dopo la rimozione.
-                    const restEt = {...(f.extraTeachers||{})};
-                    delete restEt[i];
-                    setF(p => ({...p, extraInstruments: (p.extraInstruments||[]).filter(x=>x!==i), extraTeachers: restEt}));
+                    // Rimuovi da extra
+                    set("extraInstruments", (f.extraInstruments||[]).filter(x=>x!==i));
                   } else if(!f.instrument) {
-                    // Primo corso selezionato
+                    // Imposta come principale
                     set("instrument", i);
                   } else {
-                    // Aggiungi un ulteriore corso individuale — stesso livello degli altri
+                    // Aggiungi agli extra
                     set("extraInstruments", [...(f.extraInstruments||[]), i]);
                   }
                 },
                 style:{padding:"6px 14px",borderRadius:20,cursor:"pointer",fontSize:12,
                   fontFamily:"'Open Sans',sans-serif",transition:"all 0.12s",
-                  border:`2px solid ${isSelected?C.gold:C.border}`,
-                  background:isSelected?C.goldBg:C.bg,
-                  color:isSelected?C.gold:C.textMuted,
+                  border:`2px solid ${i===f.instrument?C.gold:(f.extraInstruments||[]).includes(i)?C.teal:C.border}`,
+                  background:i===f.instrument?C.goldBg:(f.extraInstruments||[]).includes(i)?C.tealBg:C.bg,
+                  color:i===f.instrument?C.gold:(f.extraInstruments||[]).includes(i)?C.teal:C.textMuted,
                   fontWeight:isSelected?600:400}}
                 , i
+                , i===f.instrument && React.createElement('span',{style:{marginLeft:4,fontSize:10,opacity:0.7}},"★")
               );
             })
           )
           , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:4}}
-            , "Puoi selezionare più corsi individuali: sono tutti allo stesso livello e vengono conteggiati sia per l'allievo sia per il rispettivo insegnante."
+            , "Il primo selezionato (★) è il corso individuale. Puoi selezionare più corsi."
           )
           , errors.instrument && React.createElement('span', { style: {fontSize:11,color:C.red,marginTop:4,display:"block"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2973}}, errors.instrument)
         )
-
 
         /* Corso complementare — pill selector */
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2977}}
@@ -717,9 +700,9 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
 
         , React.createElement(SectionDivider, { label: "Didattica", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2996}})
 
-        /* Docente per ogni corso individuale selezionato — tutti allo stesso livello */
+        /* Docente per ogni corso selezionato */
         , (() => {
-            // Tutti i corsi selezionati: nessuna gerarchia tra loro
+            // Tutti i corsi selezionati: principale + extra
             const tuttiCorsi = [
               ...(f.instrument ? [{ strumento: f.instrument, isPrincipale: true }] : []),
               ...((f.extraInstruments||[]).map(s => ({ strumento: s, isPrincipale: false }))),
@@ -734,10 +717,9 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
             return React.createElement(React.Fragment, null,
               tuttiCorsi.map(({ strumento, isPrincipale }) => {
                 const val = isPrincipale ? (f.teacher||"") : ((f.extraTeachers||{})[strumento]||"");
-                const label = `Insegnante ${strumento} *`;
+                const label = `Insegnante ${strumento}${isPrincipale ? " ★" : ""}${tuttiCorsi.length > 1 ? "" : " *"}`;
                 const baseOpts = _teacherOpts.length > 0 ? _teacherOpts : TEACHERS;
                 const opts = [{ value:"", label:"— seleziona docente —" }, ...baseOpts];
-                const fieldError = isPrincipale ? errors.teacher : (errors.extraTeachers||{})[strumento];
                 return React.createElement('div', { key: strumento, style: { gridColumn:"1/-1" } },
                   React.createElement('label', { style: {
                     fontSize:12, color: C.textMuted, letterSpacing:"0.06em",
@@ -745,7 +727,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
                     gap:6, marginBottom:6 }}
                     , React.createElement('div', { style: {
                         width:10, height:10, borderRadius:"50%", flexShrink:0,
-                        background: C.gold }})
+                        background: isPrincipale ? C.gold : C.teal }})
                     , label
                   )
                   , React.createElement('select', {
@@ -757,14 +739,14 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
                           set("extraTeachers", { ...(f.extraTeachers||{}), [strumento]: e.target.value });
                         }
                       },
-                      style: { width:"100%", background:C.bg, border:`1px solid ${fieldError?C.red:C.border}`,
+                      style: { width:"100%", background:C.bg, border:`1px solid ${isPrincipale&&errors.teacher?C.red:C.border}`,
                         borderRadius:8, color:val?C.text:C.textMuted, fontSize:13, padding:"9px 12px",
                         fontFamily:"'Open Sans',sans-serif", appearance:"none", cursor:"pointer",
                         boxSizing:"border-box" }}
                     , opts.map(o => React.createElement('option', { key: o.value, value: o.value }, o.label))
                   )
-                  , fieldError && React.createElement('span', {
-                      style: { fontSize:11, color:C.red, marginTop:4, display:"block" }}, fieldError)
+                  , isPrincipale && errors.teacher && React.createElement('span', {
+                      style: { fontSize:11, color:C.red, marginTop:4, display:"block" }}, errors.teacher)
                 );
               })
             );
@@ -1159,21 +1141,21 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3212}}
               , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:26,fontWeight:600,marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3213}}, student.name)
               , React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3214}}
-                /* Corsi individuali dell'allievo — tutti allo stesso livello, ciascuno col proprio insegnante */
-                , student.instrument && React.createElement('span', {style:{display:"inline-flex",alignItems:"center",gap:4}}
+                /* Strumento principale (stella) */
+                , React.createElement('span', {style:{display:"inline-flex",alignItems:"center",gap:4}}
+                  , React.createElement('span',{style:{color:C.gold,fontSize:11}}, "★")
                   , React.createElement(Badge, { label: student.instrument, accentHex: "gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3215}})
-                  , student.teacher && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + student.teacher + ")")
                 )
+                /* Strumenti extra */
                 , (student.extraInstruments||[]).map(ins =>
-                    React.createElement('span', {key:ins, style:{display:"inline-flex",alignItems:"center",gap:4}}
-                      , React.createElement(Badge, {label:ins, accentHex:"gold"})
-                      , (student.extraTeachers||{})[ins] && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + (student.extraTeachers||{})[ins] + ")")
-                    )
+                    React.createElement(Badge, {key:ins, label:ins, accentHex:"teal"})
                   )
                 /* Corso complementare */
                 , comp && React.createElement('span', {style:{display:"inline-flex",alignItems:"center",gap:4}}
                     , React.createElement(Badge, { label: comp.name, accentHex: "purple", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3216}})
                   )
+                , React.createElement('span', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3217}}, "·")
+                , React.createElement('span', { style: {fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3218}}, student.teacher)
                 , React.createElement('span', { style: {color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3219}}, "·")
                 , React.createElement(Badge, { label: student.status, accentHex: student.status==="attivo"?"green":student.status==="sospeso"?"gold":"red", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3220}})
               )
@@ -2001,7 +1983,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
     const q    = search.toLowerCase();
     const comp = courses.find(c=>c.id===s.complementaryCourse);
     const allInstruments = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean);
-    return (!q || s.name.toLowerCase().includes(q) || allInstruments.some(ins=>ins.toLowerCase().includes(q)) || _optionalChain([s, 'access', _33 => _33.email, 'optionalAccess', _34 => _34.toLowerCase, 'call', _35 => _35(), 'access', _36 => _36.includes, 'call', _37 => _37(q)]) || _optionalChain([comp, 'optionalAccess', _38 => _38.name, 'access', _39 => _39.toLowerCase, 'call', _40 => _40(), 'access', _41 => _41.includes, 'call', _42 => _42(q)]))
+    return (!q || s.name.toLowerCase().includes(q) || s.instrument.toLowerCase().includes(q) || _optionalChain([s, 'access', _33 => _33.email, 'optionalAccess', _34 => _34.toLowerCase, 'call', _35 => _35(), 'access', _36 => _36.includes, 'call', _37 => _37(q)]) || _optionalChain([comp, 'optionalAccess', _38 => _38.name, 'access', _39 => _39.toLowerCase, 'call', _40 => _40(), 'access', _41 => _41.includes, 'call', _42 => _42(q)]))
       && (!filterInstrument || allInstruments.includes(filterInstrument))
       && (!filterStatus     || s.status===filterStatus)
       && (!filterCourse     || s.complementaryCourse===filterCourse);
@@ -2009,8 +1991,8 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 
   const sorted = sortFn(filtered, (s, k) => {
     if (k === "name")       return s.name || "";
-    if (k === "instrument") return [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).join(", ");
-    if (k === "teacher")    return [s.teacher, ...(s.extraInstruments||[]).map(ins=>(s.extraTeachers||{})[ins]).filter(Boolean)].filter(Boolean).join(", ");
+    if (k === "instrument") return s.instrument || "";
+    if (k === "teacher")    return s.teacher || "";
     if (k === "monthlyFee") return Number(s.monthlyFee) || 0;
     if (k === "status")     return s.status || "";
     if (k === "complem")    return (courses.find(c=>c.id===s.complementaryCourse)||{}).name || "";
@@ -2075,8 +2057,6 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
                 , sorted.map((s,i)=>{
                   const ic   = INS_COLORS[s.instrument]||C.gold;
                   const comp = courses.find(c=>c.id===s.complementaryCourse);
-                  const tuttiStrumenti = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean);
-                  const tuttiInsegnanti = [s.teacher, ...(s.extraInstruments||[]).map(ins=>(s.extraTeachers||{})[ins]).filter(Boolean)].filter(Boolean);
                   return (
                     React.createElement('tr', { key: s.id, style: {borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",cursor:"pointer",transition:"background 0.12s"},
                       onMouseEnter: e=>e.currentTarget.style.background=C.surfaceHover,
@@ -2092,13 +2072,9 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
                           )
                         )
                       )
-                      , React.createElement('td', { style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3821}}
-                        , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:4}}
-                          , tuttiStrumenti.map(ins => React.createElement(Badge, { key: ins, label: ins, color: "gold" }))
-                        )
-                      )
+                      , React.createElement('td', { style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3821}}, React.createElement(Badge, { label: s.instrument, color: "gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3821}}))
                       , React.createElement('td', { className: "hide-mobile", style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}, comp?React.createElement(Badge, { label: comp.name, color: "purple", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}):React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}, "—"))
-                      , React.createElement('td', { className: "hide-mobile", style: {padding:"13px 16px",fontSize:13,color:C.textMuted}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3823}}, tuttiInsegnanti.join(" · "))
+                      , React.createElement('td', { className: "hide-mobile", style: {padding:"13px 16px",fontSize:13,color:C.textMuted}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3823}}, s.teacher)
                       , slRuolo!=="docente" && React.createElement('td', { style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3824}}
                         , React.createElement('div', { style: {fontSize:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3825}}, "€ " , s.monthlyFee)
                         , React.createElement('div', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3826}}, s.feeType)
@@ -3159,8 +3135,8 @@ const INIT_LESSONS = (() => {
 
 // ─── FORM LEZIONE ─────────────────────────────────────────────────────────────
 // Presenza che conta come lezione svolta (pagabile al docente)
-const PRESENZE_PAGATE = ['presente','assente'];
-const PRESENZE_SVOLTE = ['presente','assente'];
+const PRESENZE_PAGATE = ['presente','assente','recupero'];
+const PRESENZE_SVOLTE = ['presente','assente','recupero'];
 const isLezionePagabile = (l) => PRESENZE_PAGATE.includes((l.attendance||'').toLowerCase());
 const isLezioneSvolta   = (l) => PRESENZE_SVOLTE.includes((l.attendance||'').toLowerCase());
 
@@ -3218,26 +3194,6 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
   const [showBranoForm, setShowBranoForm] = useState(false);
   const [f, setF] = useState(initial || emptyLesson);
   const [err, setErr] = useState({});
-
-  // Corsi individuali dell'allievo selezionato — corso ★ (principale) + corsi extra,
-  // trattati TUTTI allo stesso livello, ciascuno con il proprio insegnante collegato.
-  const studentIndividualCourses = useMemo(() => {
-    if (!f.student || !_studentsRaw) return [];
-    const st = (_studentsRaw||[]).find(s => (s.name||s.nome||'') === f.student);
-    if (!st) return [];
-    const list = [];
-    if (st.instrument) list.push({ instrument: st.instrument, teacher: st.teacher || '' });
-    (st.extraInstruments||[]).forEach(ins => {
-      if (ins) list.push({ instrument: ins, teacher: (st.extraTeachers||{})[ins] || '' });
-    });
-    return list;
-  }, [f.student, _studentsRaw]);
-
-  // Opzioni per il selettore "Corso individuale": se l'allievo ha corsi propri,
-  // mostra SOLO quelli (principale + extra, stesso livello); altrimenti fallback al catalogo completo.
-  const instrumentOptionsForm = studentIndividualCourses.length > 0
-    ? studentIndividualCourses.map(c => c.instrument)
-    : dynamicInstruments;
   // statiBrani: {[branoId]: {versioneIdx: number, stato: string}}
   // Inizializzato dai dati esistenti nel brano se disponibili
   const [statiBrani, setStatiBrani] = useState(() => {
@@ -3262,33 +3218,22 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     return `${h.toString().padStart(2,"0")}:${m.toString().padStart(2,"0")}`;
   }).filter(h => h <= "21:45");
 
-  // Auto-compila strumento e insegnante quando si seleziona un allievo o si cambia corso.
-  // Tutti i corsi individuali dell'allievo (principale ★ + extra) sono allo STESSO LIVELLO:
-  // qualunque corso venga selezionato, l'insegnante collegato a QUEL corso viene applicato.
+  // Auto-compila strumento e insegnante quando si seleziona un allievo
   useEffect(() => {
     if (!f.student || !_studentsRaw) return;
     const st = (_studentsRaw || []).find(s => (s.name || s.nome || '') === f.student);
     if (!st) return;
-    const corsi = [
-      ...(st.instrument ? [{ instrument: st.instrument, teacher: st.teacher || st.docente || st.teacherName || '' }] : []),
-      ...((st.extraInstruments||[]).map(ins => ({ instrument: ins, teacher: (st.extraTeachers||{})[ins] || '' }))),
-    ];
-    setF(prev => {
-      // Nessun corso ancora selezionato → precompila col corso principale (★)
-      if (!prev.instrument) {
-        const primario = corsi[0];
-        return primario ? { ...prev, instrument: primario.instrument, teacher: primario.teacher } : prev;
-      }
-      // Corso già selezionato: se corrisponde a uno dei corsi dell'allievo (principale o extra),
-      // allinea sempre l'insegnante correttamente assegnato a QUEL corso specifico.
-      const match = corsi.find(c => c.instrument === prev.instrument);
-      if (match && match.teacher && prev.teacher !== match.teacher) {
-        return { ...prev, teacher: match.teacher };
-      }
-      return prev;
-    });
+    // Strumento principale dell'allievo → pre-seleziona strumento lezione
+    const instr = st.instrument || st.strumento || '';
+    // Docente principale dell'allievo → pre-seleziona insegnante
+    const teacher = st.teacher || st.docente || st.teacherName || '';
+    setF(prev => ({
+      ...prev,
+      instrument: prev.instrument || instr,
+      teacher:    prev.teacher    || teacher,
+    }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [f.student, f.instrument, _studentsRaw]);
+  }, [f.student]);
 
   const validate = () => {
     const e = {};
@@ -3347,7 +3292,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
           ? React.createElement(Sel, { label: "Allievo *", value: f.student, onChange: e => set("student", e.target.value), options: dynamicStudents.length > 0 ? dynamicStudents : STUDENTS_LIST, error: err.student })
           : React.createElement(Input, { label: "Allievo", value: f.student || "—", readOnly: true })
         , roleLF !== "docente"
-          ? React.createElement(Sel, { label: "Corso individuale *", value: f.instrument, onChange: e => set("instrument", e.target.value), options: instrumentOptionsForm, error: err.instrument })
+          ? React.createElement(Sel, { label: "Corso individuale *", value: f.instrument, onChange: e => set("instrument", e.target.value), options: dynamicInstruments, error: err.instrument })
           : React.createElement(Input, { label: "Corso individuale", value: f.instrument || "—", readOnly: true })
         , roleLF !== "docente"
           ? React.createElement(Sel, { label: "Insegnante *", value: f.teacher, onChange: e => set("teacher", e.target.value), options: _teacherOptsLes.length>0 ? _teacherOptsLes : TEACHERS, error: err.teacher })
@@ -7307,33 +7252,6 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
   
     // Espone il repertorio globalmente per il modal dettaglio (workaround senza prop drilling)
     window.__repertorio__ = repertorio;
-
-    // Notifica campanella/push quando vengono assegnati nuovi brani in repertorio
-    // da questo modal (Nuova Lezione / Modifica Lezione / Nuova Collettiva)
-    const notifyRepertorioAggiunto = (studentNameOrList, teacherName, titoli) => {
-      if (!titoli || titoli.length === 0 || !window.FM_NOTIFY) return;
-      const nomi = Array.isArray(studentNameOrList) ? studentNameOrList : [studentNameOrList];
-      const studentIds = [], studentNames = [];
-      nomi.filter(Boolean).forEach(nome => {
-        const stu = propStudents.find(s => (s.name || s.nome || '') === nome);
-        if (stu) studentIds.push(stu.id); else studentNames.push(nome);
-      });
-      if (!studentIds.length && !studentNames.length) return;
-      const teacherIds = [], teacherNames = [];
-      if (teacherName) {
-        const doc = propDocenti.find(d => (d.name || d.nome || '') === teacherName);
-        if (doc) teacherIds.push(doc.id); else teacherNames.push(teacherName);
-      }
-      window.FM_NOTIFY({
-        tipo:      'repertorio_aggiunto',
-        titolo:    '🎵 Nuovo brano in repertorio',
-        messaggio: titoli.join(', ') + (teacherName ? ' — assegnato da ' + teacherName : ''),
-        studentIds, studentNames,
-        teacherIds, teacherNames,
-        push: false, // solo campanella, nessuna notifica push
-        meta: { brani: titoli },
-      });
-    };
   
     const [nextLessonCreated, setNextLessonCreated] = useState(null);
 
@@ -7374,8 +7292,6 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
       // ── 2. Propaga tutti i brani selezionati al repertorio dello studente ──
       if (data.repertorioIds && data.repertorioIds.length > 0 && data.student) {
-        const _stuBefore   = propStudents.find(s => (s.name || s.nome || '') === data.student);
-        const _existingIds = ((_stuBefore && _stuBefore.repertorio) || []).map(r => r.id);
         propSetStudents && propSetStudents(allStudents =>
           allStudents.map(stu => {
             const stuName = stu.name || stu.nome || '';
@@ -7404,16 +7320,6 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             return { ...stu, repertorio: [...(stu.repertorio || []), ...toAdd] };
           })
         );
-        // Notifica: stessa logica di dedup dell'updater, calcolata sullo snapshot pre-modifica
-        const _titoliNuovi = data.repertorioIds
-          .filter(id => !_existingIds.includes(id))
-          .map(id => {
-            const fresh = data._newBrani && data._newBrani[id];
-            const b = fresh || (window.__repertorio__ || []).find(r => r.id === id);
-            return b ? (b.title || b.titolo || '') : null;
-          })
-          .filter(Boolean);
-        notifyRepertorioAggiunto(data.student, data.teacher, _titoliNuovi);
       }
 
       // ── 3. Salva allegati della lezione con il nuovo lessonId ──
@@ -7468,10 +7374,6 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             return { ...stu, repertorio: [...(stu.repertorio || []), ...toAdd] };
           })
         );
-        const _titoliColl = lesson.repertorioIds
-          .map(id => { const b = (window.__repertorio__ || []).find(r => r.id === id); return b ? (b.title || b.titolo || '') : null; })
-          .filter(Boolean);
-        notifyRepertorioAggiunto(lesson.students.map(s => s.name), lesson.teacher, _titoliColl);
       }
 
       closeModal();
@@ -7577,8 +7479,6 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
       // ── 2. Propaga eventuali nuovi brani al repertorio dello studente ──
       if (data.repertorioIds && data.repertorioIds.length > 0 && data.student) {
-        const _stuBefore2   = propStudents.find(s => (s.name || s.nome || '') === data.student);
-        const _existingIds2 = ((_stuBefore2 && _stuBefore2.repertorio) || []).map(r => r.id);
         propSetStudents && propSetStudents(allStudents =>
           allStudents.map(stu => {
             const stuName = stu.name || stu.nome || '';
@@ -7607,15 +7507,6 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             return { ...stu, repertorio: [...(stu.repertorio || []), ...toAdd] };
           })
         );
-        const _titoliNuovi2 = data.repertorioIds
-          .filter(id => !_existingIds2.includes(id))
-          .map(id => {
-            const fresh = data._newBrani && data._newBrani[id];
-            const b = fresh || (window.__repertorio__ || []).find(r => r.id === id);
-            return b ? (b.title || b.titolo || '') : null;
-          })
-          .filter(Boolean);
-        notifyRepertorioAggiunto(data.student, data.teacher, _titoliNuovi2);
       }
 
       // ── Crea lezione successiva se ricorrente e viene segnata presenza ──
