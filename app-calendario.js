@@ -821,7 +821,7 @@ const LessonLog = ({ lessons:_lessonsRaw, studentId, onAddLesson }) => {
       , showForm && (
         React.createElement('div', { style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:16,marginBottom:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,animation:"fadeIn 0.2s ease"}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3038}}
           , React.createElement(Input, { label: "Data", type: "date", value: form.date, onChange: e=>set("date",e.target.value), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3039}})
-          , React.createElement(Sel, { label: "Presenza", value: form.attendance, onChange: e=>set("attendance",e.target.value), options: ["presente","assente","giustificato"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3040}})
+          , React.createElement(Sel, { label: "Presenza", value: form.attendance, onChange: e=>set("attendance",e.target.value), options: ["presente","assente"], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3040}})
           , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3041}}, React.createElement(Input, { label: "Argomento *" , value: form.topic, onChange: e=>set("topic",e.target.value), placeholder: "Es. Scale maggiori, Bach Invenzione n.1..."     , __self: this, __source: {fileName: _jsxFileName, lineNumber: 3041}}))
           , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3042}}, React.createElement(Textarea, { label: "Note insegnante" , value: form.notes, onChange: e=>set("notes",e.target.value), placeholder: "Osservazioni, compiti per casa..."   , __self: this, __source: {fileName: _jsxFileName, lineNumber: 3042}}))
           , React.createElement('div', { style: {gridColumn:"1/-1",display:"flex",gap:8,justifyContent:"flex-end"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3043}}
@@ -839,7 +839,7 @@ const LessonLog = ({ lessons:_lessonsRaw, studentId, onAddLesson }) => {
               , React.createElement('div', { style: {fontSize:14,fontWeight:500,marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3055}}, l.topic)
               , l.notes && React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3056}}, l.notes)
             )
-            , React.createElement(Badge, { label: l.attendance, color: l.attendance==="presente"?"green":l.attendance==="giustificato"?"gold":"red", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3058}})
+            , React.createElement(Badge, { label: l.attendance, color: l.attendance==="presente"?"green":"red", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3058}})
           )
         ))
       )
@@ -1344,7 +1344,6 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                   , React.createElement(SortTh,{label:"Lezioni",      sortKey:"tot",     currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Presenti",     sortKey:"pres",    currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Assenti",      sortKey:"ass",     currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
-                  , React.createElement(SortTh,{label:"Giustificati", sortKey:"giust",   currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Da recuperare",sortKey:"rec",     currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Tasso pres.",  sortKey:"tasso",   currentKey:sortKeyPres, dir:sortDirPres, onSort:handleSortPres, style:{padding:"10px 18px",fontSize:10}})
                 )
@@ -1354,21 +1353,19 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                   const lm   = lezMese(x.m, x.y);
                   const pres = lm.filter(l=>l.attendance==="presente").length;
                   const ass  = lm.filter(l=>l.attendance==="assente").length;
-                  const giust= lm.filter(l=>l.attendance==="giustificato").length;
                   const rec  = lm.filter(l=>l.inRecupero).length;
                   const att  = lm.filter(l=>l.attendance).length;
                   const tasso= att>0 ? Math.round((pres/att)*100) : null;
-                  return { x, i, lm, pres, ass, giust, rec, att, tasso, mese: x.y*100+x.m, tot: lm.length };
+                  return { x, i, lm, pres, ass, rec, att, tasso, mese: x.y*100+x.m, tot: lm.length };
                 }), (r,k) => {
                   if(k==="mese")  return r.mese;
                   if(k==="tot")   return r.tot;
                   if(k==="pres")  return r.pres;
                   if(k==="ass")   return r.ass;
-                  if(k==="giust") return r.giust;
                   if(k==="rec")   return r.rec;
                   if(k==="tasso") return r.tasso ?? -1;
                   return 0;
-                }).map(({x,i,lm,pres,ass,giust,rec,att,tasso}) => {
+                }).map(({x,i,lm,pres,ass,rec,att,tasso}) => {
                   const isF  = isFuture(x);
                   const isS  = x.m===selMese.m && x.y===selMese.y;
                   return (
@@ -1386,7 +1383,6 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}}, isF?"—":pres||"—")
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:ass>0?C.red:C.textDim}}, isF?"—":ass||"—")
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:giust>0?C.gold:C.textDim}}, isF?"—":giust||"—")
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:rec>0?C.orange:C.textDim}}, isF?"—":rec||"—")
                       , React.createElement('td', { style: {padding:"11px 18px"}}
                         , !isF && tasso!==null ? (
@@ -2783,7 +2779,6 @@ const collHex = (l) => {
 const attHex = (att) =>
   att === "presente"    ? C.green  :
   att === "assente"     ? C.red    :
-  att === "giustificato"? C.gold   :
   att === "recupero"    ? C.blue   :
   att === "recuperata"  ? C.teal   :
   att === "in_recupero" ? '#f59e0b':
@@ -3146,7 +3141,6 @@ const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument
 const ATT_STYLES = {
   presente:    { bg:C.greenBg,  fg:C.green,  bd:C.greenBorder,  label:'Presente'    },
   assente:     { bg:C.redBg,    fg:C.red,    bd:C.redBorder,    label:'Assente'     },
-  giustificato:{ bg:"#e8edf5",  fg:C.gold,   bd:C.goldDim,      label:'Giustificato'},
   recupero:    { bg:C.blueBg,   fg:C.blue,   bd:C.blueBorder,   label:'Recupero'    },
   in_recupero: { bg:'rgba(255,160,0,0.10)', fg:'#f59e0b', bd:'rgba(245,158,11,0.4)', label:'In recupero' },
   recuperata:  { bg:C.tealBg,   fg:C.teal,   bd:C.tealBorder,   label:'Recuperata'  },
@@ -3314,7 +3308,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
                 , (f.notesRecupero||f.notes_recupero) && React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontStyle:'italic'}}, f.notesRecupero||f.notes_recupero)
                 , React.createElement('span',{style:{fontSize:11,color:C.textDim}},'(sola lettura)')
               )
-            : ["presente","assente","giustificato","recupero","in_recupero","cambio_ora"].map(a => {
+            : ["presente","assente","recupero","in_recupero","cambio_ora"].map(a => {
               const s = ATT_STYLES[a] || ATT_STYLES.presente;
               const active = a === 'in_recupero'
                 ? (f.attendance === 'in_recupero' || f.inRecupero === true)
@@ -4075,7 +4069,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                   )
                 )
                 , React.createElement('div', { className: "att-row", style: {display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4638}}
-                  , ["presente","assente","giustificato","recupero","in_recupero","cambio_ora"].map(a => {
+                  , ["presente","assente","recupero","in_recupero","cambio_ora"].map(a => {
                     const s = ATT_STYLES[a] || ATT_STYLES.presente;
                     const active = a === 'in_recupero' ? lesson.inRecupero : lesson.attendance === a;
                     return (
@@ -6249,7 +6243,7 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
       , React.createElement('select',{value:laPresenza,onChange:e=>setLaPresenza(e.target.value),
         style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:laPresenza?C.text:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
         , React.createElement('option',{value:''},'Tutte le presenze')
-        , ['presente','assente','giustificato','recupero','in_recupero'].map(v=>
+        , ['presente','assente','recupero','in_recupero'].map(v=>
           React.createElement('option',{key:v,value:v}, v==='in_recupero'?'In recupero':v.charAt(0).toUpperCase()+v.slice(1))
         )
       )
@@ -7405,7 +7399,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         attNorm = 'presente';
         inRecNorm = false;
         scadNorm = null;
-      } else if (attNorm === 'presente' || attNorm === 'assente' || attNorm === 'giustificato') {
+      } else if (attNorm === 'presente' || attNorm === 'assente') {
         inRecNorm = false;
         scadNorm = null;
       }
