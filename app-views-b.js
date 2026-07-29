@@ -187,14 +187,14 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const prevMonth = curMonth===1 ? 12 : curMonth-1;
   const prevYear  = curMonth===1 ? curYear-1 : curYear;
 
-  // Lezioni del mese di un docente: la presenza "presente", "assente" o "recupero" contano per il compenso
-  // (in_recupero, vuoto → non retribuiti)
-  // Lezioni del mese di un docente che contano per il COMPENSO: presenza presente|assente|recupero
+  // Lezioni del mese di un docente: SOLO presenza "presente" o "assente" contano per il compenso
+  // (giustificato, recupero, in_recupero, vuoto → non retribuiti)
+  // Lezioni del mese di un docente che contano per il COMPENSO: presenza presente|assente
   const lezioniMese = (d, m, y) => lessons.filter(l => {
     if(l.attendance === 'recuperata') return false;
     if(!matchTeacher(d, l.teacher)) return false;
     const att = l.attendance || '';
-    if(att !== 'presente' && att !== 'assente' && att !== 'recupero') return false;
+    if(att !== 'presente' && att !== 'assente') return false;
     const [ly,lm] = (l.date||'').split("-").map(Number);
     return ly===y && lm===m;
   });
@@ -210,7 +210,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   });
   const totaleAltreCompetenzeMese = (d, m, y) => altreCompetenzeMese(d,m,y).reduce((t,s)=>t+(Number(s.importo)||0), 0);
 
-  // Compenso mensile = lezioni (presente/assente/recupero) × tariffa oraria + altre competenze registrate nel mese
+  // Compenso mensile = lezioni (presente/assente) × tariffa oraria + altre competenze registrate nel mese
   const stipendioMese = (d, m=curMonth, y=curYear) => lezioniMese(d,m,y).length * d.tariffaOra + totaleAltreCompetenzeMese(d,m,y);
 
   // Tutte le lezioni del mese di un docente (per conteggio totale)
@@ -467,7 +467,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 
 
   // Dati del mese selezionato
-  // lezSel/lezPrev = presente+assente+recupero → usate per il compenso
+  // lezSel/lezPrev = solo presente+assente → usate per il compenso
   // lezSelAll       = tutte le lezioni      → usate per il tab Lezioni
   const lezSel   = lezioniMese(selected, selMese.m, selMese.y);
   const lezPrevM = selMese.m===1 ? 12 : selMese.m-1;
@@ -580,7 +580,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             )
           )
           , React.createElement('div', { style: {display:"flex",gap:8,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10136}}
-            , React.createElement('button', {
+            , ruoloDocView==="docente" && React.createElement('button', {
                 onClick: ()=>setShowAmountsDoc(p=>!p),
                 title: showAmountsDoc ? "Nascondi importi" : "Mostra importi",
                 style:{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",
@@ -768,15 +768,14 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10354}}
               , React.createElement('span', { style: {fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10355}}, "Riepilogo anno scolastico"  )
             )
-            , React.createElement('div', { style: {overflowX:"auto", WebkitOverflowScrolling:"touch"}}
-            , React.createElement('table', { style: {width:"100%",minWidth:IS_PWA?640:"auto",borderCollapse:"collapse",whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10357}}
+            , React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10357}}
               , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10358}}
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10359}}
                   , React.createElement(SortTh,{label:"Mese",         sortKey:"mese",  currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Lezioni",      sortKey:"tot",   currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Presenti",     sortKey:"pres",  currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Assenti",      sortKey:"ass",   currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
-                  , React.createElement(SortTh,{label:"Recupero",     sortKey:"recu",  currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Giustificati", sortKey:"giust", currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Da recuperare",sortKey:"rec",   currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Tasso pres.",  sortKey:"tasso", currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                 )
@@ -786,21 +785,21 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   const lm = tutteLezioniMese(selected,x.m,x.y);
                   const pres  = lm.filter(l=>l.attendance==="presente").length;
                   const ass   = lm.filter(l=>l.attendance==="assente").length;
-                  const recu  = lm.filter(l=>l.attendance==="recupero").length;
+                  const giust = lm.filter(l=>l.attendance==="giustificato").length;
                   const rec   = lm.filter(l=>l.attendance==="in_recupero"||l.inRecupero).length;
                   const attended = lm.filter(l=>l.attendance).length;
                   const tasso = attended>0 ? Math.round((pres/attended)*100) : null;
-                  return { x, i, lm, pres, ass, recu, rec, tasso, mese: x.y*100+x.m, tot: lm.length };
+                  return { x, i, lm, pres, ass, giust, rec, tasso, mese: x.y*100+x.m, tot: lm.length };
                 }), (r,k) => {
                   if(k==="mese")  return r.mese;
                   if(k==="tot")   return r.tot;
                   if(k==="pres")  return r.pres;
                   if(k==="ass")   return r.ass;
-                  if(k==="recu")  return r.recu;
+                  if(k==="giust") return r.giust;
                   if(k==="rec")   return r.rec;
                   if(k==="tasso") return r.tasso ?? -1;
                   return 0;
-                }).map(({x,i,lm,pres,ass,recu,rec,tasso})=>{
+                }).map(({x,i,lm,pres,ass,giust,rec,tasso})=>{
                   const isF = isFuture(x);
                   const isS = x.m===selMese.m && x.y===selMese.y;
                   return (
@@ -820,7 +819,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}}, isF?"—":pres||"—")
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:ass>0?C.red:C.textDim}}, isF?"—":ass||"—")
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:recu>0?C.blue:C.textDim}}, isF?"—":recu||"—")
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:giust>0?C.gold:C.textDim}}, isF?"—":giust||"—")
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:rec>0?C.purple:C.textDim}}, isF?"—":rec||"—")
                       , React.createElement('td', { style: {padding:"11px 18px"}}
                         , !isF && tasso!==null && !isNaN(tasso) ? (
@@ -846,12 +845,11 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   )
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10412}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="presente").length,0))
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10413}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="assente").length,0))
-                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.blue}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="recupero").length,0)||"—")
+                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.gold}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="giustificato").length,0)||"—")
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.purple}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="in_recupero"||l.inRecupero).length,0)||"—")
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10414}}, "—")
                 )
               )
-            )
             )
           )
         )
@@ -1599,13 +1597,11 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
     { id:"scuola",   label:"Scuola",                icon:"graduation", items:["allievi","docenti","corsi","calendario"] },
     { id:"risorse",  label:"Risorse & Libri",        icon:"book",       items:["allegati","repertorio","biblioteca"] },
     { id:"notif",    label:"Notifiche & Reminders",  icon:"bell",       items:["notifiche","notifiche_settings","reminders"] },
-    { id:"config",   label:"Impostazioni",           icon:"settings",   items:["utenti","schedaScuola","modulistica","impostazioni"] },
   ];
   // Auto-apri il gruppo che contiene la voce attiva
   const initOpen = () => {
     const o = {};
     SIDEBAR_GROUPS.forEach(g => { if(g.items.includes(current)) o[g.id] = true; });
-    if(current === 'impostazioni') o["config"] = true;
     return o;
   };
   const [openGroups, setOpenGroups] = useState(initOpen);
@@ -1615,7 +1611,6 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
     SIDEBAR_GROUPS.forEach(g => {
       if(g.items.includes(current)) setOpenGroups(p => ({...p, [g.id]: true}));
     });
-    if(current === 'impostazioni') setOpenGroups(p => ({...p, config: true}));
   }, [current]);
 
   return (
@@ -1744,31 +1739,25 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                   /* Separatore */
                   , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
 
-                  /* ── Gruppo IMPOSTAZIONI ── */
-                  , GroupHdr({id:"config", label:"Impostazioni", icon:"settings"})
-                  , openGroups.config && React.createElement(React.Fragment, null
-                      /* Impostazioni generali → pagina full-screen */
-                      , NavBtn({id:"impostazioni", label:"Impostazioni generali", icon:"settings", indent:true})
-                      , NavBtn({id:"utenti",        label:"Utenti",               icon:"shield",   indent:true})
-                      , NavBtn({id:"schedaScuola",   label:"Scheda scuola",        icon:"flag",     indent:true})
-                      , NavBtn({id:"modulistica",    label:"Modulistica",          icon:"file",     indent:true})
-                      /* Sito Web */
-                      , React.createElement('a', {
-                          key:"sito-web",
-                          href:"index.html", target:"_blank",
-                          style:{width:"100%",display:"flex",alignItems:"center",gap:10,
-                            padding:"7px 10px 7px 26px",borderRadius:0,border:"none",cursor:"pointer",
-                            background:"transparent",color:"rgba(255,255,255,0.65)",
-                            fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:400,
-                            textAlign:"left",textDecoration:"none",transition:"all .15s",
-                            borderLeft:"3px solid rgba(255,255,255,0.1)"},
-                          onMouseEnter:e=>{e.currentTarget.style.color="#fff";},
-                          onMouseLeave:e=>{e.currentTarget.style.color="rgba(255,255,255,0.65)";}}
-                        , React.createElement(Ic,{n:"globe",size:12,stroke:"rgba(255,255,255,0.5)"})
-                        , "Sito Web"
-                        , React.createElement('span',{style:{marginLeft:"auto",fontSize:9,opacity:0.5}},"↗")
-                      )
-                    )
+                  /* ── Impostazioni (ora vista unica con tab interne per Scuola, Anno, Utenti) ── */
+                  , NavBtn({id:"impostazioni", label:"Impostazioni", icon:"settings"})
+
+                  /* Sito Web */
+                  , React.createElement('a', {
+                      key:"sito-web",
+                      href:"index.html", target:"_blank",
+                      style:{width:"100%",display:"flex",alignItems:"center",gap:10,
+                        padding:"9px 12px",borderRadius:0,border:"none",cursor:"pointer",
+                        background:"transparent",color:C.sidebarText,
+                        fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:400,
+                        textAlign:"left",textDecoration:"none",transition:"all .15s",
+                        borderLeft:"3px solid transparent"},
+                      onMouseEnter:e=>{e.currentTarget.style.color="#fff";},
+                      onMouseLeave:e=>{e.currentTarget.style.color=C.sidebarText;}}
+                    , React.createElement(Ic,{n:"globe",size:15,stroke:C.sidebarText})
+                    , "Sito Web"
+                    , React.createElement('span',{style:{marginLeft:"auto",fontSize:9,opacity:0.5}},"↗")
+                  )
                 );
               }
 
