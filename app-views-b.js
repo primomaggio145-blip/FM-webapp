@@ -188,7 +188,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const prevYear  = curMonth===1 ? curYear-1 : curYear;
 
   // Lezioni del mese di un docente: la presenza "presente", "assente" o "recupero" contano per il compenso
-  // (giustificato, in_recupero, vuoto → non retribuiti)
+  // (in_recupero, vuoto → non retribuiti)
   // Lezioni del mese di un docente che contano per il COMPENSO: presenza presente|assente|recupero
   const lezioniMese = (d, m, y) => lessons.filter(l => {
     if(l.attendance === 'recuperata') return false;
@@ -768,14 +768,15 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10354}}
               , React.createElement('span', { style: {fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10355}}, "Riepilogo anno scolastico"  )
             )
-            , React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10357}}
+            , React.createElement('div', { style: {overflowX:"auto", WebkitOverflowScrolling:"touch"}}
+            , React.createElement('table', { style: {width:"100%",minWidth:IS_PWA?640:"auto",borderCollapse:"collapse",whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10357}}
               , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10358}}
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10359}}
                   , React.createElement(SortTh,{label:"Mese",         sortKey:"mese",  currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Lezioni",      sortKey:"tot",   currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Presenti",     sortKey:"pres",  currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Assenti",      sortKey:"ass",   currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
-                  , React.createElement(SortTh,{label:"Giustificati", sortKey:"giust", currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Recupero",     sortKey:"recu",  currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Da recuperare",sortKey:"rec",   currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Tasso pres.",  sortKey:"tasso", currentKey:sortKeyDP, dir:sortDirDP, onSort:handleSortDP, style:{padding:"10px 18px",fontSize:10}})
                 )
@@ -785,21 +786,21 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   const lm = tutteLezioniMese(selected,x.m,x.y);
                   const pres  = lm.filter(l=>l.attendance==="presente").length;
                   const ass   = lm.filter(l=>l.attendance==="assente").length;
-                  const giust = lm.filter(l=>l.attendance==="giustificato").length;
+                  const recu  = lm.filter(l=>l.attendance==="recupero").length;
                   const rec   = lm.filter(l=>l.attendance==="in_recupero"||l.inRecupero).length;
                   const attended = lm.filter(l=>l.attendance).length;
                   const tasso = attended>0 ? Math.round((pres/attended)*100) : null;
-                  return { x, i, lm, pres, ass, giust, rec, tasso, mese: x.y*100+x.m, tot: lm.length };
+                  return { x, i, lm, pres, ass, recu, rec, tasso, mese: x.y*100+x.m, tot: lm.length };
                 }), (r,k) => {
                   if(k==="mese")  return r.mese;
                   if(k==="tot")   return r.tot;
                   if(k==="pres")  return r.pres;
                   if(k==="ass")   return r.ass;
-                  if(k==="giust") return r.giust;
+                  if(k==="recu")  return r.recu;
                   if(k==="rec")   return r.rec;
                   if(k==="tasso") return r.tasso ?? -1;
                   return 0;
-                }).map(({x,i,lm,pres,ass,giust,rec,tasso})=>{
+                }).map(({x,i,lm,pres,ass,recu,rec,tasso})=>{
                   const isF = isFuture(x);
                   const isS = x.m===selMese.m && x.y===selMese.y;
                   return (
@@ -819,7 +820,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}}, isF?"—":pres||"—")
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:ass>0?C.red:C.textDim}}, isF?"—":ass||"—")
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:giust>0?C.gold:C.textDim}}, isF?"—":giust||"—")
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:recu>0?C.blue:C.textDim}}, isF?"—":recu||"—")
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:rec>0?C.purple:C.textDim}}, isF?"—":rec||"—")
                       , React.createElement('td', { style: {padding:"11px 18px"}}
                         , !isF && tasso!==null && !isNaN(tasso) ? (
@@ -845,11 +846,12 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   )
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10412}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="presente").length,0))
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10413}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="assente").length,0))
-                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.gold}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="giustificato").length,0)||"—")
+                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.blue}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="recupero").length,0)||"—")
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.purple}}, andamento.reduce((t,x)=>t+tutteLezioniMese(selected,x.m,x.y).filter(l=>l.attendance==="in_recupero"||l.inRecupero).length,0)||"—")
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10414}}, "—")
                 )
               )
+            )
             )
           )
         )
