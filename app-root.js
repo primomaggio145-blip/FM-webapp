@@ -3132,6 +3132,7 @@ const CATEGORIE_RESET = [
   {id:'messaggi',    label:'💬 Messaggi',              desc:'Tutti i messaggi interni'},
   {id:'notifiche',   label:'🔔 Notifiche',             desc:'Storico notifiche'},
   {id:'sala_prove',  label:'🥁 Sala prove',            desc:'Prenotazioni sala prove'},
+  {id:'anniScolastici', label:'🗓️ Archivio anni scolastici', desc:'Anni scolastici configurati e relativo stato attivo'},
 ];
 
 const ResetDatiSection = () => {
@@ -3260,6 +3261,10 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     ...(isAdminImp ? [{ id:"utenti", label:"Utenti", icon:"users" }] : []),
   ];
   const [activeTab, setActiveTab] = useState(propInitialTab || "generale");
+  // Anno scolastico di cui visualizzare/gestire le festività in "Chiusure e festività"
+  // (indipendente dall'anno "attivo": permette di preparare le chiusure di un anno
+  // appena aggiunto senza doverlo prima attivare)
+  const [festAnnoSel, setFestAnnoSel] = useState(null);
   // Se il componente resta montato ma cambia la vista di provenienza (es. dal menu
   // laterale che punta ancora alle vecchie voci utenti/schedaScuola/modulistica),
   // sincronizza la tab attiva.
@@ -3443,6 +3448,154 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
       , React.createElement(ModulisticaView, {})
     )
 
+    , activeTab==="anno" && React.createElement(ImpSection, {title:"Impostazioni ricevuta", icon:"receipt"}
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px",marginBottom:16}}
+        , React.createElement('div', {style:{marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Colore accento ricevuta")
+          , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:7,marginBottom:8}}
+            , ["#1a4fa0","#2d6a8f","#6a4c93","#2a7d4f","#c0392b","#1a1a2e"].map(col=>
+                React.createElement('button', {key:col, onClick:()=>setRS("accentColor",col),
+                  style:{width:26,height:26,borderRadius:"50%",background:col,
+                    border:ac===col?"3px solid #fff":"2px solid transparent",
+                    outline:ac===col?`2px solid ${col}`:"none",cursor:"pointer"}})
+              )
+          )
+          , React.createElement('input', {type:"color", value:ac, onChange:e=>setRS("accentColor",e.target.value),
+              style:{width:30,height:30,borderRadius:6,border:"none",cursor:"pointer",padding:0}})
+        )
+        , React.createElement('div', {style:{marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Font intestazione ricevuta")
+          , ["Cormorant Garamond","Georgia","Times New Roman","Arial"].map(f=>
+              React.createElement('label', {key:f, style:{display:"flex",alignItems:"center",gap:7,cursor:"pointer",padding:"3px 0",fontSize:12,color:(rs.fontTitle||"Cormorant Garamond")===f?C.text:C.textMuted}}
+                , React.createElement('input', {type:"radio", checked:(rs.fontTitle||"Cormorant Garamond")===f, onChange:()=>setRS("fontTitle",f), style:{accentColor:ac}})
+                , React.createElement('span',{style:{fontFamily:f}}, f)
+              )
+            )
+        )
+      )
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:16}}
+        , React.createElement(ImpRSToggle,{k:"showIndirizzo",    label:"Indirizzo scuola",  rs:rs,ac:ac,setRS:setRS})
+        , React.createElement(ImpRSToggle,{k:"showDataNascita", label:"Data di nascita",    rs:rs,ac:ac,setRS:setRS})
+        , React.createElement(ImpRSToggle,{k:"showFirme",       label:"Spazio firme",       rs:rs,ac:ac,setRS:setRS})
+        , React.createElement(ImpRSToggle,{k:"showFooter",      label:"Footer",             rs:rs,ac:ac,setRS:setRS})
+        , React.createElement(ImpRSToggle,{k:"showCompetenza",  label:"Competenza",         rs:rs,ac:ac,setRS:setRS})
+        , React.createElement(ImpRSToggle,{k:"showMetodo",      label:"Metodo pagamento",   rs:rs,ac:ac,setRS:setRS})
+      )
+      /* Anteprima live ricevuta */
+      , React.createElement('div', {style:{background:"#f0ede8",borderRadius:10,padding:"14px",marginBottom:18}}
+        , React.createElement('div', {style:{fontSize:10,color:"#888",letterSpacing:".1em",textTransform:"uppercase",marginBottom:8}}, "Anteprima")
+        , React.createElement('div', {style:{background:"#fff",borderRadius:8,padding:"16px 20px",boxShadow:"0 2px 10px rgba(0,0,0,.12)",fontSize:10,maxWidth:340}}
+          , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:`2px solid ${ac}`,paddingBottom:8,marginBottom:10}}
+            , React.createElement('div', null
+              , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Oswald"}',sans-serif`,fontSize:14,fontWeight:700,color:"#1a1a2e"}}, draft.nomeScuola||"Accademia Musicale")
+              , draft.tipoEnte && React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".08em",marginTop:1}}, draft.tipoEnte)
+              , rs.showIndirizzo!==false && draft.indirizzo && React.createElement('div', {style:{fontSize:8,color:"#666",marginTop:1}}, draft.indirizzo)
+            )
+            , React.createElement('div', {style:{textAlign:"right"}}
+              , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase"}}, "Ricevuta n°")
+              , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Oswald"}',sans-serif`,fontSize:16,fontWeight:700,color:ac,lineHeight:1}}, "029/2026")
+              , React.createElement('div', {style:{fontSize:8,color:"#888",marginTop:1}}, "05/03/2026")
+            )
+          )
+          , [
+              rs.showNominativo!==false   && ["Ricevuta da","Giulia Romano"],
+              rs.showDataNascita!==false  && ["Data di nascita","30/09/2011"],
+              rs.showDataPagamento!==false&& ["Data pagamento","01/03/2026"],
+              rs.showDescrizione!==false  && ["Descrizione","Quota mensile Marzo 2026"],
+              rs.showCompetenza!==false   && ["Competenza","Marzo 2026"],
+              rs.showMetodo!==false       && ["Metodo","Bonifico bancario"],
+            ].filter(Boolean).map(([k,v],i,arr)=>
+              React.createElement('div', {key:k, style:{display:"flex",justifyContent:"space-between",padding:"3px 0",
+                borderBottom:i<arr.length-1?"1px solid #eee":"none"}}
+                , React.createElement('span', {style:{color:"#888",fontSize:9}}, k)
+                , React.createElement('span', {style:{fontWeight:600,color:"#1a1a2e",fontSize:9}}, v)
+              )
+            )
+          , React.createElement('div', {style:{textAlign:"center",margin:"8px 0",padding:"8px",border:`2px solid ${ac}`,borderRadius:5,background:ac+"15"}}
+            , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Oswald"}',sans-serif`,fontSize:18,fontWeight:700,color:ac}}, "€ 120,00")
+            , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".1em",marginTop:1}}, "Importo ricevuto")
+          )
+          , rs.showFirme!==false && React.createElement('div', {style:{display:"flex",justifyContent:"flex-end",marginTop:10}}
+            , React.createElement('div', {key:"cassiere", style:{textAlign:"center",width:"42%"}}
+                , React.createElement('div', {style:{borderTop:"1px solid #333",marginBottom:3}})
+                , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".05em"}}, rs.labelCassiere||"Il cassiere")
+              )
+          )
+          , rs.showFooter!==false && rs.noteFooter && React.createElement('div', {style:{marginTop:6,paddingTop:5,borderTop:"1px solid #eee",textAlign:"center",fontSize:8,color:"#888"}}
+            , rs.noteFooter
+          )
+        )
+      )
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr",gap:"0 20px"}}
+        , React.createElement('div', {style:{marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Etichetta firma cassiere / responsabile")
+          , React.createElement('input', {value:rs.labelCassiere||"Il cassiere / responsabile", onChange:e=>setRS("labelCassiere",e.target.value),
+              style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 13px",fontFamily:"'Open Sans',sans-serif"}})
+        )
+        , React.createElement('div', {style:{gridColumn:"1/-1",marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Firma presidente (immagine per stampa)")
+          , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:12}}
+            , rs.firmaPresidenteUrl && React.createElement('img', {src:rs.firmaPresidenteUrl, alt:"firma",
+                style:{height:50,maxWidth:180,objectFit:"contain",background:"#fff",borderRadius:6,border:`1px solid ${C.border}`,padding:4}})
+            , React.createElement('label', {style:{display:"flex",alignItems:"center",gap:7,padding:"8px 14px",borderRadius:8,
+                border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:"pointer",fontSize:12}}
+              , React.createElement(Ic,{n:"upload",size:13,stroke:C.textMuted})
+              , rs.firmaPresidenteUrl ? "Cambia immagine" : "Carica firma"
+              , React.createElement('input', {type:"file",accept:"image/*",style:{display:"none"},
+                  onChange:e=>{const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=ev=>setRS("firmaPresidenteUrl",ev.target.result); r.readAsDataURL(f);}})
+            )
+            , rs.firmaPresidenteUrl && React.createElement('button', {onClick:()=>setRS("firmaPresidenteUrl",""),
+                style:{background:"none",border:"none",cursor:"pointer",color:C.textDim,fontSize:11}}, "✕ Rimuovi")
+          )
+          , React.createElement('p',{style:{fontSize:11,color:C.textDim,marginTop:4}}, "La firma verrà stampata nello spazio «", rs.labelCassiere||"Il cassiere / responsabile", "»")
+        )
+        , React.createElement('div', {style:{gridColumn:"1/-1",marginBottom:4}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Note aggiuntive footer ricevuta")
+          , React.createElement('textarea', {value:rs.noteFooter||"", onChange:e=>setRS("noteFooter",e.target.value),
+              placeholder:"Es. IBAN IT00..., note legali...", rows:2,
+              style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,padding:"9px 13px",fontFamily:"'Open Sans',sans-serif",resize:"vertical"}})
+        )
+      )
+    )
+
+    /* ── Contatore ricevute ─────────────────────────────────────────────────── */
+    , activeTab==="anno" && React.createElement(ImpSection, {title:"Contatore ricevute", icon:"receipt"}
+      , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
+          'Il contatore si azzera automaticamente ogni 1° gennaio. Puoi impostare il numero di partenza per l\'anno corrente.')
+      , (() => {
+          const annoCorrente = new Date().getFullYear();
+          const contatoriAnni = draft.contatoriRicevute || {};
+          const annoSolare = String(annoCorrente);
+          const valoreCorrente = contatoriAnni[annoSolare] ?? draft.progressivoRicevute ?? 1;
+
+          return React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:14}}
+            /* Anno corrente */
+            , React.createElement('div', {style:{background:C.tealBg,border:`1px solid ${C.tealBorder}`,borderRadius:10,padding:'14px 16px'}}
+              , React.createElement('div',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:6}},'📋 Anno solare corrente: ',annoCorrente)
+              , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:12}}
+                , React.createElement('div',{style:{fontSize:12,color:C.textMuted}},'Prossimo n° ricevuta:')
+                , React.createElement('input',{type:'number',min:1,value:valoreCorrente,
+                    onChange: e => {
+                      const v = parseInt(e.target.value)||1;
+                      const nuovi = {...(draft.contatoriRicevute||{}), [annoSolare]: v};
+                      setD('contatoriRicevute', nuovi);
+                      setD('progressivoRicevute', v);
+                    },
+                    style:{width:90,padding:'6px 10px',borderRadius:7,border:`1px solid ${C.teal}`,background:C.surface,color:C.text,fontSize:14,fontWeight:700,textAlign:'center',fontFamily:"'Oswald',sans-serif"}})
+              )
+            )
+            /* Anni precedenti */
+            , Object.keys(contatoriAnni).filter(a=>a!==annoSolare).sort((a,b)=>b-a).map(anno =>
+                React.createElement('div', {key:anno, style:{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8}}
+                  , React.createElement('span',{style:{fontSize:12,color:C.textMuted,minWidth:60}},'Anno '+anno)
+                  , React.createElement('span',{style:{fontSize:13,color:C.textDim}},'Ultimo n° emesso: ')
+                  , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}},contatoriAnni[anno])
+                )
+              )
+          );
+        })()
+    )
+
     /* ── Anni scolastici ────────────────────────────────────────────────────── */
     , activeTab==="anno" && React.createElement(ImpSection, {title:"Archivio anni scolastici", icon:"cal"}
       , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
@@ -3590,221 +3743,6 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         })()
     )
 
-    /* ── Contatore ricevute ─────────────────────────────────────────────────── */
-    , activeTab==="anno" && React.createElement(ImpSection, {title:"Contatore ricevute", icon:"receipt"}
-      , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
-          'Il contatore si azzera automaticamente ogni 1° gennaio. Puoi impostare il numero di partenza per l\'anno corrente.')
-      , (() => {
-          const annoCorrente = new Date().getFullYear();
-          const contatoriAnni = draft.contatoriRicevute || {};
-          const annoSolare = String(annoCorrente);
-          const valoreCorrente = contatoriAnni[annoSolare] ?? draft.progressivoRicevute ?? 1;
-
-          return React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:14}}
-            /* Anno corrente */
-            , React.createElement('div', {style:{background:C.tealBg,border:`1px solid ${C.tealBorder}`,borderRadius:10,padding:'14px 16px'}}
-              , React.createElement('div',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',marginBottom:6}},'📋 Anno solare corrente: ',annoCorrente)
-              , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:12}}
-                , React.createElement('div',{style:{fontSize:12,color:C.textMuted}},'Prossimo n° ricevuta:')
-                , React.createElement('input',{type:'number',min:1,value:valoreCorrente,
-                    onChange: e => {
-                      const v = parseInt(e.target.value)||1;
-                      const nuovi = {...(draft.contatoriRicevute||{}), [annoSolare]: v};
-                      setD('contatoriRicevute', nuovi);
-                      setD('progressivoRicevute', v);
-                    },
-                    style:{width:90,padding:'6px 10px',borderRadius:7,border:`1px solid ${C.teal}`,background:C.surface,color:C.text,fontSize:14,fontWeight:700,textAlign:'center',fontFamily:"'Oswald',sans-serif"}})
-              )
-            )
-            /* Anni precedenti */
-            , Object.keys(contatoriAnni).filter(a=>a!==annoSolare).sort((a,b)=>b-a).map(anno =>
-                React.createElement('div', {key:anno, style:{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8}}
-                  , React.createElement('span',{style:{fontSize:12,color:C.textMuted,minWidth:60}},'Anno '+anno)
-                  , React.createElement('span',{style:{fontSize:13,color:C.textDim}},'Ultimo n° emesso: ')
-                  , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}},contatoriAnni[anno])
-                )
-              )
-          );
-        })()
-    )
-
-    /* ── Reset dati (solo admin) ──────────────────────────────────────────── */
-    , activeTab==="anno" && (propRuolo==="admin"||!propRuolo) && React.createElement(ResetDatiSection)
-
-    , activeTab==="generale" && React.createElement(ImpSection, {title:"Stile grafico app", icon:"palette"}
-      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
-        , React.createElement('div', {style:{marginBottom:14}}
-          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Colore accento principale")
-          , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}
-            , ["#1a4fa0","#2d6a8f","#6a4c93","#2a7d4f","#c0392b","#e67e22","#1a1a2e"].map(col=>
-                React.createElement('button', {key:col, onClick:()=>setD("accentColor",col),
-                  style:{width:28,height:28,borderRadius:"50%",background:col,
-                    border:(draft.accentColor||"#1a4fa0")===col?"3px solid #fff":"2px solid transparent",
-                    outline:(draft.accentColor||"#1a4fa0")===col?`2px solid ${col}`:"none",cursor:"pointer"}})
-              )
-          )
-          , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
-            , React.createElement('input', {type:"color", value:draft.accentColor||"#1a4fa0", onChange:e=>setD("accentColor",e.target.value),
-                style:{width:32,height:32,borderRadius:8,border:"none",cursor:"pointer",padding:0}})
-            , React.createElement('span',{style:{fontSize:12,color:C.textMuted}}, "Colore personalizzato")
-          )
-        )
-        , React.createElement('div', {style:{marginBottom:14}}
-          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Tema")
-          , React.createElement('div', {style:{display:"flex",gap:8}}
-            , ["Scuro","Chiaro"].map(t=>React.createElement('button', {key:t, onClick:()=>setD("tema",t.toLowerCase()),
-                style:{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${(draft.tema||"scuro")===t.toLowerCase()?C.gold:C.border}`,
-                  background:(draft.tema||"scuro")===t.toLowerCase()?C.goldBg:C.bg,color:(draft.tema||"scuro")===t.toLowerCase()?C.gold:C.textMuted,
-                  cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif"}}, t))
-          )
-          , React.createElement('p',{style:{fontSize:11,color:C.textDim,marginTop:6}},"Nota: il cambio tema sarà applicato al prossimo caricamento")
-        )
-      )
-    )
-
-    , activeTab==="anno" && React.createElement(ImpSection, {title:"Impostazioni ricevuta", icon:"receipt"}
-      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px",marginBottom:16}}
-        , React.createElement('div', {style:{marginBottom:14}}
-          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Colore accento ricevuta")
-          , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:7,marginBottom:8}}
-            , ["#1a4fa0","#2d6a8f","#6a4c93","#2a7d4f","#c0392b","#1a1a2e"].map(col=>
-                React.createElement('button', {key:col, onClick:()=>setRS("accentColor",col),
-                  style:{width:26,height:26,borderRadius:"50%",background:col,
-                    border:ac===col?"3px solid #fff":"2px solid transparent",
-                    outline:ac===col?`2px solid ${col}`:"none",cursor:"pointer"}})
-              )
-          )
-          , React.createElement('input', {type:"color", value:ac, onChange:e=>setRS("accentColor",e.target.value),
-              style:{width:30,height:30,borderRadius:6,border:"none",cursor:"pointer",padding:0}})
-        )
-        , React.createElement('div', {style:{marginBottom:14}}
-          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Font intestazione ricevuta")
-          , ["Cormorant Garamond","Georgia","Times New Roman","Arial"].map(f=>
-              React.createElement('label', {key:f, style:{display:"flex",alignItems:"center",gap:7,cursor:"pointer",padding:"3px 0",fontSize:12,color:(rs.fontTitle||"Cormorant Garamond")===f?C.text:C.textMuted}}
-                , React.createElement('input', {type:"radio", checked:(rs.fontTitle||"Cormorant Garamond")===f, onChange:()=>setRS("fontTitle",f), style:{accentColor:ac}})
-                , React.createElement('span',{style:{fontFamily:f}}, f)
-              )
-            )
-        )
-      )
-      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:16}}
-        , React.createElement(ImpRSToggle,{k:"showIndirizzo",    label:"Indirizzo scuola",  rs:rs,ac:ac,setRS:setRS})
-        , React.createElement(ImpRSToggle,{k:"showDataNascita", label:"Data di nascita",    rs:rs,ac:ac,setRS:setRS})
-        , React.createElement(ImpRSToggle,{k:"showFirme",       label:"Spazio firme",       rs:rs,ac:ac,setRS:setRS})
-        , React.createElement(ImpRSToggle,{k:"showFooter",      label:"Footer",             rs:rs,ac:ac,setRS:setRS})
-        , React.createElement(ImpRSToggle,{k:"showCompetenza",  label:"Competenza",         rs:rs,ac:ac,setRS:setRS})
-        , React.createElement(ImpRSToggle,{k:"showMetodo",      label:"Metodo pagamento",   rs:rs,ac:ac,setRS:setRS})
-      )
-      /* Anteprima live ricevuta */
-      , React.createElement('div', {style:{background:"#f0ede8",borderRadius:10,padding:"14px",marginBottom:18}}
-        , React.createElement('div', {style:{fontSize:10,color:"#888",letterSpacing:".1em",textTransform:"uppercase",marginBottom:8}}, "Anteprima")
-        , React.createElement('div', {style:{background:"#fff",borderRadius:8,padding:"16px 20px",boxShadow:"0 2px 10px rgba(0,0,0,.12)",fontSize:10,maxWidth:340}}
-          , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",borderBottom:`2px solid ${ac}`,paddingBottom:8,marginBottom:10}}
-            , React.createElement('div', null
-              , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Oswald"}',sans-serif`,fontSize:14,fontWeight:700,color:"#1a1a2e"}}, draft.nomeScuola||"Accademia Musicale")
-              , draft.tipoEnte && React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".08em",marginTop:1}}, draft.tipoEnte)
-              , rs.showIndirizzo!==false && draft.indirizzo && React.createElement('div', {style:{fontSize:8,color:"#666",marginTop:1}}, draft.indirizzo)
-            )
-            , React.createElement('div', {style:{textAlign:"right"}}
-              , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase"}}, "Ricevuta n°")
-              , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Oswald"}',sans-serif`,fontSize:16,fontWeight:700,color:ac,lineHeight:1}}, "029/2026")
-              , React.createElement('div', {style:{fontSize:8,color:"#888",marginTop:1}}, "05/03/2026")
-            )
-          )
-          , [
-              rs.showNominativo!==false   && ["Ricevuta da","Giulia Romano"],
-              rs.showDataNascita!==false  && ["Data di nascita","30/09/2011"],
-              rs.showDataPagamento!==false&& ["Data pagamento","01/03/2026"],
-              rs.showDescrizione!==false  && ["Descrizione","Quota mensile Marzo 2026"],
-              rs.showCompetenza!==false   && ["Competenza","Marzo 2026"],
-              rs.showMetodo!==false       && ["Metodo","Bonifico bancario"],
-            ].filter(Boolean).map(([k,v],i,arr)=>
-              React.createElement('div', {key:k, style:{display:"flex",justifyContent:"space-between",padding:"3px 0",
-                borderBottom:i<arr.length-1?"1px solid #eee":"none"}}
-                , React.createElement('span', {style:{color:"#888",fontSize:9}}, k)
-                , React.createElement('span', {style:{fontWeight:600,color:"#1a1a2e",fontSize:9}}, v)
-              )
-            )
-          , React.createElement('div', {style:{textAlign:"center",margin:"8px 0",padding:"8px",border:`2px solid ${ac}`,borderRadius:5,background:ac+"15"}}
-            , React.createElement('div', {style:{fontFamily:`'${rs.fontTitle||"Oswald"}',sans-serif`,fontSize:18,fontWeight:700,color:ac}}, "€ 120,00")
-            , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".1em",marginTop:1}}, "Importo ricevuto")
-          )
-          , rs.showFirme!==false && React.createElement('div', {style:{display:"flex",justifyContent:"flex-end",marginTop:10}}
-            , React.createElement('div', {key:"cassiere", style:{textAlign:"center",width:"42%"}}
-                , React.createElement('div', {style:{borderTop:"1px solid #333",marginBottom:3}})
-                , React.createElement('div', {style:{fontSize:8,color:"#888",textTransform:"uppercase",letterSpacing:".05em"}}, rs.labelCassiere||"Il cassiere")
-              )
-          )
-          , rs.showFooter!==false && rs.noteFooter && React.createElement('div', {style:{marginTop:6,paddingTop:5,borderTop:"1px solid #eee",textAlign:"center",fontSize:8,color:"#888"}}
-            , rs.noteFooter
-          )
-        )
-      )
-      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr",gap:"0 20px"}}
-        , React.createElement('div', {style:{marginBottom:14}}
-          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Etichetta firma cassiere / responsabile")
-          , React.createElement('input', {value:rs.labelCassiere||"Il cassiere / responsabile", onChange:e=>setRS("labelCassiere",e.target.value),
-              style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 13px",fontFamily:"'Open Sans',sans-serif"}})
-        )
-        , React.createElement('div', {style:{gridColumn:"1/-1",marginBottom:14}}
-          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Firma presidente (immagine per stampa)")
-          , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:12}}
-            , rs.firmaPresidenteUrl && React.createElement('img', {src:rs.firmaPresidenteUrl, alt:"firma",
-                style:{height:50,maxWidth:180,objectFit:"contain",background:"#fff",borderRadius:6,border:`1px solid ${C.border}`,padding:4}})
-            , React.createElement('label', {style:{display:"flex",alignItems:"center",gap:7,padding:"8px 14px",borderRadius:8,
-                border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:"pointer",fontSize:12}}
-              , React.createElement(Ic,{n:"upload",size:13,stroke:C.textMuted})
-              , rs.firmaPresidenteUrl ? "Cambia immagine" : "Carica firma"
-              , React.createElement('input', {type:"file",accept:"image/*",style:{display:"none"},
-                  onChange:e=>{const f=e.target.files[0]; if(!f)return; const r=new FileReader(); r.onload=ev=>setRS("firmaPresidenteUrl",ev.target.result); r.readAsDataURL(f);}})
-            )
-            , rs.firmaPresidenteUrl && React.createElement('button', {onClick:()=>setRS("firmaPresidenteUrl",""),
-                style:{background:"none",border:"none",cursor:"pointer",color:C.textDim,fontSize:11}}, "✕ Rimuovi")
-          )
-          , React.createElement('p',{style:{fontSize:11,color:C.textDim,marginTop:4}}, "La firma verrà stampata nello spazio «", rs.labelCassiere||"Il cassiere / responsabile", "»")
-        )
-        , React.createElement('div', {style:{gridColumn:"1/-1",marginBottom:4}}
-          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Note aggiuntive footer ricevuta")
-          , React.createElement('textarea', {value:rs.noteFooter||"", onChange:e=>setRS("noteFooter",e.target.value),
-              placeholder:"Es. IBAN IT00..., note legali...", rows:2,
-              style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:12,padding:"9px 13px",fontFamily:"'Open Sans',sans-serif",resize:"vertical"}})
-        )
-      )
-    )
-
-    /* ── Pannelli Dashboard ── */
-    , activeTab==="generale" && React.createElement(ImpSection, {title:"Pannelli Dashboard", icon:"grid"}
-      , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Scegli quali sezioni mostrare nella dashboard. Le KPI card sono sempre visibili.")
-      , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:6}}
-        , PANNELLI_DEF.map(function(p){
-          const on = panels[p.id]!==false;
-          return React.createElement('div', {key:p.id,
-            style:{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",
-              borderRadius:10,border:`1px solid ${on&&!p.sempre?C.goldDim:C.border}`,
-              background:on&&!p.sempre?C.goldBg:C.bg,transition:"all .15s",opacity:p.sempre?0.6:1}},
-            React.createElement('div', {style:{width:32,height:32,borderRadius:8,
-              background:on?`${C.gold}18`:C.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},
-              React.createElement(Ic,{n:p.icon,size:15,stroke:on?C.gold:C.textDim})
-            ),
-            React.createElement('div', {style:{flex:1}},
-              React.createElement('div',{style:{fontSize:13,fontWeight:500,color:on?C.text:C.textMuted}}, p.label),
-              React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, p.desc)
-            ),
-            p.sempre
-              ? React.createElement('span',{style:{fontSize:10,color:C.textDim,letterSpacing:".06em"}}, "FISSO")
-              : React.createElement(Toggle, {value:on, onChange:function(v){ setPanels(function(prev){ return Object.assign({},prev,{[p.id]:v}); }); }})
-          );
-        })
-      )
-    )
-
-    /* ── Google Calendar ─────────────────────────────────────────────────── */
-    , activeTab==="generale" && React.createElement(ImpSection, {title:"Google Calendar", icon:"calendar"}
-      , typeof GoogleCalendarSection !== 'undefined'
-        ? React.createElement(GoogleCalendarSection, {appUser: window.__appUser__||null})
-        : React.createElement('div', {style:{fontSize:13,color:C.textMuted}}, '⏳ Caricamento modulo Google Calendar...')
-    )
-
     /* ── Chiusure personalizzate ──────────────────────────────────────────── */
     , activeTab==="anno" && React.createElement(ImpSection, {title:"Chiusure e festività", icon:"cal"}
       // Festività nazionali con toggle aperto/chiuso
@@ -3812,10 +3750,28 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         , React.createElement('div', {style:{fontSize:13,fontWeight:600,color:C.text,marginBottom:10}}, '🇮🇹 Festività nazionali')
         , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:12}},
             'Per default la scuola è chiusa in tutte le festività. Disattiva per segnare che fate lezione.')
+        , (() => {
+            const anniDisp = (propAnni||[]).slice().sort((a,b)=>(b.annoInizio||0)-(a.annoInizio||0));
+            const annoAttivoFest = draft.annoInizioAttivo || (anniDisp[0] && anniDisp[0].annoInizio) || new Date().getFullYear();
+            const annoRifFest = festAnnoSel || annoAttivoFest;
+            return React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,marginBottom:14,flexWrap:'wrap'}}
+              , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.05em'}}, 'Anno scolastico')
+              , React.createElement('select', {
+                  value:String(annoRifFest),
+                  onChange:e=>setFestAnnoSel(parseInt(e.target.value)),
+                  style:{padding:'6px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}
+                }
+                , (anniDisp.length ? anniDisp : [{annoInizio:annoAttivoFest, annoFine:annoAttivoFest+1}]).map(a =>
+                    React.createElement('option', {key:a.annoInizio, value:a.annoInizio}, `${a.annoInizio}/${a.annoFine||a.annoInizio+1}${String(a.annoInizio)===String(annoAttivoFest)?' (attivo)':''}`)
+                  )
+              )
+              , annoRifFest !== annoAttivoFest && React.createElement('span',{style:{fontSize:11,color:C.textDim,fontStyle:'italic'}}, "— stai visualizzando un anno diverso da quello attivo")
+            );
+          })()
         , React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8}}
           , Object.entries({
-              ...getItalianHolidays(draft.annoInizioAttivo || new Date().getFullYear()),
-              ...getItalianHolidays((draft.annoInizioAttivo || new Date().getFullYear()) + 1),
+              ...getItalianHolidays(festAnnoSel || draft.annoInizioAttivo || new Date().getFullYear()),
+              ...getItalianHolidays((festAnnoSel || draft.annoInizioAttivo || new Date().getFullYear()) + 1),
             }).sort((a,b)=>a[0].localeCompare(b[0])).map(([dateStr, h]) => {
               const isAperta = (draft.festivitaConfig||{})[dateStr] === false;
               return React.createElement('div', {key:dateStr, style:{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',borderRadius:8,background:isAperta?C.greenBg:C.redBg,border:`1px solid ${isAperta?C.greenBorder:C.redBorder}`}}
@@ -3874,6 +3830,74 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         )
       )
     )   /* end React.createElement(ImpSection,...) */
+
+    /* ── Reset dati (solo admin) ──────────────────────────────────────────── */
+    , activeTab==="anno" && (propRuolo==="admin"||!propRuolo) && React.createElement(ResetDatiSection)
+
+    , activeTab==="generale" && React.createElement(ImpSection, {title:"Stile grafico app", icon:"palette"}
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
+        , React.createElement('div', {style:{marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Colore accento principale")
+          , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}
+            , ["#1a4fa0","#2d6a8f","#6a4c93","#2a7d4f","#c0392b","#e67e22","#1a1a2e"].map(col=>
+                React.createElement('button', {key:col, onClick:()=>setD("accentColor",col),
+                  style:{width:28,height:28,borderRadius:"50%",background:col,
+                    border:(draft.accentColor||"#1a4fa0")===col?"3px solid #fff":"2px solid transparent",
+                    outline:(draft.accentColor||"#1a4fa0")===col?`2px solid ${col}`:"none",cursor:"pointer"}})
+              )
+          )
+          , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+            , React.createElement('input', {type:"color", value:draft.accentColor||"#1a4fa0", onChange:e=>setD("accentColor",e.target.value),
+                style:{width:32,height:32,borderRadius:8,border:"none",cursor:"pointer",padding:0}})
+            , React.createElement('span',{style:{fontSize:12,color:C.textMuted}}, "Colore personalizzato")
+          )
+        )
+        , React.createElement('div', {style:{marginBottom:14}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Tema")
+          , React.createElement('div', {style:{display:"flex",gap:8}}
+            , ["Scuro","Chiaro"].map(t=>React.createElement('button', {key:t, onClick:()=>setD("tema",t.toLowerCase()),
+                style:{flex:1,padding:"8px",borderRadius:8,border:`1px solid ${(draft.tema||"scuro")===t.toLowerCase()?C.gold:C.border}`,
+                  background:(draft.tema||"scuro")===t.toLowerCase()?C.goldBg:C.bg,color:(draft.tema||"scuro")===t.toLowerCase()?C.gold:C.textMuted,
+                  cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif"}}, t))
+          )
+          , React.createElement('p',{style:{fontSize:11,color:C.textDim,marginTop:6}},"Nota: il cambio tema sarà applicato al prossimo caricamento")
+        )
+      )
+    )
+
+    /* ── Pannelli Dashboard ── */
+    , activeTab==="generale" && React.createElement(ImpSection, {title:"Pannelli Dashboard", icon:"grid"}
+      , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Scegli quali sezioni mostrare nella dashboard. Le KPI card sono sempre visibili.")
+      , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:6}}
+        , PANNELLI_DEF.map(function(p){
+          const on = panels[p.id]!==false;
+          return React.createElement('div', {key:p.id,
+            style:{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",
+              borderRadius:10,border:`1px solid ${on&&!p.sempre?C.goldDim:C.border}`,
+              background:on&&!p.sempre?C.goldBg:C.bg,transition:"all .15s",opacity:p.sempre?0.6:1}},
+            React.createElement('div', {style:{width:32,height:32,borderRadius:8,
+              background:on?`${C.gold}18`:C.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},
+              React.createElement(Ic,{n:p.icon,size:15,stroke:on?C.gold:C.textDim})
+            ),
+            React.createElement('div', {style:{flex:1}},
+              React.createElement('div',{style:{fontSize:13,fontWeight:500,color:on?C.text:C.textMuted}}, p.label),
+              React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, p.desc)
+            ),
+            p.sempre
+              ? React.createElement('span',{style:{fontSize:10,color:C.textDim,letterSpacing:".06em"}}, "FISSO")
+              : React.createElement(Toggle, {value:on, onChange:function(v){ setPanels(function(prev){ return Object.assign({},prev,{[p.id]:v}); }); }})
+          );
+        })
+      )
+    )
+
+    /* ── Google Calendar ─────────────────────────────────────────────────── */
+    , activeTab==="generale" && React.createElement(ImpSection, {title:"Google Calendar", icon:"calendar"}
+      , typeof GoogleCalendarSection !== 'undefined'
+        ? React.createElement(GoogleCalendarSection, {appUser: window.__appUser__||null})
+        : React.createElement('div', {style:{fontSize:13,color:C.textMuted}}, '⏳ Caricamento modulo Google Calendar...')
+    )
+
 
     /* ── Utenti (embed, solo admin) ────────────────────────────────────────── */
     , activeTab==="utenti" && isAdminImp && React.createElement('div', {style:{margin:"0 0 20px",padding:0}}
