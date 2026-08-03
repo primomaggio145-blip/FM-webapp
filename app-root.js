@@ -3118,6 +3118,38 @@ const ImpRSToggle = ({k, label, rs, ac, setRS}) => {
 // ─── RESET DATI (solo admin) ──────────────────────────────────────────────────
 const ADMIN_RESET_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-reset';
 const ADMIN_BACKUP_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-backup';
+const ADMIN_TRIGGER_BACKUP_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-trigger-backup';
+const ADMIN_LIST_BACKUPS_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-list-backups';
+
+// Innesca il backup "reale" (pg_dump via GitHub Actions). Ritorna {ok, error, nota, actionsUrl}.
+const triggerPgDumpBackup = async () => {
+  try {
+    const sb = window.supabaseClient;
+    const { data:{session} } = await sb.auth.getSession();
+    const res = await fetch(ADMIN_TRIGGER_BACKUP_EDGE, {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
+    });
+    return await res.json();
+  } catch(e) {
+    return { ok:false, error: e?.message||'Errore di rete' };
+  }
+};
+
+// Elenca i dump .dump già disponibili nel bucket "backups" con link firmati di download.
+const listPgDumpBackups = async () => {
+  try {
+    const sb = window.supabaseClient;
+    const { data:{session} } = await sb.auth.getSession();
+    const res = await fetch(ADMIN_LIST_BACKUPS_EDGE, {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
+    });
+    return await res.json();
+  } catch(e) {
+    return { ok:false, error: e?.message||'Errore di rete' };
+  }
+};
 
 // Scarica un backup completo (JSON) chiamando l'edge function admin-backup e
 // avvia il download nel browser. Ritorna {ok, error, tabelle, timestamp}.
@@ -3314,6 +3346,10 @@ const BackupDatiSection = () => {
   const [state, setState] = React.useState(null); // null | 'loading' | {ok,...}
   const [lastBackup, setLastBackup] = React.useState(null);
 
+  const [pgState, setPgState] = React.useState(null); // null | 'loading' | {ok,...}
+  const [dumps, setDumps] = React.useState(null);       // null | 'loading' | array
+  const [dumpsError, setDumpsError] = React.useState(null);
+
   const handleBackup = async () => {
     setState('loading');
     const r = await eseguiBackupEDownload();
@@ -3321,22 +3357,84 @@ const BackupDatiSection = () => {
     if (r.ok) setLastBackup(new Date());
   };
 
+  const handleTriggerPgDump = async () => {
+    setPgState('loading');
+    const r = await triggerPgDumpBackup();
+    setPgState(r);
+  };
+
+  const handleRefreshDumps = async () => {
+    setDumps('loading'); setDumpsError(null);
+    const r = await listPgDumpBackups();
+    if (r.ok) setDumps(r.backups||[]);
+    else { setDumps(null); setDumpsError(r.error||'Errore nel caricamento elenco'); }
+  };
+
+  const fmtSize = (b) => {
+    if (b==null) return '—';
+    if (b < 1024*1024) return Math.round(b/1024)+' KB';
+    return (b/1024/1024).toFixed(1)+' MB';
+  };
+
   return React.createElement(ImpSection, {title:"Backup DB", icon:"download"}
-    , React.createElement('div', {style:{padding:'12px 14px',background:C.blueBg||C.surface,border:`1px solid ${C.blueBorder||C.border}`,borderRadius:8,marginBottom:14,fontSize:12,color:C.textMuted,lineHeight:1.5}}
-        , '💾 Scarica un file JSON con tutti i dati gestionali (allievi, docenti, corsi, lezioni, pagamenti, concerti, repertorio, anni scolastici, ecc). '
-        , React.createElement('strong',null, 'Non include: '), 'i file allegati/spartiti/materiali caricati su Storage, i token di Google Calendar e gli account utente (quelli restano gestiti da Supabase Auth indipendentemente dal reset dati).'
+    // ── Backup rapido: export JSON dei dati, scaricato subito nel browser ──
+    , React.createElement('div', {style:{fontSize:13,fontWeight:600,color:C.text,marginBottom:8}}, '📄 Backup rapido (JSON)')
+    , React.createElement('div', {style:{padding:'12px 14px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:14,fontSize:12,color:C.textMuted,lineHeight:1.5}}
+        , 'Scarica subito un file JSON con tutti i dati gestionali (allievi, docenti, corsi, lezioni, pagamenti, concerti, repertorio, anni scolastici, ecc). '
+        , React.createElement('strong',null, 'Non include: '), 'i file allegati/spartiti/materiali su Storage, i token di Google Calendar e gli account utente (gestiti da Supabase Auth).'
       )
     , React.createElement('button', {onClick:handleBackup, disabled:state==='loading',
         style:{padding:'10px 20px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:state==='loading'?'not-allowed':'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:8}}
       , React.createElement(Ic,{n:'download',size:15,stroke:'#fff'})
-      , state==='loading' ? '⏳ Backup in corso...' : '📥 Scarica backup completo'
+      , state==='loading' ? '⏳ Backup in corso...' : '📥 Scarica backup JSON'
       )
     , state && state!=='loading' && (
         state.ok
           ? React.createElement('div',{style:{marginTop:12,padding:'10px 14px',borderRadius:8,background:C.greenBg,border:`1px solid ${C.greenBorder}`,fontSize:12,color:C.green}}, `✅ Backup scaricato: ${state.tabelle} tabelle, ${state.righe} record totali.`)
           : React.createElement('div',{style:{marginTop:12,padding:'10px 14px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red}}, `❌ ${state.error}`)
       )
-    , lastBackup && React.createElement('div',{style:{marginTop:10,fontSize:11,color:C.textDim}}, `Ultimo backup di questa sessione: ${lastBackup.toLocaleString('it-IT')}`)
+    , lastBackup && React.createElement('div',{style:{marginTop:10,fontSize:11,color:C.textDim}}, `Ultimo backup JSON di questa sessione: ${lastBackup.toLocaleString('it-IT')}`)
+
+    // ── Backup completo: vero pg_dump via GitHub Actions ──
+    , React.createElement('div', {style:{fontSize:13,fontWeight:600,color:C.text,margin:"26px 0 8px",paddingTop:18,borderTop:`1px solid ${C.border}`}}, '🗄️ Backup completo (pg_dump)')
+    , React.createElement('div', {style:{padding:'12px 14px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:14,fontSize:12,color:C.textMuted,lineHeight:1.5}}
+        , "Avvia un dump completo del database (schema + dati + sequenze) tramite GitHub Actions. Il file viene caricato nel bucket privato \"backups\" e resta disponibile per il download qui sotto. Richiede 1-2 minuti."
+      )
+    , React.createElement('button', {onClick:handleTriggerPgDump, disabled:pgState==='loading',
+        style:{padding:'10px 20px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:pgState==='loading'?'not-allowed':'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:8}}
+      , React.createElement(Ic,{n:'refresh',size:15,stroke:C.text})
+      , pgState==='loading' ? '⏳ Avvio in corso...' : '🚀 Avvia backup pg_dump'
+      )
+    , pgState && pgState!=='loading' && (
+        pgState.ok
+          ? React.createElement('div',{style:{marginTop:12,padding:'10px 14px',borderRadius:8,background:C.greenBg,border:`1px solid ${C.greenBorder}`,fontSize:12,color:C.green}}
+            , `✅ ${pgState.nota||'Backup avviato.'} `
+            , pgState.actionsUrl && React.createElement('a',{href:pgState.actionsUrl, target:'_blank', style:{color:C.green,textDecoration:'underline'}}, 'Vedi avanzamento su GitHub Actions ↗')
+            )
+          : React.createElement('div',{style:{marginTop:12,padding:'10px 14px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red}}, `❌ ${pgState.error}`)
+      )
+
+    // ── Elenco dump disponibili ──
+    , React.createElement('div', {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginTop:20,marginBottom:10}}
+        , React.createElement('div',{style:{fontSize:12,fontWeight:600,color:C.text}}, 'Backup .dump disponibili')
+        , React.createElement('button', {onClick:handleRefreshDumps, disabled:dumps==='loading',
+            style:{padding:'6px 12px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11}}
+          , dumps==='loading' ? '⏳ Carico...' : '🔄 Aggiorna elenco')
+      )
+    , dumpsError && React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red,marginBottom:10}}, `❌ ${dumpsError}`)
+    , Array.isArray(dumps) && dumps.length===0 && React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}}, 'Nessun backup trovato. Avviane uno con il pulsante sopra.')
+    , Array.isArray(dumps) && dumps.length>0 && React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}}
+        , dumps.map(d => React.createElement('div', {key:d.nome, style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg}}
+            , React.createElement('div',null
+              , React.createElement('div',{style:{fontSize:12,color:C.text,fontFamily:'monospace'}}, d.nome)
+              , React.createElement('div',{style:{fontSize:10,color:C.textDim,marginTop:2}}, `${fmtSize(d.dimensione)} — ${d.creato ? new Date(d.creato).toLocaleString('it-IT') : '—'}`)
+              )
+            , d.url
+              ? React.createElement('a',{href:d.url, style:{fontSize:11,fontWeight:600,color:C.gold,textDecoration:'none',padding:'6px 12px',borderRadius:7,border:`1px solid ${C.goldDim}`}}, '⬇️ Scarica')
+              : React.createElement('span',{style:{fontSize:11,color:C.textDim}}, 'link non disponibile')
+          ))
+      )
+    , React.createElement('div',{style:{marginTop:10,fontSize:10,color:C.textDim}}, "I link di download scadono dopo 5 minuti per sicurezza: se necessario, clicca \"Aggiorna elenco\" per generarne di nuovi.")
   );
 };
 
