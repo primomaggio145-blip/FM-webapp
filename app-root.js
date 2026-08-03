@@ -3120,6 +3120,23 @@ const ADMIN_RESET_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/
 const ADMIN_BACKUP_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-backup';
 const ADMIN_TRIGGER_BACKUP_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-trigger-backup';
 const ADMIN_LIST_BACKUPS_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-list-backups';
+const ADMIN_TRIGGER_RESTORE_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-trigger-restore';
+
+// Innesca il ripristino di un backup .dump specifico via GitHub Actions.
+const triggerPgRestore = async (filename) => {
+  try {
+    const sb = window.supabaseClient;
+    const { data:{session} } = await sb.auth.getSession();
+    const res = await fetch(ADMIN_TRIGGER_RESTORE_EDGE, {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
+      body: JSON.stringify({ filename }),
+    });
+    return await res.json();
+  } catch(e) {
+    return { ok:false, error: e?.message||'Errore di rete' };
+  }
+};
 
 // Innesca il backup "reale" (pg_dump via GitHub Actions). Ritorna {ok, error, nota, actionsUrl}.
 const triggerPgDumpBackup = async () => {
@@ -3349,6 +3366,9 @@ const BackupDatiSection = () => {
   const [pgState, setPgState] = React.useState(null); // null | 'loading' | {ok,...}
   const [dumps, setDumps] = React.useState(null);       // null | 'loading' | array
   const [dumpsError, setDumpsError] = React.useState(null);
+  const [restoreTarget, setRestoreTarget] = React.useState(null); // null | {nome,...}
+  const [restoreConfirm, setRestoreConfirm] = React.useState('');
+  const [restoreState, setRestoreState] = React.useState(null); // null | 'loading' | {ok,...}
 
   const handleBackup = async () => {
     setState('loading');
@@ -3368,6 +3388,14 @@ const BackupDatiSection = () => {
     const r = await listPgDumpBackups();
     if (r.ok) setDumps(r.backups||[]);
     else { setDumps(null); setDumpsError(r.error||'Errore nel caricamento elenco'); }
+  };
+
+  const handleRestoreConfirm = async () => {
+    if (restoreConfirm !== 'RIPRISTINA') return;
+    setRestoreState('loading');
+    const r = await triggerPgRestore(restoreTarget.nome);
+    setRestoreState(r);
+    if (r.ok) { setRestoreConfirm(''); }
   };
 
   const fmtSize = (b) => {
@@ -3424,17 +3452,58 @@ const BackupDatiSection = () => {
     , dumpsError && React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red,marginBottom:10}}, `❌ ${dumpsError}`)
     , Array.isArray(dumps) && dumps.length===0 && React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}}, 'Nessun backup trovato. Avviane uno con il pulsante sopra.')
     , Array.isArray(dumps) && dumps.length>0 && React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}}
-        , dumps.map(d => React.createElement('div', {key:d.nome, style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg}}
+        , dumps.map(d => React.createElement('div', {key:d.nome, style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,flexWrap:'wrap',gap:8}}
             , React.createElement('div',null
               , React.createElement('div',{style:{fontSize:12,color:C.text,fontFamily:'monospace'}}, d.nome)
               , React.createElement('div',{style:{fontSize:10,color:C.textDim,marginTop:2}}, `${fmtSize(d.dimensione)} — ${d.creato ? new Date(d.creato).toLocaleString('it-IT') : '—'}`)
               )
-            , d.url
-              ? React.createElement('a',{href:d.url, style:{fontSize:11,fontWeight:600,color:C.gold,textDecoration:'none',padding:'6px 12px',borderRadius:7,border:`1px solid ${C.goldDim}`}}, '⬇️ Scarica')
-              : React.createElement('span',{style:{fontSize:11,color:C.textDim}}, 'link non disponibile')
+            , React.createElement('div',{style:{display:'flex',gap:8}}
+              , d.url
+                ? React.createElement('a',{href:d.url, style:{fontSize:11,fontWeight:600,color:C.gold,textDecoration:'none',padding:'6px 12px',borderRadius:7,border:`1px solid ${C.goldDim}`}}, '⬇️ Scarica')
+                : React.createElement('span',{style:{fontSize:11,color:C.textDim}}, 'link non disponibile')
+              , React.createElement('button', {onClick:()=>{setRestoreTarget(d);setRestoreConfirm('');setRestoreState(null);},
+                  style:{fontSize:11,fontWeight:600,color:C.red,background:'none',cursor:'pointer',padding:'6px 12px',borderRadius:7,border:`1px solid ${C.redBorder||C.red}`}}, '♻️ Ripristina')
+              )
           ))
       )
     , React.createElement('div',{style:{marginTop:10,fontSize:10,color:C.textDim}}, "I link di download scadono dopo 5 minuti per sicurezza: se necessario, clicca \"Aggiorna elenco\" per generarne di nuovi.")
+
+    // ── Dialog conferma ripristino ──
+    , restoreTarget && React.createElement('div', {style:{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}}
+        , React.createElement('div', {style:{background:C.surface,borderRadius:14,padding:24,maxWidth:460,width:'90%',boxShadow:'0 10px 40px rgba(0,0,0,.3)'}}
+          , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:12}}
+            , React.createElement(Ic,{n:'warn',size:20,stroke:C.red})
+            , React.createElement('div',{style:{fontSize:16,fontWeight:700,color:C.text,fontFamily:"'Oswald',sans-serif"}}, 'Ripristinare questo backup?')
+          )
+          , React.createElement('div',{style:{fontSize:13,color:C.textMuted,marginBottom:8,lineHeight:1.5}},
+              `Stai per ripristinare `, React.createElement('strong',{style:{fontFamily:'monospace'}}, restoreTarget.nome), '.')
+          , React.createElement('div',{style:{fontSize:12,color:C.red,marginBottom:16,lineHeight:1.5,padding:'8px 12px',background:C.redBg,border:`1px solid ${C.redBorder}`,borderRadius:8}},
+              '⚠️ Questo SOVRASCRIVE tutti i dati attuali con quelli del backup. Qualsiasi allievo, lezione, pagamento o altro creato/modificato DOPO questo backup verrà perso. Lo schema del database non viene toccato, solo i dati.')
+          , React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:6}}, 'Scrivi ', React.createElement('strong',null,'RIPRISTINA'), ' per confermare:')
+          , React.createElement('input', {type:'text', value:restoreConfirm, onChange:e=>setRestoreConfirm(e.target.value),
+              placeholder:'RIPRISTINA',
+              style:{width:'100%',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,marginBottom:16,boxSizing:'border-box'}})
+          , restoreState==='loading' && React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:14}}, '⏳ Avvio ripristino...')
+          , restoreState && restoreState!=='loading' && (
+              restoreState.ok
+                ? React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.greenBg,border:`1px solid ${C.greenBorder}`,fontSize:12,color:C.green,marginBottom:14}}
+                  , `✅ ${restoreState.nota||'Ripristino avviato.'} `
+                  , restoreState.actionsUrl && React.createElement('a',{href:restoreState.actionsUrl, target:'_blank', style:{color:C.green,textDecoration:'underline'}}, 'Vedi avanzamento ↗')
+                  )
+                : React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red,marginBottom:14}}, `❌ ${restoreState.error}`)
+            )
+          , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
+            , React.createElement('button', {onClick:handleRestoreConfirm, disabled:restoreConfirm!=='RIPRISTINA'||restoreState==='loading'||(restoreState&&restoreState.ok),
+                style:{padding:'10px 16px',borderRadius:8,border:'none',
+                  background:(restoreConfirm!=='RIPRISTINA'||restoreState==='loading')?C.border:C.red,
+                  color:'#fff',cursor:(restoreConfirm!=='RIPRISTINA'||restoreState==='loading')?'not-allowed':'pointer',fontSize:13,fontWeight:700}}
+              , '♻️ Conferma ripristino')
+            , React.createElement('button', {onClick:()=>{setRestoreTarget(null);setRestoreConfirm('');setRestoreState(null);},
+                style:{padding:'9px 16px',borderRadius:8,border:'none',background:'none',color:C.textMuted,cursor:'pointer',fontSize:13}}
+              , (restoreState&&restoreState.ok) ? 'Chiudi' : 'Annulla')
+          )
+        )
+      )
   );
 };
 
