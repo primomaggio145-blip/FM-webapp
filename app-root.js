@@ -3117,6 +3117,38 @@ const ImpRSToggle = ({k, label, rs, ac, setRS}) => {
 
 // ─── RESET DATI (solo admin) ──────────────────────────────────────────────────
 const ADMIN_RESET_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-reset';
+const ADMIN_BACKUP_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-backup';
+
+// Scarica un backup completo (JSON) chiamando l'edge function admin-backup e
+// avvia il download nel browser. Ritorna {ok, error, tabelle, timestamp}.
+// Riutilizzata sia da BackupDatiSection che dal reminder dentro Reset dati.
+const eseguiBackupEDownload = async () => {
+  try {
+    const sb = window.supabaseClient;
+    const { data:{session} } = await sb.auth.getSession();
+    const res = await fetch(ADMIN_BACKUP_EDGE, {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
+    });
+    const json = await res.json();
+    if (!json.ok) return { ok:false, error: json.error||'Errore durante il backup' };
+
+    const stamp = new Date().toISOString().replace(/[:T]/g,'-').slice(0,16);
+    const blob = new Blob([JSON.stringify(json, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `futuro-musica-backup-${stamp}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    const nTabelle = Object.keys(json.tabelle||{}).length;
+    const nRighe = Object.values(json.tabelle||{}).reduce((a,arr)=>a+(arr?.length||0),0);
+    return { ok:true, tabelle:nTabelle, righe:nRighe, timestamp: json.timestamp };
+  } catch(e) {
+    return { ok:false, error: e?.message||'Errore di rete' };
+  }
+};
+
 
 const CATEGORIE_RESET = [
   {id:'allievi',    label:'👨‍🎓 Allievi',              desc:'Tutte le schede allievi'},
@@ -3143,6 +3175,8 @@ const ResetDatiSection = () => {
   const [resetting, setResetting] = React.useState(false);
   const [toast, setToast] = React.useState(null);
   const [showPanel, setShowPanel] = React.useState(false);
+  const [showBackupReminder, setShowBackupReminder] = React.useState(false);
+  const [reminderBackupState, setReminderBackupState] = React.useState(null); // null | 'loading' | {ok,...}
 
   const showToast = (ok, msg) => { setToast({ok,msg}); setTimeout(()=>setToast(null),6000); };
 
@@ -3192,6 +3226,18 @@ const ResetDatiSection = () => {
     setResetting(false);
   };
 
+  const handleReminderBackup = async () => {
+    setReminderBackupState('loading');
+    const r = await eseguiBackupEDownload();
+    setReminderBackupState(r);
+  };
+
+  const handleReminderProceed = () => {
+    setShowBackupReminder(false);
+    setReminderBackupState(null);
+    handleReset();
+  };
+
   return React.createElement(ImpSection, {title:"⚠️ Reset dati", icon:"trash"}
     , toast && React.createElement('div',{style:{padding:'10px 14px',borderRadius:8,marginBottom:12,fontSize:13,background:toast.ok?C.greenBg:C.redBg,border:`1px solid ${toast.ok?C.greenBorder:C.redBorder}`,color:toast.ok?C.green:C.red}}, toast.msg)
     , React.createElement('div', {style:{padding:'12px 14px',background:C.redBg,border:`1px solid ${C.redBorder}`,borderRadius:8,marginBottom:14,fontSize:12,color:C.red}}
@@ -3224,13 +3270,73 @@ const ResetDatiSection = () => {
         , React.createElement('div', {style:{display:'flex',gap:10,justifyContent:'flex-end'}}
             , React.createElement('button', {onClick:()=>{setShowPanel(false);setSelected({});setConfirmText('');},
                 style:{padding:'9px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:'none',color:C.textMuted,cursor:'pointer',fontSize:13}}, 'Annulla')
-            , React.createElement('button', {onClick:handleReset, disabled:resetting||selectedIds.length===0||confirmText!=='ELIMINA',
+            , React.createElement('button', {onClick:()=>setShowBackupReminder(true), disabled:resetting||selectedIds.length===0||confirmText!=='ELIMINA',
                 style:{padding:'9px 20px',borderRadius:8,border:'none',
                   background:(resetting||selectedIds.length===0||confirmText!=='ELIMINA')?C.border:C.red,
                   color:'#fff',cursor:(resetting||selectedIds.length===0||confirmText!=='ELIMINA')?'not-allowed':'pointer',fontSize:13,fontWeight:700}}
               , resetting?'⏳ Eliminazione...':'🗑️ Esegui reset definitivo')
           )
       )
+
+    // ── Dialog reminder: ricordare il backup prima del reset definitivo ──
+    , showBackupReminder && React.createElement('div', {style:{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}}
+        , React.createElement('div', {style:{background:C.surface,borderRadius:14,padding:24,maxWidth:440,width:'90%',boxShadow:'0 10px 40px rgba(0,0,0,.3)'}}
+          , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:12}}
+            , React.createElement(Ic,{n:'warn',size:20,stroke:C.red})
+            , React.createElement('div',{style:{fontSize:16,fontWeight:700,color:C.text,fontFamily:"'Oswald',sans-serif"}}, 'Hai fatto un backup?')
+          )
+          , React.createElement('div',{style:{fontSize:13,color:C.textMuted,marginBottom:18,lineHeight:1.5}},
+              `Stai per eliminare definitivamente ${totaleRecord} record. L'operazione non è reversibile. Ti consigliamo di scaricare un backup prima di procedere.`)
+          , reminderBackupState==='loading' && React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:14}}, '⏳ Backup in corso...')
+          , reminderBackupState && reminderBackupState!=='loading' && (
+              reminderBackupState.ok
+                ? React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.greenBg,border:`1px solid ${C.greenBorder}`,fontSize:12,color:C.green,marginBottom:14}}, `✅ Backup scaricato (${reminderBackupState.tabelle} tabelle, ${reminderBackupState.righe} record)`)
+                : React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red,marginBottom:14}}, `❌ ${reminderBackupState.error}`)
+            )
+          , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
+            , React.createElement('button', {onClick:handleReminderBackup, disabled:reminderBackupState==='loading',
+                style:{padding:'10px 16px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:'pointer',fontSize:13,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:8}}
+              , React.createElement(Ic,{n:'download',size:14,stroke:C.text}), '📥 Scarica backup ora')
+            , React.createElement('button', {onClick:handleReminderProceed, disabled:resetting,
+                style:{padding:'10px 16px',borderRadius:8,border:'none',background:C.red,color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}
+              , '🗑️ Ho già il backup, procedi col reset')
+            , React.createElement('button', {onClick:()=>{setShowBackupReminder(false);setReminderBackupState(null);},
+                style:{padding:'9px 16px',borderRadius:8,border:'none',background:'none',color:C.textMuted,cursor:'pointer',fontSize:13}}
+              , 'Annulla')
+          )
+        )
+      )
+  );
+};
+
+// ─── BACKUP DATI ────────────────────────────────────────────────────────────
+const BackupDatiSection = () => {
+  const [state, setState] = React.useState(null); // null | 'loading' | {ok,...}
+  const [lastBackup, setLastBackup] = React.useState(null);
+
+  const handleBackup = async () => {
+    setState('loading');
+    const r = await eseguiBackupEDownload();
+    setState(r);
+    if (r.ok) setLastBackup(new Date());
+  };
+
+  return React.createElement(ImpSection, {title:"Backup DB", icon:"download"}
+    , React.createElement('div', {style:{padding:'12px 14px',background:C.blueBg||C.surface,border:`1px solid ${C.blueBorder||C.border}`,borderRadius:8,marginBottom:14,fontSize:12,color:C.textMuted,lineHeight:1.5}}
+        , '💾 Scarica un file JSON con tutti i dati gestionali (allievi, docenti, corsi, lezioni, pagamenti, concerti, repertorio, anni scolastici, ecc). '
+        , React.createElement('strong',null, 'Non include: '), 'i file allegati/spartiti/materiali caricati su Storage, i token di Google Calendar e gli account utente (quelli restano gestiti da Supabase Auth indipendentemente dal reset dati).'
+      )
+    , React.createElement('button', {onClick:handleBackup, disabled:state==='loading',
+        style:{padding:'10px 20px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:state==='loading'?'not-allowed':'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:8}}
+      , React.createElement(Ic,{n:'download',size:15,stroke:'#fff'})
+      , state==='loading' ? '⏳ Backup in corso...' : '📥 Scarica backup completo'
+      )
+    , state && state!=='loading' && (
+        state.ok
+          ? React.createElement('div',{style:{marginTop:12,padding:'10px 14px',borderRadius:8,background:C.greenBg,border:`1px solid ${C.greenBorder}`,fontSize:12,color:C.green}}, `✅ Backup scaricato: ${state.tabelle} tabelle, ${state.righe} record totali.`)
+          : React.createElement('div',{style:{marginTop:12,padding:'10px 14px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red}}, `❌ ${state.error}`)
+      )
+    , lastBackup && React.createElement('div',{style:{marginTop:10,fontSize:11,color:C.textDim}}, `Ultimo backup di questa sessione: ${lastBackup.toLocaleString('it-IT')}`)
   );
 };
 
@@ -3259,6 +3365,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     { id:"scuola",   label:"Scuola",          icon:"flag"     },
     { id:"anno",     label:"Anno & Ricevute", icon:"cal"      },
     ...(isAdminImp ? [{ id:"utenti", label:"Utenti", icon:"users" }] : []),
+    ...(isAdminImp ? [{ id:"backup", label:"Backup & Reset", icon:"download" }] : []),
   ];
   const [activeTab, setActiveTab] = useState(propInitialTab || "generale");
   // Anno scolastico di cui visualizzare/gestire le festività in "Chiusure e festività"
@@ -3370,7 +3477,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     }
   };
 
-  return React.createElement('div', {style:{maxWidth:activeTab==="utenti"?1100:800,margin:"0 auto",padding:"24px 24px"}}
+  return React.createElement('div', {style:{maxWidth:(activeTab==="utenti"?1100:activeTab==="backup"?900:800),margin:"0 auto",padding:"24px 24px"}}
     , React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}
       , React.createElement('div', null
         , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,margin:0}}, "Impostazioni")
@@ -3832,7 +3939,10 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     )   /* end React.createElement(ImpSection,...) */
 
     /* ── Reset dati (solo admin) ──────────────────────────────────────────── */
-    , activeTab==="anno" && (propRuolo==="admin"||!propRuolo) && React.createElement(ResetDatiSection)
+    , activeTab==="backup" && (propRuolo==="admin"||!propRuolo) && React.createElement(ResetDatiSection)
+
+    /* ── Backup DB (solo admin) ───────────────────────────────────────────── */
+    , activeTab==="backup" && (propRuolo==="admin"||!propRuolo) && React.createElement(BackupDatiSection)
 
     , activeTab==="generale" && React.createElement(ImpSection, {title:"Stile grafico app", icon:"palette"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
