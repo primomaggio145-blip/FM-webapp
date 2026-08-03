@@ -1,0 +1,66 @@
+name: Restore DB (pg_restore)
+
+# Si avvia SOLO manualmente: dal pulsante "Ripristina" nella webapp
+# (via repository_dispatch, innescato da admin-trigger-restore), oppure
+# a mano da GitHub Actions con "Run workflow" specificando il filename.
+on:
+  repository_dispatch:
+    types: [db-restore]
+  workflow_dispatch:
+    inputs:
+      filename:
+        description: 'Nome del file .dump da ripristinare (es. futuro-musica-20260803-030000.dump)'
+        required: true
+        type: string
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determina il filename
+        id: file
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "filename=${{ github.event.client_payload.filename }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "filename=${{ inputs.filename }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Valida il nome del file (whitelist anti path-traversal)
+        run: |
+          FN="${{ steps.file.outputs.filename }}"
+          if ! echo "$FN" | grep -qE '^futuro-musica-[0-9]{8}-[0-9]{6}\.dump$'; then
+            echo "❌ Nome file non valido: $FN"
+            exit 1
+          fi
+
+      - name: Scarica il dump da Supabase Storage
+        run: |
+          curl -sf -o "${{ steps.file.outputs.filename }}" \
+            "${{ secrets.SUPABASE_URL }}/storage/v1/object/backups/${{ steps.file.outputs.filename }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
+
+      - name: Verifica dimensione file scaricato
+        run: ls -lh "${{ steps.file.outputs.filename }}"
+
+      # ⚠️ --data-only --clean: NON tocca lo schema (nessun DROP/CREATE TABLE),
+      # ma SVUOTA (TRUNCATE) ogni tabella presente nel dump appena prima di
+      # reinserirne i dati, per evitare conflitti di chiave primaria.
+      # Questo significa che qualsiasi riga creata DOPO il backup, in una
+      # tabella presente nel dump, viene persa. È un ripristino "totale",
+      # non selettivo — per un ripristino selettivo di poche tabelle vedi
+      # la procedura manuale con --table=... discussa in chat.
+      - name: Esegui pg_restore (via pooler, IPv4)
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          docker run --rm -e PGPASSWORD \
+            -v "$PWD:/backup" \
+            postgres:16 \
+            pg_restore --data-only --clean --disable-triggers \
+              -h "${{ secrets.SUPABASE_DB_HOST }}" -p 5432 \
+              -U "${{ secrets.SUPABASE_DB_USER }}" -d postgres \
+              "/backup/${{ steps.file.outputs.filename }}"
+
+      - name: Esito
+        run: echo "✅ Ripristino completato da ${{ steps.file.outputs.filename }}"
