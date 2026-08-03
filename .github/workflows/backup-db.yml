@@ -23,13 +23,20 @@ jobs:
       # compatibile con la versione del server Supabase.
       # ⚠️ Verifica su Supabase (Project Settings → Database) quale major
       #    version usa il progetto e allinea il tag "postgres:16" sotto.
-      - name: Esegui pg_dump
+      #
+      # NOTA IMPORTANTE: la connessione diretta (db.<ref>.supabase.co) è
+      # solo IPv6 — i runner di GitHub Actions non hanno IPv6 in uscita,
+      # quindi qui usiamo il CONNECTION POOLER di Supabase (Supavisor),
+      # raggiungibile anche via IPv4. Serve host/utente diversi (vedi
+      # secrets SUPABASE_DB_HOST e SUPABASE_DB_USER, spiegati sotto).
+      - name: Esegui pg_dump (via pooler, IPv4)
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           docker run --rm -e PGPASSWORD \
             postgres:17.6 \
-            pg_dump -h db.ocsxrjommtrjelnbihfr.supabase.co -p 5432 -U postgres -d postgres -F c \
+            pg_dump -h "${{ secrets.SUPABASE_DB_HOST }}" -p 5432 \
+              -U "${{ secrets.SUPABASE_DB_USER }}" -d postgres -F c \
             > "${{ steps.nome.outputs.filename }}"
 
       - name: Verifica dimensione file
