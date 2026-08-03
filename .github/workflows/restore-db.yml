@@ -60,7 +60,7 @@ jobs:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           docker run --rm -e PGPASSWORD \
-            postgres:16 \
+            postgres:17.6 \
             psql -h "${{ secrets.SUPABASE_DB_HOST }}" -p 5432 \
               -U "${{ secrets.SUPABASE_DB_USER }}" -d postgres -v ON_ERROR_STOP=1 -c "
             DO \$\$
