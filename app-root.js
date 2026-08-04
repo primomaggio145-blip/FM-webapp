@@ -3535,6 +3535,8 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
   const rs = draft.ricevutaStyle || {};
   const ac = rs.accentColor || "#1a4fa0";
   const [saveError, setSaveError] = useState('');
+  const [toast, setToast] = useState(null);
+  const showToast = (ok, msg) => { setToast({ok,msg}); setTimeout(()=>setToast(null),6000); };
 
   // Panels e Ruolo locali se non passati dall'esterno
   const [_lPanels, _setLPanels] = useState({});
@@ -3692,6 +3694,9 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
           )
         )
     )
+
+    /* ── Toast di conferma/errore (es. handleSetAttivo, handleAddAnno, ecc.) ── */
+    , toast && React.createElement('div',{style:{padding:'10px 14px',borderRadius:8,marginBottom:16,fontSize:13,background:toast.ok?C.greenBg:C.redBg,border:`1px solid ${toast.ok?C.greenBorder:C.redBorder}`,color:toast.ok?C.green:C.red}}, toast.msg)
 
     , activeTab==="scuola" && React.createElement(ImpSection, {title:"Identità scuola", icon:"flag"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
