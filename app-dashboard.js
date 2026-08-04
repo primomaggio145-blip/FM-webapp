@@ -1351,8 +1351,22 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     if (String(notifId).indexOf('notifica_') === 0) {
       var realId = String(notifId).slice('notifica_'.length);
       var sb = window.supabaseClient;
-      if (sb) { sb.from('notifiche').delete().eq('id', realId).then(function(r){ if (r && r.error) console.warn('[FM] errore eliminazione notifica:', r.error.message); }); }
-      if (_setNotificheNB) {
+      if (sb) {
+        sb.from('notifiche').delete().eq('id', realId).select().then(function(r){
+          if (r && r.error) { console.warn('[FM] errore eliminazione notifica:', r.error.message); alert('Errore durante l\'eliminazione: ' + r.error.message); return; }
+          if (!r || !r.data || r.data.length === 0) {
+            // Nessuna riga eliminata: probabile policy RLS (DELETE) mancante su Supabase.
+            // Non rimuoviamo dallo stato locale, altrimenti la notifica sparirebbe "finta"
+            // e tornerebbe al prossimo aggiornamento/accesso.
+            console.warn('[FM] delete su notifiche: 0 righe eliminate (probabile RLS mancante per DELETE)');
+            alert('Impossibile eliminare la notifica: permessi insufficienti sul database (RLS). Contatta l\'amministratore per verificare la policy DELETE sulla tabella "notifiche".');
+            return;
+          }
+          if (_setNotificheNB) {
+            _setNotificheNB(function(p){ return (p||[]).filter(function(x){ return String(x.id) !== String(realId); }); });
+          }
+        });
+      } else if (_setNotificheNB) {
         _setNotificheNB(function(p){ return (p||[]).filter(function(x){ return String(x.id) !== String(realId); }); });
       }
     } else {
