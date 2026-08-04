@@ -243,8 +243,10 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     {m:9, y:annoInizio},{m:10,y:annoInizio},{m:11,y:annoInizio},{m:12,y:annoInizio},
     {m:1, y:annoInizio+1},{m:2,y:annoInizio+1},{m:3,y:annoInizio+1},
     {m:4, y:annoInizio+1},{m:5,y:annoInizio+1},{m:6,y:annoInizio+1},
+    {m:7, y:annoInizio+1},{m:8,y:annoInizio+1},
   ];
-  // Aggiunge SOLO il mese corrente se non è nel range dell'anno scolastico
+  // Aggiunge SOLO il mese corrente se, per qualche motivo (es. annoInizioAttivo non ancora
+  // configurato per l'anno in corso), non rientrasse nel range dell'anno scolastico sopra
   if (!MESI_AS.some(x => x.m===curMonth && x.y===curYear)) {
     MESI_AS.push({m:curMonth, y:curYear});
   }
