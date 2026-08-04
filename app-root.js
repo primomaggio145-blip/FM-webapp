@@ -2982,8 +2982,16 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
     }
     const sb = window.supabaseClient;
     if (sb) {
-      const { error } = await sb.from('notifiche').delete().eq('id', n.id);
-      if (error) { console.warn('[FM] errore eliminazione notifica:', error.message); return; }
+      const { data, error } = await sb.from('notifiche').delete().eq('id', n.id).select();
+      if (error) { console.warn('[FM] errore eliminazione notifica:', error.message); alert('Errore durante l\'eliminazione: ' + error.message); return; }
+      if (!data || data.length === 0) {
+        // Nessuna riga eliminata: quasi certamente bloccato da una policy RLS (DELETE) su Supabase,
+        // non un errore visibile. Non aggiorniamo lo stato locale per non mostrare come eliminata
+        // una notifica che in realtà è ancora nel database.
+        console.warn('[FM] delete su notifiche: 0 righe eliminate (probabile RLS mancante per DELETE)');
+        alert('Impossibile eliminare la notifica: permessi insufficienti sul database (RLS). Contatta l\'amministratore per verificare la policy DELETE sulla tabella "notifiche".');
+        return;
+      }
     }
     const updater = p => (p||[]).filter(x => x.id !== n.id);
     setAllNotifiche(updater);
@@ -3019,10 +3027,21 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
                 if (!window.confirm('Eliminare tutte le notifiche già lette? L\'azione è definitiva.')) return;
                 const sb = window.supabaseClient;
                 const idsLette = mieNotifiche.filter(n => n.letto && !n._isLive).map(n => n.id);
-                if (sb && idsLette.length > 0) await sb.from('notifiche').delete().in('id', idsLette);
-                const updater = p => (p||[]).filter(x => !idsLette.includes(x.id));
-                setAllNotifiche(updater);
-                setNotifiche(updater);
+                if (sb && idsLette.length > 0) {
+                  const { data, error } = await sb.from('notifiche').delete().in('id', idsLette).select();
+                  if (error) { alert('Errore durante l\'eliminazione: ' + error.message); return; }
+                  const eliminate = new Set((data||[]).map(x => x.id));
+                  if (eliminate.size === 0) {
+                    alert('Impossibile eliminare le notifiche: permessi insufficienti sul database (RLS). Contatta l\'amministratore per verificare la policy DELETE sulla tabella "notifiche".');
+                    return;
+                  }
+                  const updater = p => (p||[]).filter(x => !eliminate.has(x.id));
+                  setAllNotifiche(updater);
+                  setNotifiche(updater);
+                  if (eliminate.size < idsLette.length) {
+                    alert(`Eliminate ${eliminate.size} su ${idsLette.length} notifiche: alcune non sono state eliminate per permessi insufficienti.`);
+                  }
+                }
               },
               style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.textMuted,
                 fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
