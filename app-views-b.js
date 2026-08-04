@@ -948,7 +948,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10480}}
               , React.createElement('span', { style: {fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10481}}, "Compensi anno scolastico"  )
             )
-            , React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10483}}
+            , React.createElement('div', { style: {overflowX:"auto", WebkitOverflowScrolling:"touch"}}
+            , React.createElement('table', { style: {width:"100%",minWidth:IS_PWA?600:"auto",borderCollapse:"collapse",whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10483}}
               , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10484}}
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10485}}
                   , React.createElement(SortTh,{label:"Mese",    sortKey:"mese",    currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
@@ -1023,6 +1024,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10538}})
                 )
               )
+            )
             )
           )
           /* Pulsante STAMPA RESOCONTO MENSILE — solo admin */
