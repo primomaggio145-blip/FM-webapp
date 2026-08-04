@@ -954,6 +954,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   , React.createElement(SortTh,{label:"Mese",    sortKey:"mese",    currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Lezioni", sortKey:"n",       currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Compenso",sortKey:"c",       currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Extra",   sortKey:"extra",   currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement('th',{style:{padding:"10px 18px",textAlign:"left",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}}, "vs mese prec.")
                 )
               )
@@ -962,15 +963,17 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   const pm = x.m===1?12:x.m-1, py = x.m===1?x.y-1:x.y;
                   const n  = lezioniMese(selected,x.m,x.y).length;
                   const np = lezioniMese(selected,pm,py).length;
-                  const c  = n * selected.tariffaOra + totaleAltreCompetenzeMese(selected, x.m, x.y);
+                  const extra = totaleAltreCompetenzeMese(selected, x.m, x.y);
+                  const c  = n * selected.tariffaOra + extra;
                   const delta = n - np;
-                  return { x, i, n, np, c, delta, mese: x.y*100+x.m };
+                  return { x, i, n, np, c, extra, delta, mese: x.y*100+x.m };
                 }), (r,k) => {
                   if(k==="mese") return r.mese;
                   if(k==="n")    return r.n;
                   if(k==="c")    return r.c;
+                  if(k==="extra")return r.extra;
                   return 0;
-                }).map(({x,i,n,np,c,delta})=>{
+                }).map(({x,i,n,np,c,extra,delta})=>{
                   const isS = x.m===selMese.m&&x.y===selMese.y;
                   const isF = isFuture(x);
                   return (
@@ -988,6 +991,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:14,fontWeight:600,color:isF?C.textDim:n>0?C.green:C.textDim}}
                         , isF?"—":n>0?`€${c.toLocaleString("it-IT")}`:"—"
+                      )
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:extra>0?600:400,color:isF?C.textDim:extra>0?C.gold:C.textDim}}
+                        , isF?"—":extra>0?`€${extra.toLocaleString("it-IT")}`:"—"
                       )
                       , React.createElement('td', { style: {padding:"11px 18px"}}
                         , !isF && np>0 && (
@@ -1010,6 +1016,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   )
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:14,fontWeight:600,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10535}}, "€"
                     , andamento.reduce((t,x)=>t+x.comp,0).toLocaleString("it-IT")
+                  )
+                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:600,color:C.gold}, __self: this }, "€"
+                    , MESI_AS.reduce((t,x)=>t+totaleAltreCompetenzeMese(selected,x.m,x.y),0).toLocaleString("it-IT")
                   )
                   , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10538}})
                 )
