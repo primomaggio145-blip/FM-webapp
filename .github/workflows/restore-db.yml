@@ -77,14 +77,59 @@ jobs:
             END \$\$;
             "
 
-      - name: Esegui pg_restore --data-only (via pooler, IPv4)
+      # ⚠️ --disable-triggers NON FUNZIONA su Supabase: richiede privilegi
+      # superuser reali per disattivare i trigger di sistema che applicano
+      # le foreign key (RI_ConstraintTrigger_*), e l'utente "postgres" su
+      # Supabase NON è un vero superuser (riservato internamente).
+      # Il flag fallisce silenziosamente e i vincoli FK restano attivi:
+      # se pg_restore inserisce una tabella figlia prima del suo genitore,
+      # l'inserimento viene rifiutato (violazione FK).
+      #
+      # Soluzione: invece di disattivare i controlli, FORZIAMO l'ordine di
+      # ripristino genitore→figlio, riordinando la lista TOC del dump prima
+      # di eseguire pg_restore. Così i vincoli non vengono mai violati.
+      - name: Genera l'ordine di ripristino (genitori prima dei figli)
+        run: |
+          docker run --rm -v "$PWD:/backup" postgres:16 \
+            pg_restore -l "/backup/${{ steps.file.outputs.filename }}" > toc.list
+
+          ORDINE=(
+            docenti corsi anni_scolastici utenti richieste_accesso sito_config
+            sito_attivita corsi_complementari allegati profili biblioteca
+            notifiche notifiche_config whatsapp_config messaggi iscrizioni_anno
+            brani concerti push_subscriptions prenotazioni_sala gcal_events
+            google_calendar_tokens
+            corsi_docenti studenti spese concerti_prenotazioni
+            lezioni repertorio_studenti quote brani_studenti
+            concerti_partecipanti richieste_recupero whatsapp_log
+          )
+
+          : > toc_ordered.list
+          : > toc_used.list
+
+          for t in "${ORDINE[@]}"; do
+            LINE=$(grep -E "TABLE DATA public ${t} " toc.list || true)
+            if [ -n "$LINE" ]; then
+              echo "$LINE" >> toc_ordered.list
+              echo "$LINE" >> toc_used.list
+            fi
+          done
+
+          # tutto il resto del TOC (header, SEQUENCE SET, ACL, eventuali tabelle
+          # non previste nell'elenco sopra) va in coda, nell'ordine originale
+          grep -v -F -x -f toc_used.list toc.list >> toc_ordered.list
+
+          echo "--- Ordine di ripristino generato ---"
+          grep "TABLE DATA" toc_ordered.list
+
+      - name: Esegui pg_restore --data-only, in ordine genitore→figlio (via pooler, IPv4)
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           docker run --rm -e PGPASSWORD \
             -v "$PWD:/backup" \
-            postgres:17.6 \
-            pg_restore --data-only --disable-triggers \
+            postgres:16 \
+            pg_restore --data-only -L /backup/toc_ordered.list \
               -h "${{ secrets.SUPABASE_DB_HOST }}" -p 5432 \
               -U "${{ secrets.SUPABASE_DB_USER }}" -d postgres \
               "/backup/${{ steps.file.outputs.filename }}"
