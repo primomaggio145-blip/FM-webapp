@@ -965,7 +965,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   const n  = lezioniMese(selected,x.m,x.y).length;
                   const np = lezioniMese(selected,pm,py).length;
                   const extra = totaleAltreCompetenzeMese(selected, x.m, x.y);
-                  const c  = n * selected.tariffaOra + extra;
+                  const c  = n * selected.tariffaOra;
                   const delta = n - np;
                   return { x, i, n, np, c, extra, delta, mese: x.y*100+x.m };
                 }), (r,k) => {
@@ -1016,7 +1016,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                     , andamento.reduce((t,x)=>t+x.n,0)
                   )
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:14,fontWeight:600,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10535}}, "€"
-                    , andamento.reduce((t,x)=>t+x.comp,0).toLocaleString("it-IT")
+                    , MESI_AS.reduce((t,x)=>t+lezioniMese(selected,x.m,x.y).length*selected.tariffaOra,0).toLocaleString("it-IT")
                   )
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:600,color:C.gold}, __self: this }, "€"
                     , MESI_AS.reduce((t,x)=>t+totaleAltreCompetenzeMese(selected,x.m,x.y),0).toLocaleString("it-IT")
