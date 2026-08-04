@@ -3934,7 +3934,21 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
             const nuovoAnno = { annoInizio: nuovoInizio, annoFine: nuovoInizio+1, mesiAttivi:[0,1,2,3,4,8,9,10,11], attivo:false };
             if (propSetAnni) propSetAnni(prev => [...prev, nuovoAnno]);
             const sb = window.supabaseClient; if (!sb) return;
-            await sb.from('anni_scolastici').upsert({anno_inizio:nuovoInizio, anno_fine:nuovoInizio+1, mesi_attivi:[0,1,2,3,4,8,9,10,11], attivo:false});
+            const { error } = await sb.from('anni_scolastici').upsert({
+                id: crypto.randomUUID(),
+                label: `${nuovoInizio}/${nuovoInizio+1}`,
+                anno_inizio: nuovoInizio,
+                anno_fine: nuovoInizio+1,
+                mesi_attivi: [0,1,2,3,4,8,9,10,11],
+                attivo: false,
+                stato: 'attivo',
+              }, {onConflict:'anno_inizio'});
+            if (error) {
+              showToast && showToast(false, `Errore salvataggio anno: ${error.message}`);
+              if (propSetAnni) propSetAnni(prev => prev.filter(a => a.annoInizio !== nuovoInizio)); // rollback ottimistico
+            } else {
+              showToast && showToast(true, `Anno scolastico ${nuovoInizio}/${nuovoInizio+1} creato ✅`);
+            }
           };
 
           return React.createElement('div', null
