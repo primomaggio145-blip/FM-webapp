@@ -898,18 +898,31 @@
     _timer = setTimeout(() => syncState(state), DEBOUNCE);
   };
 
-  // Esposto a app.js per aggiornare _prev dopo insert diretto su Supabase
+  // Esposto a app.js per aggiornare _prev dopo un caricamento/reload diretto da Supabase
+  // (es. window.__FM_FORCE_REFRESH__, window.__FM_LOAD_LEZIONI_ANNO__).
+  // IMPORTANTE: senza questo, __FM_FORCE_REFRESH__ aggiorna lo stato React ma NON la
+  // baseline _prev usata dal diff-sync — al giro successivo, ogni entità ricaricata
+  // (es. corsi) verrebbe vista come "nuova" rispetto alla vecchia _prev, causando un
+  // INSERT duplicato su un record già esistente → 409 Conflict su Supabase.
   window.__FM_UPDATE_PREV__ = function(data) {
-    if (data.lessons) {
-      _prev.lessons = data.lessons.map(l => {
-        try { return toDB.lezioni(l); } catch(e) { return l; }
-      });
-    }
-    if (data.entrate) {
-      _prev.entrate = data.entrate.map(e => {
-        try { return toDB.quote(e); } catch(e2) { return e; }
-      });
-    }
+    const ADAPTERS = {
+      students: toDB.studenti,
+      docenti:  toDB.docenti,
+      courses:  toDB.corsi,
+      lessons:  toDB.lezioni,
+      entrate:  toDB.quote,
+      spese:    toDB.spese,
+      concerti: toDB.concerti,
+      allegati: toDB.allegati,
+      prenotazioni_sala: toDB.prenotazioni_sala,
+    };
+    Object.keys(ADAPTERS).forEach(key => {
+      if (data[key] !== undefined && data[key] !== null) {
+        _prev[key] = data[key].map(item => {
+          try { return ADAPTERS[key](item); } catch(e) { return item; }
+        });
+      }
+    });
   };
 
   // Esposto alle view (Allievi/Corsi/Docenti/Impostazioni): carica SOLO le lezioni

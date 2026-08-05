@@ -2646,7 +2646,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   );
 };
 
-const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:propStudents, setStudents:propSetStudents, docenti:propDocenti, userRuolo:_rC2, appUser:_aC, iscrizioniAnno:propIscrizioniCV, annoInizioAttivo:propAnnoIniziCV, anniScolastici:propAnniCV }) => {
+const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:propStudents, setStudents:propSetStudents, docenti:propDocenti, lessons:propLessonsCV, userRuolo:_rC2, appUser:_aC, iscrizioniAnno:propIscrizioniCV, annoInizioAttivo:propAnnoIniziCV, anniScolastici:propAnniCV }) => {
   const _ruoloCorsi = _rC2 || "admin";
   const _nomeCorsi  = (_aC && _aC.nome) || "";
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
@@ -2669,14 +2669,30 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
 
   // Allievi filtrati per anno: solo chi ha un'iscrizione in quell'anno
   const iscrizioniAnno = propIscrizioniCV || (window.__FM_DATA__&&window.__FM_DATA__.iscrizioniAnno) || [];
+  const lessonsCV = propLessonsCV || (window.__FM_DATA__&&window.__FM_DATA__.lessons) || [];
   const studentsAnno = React.useMemo(() => {
     if (_ruoloCorsi !== 'admin') return students;
     const idIscritti = new Set(
       iscrizioniAnno.filter(i=>String(i.annoInizio)===String(annoSel)).map(i=>String(i.studentId))
     );
-    if (idIscritti.size === 0) return students; // se nessuna iscrizione registrata, mostra tutti
-    return students.filter(s => idIscritti.has(String(s.id)));
-  }, [students, iscrizioniAnno, annoSel, _ruoloCorsi]);
+    if (idIscritti.size > 0) return students.filter(s => idIscritti.has(String(s.id)));
+    // Fallback: nessuna iscrizione registrata per l'anno selezionato (es. mai importata) —
+    // usa le lezioni effettive dell'anno come indicatore, invece di mostrare tutti gli allievi
+    const idConLezioni = new Set(
+      lessonsCV.flatMap(l => {
+        const [ly] = (l.date||'').split('-').map(Number);
+        const lm = parseInt((l.date||'').split('-')[1]||'0');
+        const inAnno = (lm>=9 && ly===Number(annoSel)) || (lm<=8 && ly===Number(annoSel)+1);
+        if (!inAnno) return [];
+        const ids = [];
+        if (l.studentId) ids.push(String(l.studentId));
+        (l.students||[]).forEach(s => { if (s && s.id) ids.push(String(s.id)); });
+        return ids;
+      })
+    );
+    if (idConLezioni.size > 0) return students.filter(s => idConLezioni.has(String(s.id)));
+    return students; // nessun dato storico disponibile per quell'anno: ultimo fallback
+  }, [students, iscrizioniAnno, annoSel, _ruoloCorsi, lessonsCV]);
 
   const handleAddCourse = async (d) => {
     const sb = window.supabaseClient;
