@@ -912,6 +912,30 @@
     }
   };
 
+  // Esposto alle view (Allievi/Corsi/Docenti/Impostazioni): carica SOLO le lezioni
+  // dell'anno scolastico indicato (1 set annoInizio → 31 ago annoInizio+1) e SOSTITUISCE
+  // per intero lo stato React `lessons`, così calendario/registro mostrano solo quell'anno.
+  // Resetta anche _prev.lessons alla stessa selezione: senza questo, il prossimo giro di
+  // syncState() vedrebbe tutte le lezioni fuori range come "cancellate" e le eliminerebbe
+  // davvero da Supabase — vedi window.__FM_UPDATE_PREV__ sopra, stesso principio.
+  window.__FM_LOAD_LEZIONI_ANNO__ = async function(annoInizio) {
+    const sb = window.supabaseClient;
+    if (!sb || annoInizio == null) return null;
+    try {
+      const dataInizio = `${annoInizio}-09-01`;
+      const dataFine   = `${Number(annoInizio) + 1}-08-31`;
+      const { data, error } = await sb.from('lezioni').select('*')
+        .gte('data', dataInizio).lte('data', dataFine)
+        .order('data', { ascending: true });
+      if (error) { warn('load lezioni anno', error.message); return null; }
+      const adapted = (data || []).map(r => adaptLezione(r, []));
+      _prev.lessons = adapted;
+      if (window.__FM_RELOAD__) window.__FM_RELOAD__({ lessons: adapted });
+      log(`Lezioni caricate per anno ${annoInizio}/${Number(annoInizio) + 1}: ${adapted.length}`);
+      return adapted;
+    } catch(e) { warn('load lezioni anno', e); return null; }
+  };
+
   // Guard globale: set di chiavi "data_ora_corso/studente" per cui un insert è in corso o completato
   // Previene inserimenti doppi da handleEdit + debounce fm_sync
   window.__FM_LESSON_INSERTED__ = window.__FM_LESSON_INSERTED__ || new Set();

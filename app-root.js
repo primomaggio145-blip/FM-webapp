@@ -3917,6 +3917,11 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
             // Aggiorna anche lo sharedConfig globale
             if (setConfig) setConfig(p => ({...p, annoInizioAttivo: annoInizio}));
             showToast && showToast(true, `Anno scolastico ${annoInizio}/${annoInizio+1} impostato come attivo ✅`);
+            // Ricarica tutti i dati da Supabase (docenti, allievi, corsi, lezioni, iscrizioni)
+            // così l'app riflette subito il nuovo anno attivo, senza bisogno di refresh manuale
+            if (window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
+            // Sostituisce le lezioni in memoria con SOLO quelle dell'anno appena attivato
+            if (window.__FM_LOAD_LEZIONI_ANNO__) window.__FM_LOAD_LEZIONI_ANNO__(annoInizio);
           };
 
           const handleToggleMese = async (annoInizio, mese) => {
@@ -3948,6 +3953,8 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
               if (propSetAnni) propSetAnni(prev => prev.filter(a => a.annoInizio !== nuovoInizio)); // rollback ottimistico
             } else {
               showToast && showToast(true, `Anno scolastico ${nuovoInizio}/${nuovoInizio+1} creato ✅`);
+              // Ricarica da Supabase per allineare anni_scolastici (e relative iscrizioni) nello stato React
+              if (window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
             }
           };
 
