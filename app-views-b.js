@@ -175,9 +175,41 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     }
     return corsi;
   };
-  const allievi = (d) => students
-    .map(s => ({ ...s, _corsiConDocente: corsiConDocente(d, s) }))
-    .filter(s => s._corsiConDocente.length > 0);
+  const allievi = (d) => {
+    // Filtra prima per anno scolastico selezionato (fonte di verità: iscrizioni_anno).
+    const annoTarget = (typeof annoSelDoc !== 'undefined' && annoSelDoc != null) ? annoSelDoc : annoInizio;
+    const iscrAnnoList = _propIscrizioniDV || [];
+    const idsIscrittiAnno = new Set(
+      iscrAnnoList.filter(i => String(i.annoInizio) === String(annoTarget)).map(i => String(i.studentId))
+    );
+    let base;
+    if (idsIscrittiAnno.size > 0) {
+      base = students.filter(s => idsIscrittiAnno.has(String(s.id)));
+    } else {
+      // Fallback: nessuna iscrizione registrata per l'anno (es. mai importata) —
+      // usa le lezioni effettive con QUESTO docente in quell'anno, invece di mostrare
+      // tutti gli allievi attualmente assegnati (che includerebbe anche altri anni)
+      const idsConLezioniDocente = new Set(
+        lessons.flatMap(l => {
+          if (!matchTeacher(d, l.teacher)) return [];
+          const [ly] = (l.date||'').split('-').map(Number);
+          const lm = parseInt((l.date||'').split('-')[1]||'0');
+          const inAnno = (lm>=9 && ly===Number(annoTarget)) || (lm<=8 && ly===Number(annoTarget)+1);
+          if (!inAnno) return [];
+          const ids = [];
+          if (l.studentId) ids.push(String(l.studentId));
+          (l.students||[]).forEach(s => { if (s && s.id) ids.push(String(s.id)); });
+          return ids;
+        })
+      );
+      base = idsConLezioniDocente.size > 0
+        ? students.filter(s => idsConLezioniDocente.has(String(s.id)))
+        : students; // ultimo fallback: nessun dato storico disponibile
+    }
+    return base
+      .map(s => ({ ...s, _corsiConDocente: corsiConDocente(d, s) }))
+      .filter(s => s._corsiConDocente.length > 0);
+  };
   const lezioniD = (d) => lessons.filter(l => l.date && matchTeacher(d, l.teacher) && l.attendance !== 'recuperata');
 
   // Calcoli mensili basati su lezioni effettive
