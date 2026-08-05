@@ -4087,12 +4087,20 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
               const annoRifFest2 = festAnnoSel || annoAttivoFest2;
               const annoRifObj = anniDisp2.find(a => String(a.annoInizio) === String(annoRifFest2));
               const mesiAttiviRif = (annoRifObj && Array.isArray(annoRifObj.mesiAttivi)) ? annoRifObj.mesiAttivi : [0,1,2,3,4,8,9,10,11];
-              return Object.entries({
-                  ...getItalianHolidays(annoRifFest2),
-                  ...getItalianHolidays(annoRifFest2 + 1),
-                })
-                // Mostra solo le festività che cadono in un mese di lezione dell'anno scolastico selezionato
-                .filter(([dateStr]) => mesiAttiviRif.includes(parseInt(dateStr.split('-')[1], 10) - 1))
+              // Un anno scolastico "2026/2027" copre Set-Dic 2026 (dal primo anno civile)
+              // e Gen-Ago 2027 (dal secondo anno civile) — non entrambi gli anni per intero.
+              // Per ogni mese selezionato in mesiAttivi, prendi le festività dal SOLO anno
+              // civile corretto: mese >= Settembre (8) → primo anno; mese < Settembre → secondo.
+              const holidaysMerged = {};
+              Object.entries(getItalianHolidays(annoRifFest2)).forEach(([dateStr, h]) => {
+                const mese = parseInt(dateStr.split('-')[1], 10) - 1;
+                if (mese >= 8 && mesiAttiviRif.includes(mese)) holidaysMerged[dateStr] = h;
+              });
+              Object.entries(getItalianHolidays(annoRifFest2 + 1)).forEach(([dateStr, h]) => {
+                const mese = parseInt(dateStr.split('-')[1], 10) - 1;
+                if (mese < 8 && mesiAttiviRif.includes(mese)) holidaysMerged[dateStr] = h;
+              });
+              return Object.entries(holidaysMerged)
                 .sort((a,b)=>a[0].localeCompare(b[0])).map(([dateStr, h]) => {
               const isAperta = (draft.festivitaConfig||{})[dateStr] === false;
               return React.createElement('div', {key:dateStr, style:{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',borderRadius:8,background:isAperta?C.greenBg:C.redBg,border:`1px solid ${isAperta?C.greenBorder:C.redBorder}`}}
