@@ -4081,10 +4081,19 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
             );
           })()
         , React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8}}
-          , Object.entries({
-              ...getItalianHolidays(festAnnoSel || draft.annoInizioAttivo || new Date().getFullYear()),
-              ...getItalianHolidays((festAnnoSel || draft.annoInizioAttivo || new Date().getFullYear()) + 1),
-            }).sort((a,b)=>a[0].localeCompare(b[0])).map(([dateStr, h]) => {
+          , (() => {
+              const anniDisp2 = (propAnni||[]);
+              const annoAttivoFest2 = draft.annoInizioAttivo || (anniDisp2[0] && anniDisp2[0].annoInizio) || new Date().getFullYear();
+              const annoRifFest2 = festAnnoSel || annoAttivoFest2;
+              const annoRifObj = anniDisp2.find(a => String(a.annoInizio) === String(annoRifFest2));
+              const mesiAttiviRif = (annoRifObj && Array.isArray(annoRifObj.mesiAttivi)) ? annoRifObj.mesiAttivi : [0,1,2,3,4,8,9,10,11];
+              return Object.entries({
+                  ...getItalianHolidays(annoRifFest2),
+                  ...getItalianHolidays(annoRifFest2 + 1),
+                })
+                // Mostra solo le festività che cadono in un mese di lezione dell'anno scolastico selezionato
+                .filter(([dateStr]) => mesiAttiviRif.includes(parseInt(dateStr.split('-')[1], 10) - 1))
+                .sort((a,b)=>a[0].localeCompare(b[0])).map(([dateStr, h]) => {
               const isAperta = (draft.festivitaConfig||{})[dateStr] === false;
               return React.createElement('div', {key:dateStr, style:{display:'flex',alignItems:'center',gap:12,padding:'8px 12px',borderRadius:8,background:isAperta?C.greenBg:C.redBg,border:`1px solid ${isAperta?C.greenBorder:C.redBorder}`}}
                 , React.createElement('span',{style:{fontSize:16}}, h.emoji)
@@ -4108,6 +4117,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
                 )
               );
             })
+        })()
         )
       )
       // Chiusure personalizzate (periodi arbitrari)

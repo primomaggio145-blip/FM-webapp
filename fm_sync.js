@@ -761,10 +761,22 @@
         id:         r.id,
         label:      r.label,
         annoInizio: r.anno_inizio,
+        annoFine:   r.anno_fine || (r.anno_inizio+1),
+        mesiAttivi: Array.isArray(r.mesi_attivi) ? r.mesi_attivi : [0,1,2,3,4,8,9,10,11],
+        attivo:     r.attivo || false,
         stato:      r.stato,
         note:       r.note || '',
       }));
       log('Anni scolastici DB: ' + anniScolasticiDB.length + ' — ' + anniScolasticiDB.map(a=>a.label+'('+a.stato+')').join(', '));
+
+      // annoInizioAttivo: usa l'anno con attivo=true come fonte di verità
+      // (coerente con la stessa logica in app-root.js __FM_FORCE_REFRESH__)
+      const annoAttivoFromDB = (sANNI||[]).find(r => r.attivo === true);
+      if (annoAttivoFromDB) {
+        configFromDB.annoInizioAttivo = annoAttivoFromDB.anno_inizio;
+      } else if (configFromDB.annoInizioAttivo) {
+        configFromDB.annoInizioAttivo = parseInt(configFromDB.annoInizioAttivo) || configFromDB.annoInizioAttivo;
+      }
 
       // Mappa concerto_id → lista partecipanti (da tabella relazionale concerti_partecipanti)
       const partecipantiMap = {};
