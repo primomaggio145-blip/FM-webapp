@@ -357,7 +357,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               return anniDisp.map(a => {
                 const label = `${a.annoInizio}/${String(a.annoFine||a.annoInizio+1).slice(2)}`;
                 const sel = String(a.annoInizio)===String(annoSelDoc);
-                return React.createElement('button',{key:a.annoInizio, onClick:()=>setAnnoSelDoc(a.annoInizio),
+                return React.createElement('button',{key:a.annoInizio, onClick:()=>{ setAnnoSelDoc(a.annoInizio); if (window.__FM_LOAD_LEZIONI_ANNO__) window.__FM_LOAD_LEZIONI_ANNO__(a.annoInizio); },
                   style:{padding:'4px 12px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.teal:C.bg,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:12,fontWeight:sel?700:400,fontFamily:"'Open Sans',sans-serif"}}
                   , label, sel&&' ●');
               });

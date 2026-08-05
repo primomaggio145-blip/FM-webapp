@@ -2400,6 +2400,11 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
     return [{annoInizio: annoInizioAttivo||new Date().getFullYear(), annoFine:(annoInizioAttivo||new Date().getFullYear())+1}];
   }, [propAnniScolasticiAV, annoInizioAttivo]);
   const [annoSel, setAnnoSel] = useState(annoInizioAttivo || (anniDisp[0]&&anniDisp[0].annoInizio) || new Date().getFullYear());
+  // Se l'anno attivo cambia (es. attivato da Impostazioni mentre la view è già montata),
+  // allinea automaticamente la selezione — altrimenti resterebbe bloccata sull'anno del mount
+  React.useEffect(() => {
+    if (annoInizioAttivo != null) setAnnoSel(annoInizioAttivo);
+  }, [annoInizioAttivo]);
 
   // Filtra allievi per anno scolastico selezionato: SOLO chi ha una riga in iscrizioni_anno per quell'anno
   const studentsAnno = React.useMemo(() => {
@@ -2563,7 +2568,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             , anniDisp.map(a => {
                 const label = `${a.annoInizio}/${String(a.annoFine||a.annoInizio+1).slice(2)}`;
                 const sel = String(a.annoInizio) === String(annoSel);
-                return React.createElement('button',{key:a.annoInizio, onClick:()=>setAnnoSel(a.annoInizio),
+                return React.createElement('button',{key:a.annoInizio, onClick:()=>{ setAnnoSel(a.annoInizio); if (window.__FM_LOAD_LEZIONI_ANNO__) window.__FM_LOAD_LEZIONI_ANNO__(a.annoInizio); },
                   style:{padding:'4px 12px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.teal:C.bg,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:12,fontWeight:sel?700:400,fontFamily:"'Open Sans',sans-serif"}}
                   , label, sel && ' ●'
                 );
@@ -2658,6 +2663,9 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
     return anni.length > 0 ? anni.slice().sort((a,b)=>(b.annoInizio||0)-(a.annoInizio||0)) : [{annoInizio: propAnnoIniziCV||new Date().getFullYear()}];
   }, [propAnniCV, propAnnoIniziCV]);
   const [annoSel, setAnnoSel] = useState(propAnnoIniziCV || (anniDisp[0]&&anniDisp[0].annoInizio) || new Date().getFullYear());
+  React.useEffect(() => {
+    if (propAnnoIniziCV != null) setAnnoSel(propAnnoIniziCV);
+  }, [propAnnoIniziCV]);
 
   // Allievi filtrati per anno: solo chi ha un'iscrizione in quell'anno
   const iscrizioniAnno = propIscrizioniCV || (window.__FM_DATA__&&window.__FM_DATA__.iscrizioniAnno) || [];
@@ -2707,7 +2715,7 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
           , anniDisp.map(a => {
               const label = `${a.annoInizio}/${String(a.annoFine||a.annoInizio+1).slice(2)}`;
               const sel = String(a.annoInizio)===String(annoSel);
-              return React.createElement('button',{key:a.annoInizio, onClick:()=>setAnnoSel(a.annoInizio),
+              return React.createElement('button',{key:a.annoInizio, onClick:()=>{ setAnnoSel(a.annoInizio); if (window.__FM_LOAD_LEZIONI_ANNO__) window.__FM_LOAD_LEZIONI_ANNO__(a.annoInizio); },
                 style:{padding:'4px 12px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.teal:C.bg,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:12,fontWeight:sel?700:400,fontFamily:"'Open Sans',sans-serif"}}
                 , label, sel&&' ●');
             })
