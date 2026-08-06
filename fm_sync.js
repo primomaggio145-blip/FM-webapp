@@ -42,11 +42,15 @@
   }
   function adaptDocente(r) {
     const FA = window.FMAdapter;
-    return FA ? FA.docente(r) : r;
+    const base = FA ? FA.docente(r) : r;
+    base.annoCreazione = (r.anno_creazione != null) ? r.anno_creazione : null;
+    return base;
   }
   function adaptCorso(r) {
     const FA = window.FMAdapter;
-    return FA ? FA.corso(r) : r;
+    const base = FA ? FA.corso(r) : r;
+    base.annoCreazione = (r.anno_creazione != null) ? r.anno_creazione : null;
+    return base;
   }
   function adaptLezione(r, allegatiAll) {
     // Collega gli allegati di questa lezione (dal array globale allegati)
@@ -226,6 +230,7 @@
         contratto: d.contratto || null,
         data_inizio: d.dataInizio || null,
         attivo: d.attivo !== false,
+        anno_creazione: d.annoCreazione != null ? d.annoCreazione : undefined,
       };
     },
     corsi(c) {
@@ -237,6 +242,7 @@
         livelli: c.livelli || null,
         foto: c.foto || null,
         visible: c.visible !== false,
+        anno_creazione: c.annoCreazione != null ? c.annoCreazione : undefined,
       };
     },
     lezioni(l) {

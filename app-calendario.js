@@ -436,7 +436,7 @@ const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, o
 };
 
 // ── Lista corsi ───────────────────────────────────────────────────────────────
-const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, onDelete, userRuolo:_cmRuolo }) => {
+const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, onDelete, userRuolo:_cmRuolo, annoSel:_annoSelCM }) => {
   const docenti = _docentiRaw || [];
   const _ruoloCorsi = _cmRuolo || "admin";
   const [modal,         setModal]         = useState(null);
@@ -480,9 +480,11 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
     const col = badgeColor==="purple" ? C.purple : C.gold;
     const bg  = badgeColor==="purple" ? C.purpleBg : "#e8edf5";
     const bd  = badgeColor==="purple" ? C.purpleBorder : C.goldDim;
+    const nonPresenteAnno = _annoSelCM != null && c.annoCreazione != null && Number(_annoSelCM) < Number(c.annoCreazione);
     return (
       React.createElement('div', { onClick: (_ruoloCorsi==="allievo"||_ruoloCorsi==="docente") ? undefined : ()=>setSelectedCourse(c),
-        style: {display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,cursor:(_ruoloCorsi==="allievo"||_ruoloCorsi==="docente")?"default":"pointer",transition:"all 0.15s"},
+        style: {display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,cursor:(_ruoloCorsi==="allievo"||_ruoloCorsi==="docente")?"default":"pointer",transition:"all 0.15s",
+          opacity: nonPresenteAnno ? 0.55 : 1},
         onMouseEnter: e=>{ e.currentTarget.style.borderColor=col; e.currentTarget.style.background=bg+"55"; },
         onMouseLeave: e=>{ e.currentTarget.style.borderColor=C.border; e.currentTarget.style.background=C.bg; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2824}}
         , React.createElement('div', { style: {width:38,height:38,borderRadius:8,background:bg,border:`1px solid ${bd}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2828}}
@@ -490,6 +492,7 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
         )
         , React.createElement('div', { style: {flex:1,minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2831}}
           , React.createElement('div', { style: {fontSize:14,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2832}}, c.name)
+          , nonPresenteAnno && React.createElement('div', {style:{fontSize:10,fontWeight:700,letterSpacing:'.06em',color:'#c0392b',background:'#fdecea',border:'1px solid #c0392b40',borderRadius:6,padding:'2px 6px',display:'inline-block',marginTop:3}}, 'NON PRESENTE IN QUESTO A.S.')
           , c.description && React.createElement('div', { style: {fontSize:12,color:C.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2833}}, c.description)
         )
         , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:12,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2835}}
@@ -2697,12 +2700,14 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
   const handleAddCourse = async (d) => {
     const sb = window.supabaseClient;
     const newId = uid();
+    // L'anno di creazione è sempre l'anno ATTIVO (non quello eventualmente sfogliato nel selettore)
+    const annoCreazione = propAnnoIniziCV != null ? Number(propAnnoIniziCV) : Number(annoSel);
     if (sb) {
-      const row = { id:newId, nome:d.name||d.nome||'', tipo:d.type||d.tipo||'individuale', descrizione:d.description||d.descrizione||null, visible:true };
+      const row = { id:newId, nome:d.name||d.nome||'', tipo:d.type||d.tipo||'individuale', descrizione:d.description||d.descrizione||null, visible:true, anno_creazione: annoCreazione };
       const { error } = await sb.from('corsi').insert(row);
       if (error) console.warn('[FM] handleAddCourse error:', error.message);
     }
-    setCourses(p => [...p, {...d, id:newId}]);
+    setCourses(p => [...p, {...d, id:newId, annoCreazione}]);
   };
   const handleEditCourse = async (d) => {
     const sb = window.supabaseClient;
@@ -2737,6 +2742,7 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
             })
         )
       , React.createElement(CourseManager, {
+        annoSel: annoSel,
         courses: _ruoloCorsi==="docente"
           ? (()=>{
               // Cerca il docente per docenteId (più affidabile) oppure per nome
