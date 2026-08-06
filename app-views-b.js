@@ -82,7 +82,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const saveDoc  = async () => {
     const isNew = modal === "new";
     const saved = isNew
-      ? {...draft, id:uid(), colore:draft.colore||C.gold, teacherKey:draft.teacherKey||draft.nome}
+      ? {...draft, id:uid(), colore:draft.colore||C.gold, teacherKey:draft.teacherKey||draft.nome, annoCreazione:annoInizio}
       : {...draft};
     if(isNew)  setDocenti(p=>[...p, saved]);
     if(!isNew) { setDocenti(p=>p.map(d=>d.id===saved.id?saved:d)); if(_optionalChain([selected, 'optionalAccess', _83 => _83.id])===saved.id) setSelected(saved); }
@@ -133,6 +133,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           contratto:   saved.contratto   || null,
           data_inizio: saved.dataInizio  || null,
           attivo:      saved.attivo !== false,
+          anno_creazione: isNew ? annoInizio : undefined,
         };
         // rimuove undefined
         Object.keys(row).forEach(k => { if (row[k] === undefined) delete row[k]; });
@@ -399,48 +400,21 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
       , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9969}}
         , (ruoloDocView==="docente"
           ? (()=>{ const did=(_appUserDocView&&_appUserDocView.docenteId)||null; if(did) return (docenti||[]).filter(d=>String(d.id)===String(did)); const ln=(_appUserDocView&&_appUserDocView.nome)||""; return (docenti||[]).filter(d=>d.teacherKey===ln||(d.nome||"").toLowerCase().includes(ln.toLowerCase())); })()
-          // Admin: filtra per anno scolastico — usa iscrizioni_anno come fonte di verità, fallback su lezioni
-          : (() => {
-              const tuttiDocenti = docenti||[];
-              const iscrAnno = _propIscrizioniDV||[];
-              const iscrittiAnnoCorrente = iscrAnno.filter(i=>String(i.annoInizio)===String(annoSelDoc));
-              const docConIscrizioni = new Set();
-              iscrittiAnnoCorrente.forEach(i => {
-                if (i.docenteNome) docConIscrizioni.add(i.docenteNome);
-                // La riga di iscrizione registra un solo corso/docente per allievo/anno:
-                // recupera anche i docenti di TUTTI i corsi individuali attuali dell'allievo
-                // (principale + extra), così un docente "secondario" non sparisce dalla vista.
-                const stu = students.find(s => String(s.id)===String(i.studentId));
-                if (stu) {
-                  if (stu.teacher) docConIscrizioni.add(stu.teacher);
-                  if (stu.extraTeachers && typeof stu.extraTeachers === 'object') {
-                    const extraAttivi = new Set(stu.extraInstruments||[]);
-                    Object.entries(stu.extraTeachers).forEach(([corso, t]) => { if (t && extraAttivi.has(corso)) docConIscrizioni.add(t); });
-                  }
-                }
-              });
-              if (docConIscrizioni.size > 0) {
-                return tuttiDocenti.filter(d => docConIscrizioni.has(d.nome||'') || docConIscrizioni.has(d.teacherKey||''));
-              }
-              // Fallback: nessuna iscrizione registrata ancora, usa le lezioni come prima
-              const docConLezioni = new Set(
-                lessons.filter(l => {
-                  const [ly] = (l.date||'').split('-').map(Number);
-                  const lm = parseInt((l.date||'').split('-')[1]||'0');
-                  return (lm>=9 && ly===annoSelDoc) || (lm<=8 && ly===annoSelDoc+1);
-                }).map(l=>l.teacher||l.docente||'').filter(Boolean)
-              );
-              if (docConLezioni.size===0) return tuttiDocenti;
-              return tuttiDocenti.filter(d => docConLezioni.has(d.nome||'') || docConLezioni.has(d.teacherKey||''));
-            })()
+          // Admin: mostra sempre tutti i docenti — l'anno scolastico selezionato filtra
+          // solo il loro elenco/conteggio allievi (vedi allievi(d)), non la loro presenza in lista
+          : (docenti||[])
         ).map(d=>{
           const all = allievi(d);
+          // Il docente non era ancora presente nell'anno scolastico sfogliato (creato dopo)
+          const nonPresenteAnno = ruoloDocView==="admin" && d.annoCreazione != null && Number(annoSelDoc) < Number(d.annoCreazione);
           return (
             React.createElement('div', { key: d.id, onClick: ()=>{setSelected(d);setTab("profilo");},
               style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,
-                padding:22,cursor:"pointer",transition:"all 0.18s",borderTop:`3px solid ${d.colore}30`},
+                padding:22,cursor:"pointer",transition:"all 0.18s",borderTop:`3px solid ${d.colore}30`,
+                opacity: nonPresenteAnno ? 0.55 : 1},
               onMouseEnter: e=>{e.currentTarget.style.borderColor=d.colore;e.currentTarget.style.borderTopColor=d.colore;},
               onMouseLeave: e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.borderTopColor=d.colore+"30";}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9973}}
+              , nonPresenteAnno && React.createElement('div', {style:{fontSize:10,fontWeight:700,letterSpacing:'.06em',color:'#c0392b',background:'#fdecea',border:'1px solid #c0392b40',borderRadius:6,padding:'3px 8px',display:'inline-block',marginBottom:10}}, 'NON PRESENTE IN QUESTO A.S.')
               , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9978}}
                 , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9979}}
                   , React.createElement(Avatar, { initials: d.nome.replace("Prof.ssa ","").replace("Prof. ","").split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(), hex: d.colore, size: 44, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9980}})
