@@ -2707,7 +2707,11 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
       const { error } = await sb.from('corsi').insert(row);
       if (error) console.warn('[FM] handleAddCourse error:', error.message);
     }
-    setCourses(p => [...p, {...d, id:newId, annoCreazione}]);
+    setCourses(p => {
+      const next = [...p, {...d, id:newId, annoCreazione}];
+      if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ courses: next });
+      return next;
+    });
   };
   const handleEditCourse = async (d) => {
     const sb = window.supabaseClient;
@@ -2716,7 +2720,11 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
       const { error } = await sb.from('corsi').update(row).eq('id', d.id);
       if (error) console.warn('[FM] handleEditCourse error:', error.message);
     }
-    setCourses(p => p.map(c => c.id===d.id ? {...c,...d} : c));
+    setCourses(p => {
+      const next = p.map(c => c.id===d.id ? {...c,...d} : c);
+      if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ courses: next });
+      return next;
+    });
   };
   const handleDelCourse = async (id) => {
     const sb = window.supabaseClient;
@@ -2724,7 +2732,11 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
       const { error } = await sb.from('corsi').delete().eq('id', id);
       if (error) console.warn('[FM] handleDelCourse error:', error.message);
     }
-    setCourses(p => p.filter(c => c.id !== id));
+    setCourses(p => {
+      const next = p.filter(c => c.id !== id);
+      if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ courses: next });
+      return next;
+    });
     setStudents(p => p.map(s => s.complementaryCourse===id ? {...s,complementaryCourse:""} : s));
   };
 

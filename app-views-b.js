@@ -84,8 +84,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     const saved = isNew
       ? {...draft, id:uid(), colore:draft.colore||C.gold, teacherKey:draft.teacherKey||draft.nome, annoCreazione:annoInizio}
       : {...draft};
-    if(isNew)  setDocenti(p=>[...p, saved]);
-    if(!isNew) { setDocenti(p=>p.map(d=>d.id===saved.id?saved:d)); if(_optionalChain([selected, 'optionalAccess', _83 => _83.id])===saved.id) setSelected(saved); }
+    if(isNew)  setDocenti(p=>{ const next=[...p, saved]; if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ docenti: next }); return next; });
+    if(!isNew) { setDocenti(p=>{ const next=p.map(d=>d.id===saved.id?saved:d); if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ docenti: next }); return next; }); if(_optionalChain([selected, 'optionalAccess', _83 => _83.id])===saved.id) setSelected(saved); }
     setModal(null);
 
     // Persiste corsi_docenti su Supabase
