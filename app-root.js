@@ -3235,7 +3235,7 @@ const CATEGORIE_RESET = [
   {id:'anniScolastici', label:'🗓️ Archivio anni scolastici', desc:'Anni scolastici configurati e relativo stato attivo'},
 ];
 
-const ResetDatiSection = () => {
+const ResetDatiSection = ({ anniScolastici: propAnniReset, setAnniScolastici: propSetAnniReset } = {}) => {
   const [selected, setSelected] = React.useState({});
   const [counts, setCounts] = React.useState({});
   const [loadingCounts, setLoadingCounts] = React.useState(false);
@@ -3245,6 +3245,10 @@ const ResetDatiSection = () => {
   const [showPanel, setShowPanel] = React.useState(false);
   const [showBackupReminder, setShowBackupReminder] = React.useState(false);
   const [reminderBackupState, setReminderBackupState] = React.useState(null); // null | 'loading' | {ok,...}
+  const [annoTarget, setAnnoTarget] = React.useState(null);       // anno selezionato per eliminazione singola
+  const [annoConfirmText, setAnnoConfirmText] = React.useState('');
+  const [annoPreview, setAnnoPreview] = React.useState(null);     // null | 'loading' | {label, allieviCollegati}
+  const [annoState, setAnnoState] = React.useState(null);         // null | 'loading' | {ok,...}
 
   const showToast = (ok, msg) => { setToast({ok,msg}); setTimeout(()=>setToast(null),6000); };
 
@@ -3306,6 +3310,41 @@ const ResetDatiSection = () => {
     handleReset();
   };
 
+  const openAnnoDelete = async (anno) => {
+    setAnnoTarget(anno); setAnnoConfirmText(''); setAnnoState(null); setAnnoPreview('loading');
+    try {
+      const sb = window.supabaseClient;
+      const { data:{session} } = await sb.auth.getSession();
+      const res = await fetch(ADMIN_RESET_EDGE, {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
+        body: JSON.stringify({action:'count_anno', annoInizio: anno.annoInizio})
+      });
+      const json = await res.json();
+      setAnnoPreview(json.ok ? json : { ok:false, error: json.error||'Errore nel conteggio' });
+    } catch(e) { setAnnoPreview({ ok:false, error: e?.message||'Errore di rete' }); }
+  };
+
+  const handleAnnoDelete = async () => {
+    if (annoConfirmText !== 'ELIMINA' || !annoTarget) return;
+    setAnnoState('loading');
+    try {
+      const sb = window.supabaseClient;
+      const { data:{session} } = await sb.auth.getSession();
+      const res = await fetch(ADMIN_RESET_EDGE, {
+        method:'POST',
+        headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
+        body: JSON.stringify({action:'reset_anno', annoInizio: annoTarget.annoInizio})
+      });
+      const json = await res.json();
+      setAnnoState(json);
+      if (json.ok) {
+        if (propSetAnniReset) propSetAnniReset(prev => (prev||[]).filter(a => a.annoInizio !== annoTarget.annoInizio));
+        showToast(true, `✅ Anno ${json.label||annoTarget.label} eliminato — ${json.allieviScollegati||0} allievi scollegati.`);
+      }
+    } catch(e) { setAnnoState({ ok:false, error: e?.message||'Errore' }); }
+  };
+
   return React.createElement(ImpSection, {title:"⚠️ Reset dati", icon:"trash"}
     , toast && React.createElement('div',{style:{padding:'10px 14px',borderRadius:8,marginBottom:12,fontSize:13,background:toast.ok?C.greenBg:C.redBg,border:`1px solid ${toast.ok?C.greenBorder:C.redBorder}`,color:toast.ok?C.green:C.red}}, toast.msg)
     , React.createElement('div', {style:{padding:'12px 14px',background:C.redBg,border:`1px solid ${C.redBorder}`,borderRadius:8,marginBottom:14,fontSize:12,color:C.red}}
@@ -3328,6 +3367,22 @@ const ResetDatiSection = () => {
                     , loadingCounts ? '...' : (counts[cat.id]!==undefined ? counts[cat.id]+' record' : '')
                   )
               ))
+          )
+        , Array.isArray(propAnniReset) && propAnniReset.length > 0 && React.createElement('div', {style:{padding:'12px 14px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:16}}
+            , React.createElement('div',{style:{fontSize:12,fontWeight:600,color:C.text,marginBottom:4}}, '🗓️ Oppure elimina solo UN anno scolastico specifico')
+            , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginBottom:10}}, 'Gli allievi collegati a quell\'anno vengono scollegati (non cancellati). Gli altri anni restano intatti.')
+            , React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}}
+              , propAnniReset.slice().sort((a,b)=>(b.annoInizio||0)-(a.annoInizio||0)).map(a => React.createElement('div', {key:a.annoInizio,
+                  style:{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg}}
+                  , React.createElement('div',{style:{fontSize:12,color:C.text}}
+                    , `${a.label || (a.annoInizio+'/'+(a.annoFine||a.annoInizio+1))} `
+                    , a.attivo && React.createElement('span',{style:{fontSize:10,color:C.gold,fontWeight:700}}, '● attivo')
+                    )
+                  , React.createElement('button', {onClick:()=>openAnnoDelete(a),
+                      style:{fontSize:11,fontWeight:600,color:C.red,background:'none',cursor:'pointer',padding:'5px 10px',borderRadius:6,border:`1px solid ${C.redBorder||C.red}`}}
+                    , '🗑️ Elimina')
+                ))
+            )
           )
         , selectedIds.length > 0 && React.createElement('div', {style:{padding:'12px 14px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:14}}
             , React.createElement('div',{style:{fontSize:13,fontWeight:600,marginBottom:10}}, `Stai per eliminare ${totaleRecord} record totali da ${selectedIds.length} categorie.`)
@@ -3371,6 +3426,43 @@ const ResetDatiSection = () => {
             , React.createElement('button', {onClick:()=>{setShowBackupReminder(false);setReminderBackupState(null);},
                 style:{padding:'9px 16px',borderRadius:8,border:'none',background:'none',color:C.textMuted,cursor:'pointer',fontSize:13}}
               , 'Annulla')
+          )
+        )
+      )
+
+    // ── Dialog conferma eliminazione di UN SINGOLO anno scolastico ──
+    , annoTarget && React.createElement('div', {style:{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}}
+        , React.createElement('div', {style:{background:C.surface,borderRadius:14,padding:24,maxWidth:440,width:'90%',boxShadow:'0 10px 40px rgba(0,0,0,.3)'}}
+          , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:12}}
+            , React.createElement(Ic,{n:'warn',size:20,stroke:C.red})
+            , React.createElement('div',{style:{fontSize:16,fontWeight:700,color:C.text,fontFamily:"'Oswald',sans-serif"}}, `Eliminare l'anno ${annoTarget.label||annoTarget.annoInizio}?`)
+          )
+          , annoPreview==='loading' && React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:14}}, '⏳ Verifico allievi collegati...')
+          , annoPreview && annoPreview!=='loading' && (
+              annoPreview.ok
+                ? React.createElement('div',{style:{fontSize:13,color:C.textMuted,marginBottom:16,lineHeight:1.5}}
+                  , React.createElement('strong',null, annoPreview.allieviCollegati), ` allievi risultano collegati a questo anno — verranno solo `,
+                    React.createElement('strong',null,'scollegati'), ` (il riferimento all'anno viene azzerato), NON cancellati. L'anno scolastico stesso verrà eliminato definitivamente. Gli altri anni non vengono toccati.`
+                  )
+                : React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red,marginBottom:14}}, `❌ ${annoPreview.error}`)
+            )
+          , annoPreview && annoPreview.ok && React.createElement(React.Fragment, null
+            , React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:6}}, 'Scrivi ', React.createElement('strong',null,'ELIMINA'), ' per confermare:')
+            , React.createElement('input', {type:'text', value:annoConfirmText, onChange:e=>setAnnoConfirmText(e.target.value),
+                placeholder:'ELIMINA',
+                style:{width:'100%',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,marginBottom:16,boxSizing:'border-box'}})
+            , annoState==='loading' && React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:14}}, '⏳ Eliminazione in corso...')
+            , annoState && annoState!=='loading' && !annoState.ok && React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red,marginBottom:14}}, `❌ ${annoState.error}`)
+          )
+          , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
+            , annoPreview && annoPreview.ok && !(annoState && annoState.ok) && React.createElement('button', {onClick:handleAnnoDelete, disabled:annoConfirmText!=='ELIMINA'||annoState==='loading',
+                style:{padding:'10px 16px',borderRadius:8,border:'none',
+                  background:(annoConfirmText!=='ELIMINA'||annoState==='loading')?C.border:C.red,
+                  color:'#fff',cursor:(annoConfirmText!=='ELIMINA'||annoState==='loading')?'not-allowed':'pointer',fontSize:13,fontWeight:700}}
+              , '🗑️ Conferma eliminazione anno')
+            , React.createElement('button', {onClick:()=>{setAnnoTarget(null);setAnnoConfirmText('');setAnnoPreview(null);setAnnoState(null);},
+                style:{padding:'9px 16px',borderRadius:8,border:'none',background:'none',color:C.textMuted,cursor:'pointer',fontSize:13}}
+              , (annoState&&annoState.ok) ? 'Chiudi' : 'Annulla')
           )
         )
       )
@@ -4169,7 +4261,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     )   /* end React.createElement(ImpSection,...) */
 
     /* ── Reset dati (solo admin) ──────────────────────────────────────────── */
-    , activeTab==="backup" && (propRuolo==="admin"||!propRuolo) && React.createElement(ResetDatiSection)
+    , activeTab==="backup" && (propRuolo==="admin"||!propRuolo) && React.createElement(ResetDatiSection, {anniScolastici: propAnni, setAnniScolastici: propSetAnni})
 
     /* ── Backup DB (solo admin) ───────────────────────────────────────────── */
     , activeTab==="backup" && (propRuolo==="admin"||!propRuolo) && React.createElement(BackupDatiSection)
