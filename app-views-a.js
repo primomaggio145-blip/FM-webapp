@@ -2247,7 +2247,7 @@ const INIT_RICHIESTE = [
 
 // ─── DRAWER DETTAGLIO UTENTE ──────────────────────────────────────────────────
 const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin,students,docenti})=>{
-  const [draft,setDraft]=useState({...utente, docenteId:utente.docenteId||null, allievoId:utente.allievoId||null});
+  const [draft,setDraft]=useState({...utente, nomeSocio:utente.nomeSocio||'', docenteId:utente.docenteId||null, allievoId:utente.allievoId||null});
   const [tab,setTab]=useState("profilo");
   const r=ruoloById(draft.ruolo);
   const isSelf=isCurrentAdmin&&utente.id==="u1";// non può modificare se stesso
@@ -2306,7 +2306,10 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
             React.createElement(React.Fragment, null
               , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9200}}
                 , React.createElement(Field, { label: "Nome completo *"  , value: draft.nome, onChange: e=>setD("nome",e.target.value), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9201}})
-                , React.createElement(Field, { label: "Email *" , type: "email", value: draft.email, onChange: e=>setD("email",e.target.value), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9202}})
+                , React.createElement(Field, { label: "Email" , type: "email", value: draft.email, disabled: true,
+                    hint: "L'email è l'account di accesso e non è modificabile da qui.", __self: this, __source: {fileName: _jsxFileName, lineNumber: 9202}})
+                , React.createElement(Field, { label: "Nome socio (chi si iscrive)", value: draft.nomeSocio,
+                    onChange: e=>setD("nomeSocio",e.target.value), placeholder: "Es. Anna Rossi" })
               )
 
               /* Ruolo */
@@ -2573,6 +2576,12 @@ const RichiestaModal=({richiesta,onApprova,onRifiuta,onClose})=>{
             , React.createElement('div', { style: {fontSize:16,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9432}}, richiesta.nome)
             , React.createElement('div', { style: {fontSize:12,color:C.textMuted,marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9433}}, richiesta.email)
             , React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9434}}, "Richiesta del "  , fmt_data(richiesta.data))
+          )
+        )
+        , richiesta.nomeSocio&&(
+          React.createElement('div', { style: {background:C.goldBg,border:`1px solid rgba(26,79,160,0.25)`,borderRadius:9,padding:"11px 14px"} }
+            , React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginBottom:4,letterSpacing:"0.07em",textTransform:"uppercase"} }, "Nome socio (chi si iscrive)")
+            , React.createElement('div', { style: {fontSize:14,color:C.gold,fontWeight:500} }, richiesta.nomeSocio)
           )
         )
         , React.createElement('div', { style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:9,padding:"12px 14px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9437}}
@@ -3074,6 +3083,7 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
               ultimoAccesso:p.updated_at?.split("T")[0]||null,
               permessi:     {...(PERM_DEFAULT[p.ruolo]||{})},
               note:         p.note||'',
+              nomeSocio:    p.nome_socio||'',
               docenteId:    p.docente_id||null,
               allievoId:    p.allievo_id||null,
             })));
@@ -3085,6 +3095,7 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
               email:    r.email,
               ruolo:    r.ruolo||'allievo',
               messaggio:r.messaggio||'',
+              nomeSocio:r.nome_socio||'',
               data:     r.created_at?.split("T")[0]||'',
             })));
           } else {
@@ -3130,6 +3141,7 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
           nome:       draft.nome,
           ruolo:      draft.ruolo,
           note:       draft.note||null,
+          nome_socio: draft.nomeSocio||null,
           docente_id: docenteIdVal,
           allievo_id: allievoIdVal,
           updated_at: new Date().toISOString(),
@@ -3172,12 +3184,13 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
       (async()=>{
         try {
           if(window.FM_AUTH){
-            await window.FM_AUTH.approvaRichiesta({richiestaId:req.id,nome:req.nome,email:req.email,ruolo});
+            await window.FM_AUTH.approvaRichiesta({richiestaId:req.id,nome:req.nome,email:req.email,ruolo,nomeSocio:req.nomeSocio});
           }
           const nuovo={id:uid(),nome:req.nome,email:req.email,ruolo,stato:"invitato",
             avatar:req.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(),
             iscritto:new Date().toISOString().split("T")[0],
-            ultimoAccesso:null,permessi:{...PERM_DEFAULT[ruolo]},note:""};
+            ultimoAccesso:null,permessi:{...PERM_DEFAULT[ruolo]},
+            note:req.nomeSocio?`Socio/iscritto: ${req.nomeSocio}`:"",nomeSocio:req.nomeSocio||""};
           setUtenti(p=>[...p,nuovo]);
           setRichieste(p=>p.filter(r=>r.id!==req.id));
           closeModal();
@@ -3415,6 +3428,13 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
                             , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9774}}
                               , React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9775}}, fmt_data(req.data))
                               , React.createElement(RuoloBadge, { ruolo: req.ruolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9776}})
+                            )
+                          )
+                          , req.nomeSocio&&(
+                            React.createElement('div', { style: {marginTop:8,display:"flex",alignItems:"center",gap:6,
+                              fontSize:12,color:C.gold} }
+                              , React.createElement(Ic, { n: "user", size: 12, stroke: C.gold }), "Nome socio: "
+                              , React.createElement('strong', { style: {color:C.text,fontWeight:500} }, req.nomeSocio)
                             )
                           )
                           , React.createElement('div', { style: {marginTop:10,padding:"10px 14px",background:C.bg,

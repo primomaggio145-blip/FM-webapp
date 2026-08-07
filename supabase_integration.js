@@ -121,7 +121,7 @@
     },
 
     // Invia richiesta di accesso (senza essere autenticati)
-    async inviaRichiesta({ nome, email, ruolo, messaggio }) {
+    async inviaRichiesta({ nome, email, ruolo, messaggio, nomeSocio }) {
       // Genera UUID compatibile con tutti i browser
       const newId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
         const r = Math.random() * 16 | 0;
@@ -130,13 +130,14 @@
       const row = { id: newId, nome, email, ruolo };
       // Aggiungi colonne opzionali solo se presenti
       if (messaggio) row.messaggio = messaggio;
+      if (nomeSocio) row.nome_socio = nomeSocio;
       try { row.stato = 'in_attesa'; } catch(e) {}
       const { error } = await sb.from('richieste_accesso').insert(row);
       if (error) throw error;
     },
 
     // Admin: approva richiesta → manda email invito
-    async approvaRichiesta({ richiestaId, nome, email, ruolo }) {
+    async approvaRichiesta({ richiestaId, nome, email, ruolo, nomeSocio }) {
       // Usa session token se disponibile, altrimenti anon key (admin senza sessione Auth)
       const session = await window.FM_AUTH.getSession();
       console.log('[FM] approvaRichiesta session:', session ? 'OK uid='+session.user?.id : 'NULL');
@@ -153,6 +154,21 @@
       });
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || 'Errore approvazione');
+
+      // Best-effort: riporta il "nome socio" nella nota del profilo appena creato,
+      // così l'informazione non va persa anche se la Edge Function non la conosce.
+      if (nomeSocio) {
+        try {
+          const newUserId = json.user?.id || json.userId || json.id || null;
+          const query = newUserId
+            ? sb.from('profili').update({ nome_socio: nomeSocio, note: `Socio/iscritto: ${nomeSocio}` }).eq('id', newUserId)
+            : sb.from('profili').update({ nome_socio: nomeSocio, note: `Socio/iscritto: ${nomeSocio}` }).eq('email', email);
+          const { error: noteErr } = await query;
+          if (noteErr) console.warn('[FM] impossibile salvare nome_socio sul profilo:', noteErr.message);
+        } catch (ex) {
+          console.warn('[FM] propagazione nome_socio fallita (non bloccante):', ex.message);
+        }
+      }
       return json;
     },
 
