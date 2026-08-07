@@ -2409,9 +2409,11 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
     if (annoInizioAttivo != null) setAnnoSel(annoInizioAttivo);
   }, [annoInizioAttivo]);
 
-  // Filtra allievi per anno scolastico selezionato: SOLO chi ha una riga in iscrizioni_anno per quell'anno
+  // Filtra allievi per anno scolastico selezionato: SOLO chi ha una riga in iscrizioni_anno per quell'anno.
+  // Si applica sia ad admin che a docente (che è già filtrato per teacherKey in `students`);
+  // l'allievo vede sempre e solo se stesso, indipendentemente dall'anno selezionato.
   const studentsAnno = React.useMemo(() => {
-    if (_ruoloAV !== 'admin') return students; // allievo/docente vedono solo se stessi
+    if (_ruoloAV === 'allievo') return students;
     const idIscritti = new Set(
       iscrizioniAnno
         .filter(i => String(i.annoInizio) === String(annoSel))
