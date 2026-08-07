@@ -721,10 +721,20 @@ const Avatar = ({ initials:ini, hex=C.gold, size=36 }) => (
   )
 );
 
-const Field = ({ label, children }) => (
+const Field = ({ label, value, onChange, type="text", placeholder, error, disabled, hint, children }) => (
   React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 466}}
     , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 467}}, label)
-    , children
+    , children ? children : React.createElement('input', {
+        type: type, value: value!==undefined&&value!==null?value:'', onChange: onChange,
+        placeholder: placeholder, disabled: disabled,
+        style: {background:disabled?C.surface2:C.bg,border:`1px solid ${error?C.red:C.border}`,borderRadius:8,
+          color:disabled?C.textDim:C.text,fontSize:13,padding:"9px 13px",width:"100%",boxSizing:"border-box",
+          fontFamily:"'Open Sans',sans-serif",cursor:disabled?"not-allowed":"text",outline:"none"}
+      })
+    , hint&&React.createElement('span', { style: {fontSize:11,color:C.textDim,lineHeight:1.4} }, hint)
+    , error&&React.createElement('span', { style: {fontSize:11,color:C.red,display:"flex",alignItems:"center",gap:5} }
+        , React.createElement(Ic, { n: "alert", size: 12, stroke: C.red }), error
+      )
   )
 );
 
@@ -1296,7 +1306,7 @@ const FormLogin = ({onSuccess,onRegistrazione,onRecupero,onBand})=>{
 // ─── FORM RICHIEDI ACCESSO ────────────────────────────────────────────────────
 const FormRegistrazione = ({onBack})=>{
   const [step,    setStep]    = useState(1); // 1=dati, 2=inviato
-  const [f,       setF]       = useState({nome:"",email:"",ruolo:"docente",messaggio:""});
+  const [f,       setF]       = useState({nome:"",email:"",nomeSocio:"",ruolo:"docente",messaggio:""});
   const [loading, setLoading] = useState(false);
   const [err,     setErr]     = useState({});
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -1310,6 +1320,7 @@ const FormRegistrazione = ({onBack})=>{
     const e={};
     if(!f.nome.trim())  e.nome="Nome obbligatorio";
     if(!f.email.trim()||!/\S+@\S+\.\S+/.test(f.email)) e.email="Email non valida";
+    if(!f.nomeSocio.trim()) e.nomeSocio="Campo obbligatorio";
     return e;
   };
 
@@ -1319,7 +1330,7 @@ const FormRegistrazione = ({onBack})=>{
     (async()=>{
       try {
         if(window.FM_AUTH){
-          await window.FM_AUTH.inviaRichiesta({nome:f.nome.trim(),email:f.email.trim().toLowerCase(),ruolo:f.ruolo,messaggio:f.messaggio||''});
+          await window.FM_AUTH.inviaRichiesta({nome:f.nome.trim(),email:f.email.trim().toLowerCase(),nomeSocio:f.nomeSocio.trim(),ruolo:f.ruolo,messaggio:f.messaggio||''});
         }
         setLoading(false); setStep(2);
       } catch(ex){
@@ -1388,6 +1399,12 @@ const FormRegistrazione = ({onBack})=>{
         , React.createElement(AuthInput, { label: "Email *" , type: "email", icon: "mail", value: f.email,
           onChange: e=>{set("email",e.target.value);setErr(p=>({...p,email:""}));},
           error: err.email, placeholder: "mario@esempio.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 1008}})
+        , React.createElement(AuthInput, { label: "Nome socio *", icon: "user", value: f.nomeSocio,
+          onChange: e=>{set("nomeSocio",e.target.value);setErr(p=>({...p,nomeSocio:""}));},
+          error: err.nomeSocio, placeholder: "Es. Anna Rossi (chi seguirà le lezioni)" })
+        , React.createElement('p', { style: {fontSize:11,color:C.textMuted,lineHeight:1.5,marginTop:-6} },
+          "Indica il nome della persona che utilizzerà effettivamente l'app (es. l'allievo), se diverso da chi compila questo modulo."
+        )
       )
 
       /* Ruolo */
