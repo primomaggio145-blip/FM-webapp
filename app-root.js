@@ -3647,12 +3647,27 @@ const RecordScollegatiSection = () => {
   const [relinkSel, setRelinkSel] = React.useState({}); // { [rowId]: targetId }
   const [rowBusy, setRowBusy] = React.useState({});     // { [rowId]: 'loading' | 'confirm-delete' }
   const [rowMsg, setRowMsg] = React.useState({});       // { [rowId]: {ok, error} }
+  const [bulkTarget, setBulkTarget] = React.useState(null); // checkId in fase di conferma eliminazione massiva
+  const [bulkConfirmText, setBulkConfirmText] = React.useState('');
+  const [bulkState, setBulkState] = React.useState(null);   // null | 'loading' | {ok,...}
 
   const loadCheck = async (checkId) => {
     setData(prev => ({...prev, [checkId]: 'loading'}));
     const r = await callOrphansEdge({ action:'list', checkId });
     setData(prev => ({...prev, [checkId]: r.ok ? {rows:r.rows, targets:r.targets} : {error:r.error} }));
   };
+
+  const handleBulkDelete = async () => {
+    if (bulkConfirmText !== 'ELIMINA' || !bulkTarget) return;
+    setBulkState('loading');
+    const r = await callOrphansEdge({ action:'delete_all', checkId: bulkTarget });
+    setBulkState(r);
+    if (r.ok) {
+      setData(prev => ({...prev, [bulkTarget]: {...prev[bulkTarget], rows: []}}));
+    }
+  };
+
+  const closeBulkDialog = () => { setBulkTarget(null); setBulkConfirmText(''); setBulkState(null); };
 
   const handleRelink = async (checkId, row) => {
     const rowId = row.id;
@@ -3693,11 +3708,16 @@ const RecordScollegatiSection = () => {
     , ORPHAN_CHECKS_UI.map(check => {
         const state = data[check.id];
         return React.createElement('div', {key:check.id, style:{marginBottom:18,paddingBottom:18,borderBottom:`1px solid ${C.border}`}}
-          , React.createElement('div', {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}
+          , React.createElement('div', {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10,flexWrap:'wrap',gap:8}}
               , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.text}}, check.label)
-              , React.createElement('button', {onClick:()=>loadCheck(check.id), disabled:state==='loading',
-                  style:{padding:'6px 12px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11}}
-                , state==='loading' ? '⏳ Cerco...' : '🔍 Cerca record scollegati')
+              , React.createElement('div',{style:{display:'flex',gap:8}}
+                , state && state!=='loading' && !state.error && state.rows && state.rows.length>0 && React.createElement('button', {onClick:()=>{setBulkTarget(check.id);setBulkConfirmText('');setBulkState(null);},
+                    style:{padding:'6px 12px',borderRadius:7,border:`1px solid ${C.redBorder||C.red}`,background:'none',color:C.red,cursor:'pointer',fontSize:11,fontWeight:600}}
+                  , `🗑️ Elimina tutti (${state.rows.length})`)
+                , React.createElement('button', {onClick:()=>loadCheck(check.id), disabled:state==='loading',
+                    style:{padding:'6px 12px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11}}
+                  , state==='loading' ? '⏳ Cerco...' : '🔍 Cerca record scollegati')
+                )
             )
           , state && state!=='loading' && state.error && React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red}}, `❌ ${state.error}`)
           , state && state!=='loading' && !state.error && state.rows && state.rows.length===0 && React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}}, '✅ Nessun record scollegato trovato.')
@@ -3729,6 +3749,38 @@ const RecordScollegatiSection = () => {
             )
         );
       })
+
+    // ── Dialog conferma eliminazione MASSIVA di un check ──
+    , bulkTarget && React.createElement('div', {style:{position:'fixed',inset:0,background:'rgba(0,0,0,.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:9999}}
+        , React.createElement('div', {style:{background:C.surface,borderRadius:14,padding:24,maxWidth:440,width:'90%',boxShadow:'0 10px 40px rgba(0,0,0,.3)'}}
+          , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,marginBottom:12}}
+            , React.createElement(Ic,{n:'warn',size:20,stroke:C.red})
+            , React.createElement('div',{style:{fontSize:16,fontWeight:700,color:C.text,fontFamily:"'Oswald',sans-serif"}}, 'Eliminare tutti questi record?')
+          )
+          , React.createElement('div',{style:{fontSize:13,color:C.textMuted,marginBottom:16,lineHeight:1.5}},
+              `Stai per eliminare TUTTI (${(data[bulkTarget]&&data[bulkTarget].rows&&data[bulkTarget].rows.length)||0}) i record scollegati di "${(ORPHAN_CHECKS_UI.find(c=>c.id===bulkTarget)||{}).label||bulkTarget}". Per gli allievi, vengono eliminate anche lezioni, pagamenti e altri dati collegati a loro. L'operazione non è reversibile.`)
+          , React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:6}}, 'Scrivi ', React.createElement('strong',null,'ELIMINA'), ' per confermare:')
+          , React.createElement('input', {type:'text', value:bulkConfirmText, onChange:e=>setBulkConfirmText(e.target.value),
+              placeholder:'ELIMINA',
+              style:{width:'100%',padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,marginBottom:16,boxSizing:'border-box'}})
+          , bulkState==='loading' && React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:14}}, '⏳ Eliminazione in corso...')
+          , bulkState && bulkState!=='loading' && (
+              bulkState.ok
+                ? React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.greenBg,border:`1px solid ${C.greenBorder}`,fontSize:12,color:C.green,marginBottom:14}}, `✅ ${bulkState.eliminati} record eliminati.`)
+                : React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red,marginBottom:14}}, `❌ ${bulkState.error}`)
+            )
+          , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
+            , !(bulkState && bulkState.ok) && React.createElement('button', {onClick:handleBulkDelete, disabled:bulkConfirmText!=='ELIMINA'||bulkState==='loading',
+                style:{padding:'10px 16px',borderRadius:8,border:'none',
+                  background:(bulkConfirmText!=='ELIMINA'||bulkState==='loading')?C.border:C.red,
+                  color:'#fff',cursor:(bulkConfirmText!=='ELIMINA'||bulkState==='loading')?'not-allowed':'pointer',fontSize:13,fontWeight:700}}
+              , '🗑️ Conferma eliminazione di tutti')
+            , React.createElement('button', {onClick:closeBulkDialog,
+                style:{padding:'9px 16px',borderRadius:8,border:'none',background:'none',color:C.textMuted,cursor:'pointer',fontSize:13}}
+              , (bulkState&&bulkState.ok) ? 'Chiudi' : 'Annulla')
+          )
+        )
+      )
   );
 };
 
