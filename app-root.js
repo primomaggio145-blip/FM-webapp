@@ -307,26 +307,12 @@ function App() {
           if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__(reloadData);
           window.__FM_RELOAD__(reloadData);
         }
-        // Notifiche
+        // Notifiche — per ruolo (match preciso per persona demandato a NotificationBell/NotificheView)
         try {
           const _u = window.__currentUser__;
           const _ruolo = (_u && _u.ruolo) || 'admin';
-          const _id = (_u && (_u.allievoId || _u.docenteId)) || null;
-          const _nome = (_u && _u.nome) || '';
-          let nq = sb.from('notifiche').select('*').eq('letto', false).eq('destinatario_ruolo', _ruolo).order('created_at', {ascending:false}).limit(50);
-          const { data: nn } = await nq;
-          if (nn) {
-            let filtered = nn;
-            if (_ruolo !== 'admin') {
-              filtered = nn.filter(function(n){
-                if(!n.destinatario_id && !n.destinatario_nome) return true;
-                if(_id && n.destinatario_id && String(n.destinatario_id)===String(_id)) return true;
-                if(_nome && n.destinatario_nome){const dn=(n.destinatario_nome||'').toLowerCase();const mn=_nome.toLowerCase();return dn===mn||dn.includes(mn)||mn.includes(dn);}
-                return false;
-              });
-            }
-            setSharedNotifiche(filtered);
-          }
+          const { data: nn } = await sb.from('notifiche').select('*').eq('letto', false).eq('destinatario_ruolo', _ruolo).order('created_at', {ascending:false}).limit(50);
+          if (nn) setSharedNotifiche(nn);
         } catch(e) {}
         // Richieste recupero
         try {
@@ -4175,11 +4161,14 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
             // Aggiorna anche lo sharedConfig globale
             if (setConfig) setConfig(p => ({...p, annoInizioAttivo: annoInizio}));
             showToast && showToast(true, `Anno scolastico ${annoInizio}/${annoInizio+1} impostato come attivo ✅`);
-            // Ricarica tutti i dati da Supabase (docenti, allievi, corsi, lezioni, iscrizioni)
-            // così l'app riflette subito il nuovo anno attivo, senza bisogno di refresh manuale
-            if (window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
-            // Sostituisce le lezioni in memoria con SOLO quelle dell'anno appena attivato
-            if (window.__FM_LOAD_LEZIONI_ANNO__) window.__FM_LOAD_LEZIONI_ANNO__(annoInizio);
+            // Ricarica tutti i dati da Supabase (docenti, allievi, corsi, iscrizioni), POI le lezioni
+            // scoped all'anno appena attivato. L'ordine è importante: __FM_FORCE_REFRESH__ ricarica
+            // anche le lezioni di "oggi + ultime 24h" indipendentemente dall'anno selezionato, quindi
+            // deve completare PRIMA di __FM_LOAD_LEZIONI_ANNO__, altrimenti sovrascriverebbe (in modo
+            // asincrono e imprevedibile, essendo la fetch più lenta) i dati corretti dell'anno scelto
+            // con un mix che include lezioni fuori anno — causa della Dashboard "non aggiornata".
+            if (window.__FM_FORCE_REFRESH__) await window.__FM_FORCE_REFRESH__();
+            if (window.__FM_LOAD_LEZIONI_ANNO__) await window.__FM_LOAD_LEZIONI_ANNO__(annoInizio);
           };
 
           const handleToggleMese = async (annoInizio, mese) => {

@@ -949,6 +949,10 @@
       if (error) { warn('load lezioni anno', error.message); return null; }
       const adapted = (data || []).map(r => adaptLezione(r, []));
       _prev.lessons = adapted;
+      // Mantiene window.__FM_DATA__.lessons allineato: è uno snapshot fissato al boot,
+      // altrimenti il prossimo __FM_FORCE_REFRESH__ calcolerebbe "untouched" contro dati
+      // vecchi e potrebbe reintrodurre lezioni dell'anno precedente.
+      window.__FM_DATA__ = { ...(window.__FM_DATA__ || {}), lessons: adapted };
       if (window.__FM_RELOAD__) window.__FM_RELOAD__({ lessons: adapted });
       log(`Lezioni caricate per anno ${annoInizio}/${Number(annoInizio) + 1}: ${adapted.length}`);
       return adapted;
