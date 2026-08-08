@@ -2136,7 +2136,17 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
   const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
   const cfg = config || {};
-  const SOGLIA_IND_G = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
+  // Valori per corso (configurabili a livello globale, con fallback ai valori richiesti)
+  const PUNTI_CORSO_INDIVIDUALE = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
+  const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
+  // Soglia di default per un allievo: 4 lezioni/mese per ogni corso individuale
+  // (principale + extra, tutti allo stesso livello) + 2 lezioni/mese per il corso collettivo (max 1).
+  // Se l'allievo ha un'eccezione impostata in scheda (sogliaIndividualeEcc), quella prevale sempre.
+  const sogliaDefaultAllievo = (s) => {
+    const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
+    const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
+    return nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE + nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO;
+  };
 
   const [reportOpen, setReportOpen] = useState(false);
   const [reportMese, setReportMese] = useState(meseCurr);
@@ -2157,10 +2167,11 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
   const allieviAttivi = (students||[]).filter(s=>s.status==='attivo'||!s.status);
   const report = allieviAttivi.map(s => {
     const nome = s.name||s.nome||'';
-    const soglia = s.sogliaIndividualeEcc!=null ? Number(s.sogliaIndividualeEcc) : SOGLIA_IND_G;
+    const isEccezione = s.sogliaIndividualeEcc!=null;
+    const soglia = isEccezione ? Number(s.sogliaIndividualeEcc) : sogliaDefaultAllievo(s);
     const count  = contInd[nome]||0;
     const delta  = count - soglia;
-    return { id:s.id, nome, count, soglia, delta };
+    return { id:s.id, nome, count, soglia, delta, isEccezione };
   }).filter(r=>r.nome).sort((a,b)=>b.delta-a.delta);
 
   const superano    = report.filter(r=>r.delta>0);
@@ -2220,7 +2231,7 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
                   onClick:()=>{ const s=(students||[]).find(st=>(st.name||st.nome||'')===r.nome); if(s&&onSelectAllievo) onSelectAllievo(s); }}
                 , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:600,color:C.text}}, r.nome)
                 , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,color:C.text,fontWeight:700}}, r.count)
-                , React.createElement('td',{style:{padding:'10px 16px',fontSize:12,color:C.textMuted}}, r.soglia, r.soglia!==SOGLIA_IND_G&&React.createElement('span',{style:{fontSize:10,color:C.gold,marginLeft:6}},'(eccezione)'))
+                , React.createElement('td',{style:{padding:'10px 16px',fontSize:12,color:C.textMuted}}, r.soglia, r.isEccezione&&React.createElement('span',{style:{fontSize:10,color:C.gold,marginLeft:6}},'(eccezione)'))
                 , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:700,color:clr}}, r.delta>0?`+${r.delta}`:r.delta<0?r.delta:'0')
                 , React.createElement('td',{style:{padding:'10px 16px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bg,color:clr,border:`1px solid ${bd}`,borderRadius:20,padding:'3px 10px'}},lbl))
               );
@@ -2229,7 +2240,7 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
         )
       )
       , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between'}}
-        , `Soglia globale: ${SOGLIA_IND_G} lez/mese · ${report.length} allievi attivi`
+        , `Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · ${report.length} allievi attivi`
         , React.createElement('span',null,'Clicca su un allievo per aprire il profilo')
       )
     )
