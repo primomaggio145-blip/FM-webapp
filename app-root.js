@@ -3140,6 +3140,22 @@ const ADMIN_BACKUP_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1
 const ADMIN_TRIGGER_BACKUP_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-trigger-backup';
 const ADMIN_LIST_BACKUPS_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-list-backups';
 const ADMIN_TRIGGER_RESTORE_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-trigger-restore';
+const ADMIN_ORPHANS_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/admin-orphans';
+
+const callOrphansEdge = async (payload) => {
+  try {
+    const sb = window.supabaseClient;
+    const { data:{session} } = await sb.auth.getSession();
+    const res = await fetch(ADMIN_ORPHANS_EDGE, {
+      method:'POST',
+      headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    });
+    return await res.json();
+  } catch(e) {
+    return { ok:false, error: e?.message||'Errore di rete' };
+  }
+};
 
 // Innesca il ripristino di un backup .dump specifico via GitHub Actions.
 const triggerPgRestore = async (filename) => {
@@ -3615,6 +3631,104 @@ const BackupDatiSection = () => {
           )
         )
       )
+  );
+};
+
+// ─── RECORD SCOLLEGATI (orfani da FK nullificate da precedenti reset) ─────────
+const ORPHAN_CHECKS_UI = [
+  { id:'spese_docente', label:'💰 Spese senza docente collegato',
+    cols:[{key:'descrizione',label:'Descrizione'},{key:'importo',label:'Importo €'},{key:'data',label:'Data'}] },
+  { id:'studenti_anno', label:'🎓 Allievi senza anno scolastico collegato',
+    cols:[{key:'nome',label:'Nome'},{key:'strumento',label:'Strumento'},{key:'status',label:'Stato'}] },
+];
+
+const RecordScollegatiSection = () => {
+  const [data, setData] = React.useState({});       // { [checkId]: {rows, targets} | 'loading' | {error} }
+  const [relinkSel, setRelinkSel] = React.useState({}); // { [rowId]: targetId }
+  const [rowBusy, setRowBusy] = React.useState({});     // { [rowId]: 'loading' | 'confirm-delete' }
+  const [rowMsg, setRowMsg] = React.useState({});       // { [rowId]: {ok, error} }
+
+  const loadCheck = async (checkId) => {
+    setData(prev => ({...prev, [checkId]: 'loading'}));
+    const r = await callOrphansEdge({ action:'list', checkId });
+    setData(prev => ({...prev, [checkId]: r.ok ? {rows:r.rows, targets:r.targets} : {error:r.error} }));
+  };
+
+  const handleRelink = async (checkId, row) => {
+    const rowId = row.id;
+    const target = relinkSel[rowId];
+    if (!target) return;
+    setRowBusy(prev => ({...prev, [rowId]:'loading'}));
+    const r = await callOrphansEdge({ action:'relink', checkId, rowId, newTargetId: target });
+    setRowMsg(prev => ({...prev, [rowId]: r}));
+    setRowBusy(prev => ({...prev, [rowId]: null}));
+    if (r.ok) {
+      setData(prev => ({...prev, [checkId]: {...prev[checkId], rows: prev[checkId].rows.filter(x=>x.id!==rowId)}}));
+    }
+  };
+
+  const handleDeleteClick = (rowId, checkId) => {
+    if (rowBusy[rowId] === 'confirm-delete') {
+      handleDeleteConfirmed(rowId, checkId);
+    } else {
+      setRowBusy(prev => ({...prev, [rowId]:'confirm-delete'}));
+      setTimeout(() => setRowBusy(prev => prev[rowId]==='confirm-delete' ? {...prev, [rowId]:null} : prev), 4000);
+    }
+  };
+
+  const handleDeleteConfirmed = async (rowId, checkId) => {
+    setRowBusy(prev => ({...prev, [rowId]:'loading'}));
+    const r = await callOrphansEdge({ action:'delete', checkId, rowId });
+    setRowMsg(prev => ({...prev, [rowId]: r}));
+    setRowBusy(prev => ({...prev, [rowId]: null}));
+    if (r.ok) {
+      setData(prev => ({...prev, [checkId]: {...prev[checkId], rows: prev[checkId].rows.filter(x=>x.id!==rowId)}}));
+    }
+  };
+
+  return React.createElement(ImpSection, {title:"Record scollegati", icon:"unlock"}
+    , React.createElement('div', {style:{padding:'12px 14px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:16,fontSize:12,color:C.textMuted,lineHeight:1.5}}
+        , "Dopo un reset dati (es. eliminazione di un docente o di un anno scolastico), alcuni record collegati restano nel database senza quel riferimento — non vengono cancellati automaticamente per non perdere dati. Qui puoi vederli, ricollegarli al genitore giusto, oppure eliminarli se non servono più."
+      )
+    , ORPHAN_CHECKS_UI.map(check => {
+        const state = data[check.id];
+        return React.createElement('div', {key:check.id, style:{marginBottom:18,paddingBottom:18,borderBottom:`1px solid ${C.border}`}}
+          , React.createElement('div', {style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}
+              , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.text}}, check.label)
+              , React.createElement('button', {onClick:()=>loadCheck(check.id), disabled:state==='loading',
+                  style:{padding:'6px 12px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11}}
+                , state==='loading' ? '⏳ Cerco...' : '🔍 Cerca record scollegati')
+            )
+          , state && state!=='loading' && state.error && React.createElement('div',{style:{padding:'8px 12px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red}}, `❌ ${state.error}`)
+          , state && state!=='loading' && !state.error && state.rows && state.rows.length===0 && React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}}, '✅ Nessun record scollegato trovato.')
+          , state && state!=='loading' && !state.error && state.rows && state.rows.length>0 && React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8}}
+              , state.rows.map(row => {
+                  const busy = rowBusy[row.id];
+                  const msg = rowMsg[row.id];
+                  return React.createElement('div', {key:row.id, style:{padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg}}
+                    , React.createElement('div', {style:{display:'flex',flexWrap:'wrap',gap:14,marginBottom:8,fontSize:12,color:C.text}}
+                        , check.cols.map(c => React.createElement('span',{key:c.key}, React.createElement('strong',null,c.label+': '), String(row[c.key] ?? '—')))
+                      )
+                    , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}
+                        , React.createElement('select', {value:relinkSel[row.id]||'', onChange:e=>setRelinkSel(prev=>({...prev,[row.id]:e.target.value})),
+                            style:{padding:'6px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,minWidth:180}}
+                          , React.createElement('option',{value:''}, '-- scegli a chi ricollegare --')
+                          , (state.targets||[]).map(t => React.createElement('option',{key:t.id, value:t.id}, t.nome||t.label))
+                          )
+                        , React.createElement('button', {onClick:()=>handleRelink(check.id, row), disabled:!relinkSel[row.id]||busy==='loading',
+                            style:{padding:'6px 12px',borderRadius:7,border:`1px solid ${C.goldDim||C.border}`,background:C.bg,color:C.gold,cursor:!relinkSel[row.id]?'not-allowed':'pointer',fontSize:11,fontWeight:600}}
+                          , '🔗 Ricollega')
+                        , React.createElement('button', {onClick:()=>handleDeleteClick(row.id, check.id),
+                            disabled:busy==='loading',
+                            style:{padding:'6px 12px',borderRadius:7,border:`1px solid ${C.redBorder||C.red}`,background:busy==='confirm-delete'?C.red:'none',color:busy==='confirm-delete'?'#fff':C.red,cursor:'pointer',fontSize:11,fontWeight:600}}
+                          , busy==='loading' ? '⏳...' : busy==='confirm-delete' ? '⚠️ Conferma eliminazione' : '🗑️ Elimina')
+                      )
+                    , msg && !msg.ok && React.createElement('div',{style:{marginTop:6,fontSize:11,color:C.red}}, `❌ ${msg.error}`)
+                  );
+                })
+            )
+        );
+      })
   );
 };
 
@@ -4262,6 +4376,9 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
 
     /* ── Reset dati (solo admin) ──────────────────────────────────────────── */
     , activeTab==="backup" && (propRuolo==="admin"||!propRuolo) && React.createElement(ResetDatiSection, {anniScolastici: propAnni, setAnniScolastici: propSetAnni})
+
+    /* ── Record scollegati (solo admin) ───────────────────────────────────── */
+    , activeTab==="backup" && (propRuolo==="admin"||!propRuolo) && React.createElement(RecordScollegatiSection)
 
     /* ── Backup DB (solo admin) ───────────────────────────────────────────── */
     , activeTab==="backup" && (propRuolo==="admin"||!propRuolo) && React.createElement(BackupDatiSection)
