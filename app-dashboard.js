@@ -1908,7 +1908,7 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
   );
 };
 
-const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, notifiche:propNotifiche, setNotifiche:propSetNotifiche, panels:propPanels, setPanels:propSetPanels, onQuickAction }) => {
+const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, notifiche:propNotifiche, setNotifiche:propSetNotifiche, panels:propPanels, setPanels:propSetPanels, iscrizioniAnno:propIscrizioniAnnoDash, onQuickAction }) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Clock live: aggiorna ogni 60s per far scorrere la progressbar e la timeline
   const [dashNow, setDashNow] = useState(new Date());
@@ -1937,7 +1937,27 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const _students = propStudentsDash || [];
     const _docenti  = propDocentiDash  || [];
     const _entrate  = propEntrateDash  || [];
-    const _lessons  = propLessonsDash  || [];
+    // Anno scolastico attivo (fonte di verità: config, con fallback all'anno solare corrente)
+    const _annoAttivoDash = (propConfig && propConfig.annoInizioAttivo) || annoScolasticoAttivo;
+    // Le lezioni condivise (sharedLessons) NON sono per costruzione scoped a un anno scolastico
+    // (il boot/refresh carica "ultimi 60 giorni + future" a prescindere dall'anno attivo) — quindi
+    // filtriamo qui per evitare che la Dashboard mostri lezioni di un anno diverso da quello attivo.
+    const _lessonsAllYears = propLessonsDash || [];
+    const _lessons = _annoAttivoDash
+      ? _lessonsAllYears.filter(l => {
+          const d = l.date || l.data || "";
+          if (!d) return false;
+          return d >= `${_annoAttivoDash}-09-01` && d <= `${Number(_annoAttivoDash)+1}-08-31`;
+        })
+      : _lessonsAllYears;
+    // Allievi iscritti nell'anno scolastico attivo (per i KPI aggregati "Allievi attivi" /
+    // "Corsi individuali attivi" / "Morosi"): gli studenti NON sono mai filtrati per anno a monte,
+    // quindi senza questo filtro la Dashboard mostrerebbe sempre il totale di tutti gli anni.
+    // _students (non filtrato) resta invariato per il lookup del proprio profilo (ruolo allievo/docente).
+    const _iscrizioniAnnoDash = propIscrizioniAnnoDash || [];
+    const _studentsAnno = _iscrizioniAnnoDash.length > 0
+      ? _students.filter(s => _iscrizioniAnnoDash.some(i => String(i.studentId) === String(s.id) && String(i.annoInizio) === String(_annoAttivoDash)))
+      : _students;
     // Dati filtrati per allievo loggato (definiti dopo _students/_entrate)
     const myNome = (appUser && appUser.nome) || "";
     const myDocNome = ruolo==="docente" ? myNome : "";
@@ -2005,13 +2025,13 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
       return t === k || t.includes(k) || k.includes(t);
     };
     const _myStudentsForDash = ruolo==="docente"
-      ? _students.filter(s=>{ const t=(s.teacher||"").toLowerCase().trim(); const k=myDocTeacherKey.toLowerCase().trim(); return t===k||t.includes(k)||k.includes(t); })
-      : _students;
+      ? _studentsAnno.filter(s=>{ const t=(s.teacher||"").toLowerCase().trim(); const k=myDocTeacherKey.toLowerCase().trim(); return t===k||t.includes(k)||k.includes(t); })
+      : _studentsAnno;
     const allieviAttivi    = _myStudentsForDash.filter(a=>a.status==="attivo"||a.stato==="attivo").length;
     const corsiIndividualiAttivi = _myStudentsForDash
       .filter(a=>a.status==="attivo"||a.stato==="attivo")
       .reduce((tot,a)=> tot + (a.instrument?1:0) + ((a.extraInstruments||[]).length), 0);
-    const morosi           = ruolo==="docente" ? 0 : _students.filter(a=>a.status==="scaduto"||a.stato==="scaduto").length;
+    const morosi           = ruolo==="docente" ? 0 : _studentsAnno.filter(a=>a.status==="scaduto"||a.stato==="scaduto").length;
     const oraNum  = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
     const nowMins = dashNow.getHours()*60+dashNow.getMinutes();
     const lezioniOggi      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(dashNow) && l.attendance !== 'recuperata';}).length;
@@ -2371,7 +2391,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   , (() => {
                       // KPI cards configurabili — ordine salvato in panels.kpiOrder
                       const ALL_KPI = [
-                        { id:'allievi',  icon:"users",    label:"Allievi attivi",  value: allieviAttivi, sub: `${_students.length} totali`, hex: C.gold },
+                        { id:'allievi',  icon:"users",    label:"Allievi attivi",  value: allieviAttivi, sub: `${_studentsAnno.length} totali`, hex: C.gold },
                         { id:'corsiIndividuali', icon:"music", label:"Corsi individuali attivi", value: corsiIndividualiAttivi, sub: "strumenti principali + extra", hex: C.blue },
                         { id:'lezioni',  icon:"calendar", label:"Lezioni oggi",    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal },
                         { id:'entrate',  icon:"up",       label:"Entrate mese",    value: fmt(entrMeseLiveLive), hex: C.green, trend:+8, hideAmounts:!showAmounts },
