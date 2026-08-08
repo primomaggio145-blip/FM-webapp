@@ -1939,6 +1939,13 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const _entrate  = propEntrateDash  || [];
     // Anno scolastico attivo (fonte di verità: config, con fallback all'anno solare corrente)
     const _annoAttivoDash = (propConfig && propConfig.annoInizioAttivo) || annoScolasticoAttivo;
+    // Etichetta anno scolastico (es. "2026/2027") derivata dall'anno ATTIVO, non dal campo statico
+    // config.annoScolastico (che handleSetAttivo non aggiorna e quindi resta bloccato al valore
+    // impostato l'ultima volta manualmente, disallineandosi dall'anno effettivamente attivo)
+    const _annoScolasticoLabelDash = (() => {
+      const found = (propAnni || []).find(a => String(a.annoInizio) === String(_annoAttivoDash));
+      return found ? found.label : `${_annoAttivoDash}/${Number(_annoAttivoDash)+1}`;
+    })();
     // Le lezioni condivise (sharedLessons) NON sono per costruzione scoped a un anno scolastico
     // (il boot/refresh carica "ultimi 60 giorni + future" a prescindere dall'anno attivo) — quindi
     // filtriamo qui per evitare che la Dashboard mostri lezioni di un anno diverso da quello attivo.
@@ -2053,7 +2060,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const meseOggi = oggi.getMonth() + 1;
     const annoOggi = oggi.getFullYear();
 
-    const ALLIEVI_LIVE = _students
+    const ALLIEVI_LIVE = _studentsAnno
       .filter(s => (s.status || s.stato || '') !== 'inattivo')
       .map(s => {
         const idAllievo = s.id;
@@ -2256,13 +2263,14 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             borderBottom:`1px solid ${C.border}`,padding:"16px 20px",
             display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2162}}
             , React.createElement('div', { style: {animation:"fadeUp 0.4s ease both"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2165}}
-              , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:30,fontWeight:300,letterSpacing:"0.02em",lineHeight:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2166}}, "Buongiorno, "
+              , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:30,fontWeight:300,letterSpacing:"0.02em",lineHeight:1.15}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2166}}, "Buongiorno, "
+                 , IS_PWA ? React.createElement('br') : null
                  , React.createElement('span', { style: {fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2167}}
                   , myNome || (ruolo==="admin"?"Amministratore":ruolo==="docente"?"Docente":ruolo==="allievo"?"Allievo":"Utente")
                 )
               )
               , React.createElement('p', { style: {fontSize:13,color:C.textMuted,marginTop:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2171}}
-                , config.annoScolastico
+                , _annoScolasticoLabelDash
                 , ruolo==="docente" ? " · " + _lessons.filter(function(l){return matchDocLezione(l) && l.attendance !== "recuperata";}).length + " mie lezioni"
                 : ruolo==="allievo" ? " · " + (_lessons||[]).filter(l => matchLezioneAllievo(l) && l.attendance !== 'recuperata').length + " lezioni assegnate"
                 : " · " + lezioniOggi + " lezioni oggi · " + lezComplete + " completate · " + (lezioniOggi-lezComplete) + " rimanenti"
@@ -2861,7 +2869,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             /* Footer */
             , React.createElement('div', { style: {paddingBottom:8,textAlign:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2383}}
               , React.createElement('span', { style: {fontSize:10,color:C.textDim,letterSpacing:"0.1em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2384}}
-                , config.nomeScuola.toUpperCase(), " · SISTEMA GESTIONALE · "     , config.annoScolastico
+                , config.nomeScuola.toUpperCase(), " · SISTEMA GESTIONALE · "     , _annoScolasticoLabelDash
               )
             )
           )
