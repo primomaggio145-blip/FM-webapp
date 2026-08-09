@@ -254,13 +254,14 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     return ly===y && lm===m;
   });
 
-  // Strumenti di un docente: usa d.strumenti se presente, altrimenti ricava
-  // dai corsi individuali assegnati (i nomi dei corsi individuali = gli strumenti)
-  const strumentiDocente = (d) => {
-    if (d.strumenti) return d.strumenti;
-    const corsiIds = d.corsi || [];
+  // Corsi assegnati a un docente: derivati SEMPRE dai corsi realmente assegnati
+  // (controllo bidirezionale d.corsi <-> corso.docenti, per riflettere l'assegnazione
+  // anche se sincronizzata da un solo lato) — non usa più il vecchio campo testo
+  // libero "strumenti", che poteva restare disallineato dopo una nuova assegnazione
+  const corsiAssegnatiDocente = (d) => {
+    const corsiIds = (d.corsi || []).map(String);
     const nomi = (_coursesDocView || [])
-      .filter(c => c.type === 'individuale' && corsiIds.includes(c.id))
+      .filter(c => corsiIds.includes(String(c.id)) || (c.docenti||[]).map(String).includes(String(d.id)))
       .map(c => c.name);
     return nomi.length > 0 ? nomi.join(' · ') : '—';
   };
@@ -420,7 +421,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   , React.createElement(Avatar, { initials: d.nome.replace("Prof.ssa ","").replace("Prof. ","").split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(), hex: d.colore, size: 44, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9980}})
                   , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 9981}}
                     , React.createElement('div', { style: {fontSize:15,fontWeight:600,marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9982}}, d.nome)
-                    , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9983}}, strumentiDocente(d))
+                    , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9983}}, corsiAssegnatiDocente(d))
                   )
                 )
                 , ruoloDocView==="admin" && React.createElement('button', { onClick: e=>{e.stopPropagation();openEdit(d);},
@@ -580,7 +581,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             , React.createElement(Avatar, { initials: selected.nome.replace("Prof.ssa ","").replace("Prof. ","").split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(), hex: selected.colore, size: 56, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10126}})
             , React.createElement('div', {style:{minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10127}}
               , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:"clamp(18px,5vw,26px)",fontWeight:600,marginBottom:4,wordBreak:"break-word"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10128}}, selected.nome)
-              , React.createElement('div', { style: {fontSize:13,color:C.textMuted,marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10129}}, strumentiDocente(selected))
+              , React.createElement('div', { style: {fontSize:13,color:C.textMuted,marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10129}}, corsiAssegnatiDocente(selected))
               , React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10130}}
                 , React.createElement('span', { style: {fontSize:11,background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,borderRadius:4,padding:"2px 8px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10131}}, selected.contratto)
                 , selected.dataInizio && React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10132}}, "Dal " , new Date(selected.dataInizio+"T00:00:00").toLocaleDateString("it-IT",{month:"long",year:"numeric"}))
@@ -649,7 +650,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           , [
             {label:"Email",    value:selected.email||"—", icon:"mail"},
             {label:"Telefono", value:selected.phone||"—", icon:"phone"},
-            {label:"Strumenti insegnati", value:strumentiDocente(selected), icon:"music"},
+            {label:"Corsi Assegnati", value:corsiAssegnatiDocente(selected), icon:"music"},
             // Contratto e tariffa sempre visibili (docente vede solo sé stesso)
             {label:"Tipo contratto", value:selected.contratto||"—", icon:"tag"},
             {label:"Tariffa oraria", value:`€${selected.tariffaOra}/h`, icon:"euro"},
