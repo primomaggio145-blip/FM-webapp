@@ -2719,6 +2719,13 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
       const row = { id:newId, nome:d.name||d.nome||'', tipo:d.type||d.tipo||'individuale', descrizione:d.description||d.descrizione||null, visible:true, anno_creazione: annoCreazione };
       const { error } = await sb.from('corsi').insert(row);
       if (error) console.warn('[FM] handleAddCourse error:', error.message);
+      // Persiste l'assegnazione docenti su corsi_docenti (senza questo si perde al riavvio)
+      const docentiIds = (d.docenti||[]);
+      if (docentiIds.length > 0) {
+        const nuovi = docentiIds.map(docenteId => ({ corso_id: newId, docente_id: docenteId }));
+        const { error: errDoc } = await sb.from('corsi_docenti').insert(nuovi);
+        if (errDoc) console.warn('[FM] corsi_docenti insert (nuovo corso):', errDoc.message);
+      }
     }
     setCourses(p => {
       const next = [...p, {...d, id:newId, annoCreazione}];
@@ -2732,6 +2739,16 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
       const row = { nome:d.name||d.nome||'', tipo:d.type||d.tipo||'individuale', descrizione:d.description||d.descrizione||null };
       const { error } = await sb.from('corsi').update(row).eq('id', d.id);
       if (error) console.warn('[FM] handleEditCourse error:', error.message);
+      // Persiste l'assegnazione docenti su corsi_docenti (senza questo si perde al riavvio):
+      // sostituisce tutte le associazioni esistenti per questo corso con quelle attuali
+      try {
+        await sb.from('corsi_docenti').delete().eq('corso_id', d.id);
+        const nuovi = (d.docenti||[]).map(docenteId => ({ corso_id: d.id, docente_id: docenteId }));
+        if (nuovi.length > 0) {
+          const { error: errDoc } = await sb.from('corsi_docenti').insert(nuovi);
+          if (errDoc) console.warn('[FM] corsi_docenti insert (modifica corso):', errDoc.message);
+        }
+      } catch(e) { console.warn('[FM] corsi_docenti sync error:', e.message); }
     }
     setCourses(p => {
       const next = p.map(c => c.id===d.id ? {...c,...d} : c);
