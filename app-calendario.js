@@ -3757,7 +3757,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali }) => {
+const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction }) => {
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
   const hex = lessonHex(lesson);
@@ -3886,23 +3886,50 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
         , lesson.tipo==="collettivo" && (lesson.students||[]).length > 0 && (
           React.createElement('div', { style: {padding:"12px 14px", background:C.purpleBg, borderRadius:8, border:`1px solid ${C.purpleBorder}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4566}}
             , React.createElement('div', { style: {fontSize:10, color:C.purple, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4567}}, "Allievi ("
-               , (lesson.students||[]).length, ")"
+               , (lesson.students||[]).length, ") · presenza individuale"
             )
             , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4570}}
-              , (lesson.students||[]).map(s => (
-                React.createElement('div', { key: s.id, style: {display:"flex", alignItems:"center", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4572}}
-                  , React.createElement('div', { style: {width:26, height:26, borderRadius:"50%", flexShrink:0,
-                    background:`${insHex(s.instrument)}20`, border:`1px solid ${insHex(s.instrument)}40`,
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize:10, fontWeight:700, color:insHex(s.instrument)}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4573}}
-                    , initials(s.name)
-                  )
-                  , React.createElement('div', { style: {flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4579}}
-                    , React.createElement('span', { style: {fontSize:13, fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4580}}, s.name)
-                    , React.createElement('span', { style: {fontSize:11, color:C.textMuted, marginLeft:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4581}}, s.instrument)
-                  )
-                )
-              ))
+              , (lesson.students||[]).map(s => {
+                  const stAtt = s.attendance || '';
+                  const setStAtt = (val) => {
+                    if (!canEdit) return;
+                    const next = (lesson.students||[]).map(x => x.id===s.id ? {...x, attendance: stAtt===val ? '' : val} : x);
+                    saveField({ students: next });
+                  };
+                  return (
+                    React.createElement('div', { key: s.id, style: {display:"flex", alignItems:"center", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4572}}
+                      , React.createElement('div', { style: {width:26, height:26, borderRadius:"50%", flexShrink:0,
+                        background:`${insHex(s.instrument)}20`, border:`1px solid ${insHex(s.instrument)}40`,
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        fontSize:10, fontWeight:700, color:insHex(s.instrument)}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4573}}
+                        , initials(s.name)
+                      )
+                      , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4579}}
+                        , React.createElement('span', { style: {fontSize:13, fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4580}}, s.name)
+                        , React.createElement('span', { style: {fontSize:11, color:C.textMuted, marginLeft:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4581}}, s.instrument)
+                      )
+                      , React.createElement('div', { style: {display:"flex", gap:4, flexShrink:0} }
+                        , ['presente','assente'].map(a => {
+                            const st = ATT_STYLES[a];
+                            const active = stAtt === a;
+                            return React.createElement('button', {
+                              key: a,
+                              onClick: () => setStAtt(a),
+                              disabled: !canEdit,
+                              style: {padding:"4px 10px", borderRadius:6,
+                                border:`1.5px solid ${active ? st.bd : C.border}`,
+                                background: active ? st.bg : "transparent",
+                                color: active ? st.fg : C.textDim,
+                                fontSize:11, fontWeight: active ? 600 : 400,
+                                cursor: canEdit ? "pointer" : "default",
+                                opacity: canEdit ? 1 : (active ? 1 : 0.5),
+                                fontFamily:"'Open Sans',sans-serif", whiteSpace:"nowrap"}
+                            }, st.label);
+                          })
+                      )
+                    )
+                  );
+                })
             )
           )
         )
@@ -4136,12 +4163,31 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                 )
                 , React.createElement('span',{style:{fontSize:10,color:C.textDim,marginLeft:'auto'}},'(sola lettura)')
               )
+            /* Recupero ufficialmente approvato e fissato — presenza sola lettura, non modificabile */
+            : lesson.tipo === 'recupero'
+            ? React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:C.blueBg,border:'1px solid '+C.blueBorder,borderRadius:8}}
+                , React.createElement(Ic,{n:'calendar',size:15,stroke:C.blue})
+                , React.createElement('div',null
+                  , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.blue}},'🔄 RECUPERO')
+                  , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2}}, lesson.notes || 'Lezione di recupero confermata ufficialmente')
+                )
+                , React.createElement('span',{style:{fontSize:10,color:C.textDim,marginLeft:'auto'}},'(sola lettura)')
+              )
             : React.createElement(React.Fragment, null
-                /* Banner informativo per lezione di recupero fissata — NON blocca i pulsanti */
-                , lesson.tipo === 'recupero' && (
-                  React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',background:C.blueBg,border:'1px solid '+C.blueBorder,borderRadius:8,marginBottom:10}}
-                    , React.createElement(Ic,{n:'calendar',size:14,stroke:C.blue})
-                    , React.createElement('div',{style:{fontSize:12,fontWeight:600,color:C.blue}},'Lezione di recupero · segna la presenza qui sotto')
+                /* Pulsante "Prenota Recupero" lato allievo — quando il docente ha segnato la presenza come "In Recupero" */
+                , !isRecuperoScaduto && (lesson.inRecupero || lesson.attendance === 'in_recupero') && role === 'allievo' && (
+                  React.createElement('div', {style:{marginBottom:10,padding:'10px 14px',background:'rgba(245,158,11,0.08)',border:'1px solid rgba(245,158,11,0.35)',borderRadius:10,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}
+                    , React.createElement(Ic,{n:'clock',size:15,stroke:'#f59e0b'})
+                    , React.createElement('div',{style:{flex:1,fontSize:12,color:'#f59e0b',fontWeight:600}}
+                      , 'Lezione in recupero', lesson.recuperoScadenza ? (' · scade il ' + lesson.recuperoScadenza) : '')
+                    , React.createElement('button', {
+                        onClick: () => {
+                          if (onClose) onClose();
+                          if (onNavigate) onNavigate('allievi');
+                          if (onQuickAction) setTimeout(() => onQuickAction('openRecuperoModal'), 120);
+                        },
+                        style:{padding:'7px 14px',borderRadius:8,border:'none',background:'#f59e0b',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}
+                      }, '📅 Prenota Recupero')
                   )
                 )
                 , isRecuperoScaduto && (
@@ -5395,9 +5441,11 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     const e = validate();
     if (Object.keys(e).length) { setErr(e); return; }
     const teacherObj = docenti.find(d => d.id === form.teacherId);
+    const prevAttById = {};
+    (initial?.students || []).forEach(s => { if (s && s.id) prevAttById[s.id] = s.attendance || ''; });
     const studObjs   = selStudents.map(id => {
       const s = students.find(x => x.id === id);
-      return { id: s.id, name: s.name, instrument: s.instrument, level: s.level||"" };
+      return { id: s.id, name: s.name, instrument: s.instrument, level: s.level||"", attendance: prevAttById[id] || '' };
     });
     onSave({
       id:         initial?.id || uid(),  // preserva id in edit mode
@@ -5470,6 +5518,8 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
         )
       )
       , React.createElement('div', { style: {padding:"14px 22px", borderTop:`1px solid ${C.border}`,
+        position:"sticky", bottom:0, background:C.surface, zIndex:2,
+        paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",
         display:"flex", justifyContent:"space-between"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5468}}
         , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5470}}, "Annulla")
         , React.createElement(Btn, { onClick: () => { if(selCourse) setStep(2); }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5471}}, "Avanti "
@@ -5482,8 +5532,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
   // ── STEP 2: docente + dettagli + allievi ──
   return (
     React.createElement(React.Fragment, null
-      , React.createElement('div', { style: {padding:22, display:"flex", flexDirection:"column", gap:14,
-        maxHeight:"74vh", overflowY:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5481}}
+      , React.createElement('div', { style: {padding:22, display:"flex", flexDirection:"column", gap:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5481}}
 
         /* Header corso */
         , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:10, padding:"10px 14px",
@@ -5751,6 +5800,8 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
       )
 
       , React.createElement('div', { style: {padding:"14px 22px", borderTop:"1px solid " + C.border,
+        position:"sticky", bottom:0, background:C.surface, zIndex:2,
+        paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",
         display:"flex", justifyContent:"space-between", alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5649}}
         , React.createElement(Btn, { variant: "secondary", onClick: () => setStep(1), __self: this, __source: {fileName: _jsxFileName, lineNumber: 5651}}
           , React.createElement(Ic, { n: "left", size: 14, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5652}}), "Indietro"
@@ -6040,8 +6091,8 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
         corso_nome: corsoNome,
         room:       roomOrig,
         topic:      null,    // argomento libero — il docente lo compila a lezione
-        attendance: null,    // segnabile normalmente
-        tipo:       'individuale',
+        attendance: 'recupero', // presenza fissata in sola lettura come "RECUPERO"
+        tipo:       'recupero',
         recurrence: 'Nessuna',
         notes:      '🔄 Recupero del ' + dLOrigine + ' — Richiesta #'+(selRich.id||''),
         in_recupero: false,
@@ -7277,7 +7328,7 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
   );
 };
 
-const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV, config:calConfig }) => {
+const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV, config:calConfig, onNavigate, onQuickAction }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
   const propStudents = _propStudentsRaw || [];
@@ -8284,6 +8335,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   notes:          updated.notes        || null,
                   repertorio_ids: updated.repertorioIds && updated.repertorioIds.length > 0
                                     ? JSON.stringify(updated.repertorioIds) : null,
+                  students:       updated.students && updated.students.length > 0
+                                    ? JSON.stringify(updated.students) : null,
                   updated_at:     new Date().toISOString(),
                 }).eq('id', updated.id).then(({ error }) => {
                   if (error) console.warn('[FM] onUpdateLesson error:', error.message);
@@ -8294,6 +8347,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             students: propStudents,
             nextLessonDate: _optionalChain([selLesson, 'optionalAccess', _55 => _55.recurrence]) && selLesson.recurrence !== 'Nessuna' ? nextLessonCreated : null,
             onClose: closeModal,
+            onNavigate: onNavigate,
+            onQuickAction: onQuickAction,
             role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6146}})
         )
         , modal === "delete" && selLesson && (
