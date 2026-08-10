@@ -82,6 +82,7 @@
       linkUrl: r.link_url || '',
       inRecupero: r.in_recupero || false,
       recuperoScadenza: r.recupero_scadenza || null,
+      motivoAssenza: r.motivo_assenza || null,
       durata: r.durata
         ? parseInt(r.durata)
         : (r.tipo === 'collettivo' ? 60 : r.tipo === 'prova' ? 30 : 45),
@@ -261,6 +262,7 @@
         link_url: l.linkUrl || null,
         in_recupero: l.inRecupero || false,
         recupero_scadenza: l.recuperoScadenza || null,
+        motivo_assenza: l.motivoAssenza || null,
         durata: l.durata ? parseInt(l.durata) : null,
         exercises: l.exercises || null,
         repertorio_ids: l.repertorioIds && l.repertorioIds.length > 0
@@ -726,6 +728,7 @@
         { data: sANNI },
         { data: sISCR },
         { data: sCP },
+        { data: sGR },
       ] = await Promise.all([
         sb.from('studenti').select('*').order('nome'),
         sb.from('docenti').select('*').order('nome'),
@@ -742,6 +745,7 @@
         sb.from('anni_scolastici').select('*').order('anno_inizio', { ascending: false }),
         sb.from('iscrizioni_anno').select('*'),
         sb.from('concerti_partecipanti').select('*'),
+        sb.from('gruppi_collettivi').select('*'),
       ]);
 
       // Log errori
@@ -800,10 +804,24 @@
         dataIscrizione: r.data_iscrizione||'', note: r.note||'',
       }));
 
+      // Gruppi collettivi: sottogruppi fissi di allievi all'interno di un corso collettivo
+      const gruppiDB = (sGR || []).map(r => ({
+        id:         r.id,
+        corsoId:    r.corso_id || '',
+        nome:       r.nome || '',
+        docenteId:  r.docente_id || '',
+        giorno:     r.giorno || '',
+        ora:        r.ora || '',
+        room:       r.room || '',
+        annoInizio: r.anno_inizio != null ? r.anno_inizio : null,
+        allievi:    Array.isArray(r.allievi) ? r.allievi : (() => { try { return JSON.parse(r.allievi||'[]'); } catch(e){ return []; } })(),
+      }));
+
       const data = {
         config: Object.keys(configFromDB).length > 0 ? configFromDB : null,
         anniScolastici: anniScolasticiDB, // sempre passato, anche se []
         iscrizioniAnno: iscrizioniAnnoDB, // sempre passato, anche se []
+        gruppi: gruppiDB, // sempre passato, anche se []
         dashboardPanels: dashboardPanelsDB,
         students: (sS || []).map(adaptStudente),
         docenti:  (sD || []).map(adaptDocente),

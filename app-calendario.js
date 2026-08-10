@@ -285,7 +285,7 @@ const CourseForm = ({ initial, onSave, onClose, docenti:_docentiRaw }) => {
 };
 
 // ── Scheda dettaglio corso ────────────────────────────────────────────────────
-const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, onDelete }) => {
+const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, onDelete, gruppi:_gruppiCD, setGruppi:_setGruppiCD, iscrizioniAnno:_iscrCD, annoSel:_annoSelCD, userRuolo:_ruoloCD }) => {
   const docenti = _docentiRaw || [];
   const isIndividuale = course.type === "individuale";
   const col  = isIndividuale ? C.gold   : C.purple;
@@ -375,6 +375,18 @@ const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, o
         )
       )
 
+      /* Gruppi collettivi — solo per corsi non individuali */
+      , !isIndividuale && React.createElement(GruppiManager, {
+          course: course,
+          students: students,
+          docenti: docenti,
+          gruppi: (_gruppiCD||[]).filter(g => g.corsoId === course.id),
+          setGruppi: _setGruppiCD,
+          iscrizioniAnno: _iscrCD || [],
+          annoSel: _annoSelCD,
+          canEdit: _ruoloCD === 'admin' || !_ruoloCD,
+        })
+
       /* Lista allievi */
       , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2723}}
         , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2724}}
@@ -435,8 +447,231 @@ const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, o
   );
 };
 
+// ── Gruppi collettivi ────────────────────────────────────────────────────────
+// Gestione admin dei sottogruppi fissi di un corso collettivo: creazione, modifica,
+// eliminazione gruppi + assegnazione/rimozione allievi. Un allievo può appartenere
+// al massimo a UN gruppo per ciascun corso a cui è iscritto (vincolo enforced qui sotto).
+const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizioniAnno, annoSel, canEdit }) => {
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState({ nome:'', docenteId:'', giorno:'', ora:'', room:'' });
+  const [addingToGroupId, setAddingToGroupId] = useState(null);
+
+  const sb = window.supabaseClient;
+
+  const persist = (action, payload) => {
+    if (!sb) return;
+    if (action === 'insert') {
+      sb.from('gruppi_collettivi').insert({
+        id: payload.id, corso_id: payload.corsoId, nome: payload.nome,
+        docente_id: payload.docenteId || null, giorno: payload.giorno || null,
+        ora: payload.ora || null, room: payload.room || null,
+        anno_inizio: payload.annoInizio != null ? payload.annoInizio : null,
+        allievi: JSON.stringify(payload.allievi || []),
+        updated_at: new Date().toISOString(),
+      }).then(({ error }) => { if (error) console.warn('[FM] gruppo insert error:', error.message); });
+    } else if (action === 'update') {
+      sb.from('gruppi_collettivi').update({
+        nome: payload.nome, docente_id: payload.docenteId || null,
+        giorno: payload.giorno || null, ora: payload.ora || null, room: payload.room || null,
+        allievi: JSON.stringify(payload.allievi || []),
+        updated_at: new Date().toISOString(),
+      }).eq('id', payload.id).then(({ error }) => { if (error) console.warn('[FM] gruppo update error:', error.message); });
+    } else if (action === 'delete') {
+      sb.from('gruppi_collettivi').delete().eq('id', payload).then(({ error }) => { if (error) console.warn('[FM] gruppo delete error:', error.message); });
+    }
+  };
+
+  const resetForm = () => { setForm({ nome:'', docenteId:'', giorno:'', ora:'', room:'' }); setShowForm(false); setEditingId(null); };
+
+  const handleSaveForm = () => {
+    if (!form.nome.trim()) return;
+    if (editingId) {
+      const patch = { nome: form.nome.trim(), docenteId: form.docenteId||'', giorno: form.giorno||'', ora: form.ora||'', room: form.room||'' };
+      setGruppi(prev => (prev||[]).map(g => g.id===editingId ? {...g, ...patch} : g));
+      const full = { ...(gruppi.find(g=>g.id===editingId)||{}), ...patch };
+      persist('update', full);
+    } else {
+      const newG = { id: uid(), corsoId: course.id, annoInizio: annoSel, allievi: [],
+        nome: form.nome.trim(), docenteId: form.docenteId||'', giorno: form.giorno||'', ora: form.ora||'', room: form.room||'' };
+      setGruppi(prev => [...(prev||[]), newG]);
+      persist('insert', newG);
+    }
+    resetForm();
+  };
+
+  const startEdit = (g) => {
+    setForm({ nome: g.nome||'', docenteId: g.docenteId||'', giorno: g.giorno||'', ora: g.ora||'', room: g.room||'' });
+    setEditingId(g.id);
+    setShowForm(true);
+  };
+
+  const handleDeleteGruppo = (g) => {
+    if (!window.confirm(`Eliminare il gruppo "${g.nome}"? Gli allievi torneranno senza gruppo assegnato.`)) return;
+    setGruppi(prev => (prev||[]).filter(x => x.id!==g.id));
+    persist('delete', g.id);
+  };
+
+  const addStudent = (gruppoId, studentId) => {
+    const g = gruppi.find(x=>x.id===gruppoId);
+    if (!g || !studentId) return;
+    const next = Array.from(new Set([...(g.allievi||[]), studentId]));
+    setGruppi(prev => (prev||[]).map(x => x.id===gruppoId ? {...x, allievi: next} : x));
+    persist('update', {...g, allievi: next});
+    setAddingToGroupId(null);
+  };
+
+  const removeStudent = (gruppoId, studentId) => {
+    const g = gruppi.find(x=>x.id===gruppoId);
+    if (!g) return;
+    const next = (g.allievi||[]).filter(id=>String(id)!==String(studentId));
+    setGruppi(prev => (prev||[]).map(x => x.id===gruppoId ? {...x, allievi: next} : x));
+    persist('update', {...g, allievi: next});
+  };
+
+  // Allievi iscritti a questo corso nell'anno selezionato (fonte: iscrizioni_anno)
+  const enrolledIds = new Set(
+    (iscrizioniAnno||[])
+      .filter(i => String(i.corsoId)===String(course.id) && (annoSel==null || String(i.annoInizio)===String(annoSel)))
+      .map(i => String(i.studentId))
+  );
+  const enrolledStudents = (students||[]).filter(s => enrolledIds.has(String(s.id)));
+
+  // Allievi già assegnati a QUALSIASI gruppo di questo corso (max 1 gruppo per corso)
+  const assignedIds = new Set(gruppi.flatMap(g => (g.allievi||[]).map(String)));
+  const unassigned = enrolledStudents.filter(s => !assignedIds.has(String(s.id)));
+
+  const findStudent = (id) => (students||[]).find(s => String(s.id)===String(id));
+  const findDocente = (id) => (docenti||[]).find(d => String(d.id)===String(id));
+
+  return (
+    React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",marginBottom:16}}
+      , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
+        , React.createElement(Ic, { n: "group", size: 14, color: C.textMuted})
+        , React.createElement('span', { style: {fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}}, "Gruppi collettivi")
+        , React.createElement('span', { style: {fontSize:11,color:C.textDim}}, "(", gruppi.length, ")")
+        , canEdit && React.createElement('button', {
+            onClick: () => { resetForm(); setShowForm(true); },
+            style:{marginLeft:'auto', padding:'6px 12px', borderRadius:8, border:'none', background:C.purple, color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
+          }, '+ Nuovo gruppo')
+      )
+
+      /* Avviso allievi senza gruppo */
+      , unassigned.length > 0 && (
+        React.createElement('div', {style:{margin:'12px 20px 0', padding:'10px 14px', background:'rgba(245,158,11,0.08)', border:'1px solid rgba(245,158,11,0.35)', borderRadius:8, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}
+          , React.createElement(Ic,{n:'alert',size:14,stroke:'#f59e0b'})
+          , React.createElement('span', {style:{fontSize:12, color:'#f59e0b', fontWeight:600}}
+            , unassigned.length, ' allie', unassigned.length===1?'vo':'vi', ' iscritt', unassigned.length===1?'o':'i', ' senza gruppo: '
+            , unassigned.map(s=>s.name).join(', ')
+          )
+        )
+      )
+
+      /* Form nuovo/modifica gruppo */
+      , showForm && canEdit && (
+        React.createElement('div', {style:{margin:'12px 20px 0', padding:'14px', background:C.purpleBg, border:`1px solid ${C.purpleBorder}`, borderRadius:10, display:'flex', flexDirection:'column', gap:8}}
+          , React.createElement('div', {style:{fontSize:12, fontWeight:600, color:C.purple}}, editingId ? 'Modifica gruppo' : 'Nuovo gruppo')
+          , React.createElement('div', {style:{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}
+            , React.createElement('input', {type:'text', value:form.nome, placeholder:'Nome gruppo (es. Gruppo A)',
+                onChange: e=>setForm(p=>({...p, nome:e.target.value})),
+                style:{padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif"}})
+            , React.createElement('select', {value:form.docenteId, onChange: e=>setForm(p=>({...p, docenteId:e.target.value})),
+                style:{padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif"}}
+                , React.createElement('option', {value:''}, 'Docente...')
+                , (docenti||[]).map(d => React.createElement('option', {key:d.id, value:d.id}, d.nome))
+              )
+            , React.createElement('input', {type:'text', value:form.giorno, placeholder:'Giorno (es. Lunedì)',
+                onChange: e=>setForm(p=>({...p, giorno:e.target.value})),
+                style:{padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif"}})
+            , React.createElement('input', {type:'text', value:form.ora, placeholder:'Ora (es. 17:00)',
+                onChange: e=>setForm(p=>({...p, ora:e.target.value})),
+                style:{padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif"}})
+            , React.createElement('input', {type:'text', value:form.room, placeholder:'Aula',
+                onChange: e=>setForm(p=>({...p, room:e.target.value})),
+                style:{padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif", gridColumn:'1 / -1'}})
+          )
+          , React.createElement('div', {style:{display:'flex', gap:8, justifyContent:'flex-end'}}
+            , React.createElement('button', {onClick: resetForm,
+                style:{padding:'7px 14px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.textMuted, fontSize:12, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}}, 'Annulla')
+            , React.createElement('button', {onClick: handleSaveForm, disabled: !form.nome.trim(),
+                style:{padding:'7px 16px', borderRadius:8, border:'none', background: form.nome.trim()?C.purple:C.border, color:'#fff', fontSize:12, fontWeight:600, cursor: form.nome.trim()?'pointer':'not-allowed', fontFamily:"'Open Sans',sans-serif"}}, editingId?'Salva':'Crea gruppo')
+          )
+        )
+      )
+
+      /* Lista gruppi */
+      , gruppi.length === 0 && !showForm ? (
+        React.createElement('div', {style:{textAlign:'center', padding:'32px 0', color:C.textDim}}
+          , React.createElement('p', {style:{fontSize:13}}, 'Nessun gruppo creato per questo corso')
+        )
+      ) : (
+        React.createElement('div', {style:{padding:'16px 20px', display:'flex', flexDirection:'column', gap:12}}
+          , gruppi.map(g => {
+              const docente = findDocente(g.docenteId);
+              const membri = (g.allievi||[]).map(findStudent).filter(Boolean);
+              const eligibili = enrolledStudents.filter(s => !assignedIds.has(String(s.id)));
+              return (
+                React.createElement('div', {key:g.id, style:{border:`1px solid ${C.border}`, borderRadius:10, overflow:'hidden'}}
+                  , React.createElement('div', {style:{padding:'10px 14px', background:C.bg, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}
+                    , React.createElement('div', {style:{width:30,height:30,borderRadius:8,background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+                      , React.createElement(Ic,{n:'group',size:14,color:C.purple})
+                    )
+                    , React.createElement('div', {style:{flex:1, minWidth:120}}
+                      , React.createElement('div', {style:{fontSize:14, fontWeight:600}}, g.nome)
+                      , React.createElement('div', {style:{fontSize:11, color:C.textMuted}}
+                        , [docente?docente.nome:null, g.giorno, g.ora, g.room].filter(Boolean).join(' · ') || '—'
+                      )
+                    )
+                    , React.createElement('span', {style:{fontSize:11, color:C.textDim, background:C.surfaceHover, padding:'3px 8px', borderRadius:12}}, membri.length, ' allievi')
+                    , canEdit && React.createElement('button', {onClick: ()=>startEdit(g),
+                        style:{padding:'5px 8px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', cursor:'pointer'}}
+                        , React.createElement(Ic,{n:'edit',size:13,color:C.textMuted}))
+                    , canEdit && React.createElement('button', {onClick: ()=>handleDeleteGruppo(g),
+                        style:{padding:'5px 8px', borderRadius:6, border:`1px solid ${C.redBorder}`, background:'transparent', cursor:'pointer'}}
+                        , React.createElement(Ic,{n:'trash',size:13,color:C.red}))
+                  )
+                  , React.createElement('div', {style:{padding:'10px 14px', display:'flex', flexDirection:'column', gap:6}}
+                    , membri.length === 0
+                      ? React.createElement('div', {style:{fontSize:12, color:C.textDim}}, 'Nessun allievo in questo gruppo')
+                      : membri.map(s => (
+                          React.createElement('div', {key:s.id, style:{display:'flex', alignItems:'center', gap:8}}
+                            , React.createElement('div', {style:{width:22,height:22,borderRadius:'50%',background:`${insHex(s.instrument)}20`,border:`1px solid ${insHex(s.instrument)}40`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:insHex(s.instrument),flexShrink:0}}
+                              , initials(s.name))
+                            , React.createElement('span', {style:{fontSize:13, flex:1}}, s.name)
+                            , canEdit && React.createElement('button', {onClick: ()=>removeStudent(g.id, s.id),
+                                style:{padding:'3px 8px', borderRadius:6, border:'none', background:'transparent', color:C.red, fontSize:11, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}}, '✕ rimuovi')
+                          )
+                        ))
+                    , canEdit && (
+                        addingToGroupId === g.id ? (
+                          React.createElement('div', {style:{display:'flex', gap:6, marginTop:4}}
+                            , React.createElement('select', {
+                                onChange: e => { if (e.target.value) addStudent(g.id, e.target.value); },
+                                defaultValue:'',
+                                style:{flex:1, padding:'6px 8px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
+                                , React.createElement('option', {value:''}, eligibili.length? 'Seleziona allievo...' : 'Nessun allievo disponibile')
+                                , eligibili.map(s => React.createElement('option', {key:s.id, value:s.id}, s.name))
+                              )
+                            , React.createElement('button', {onClick: ()=>setAddingToGroupId(null),
+                                style:{padding:'6px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.textMuted, fontSize:11, cursor:'pointer'}}, 'Chiudi')
+                          )
+                        ) : (
+                          React.createElement('button', {onClick: ()=>setAddingToGroupId(g.id),
+                            style:{alignSelf:'flex-start', padding:'6px 10px', borderRadius:6, border:`1px dashed ${C.purpleBorder}`, background:'transparent', color:C.purple, fontSize:11, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}}, '+ Aggiungi allievo')
+                        )
+                      )
+                  )
+                )
+              );
+            })
+        )
+      )
+    )
+  );
+};
+
 // ── Lista corsi ───────────────────────────────────────────────────────────────
-const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, onDelete, userRuolo:_cmRuolo, annoSel:_annoSelCM }) => {
+const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, onDelete, userRuolo:_cmRuolo, annoSel:_annoSelCM, gruppi:_gruppiCM, setGruppi:_setGruppiCM, iscrizioniAnno:_iscrCM }) => {
   const docenti = _docentiRaw || [];
   const _ruoloCorsi = _cmRuolo || "admin";
   const [modal,         setModal]         = useState(null);
@@ -467,7 +702,12 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
           docenti: docenti,
           onBack: ()=>setSelectedCourse(null),
           onEdit: onEdit ? ()=>{ setTarget(live); setModal("edit"); } : undefined,
-          onDelete: onDelete ? ()=>{ setTarget(live); setModal("delete"); } : undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2804}}
+          onDelete: onDelete ? ()=>{ setTarget(live); setModal("delete"); } : undefined,
+          gruppi: _gruppiCM || [],
+          setGruppi: _setGruppiCM,
+          iscrizioniAnno: _iscrCM || [],
+          annoSel: _annoSelCM,
+          userRuolo: _cmRuolo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2804}}
         )
         , modal==="edit"   && target && React.createElement(Modal, { title: "Modifica corso" , onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 2812}}, React.createElement(CourseForm, { initial: target, docenti: docenti, onSave: d=>{onEdit({...target,...d});setSelectedCourse(p=>({...p,...d}));setModal(null);}, onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 2812}}))
         , modal==="delete" && target && React.createElement(ConfirmDelete, { label: target.name, description: "Il corso verrà rimosso. Gli allievi iscritti perderanno l'associazione al corso complementare."           , onConfirm: ()=>handleDelete(target.id), onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 2813}})
@@ -859,7 +1099,7 @@ const LessonLog = ({ lessons:_lessonsRaw, studentId, onAddLesson }) => {
               , React.createElement('div', { style: {fontSize:14,fontWeight:500,marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3055}}, l.topic)
               , l.notes && React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3056}}, l.notes)
             )
-            , React.createElement(Badge, { label: l.attendance, color: l.attendance==="presente"?"green":"red", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3058}})
+            , l.attendance && React.createElement(Badge, { label: (ATT_STYLES[l.attendance]||{}).label || l.attendance, color: l.attendance==="presente"?"green":"red", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3058}})
           )
         ))
       )
@@ -870,13 +1110,14 @@ const LessonLog = ({ lessons:_lessonsRaw, studentId, onAddLesson }) => {
 // ════════════════════════════════════════════════════════════════════════════════
 // SCHEDA DETTAGLIO
 // ════════════════════════════════════════════════════════════════════════════════
-const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntrateRaw, setEntrate, annoInizioAttivo, onEdit, onDelete, onBack, onAddLesson, onUpdateStudent, config:propConfig, setConfig:propSetConfig, userRuolo:_sdRuolo }) => {
+const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntrateRaw, setEntrate, annoInizioAttivo, onEdit, onDelete, onBack, onAddLesson, onUpdateStudent, config:propConfig, setConfig:propSetConfig, userRuolo:_sdRuolo, gruppi:_gruppiSD }) => {
   const isMobile = useIsMobile();
   const sdRuolo = _sdRuolo || "admin"; // admin | docente | allievo
   const lessons = _lessonsRaw || [];
   const allEntrate = _allEntrateRaw || [];
   const accentHex = INS_COLORS[student.instrument] || C.gold;
   const comp   = courses.find(c => c.id === student.complementaryCourse);
+  const myGruppi = (_gruppiSD||[]).filter(g => (g.allievi||[]).some(id => String(id)===String(student.id)));
 
   // Anno scolastico e selettore mese ── tutti gli hook PRIMA di qualsiasi return
   const nowDate   = new Date(today);
@@ -1277,6 +1518,22 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
               )
             )
           )
+          , myGruppi.length > 0 && (
+            React.createElement('div', { style: {gridColumn:"1/-1",display:"flex",flexDirection:"column",gap:8,padding:"14px 16px",background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:10}}
+              , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+                , React.createElement(Ic, { n: "group", size: 16, accentHex: C.purple})
+                , React.createElement('span', { style: {fontSize:11,color:C.purple,letterSpacing:"0.06em",textTransform:"uppercase",opacity:0.7}}, "Gruppi collettivi")
+              )
+              , myGruppi.map(g => {
+                  const corso = courses.find(c => c.id === g.corsoId);
+                  return React.createElement('div', {key:g.id, style:{display:"flex", alignItems:"center", gap:8, fontSize:13}}
+                    , React.createElement('span', {style:{fontWeight:600, color:C.purple}}, g.nome)
+                    , corso && React.createElement('span', {style:{color:C.textMuted}}, '· '+corso.name)
+                    , (g.giorno||g.ora) && React.createElement('span', {style:{fontSize:11, color:C.textDim}}, '· '+[g.giorno,g.ora].filter(Boolean).join(' '))
+                  );
+                })
+            )
+          )
           , student.notes && sdRuolo !== "docente" && (
             React.createElement('div', { style: {gridColumn:"1/-1",padding:"14px 16px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3289}}
               , React.createElement('div', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3290}}, "Note")
@@ -1302,14 +1559,14 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
               )
               , React.createElement('div', { style: {display:"flex",gap:10,alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3311}}
                 , React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3312}}, lezSel.length, " lezioni" )
-                , lezSel.filter(l=>l.attendance==="presente").length>0 && (
+                , lezSel.filter(l=>studAttendance(l,student.name,student.id)==="presente").length>0 && (
                   React.createElement('span', { style: {fontSize:11,background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`,borderRadius:4,padding:"2px 8px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3314}}
-                    , lezSel.filter(l=>l.attendance==="presente").length, " pres."
+                    , lezSel.filter(l=>studAttendance(l,student.name,student.id)==="presente").length, " svolte"
                   )
                 )
-                , lezSel.filter(l=>l.attendance==="assente").length>0 && (
+                , lezSel.filter(l=>studAttendance(l,student.name,student.id)==="assente").length>0 && (
                   React.createElement('span', { style: {fontSize:11,background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`,borderRadius:4,padding:"2px 8px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3319}}
-                    , lezSel.filter(l=>l.attendance==="assente").length, " ass."
+                    , lezSel.filter(l=>studAttendance(l,student.name,student.id)==="assente").length, " non svolte"
                   )
                 )
               )
@@ -1344,9 +1601,12 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                         : `${l.instrument||"—"} · ${l.room||"—"} · ${l.teacher||"—"}`
                     )
                   )
-                  , l.attendance
-                    ? React.createElement(Badge, { label: l.attendance, accentHex: l.attendance==="presente"?"green":l.attendance==="assente"?"red":"gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3352}})
-                    : React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3353}}, "—")
+                  , (() => {
+                      const eff = studAttendance(l, student.name, student.id);
+                      return eff
+                        ? React.createElement(Badge, { label: (ATT_STYLES[eff]||{}).label || eff, accentHex: eff==="presente"?"green":eff==="assente"?"red":"gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3352}})
+                        : React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3353}}, "—");
+                    })()
                   
                 )
               ))
@@ -1371,10 +1631,10 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
               , React.createElement('tbody', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3372}}
                 , sortFnPres(MESI_AS.map((x,i) => {
                   const lm   = lezMese(x.m, x.y);
-                  const pres = lm.filter(l=>l.attendance==="presente").length;
-                  const ass  = lm.filter(l=>l.attendance==="assente").length;
+                  const pres = lm.filter(l=>studAttendance(l,student.name,student.id)==="presente").length;
+                  const ass  = lm.filter(l=>studAttendance(l,student.name,student.id)==="assente").length;
                   const rec  = lm.filter(l=>l.inRecupero).length;
-                  const att  = lm.filter(l=>l.attendance).length;
+                  const att  = lm.filter(l=>studAttendance(l,student.name,student.id)).length;
                   const tasso= att>0 ? Math.round((pres/att)*100) : null;
                   return { x, i, lm, pres, ass, rec, att, tasso, mese: x.y*100+x.m, tot: lm.length };
                 }), (r,k) => {
@@ -1425,10 +1685,10 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                     , andamento.reduce((t,x)=>t+x.n,0)
                   )
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3416}}
-                    , andamento.reduce((t,x)=>t+lezMese(x.m,x.y).filter(l=>l.attendance==="presente").length,0)
+                    , andamento.reduce((t,x)=>t+lezMese(x.m,x.y).filter(l=>studAttendance(l,student.name,student.id)==="presente").length,0)
                   )
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.red}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3419}}
-                    , andamento.reduce((t,x)=>t+lezMese(x.m,x.y).filter(l=>l.attendance==="assente").length,0)
+                    , andamento.reduce((t,x)=>t+lezMese(x.m,x.y).filter(l=>studAttendance(l,student.name,student.id)==="assente").length,0)
                   )
                   , React.createElement('td', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3422}})
                 )
@@ -2377,7 +2637,7 @@ const ImportaIscrizioniModal = ({ annoCorrente, anniDisp, allStudents, studentsN
 };
 
 
-const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV, iscrizioniAnno:propIscrizioniAnno, setIscrizioniAnno:propSetIscrizioniAnno, anniScolastici:propAnniScolasticiAV }) => {
+const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV, iscrizioniAnno:propIscrizioniAnno, setIscrizioniAnno:propSetIscrizioniAnno, anniScolastici:propAnniScolasticiAV, gruppi:propGruppiAV }) => {
   const _ruoloAV = propUserRuoloAV || "admin";
   const _nomeAV  = (_appUserAV && _appUserAV.nome) || "";
   const isMobile = useIsMobile();
@@ -2623,6 +2883,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             onDelete: _ruoloAV==="admin" ? ()=>setModal("delete") : undefined,
             onBack: _ruoloAV!=="allievo" ? ()=>setView("list") : undefined,
             onAddLesson: handleAddLesson,
+            gruppi: propGruppiAV || [],
             onUpdateStudent: d=>setStudents(p=>p.map(s=>s.id===d.id?d:s)), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3893}}
           )
         )
@@ -2662,7 +2923,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   );
 };
 
-const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:propStudents, setStudents:propSetStudents, docenti:propDocenti, lessons:propLessonsCV, userRuolo:_rC2, appUser:_aC, iscrizioniAnno:propIscrizioniCV, annoInizioAttivo:propAnnoIniziCV, anniScolastici:propAnniCV }) => {
+const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:propStudents, setStudents:propSetStudents, docenti:propDocenti, lessons:propLessonsCV, userRuolo:_rC2, appUser:_aC, iscrizioniAnno:propIscrizioniCV, annoInizioAttivo:propAnnoIniziCV, anniScolastici:propAnniCV, gruppi:propGruppiCV, setGruppi:propSetGruppiCV }) => {
   const _ruoloCorsi = _rC2 || "admin";
   const _nomeCorsi  = (_aC && _aC.nome) || "";
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
@@ -2805,7 +3066,11 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
         userRuolo: _ruoloCorsi,
         onAdd: _ruoloCorsi==="admin" ? handleAddCourse : undefined,
         onEdit: _ruoloCorsi==="admin" ? handleEditCourse : undefined,
-        onDelete: _ruoloCorsi==="admin" ? handleDelCourse : undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3934}}
+        onDelete: _ruoloCorsi==="admin" ? handleDelCourse : undefined,
+        gruppi: propGruppiCV || [],
+        setGruppi: propSetGruppiCV,
+        iscrizioniAnno: iscrizioniAnno,
+        annoSel: annoSel, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3934}}
       )
     )
   );
@@ -3064,6 +3329,20 @@ const studentInLesson = (l, name, studentId) => {
 const lessonLabel = l => isColl(l)
   ? (l.courseName||"Collettiva")
   : (l.student||"");
+// Presenza effettiva per un allievo su una lezione: per le collettive usa il valore individuale
+// dell'allievo (l.students[].attendance) se presente, altrimenti ricade sull'attendance della lezione.
+const studAttendance = (l, name, studentId) => {
+  if (isColl(l)) {
+    const arr = l.students || [];
+    const s = arr.find(x =>
+      (studentId != null && x.id != null && String(x.id) === String(studentId)) ||
+      (x.name||'').toLowerCase() === (name||'').toLowerCase()
+    );
+    if (s && s.attendance) return s.attendance;
+    return l.attendance || '';
+  }
+  return l.attendance || '';
+};
 const isSameDay = (a, b) => yyyymmdd(a) === yyyymmdd(b);
 
 const startOfWeek = (d) => {
@@ -3234,10 +3513,10 @@ const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument
 
 // ─── ATT_STYLES globale (usato da LessonForm, LessonDetailModal, LezioniAdminView, RecuperoView)
 const ATT_STYLES = {
-  presente:    { bg:C.greenBg,  fg:C.green,  bd:C.greenBorder,  label:'Presente'    },
-  assente:     { bg:C.redBg,    fg:C.red,    bd:C.redBorder,    label:'Assente'     },
+  presente:    { bg:C.greenBg,  fg:C.green,  bd:C.greenBorder,  label:'Svolta'      },
+  assente:     { bg:C.redBg,    fg:C.red,    bd:C.redBorder,    label:'Non svolta'  },
   recupero:    { bg:C.blueBg,   fg:C.blue,   bd:C.blueBorder,   label:'Recupero'    },
-  in_recupero: { bg:'rgba(255,160,0,0.10)', fg:'#f59e0b', bd:'rgba(245,158,11,0.4)', label:'In recupero' },
+  in_recupero: { bg:'rgba(255,160,0,0.10)', fg:'#f59e0b', bd:'rgba(245,158,11,0.4)', label:'Da recuperare' },
   recuperata:  { bg:C.tealBg,   fg:C.teal,   bd:C.tealBorder,   label:'Recuperata'  },
   cambio_ora:  { bg:'rgba(139,92,246,0.10)', fg:'#7c3aed', bd:'rgba(139,92,246,0.4)', label:'Cambio ora'  },
 };
@@ -3797,6 +4076,12 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
   // Aggiorna se cambiano gli allegati globali
   useEffect(()=>{ if(allegatiGlobali){ const f=(allegatiGlobali||[]).filter(a=>(a.lezioneId||a.lezione_id)===lesson.id); setLocalAllegati(f); } },[allegatiGlobali]);
   const [saving, setSaving] = useState(false);
+  // Motivo assenza obbligatorio — livello lezione
+  const [assenzaPrompt, setAssenzaPrompt] = useState(false);
+  const [assenzaMotivo, setAssenzaMotivo] = useState('');
+  // Motivo assenza obbligatorio — per singolo allievo (lezione collettiva)
+  const [assenzaPromptStudentId, setAssenzaPromptStudentId] = useState(null);
+  const [assenzaMotivoStudent,   setAssenzaMotivoStudent]   = useState('');
 
   const saveField = (patch) => {
     if (!onUpdateLesson) return;
@@ -3910,11 +4195,19 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                   const stAtt = s.attendance || '';
                   const setStAtt = (val) => {
                     if (!canEdit) return;
-                    const next = (lesson.students||[]).map(x => x.id===s.id ? {...x, attendance: stAtt===val ? '' : val} : x);
+                    if (val === 'assente' && stAtt !== 'assente') {
+                      setAssenzaMotivoStudent(s.motivoAssenza || '');
+                      setAssenzaPromptStudentId(s.id);
+                      return;
+                    }
+                    const next = (lesson.students||[]).map(x => x.id===s.id
+                      ? {...x, attendance: stAtt===val ? '' : val, motivoAssenza: (stAtt===val || val!=='assente') ? '' : x.motivoAssenza}
+                      : x);
                     saveField({ students: next });
                   };
                   return (
-                    React.createElement('div', { key: s.id, style: {display:"flex", alignItems:"center", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4572}}
+                    React.createElement('div', { key: s.id, style: {display:"flex", flexDirection:"column", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4572}}
+                    , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8}}
                       , React.createElement('div', { style: {width:26, height:26, borderRadius:"50%", flexShrink:0,
                         background:`${insHex(s.instrument)}20`, border:`1px solid ${insHex(s.instrument)}40`,
                         display:"flex", alignItems:"center", justifyContent:"center",
@@ -3944,6 +4237,46 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                             }, st.label);
                           })
                       )
+                    )
+                    , assenzaPromptStudentId === s.id && (
+                      React.createElement('div', {style:{padding:"8px 10px", border:`1px solid ${C.redBorder}`, background:C.redBg, borderRadius:8, marginLeft:34}}
+                        , React.createElement('div', {style:{fontSize:10, fontWeight:600, color:C.red, marginBottom:5}}, 'Motivo assenza (obbligatorio)')
+                        , React.createElement('input', {
+                            type:'text', value: assenzaMotivoStudent, autoFocus:true,
+                            onChange: e => setAssenzaMotivoStudent(e.target.value),
+                            placeholder:'Es. Malattia, impegno personale...',
+                            style:{width:'100%', padding:'7px 9px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, fontFamily:"'Open Sans',sans-serif", marginBottom:6, boxSizing:'border-box'}
+                          })
+                        , React.createElement('div', {style:{display:'flex', gap:6, justifyContent:'flex-end'}}
+                          , React.createElement('button', {
+                              onClick: () => { setAssenzaPromptStudentId(null); setAssenzaMotivoStudent(''); },
+                              style:{padding:'5px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.textMuted, fontSize:11, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
+                            }, 'Annulla')
+                          , React.createElement('button', {
+                              disabled: !assenzaMotivoStudent.trim(),
+                              onClick: () => {
+                                if (!assenzaMotivoStudent.trim()) return;
+                                const next = (lesson.students||[]).map(x => x.id===s.id
+                                  ? {...x, attendance:'assente', motivoAssenza: assenzaMotivoStudent.trim()}
+                                  : x);
+                                saveField({ students: next });
+                                setAssenzaPromptStudentId(null);
+                                setAssenzaMotivoStudent('');
+                              },
+                              style:{padding:'5px 12px', borderRadius:6, border:'none',
+                                background: assenzaMotivoStudent.trim() ? C.red : C.border,
+                                color:'#fff', fontSize:11, fontWeight:600,
+                                cursor: assenzaMotivoStudent.trim() ? 'pointer' : 'not-allowed',
+                                fontFamily:"'Open Sans',sans-serif"}
+                            }, 'Conferma assenza')
+                        )
+                      )
+                    )
+                    , assenzaPromptStudentId !== s.id && stAtt === 'assente' && s.motivoAssenza && (
+                      React.createElement('div', {style:{marginLeft:34, fontSize:11, color:C.red}}
+                        , React.createElement('strong', null, 'Motivo: '), s.motivoAssenza
+                      )
+                    )
                     )
                   );
                 })
@@ -4245,7 +4578,20 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                     const s = ATT_STYLES[a] || ATT_STYLES.presente;
                     const active = a === 'in_recupero' ? lesson.inRecupero : lesson.attendance === a;
                     return (
-                      React.createElement('button', { key: a, onClick: () => canEdit && onAttendance(lesson.id, active ? "" : a),
+                      React.createElement('button', { key: a, onClick: () => {
+                          if (!canEdit) return;
+                          if (a === 'assente' && !active) {
+                            setAssenzaMotivo(lesson.motivoAssenza || '');
+                            setAssenzaPrompt(true);
+                            return;
+                          }
+                          if (a === 'assente' && active) {
+                            onAttendance(lesson.id, "");
+                            saveField({ motivoAssenza: null });
+                            return;
+                          }
+                          onAttendance(lesson.id, active ? "" : a);
+                        },
                         style: {flex:1, padding:"9px 0", borderRadius:8,
                           border:`2px solid ${active ? s.bd : C.border}`,
                           background: active ? s.bg : C.bg,
@@ -4264,6 +4610,42 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                       , React.createElement(Ic,{n:'clock',size:12,stroke:'#f59e0b'})
                       , 'Lezione in recupero — scade il ', lesson.recuperoScadenza
                     )
+                  )
+                )
+                , assenzaPrompt && (
+                  React.createElement('div', {style:{marginTop:8, padding:"10px 12px", border:`1px solid ${C.redBorder}`, background:C.redBg, borderRadius:8}}
+                    , React.createElement('div', {style:{fontSize:11, fontWeight:600, color:C.red, marginBottom:6}}, 'Motivo assenza (obbligatorio)')
+                    , React.createElement('input', {
+                        type:'text', value: assenzaMotivo, autoFocus:true,
+                        onChange: e => setAssenzaMotivo(e.target.value),
+                        placeholder:'Es. Malattia, impegno personale...',
+                        style:{width:'100%', padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif", marginBottom:8, boxSizing:'border-box'}
+                      })
+                    , React.createElement('div', {style:{display:'flex', gap:8, justifyContent:'flex-end'}}
+                      , React.createElement('button', {
+                          onClick: () => { setAssenzaPrompt(false); setAssenzaMotivo(''); },
+                          style:{padding:'6px 12px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.textMuted, fontSize:12, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
+                        }, 'Annulla')
+                      , React.createElement('button', {
+                          disabled: !assenzaMotivo.trim(),
+                          onClick: () => {
+                            if (!assenzaMotivo.trim()) return;
+                            onAttendance(lesson.id, 'assente');
+                            saveField({ motivoAssenza: assenzaMotivo.trim() });
+                            setAssenzaPrompt(false);
+                          },
+                          style:{padding:'6px 14px', borderRadius:6, border:'none',
+                            background: assenzaMotivo.trim() ? C.red : C.border,
+                            color:'#fff', fontSize:12, fontWeight:600,
+                            cursor: assenzaMotivo.trim() ? 'pointer' : 'not-allowed',
+                            fontFamily:"'Open Sans',sans-serif"}
+                        }, 'Conferma assenza')
+                    )
+                  )
+                )
+                , !assenzaPrompt && lesson.attendance === 'assente' && lesson.motivoAssenza && (
+                  React.createElement('div', {style:{marginTop:8, padding:'8px 12px', background:C.redBg, border:`1px solid ${C.redBorder}`, borderRadius:8, fontSize:12, color:C.red}}
+                    , React.createElement('strong', null, 'Motivo: '), lesson.motivoAssenza
                   )
                 )
               )
@@ -5388,10 +5770,47 @@ const CalRepertorioTab = ({ repertorio, lessons, onAdd, onEdit, onDelete, canEdi
 };
 
 // ─── FORM LEZIONE COLLETTIVA ─────────────────────────────────────────────────
-const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose }) => {
+// Piccolo widget per aggiungere un allievo singolo "esterno" (non iscritto al corso / non nel gruppo)
+// alla lezione collettiva, mantenendo comunque il resto della selezione (gruppo + eventuali altri) invariato.
+const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd }) => {
+  const [open, setOpen] = useState(false);
+  const [val,  setVal]  = useState('');
+  const excluded = new Set(excludeIds||[]);
+  const candidati = (students||[]).filter(s => s.status==="attivo" && !excluded.has(s.id));
+  if (!open) {
+    return React.createElement('button', {
+      onClick: () => setOpen(true),
+      style: {marginTop:10, padding:'7px 12px', borderRadius:8, border:`1px dashed ${C.purpleBorder}`,
+        background:'transparent', color:C.purple, fontSize:12, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
+    }, '+ Aggiungi allievo singolo esterno');
+  }
+  return React.createElement('div', { style: {marginTop:10, display:'flex', gap:8} }
+    , React.createElement('select', {
+        value: val, onChange: e=>setVal(e.target.value),
+        style: {flex:1, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif"}
+      }
+      , React.createElement('option', {value:''}, candidati.length ? 'Seleziona allievo...' : 'Nessun allievo disponibile')
+      , candidati.map(s => React.createElement('option', {key:s.id, value:s.id}, s.name, ' · ', s.instrument))
+    )
+    , React.createElement('button', {
+        disabled: !val,
+        onClick: () => { if (val) { onAdd(val); setVal(''); setOpen(false); } },
+        style: {padding:'8px 14px', borderRadius:8, border:'none', background: val?C.purple:C.border,
+          color:'#fff', fontSize:12, fontWeight:600, cursor: val?'pointer':'not-allowed', fontFamily:"'Open Sans',sans-serif"}
+      }, 'Aggiungi')
+    , React.createElement('button', {
+        onClick: () => { setOpen(false); setVal(''); },
+        style: {padding:'8px 12px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent',
+          color:C.textMuted, fontSize:12, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
+      }, 'Annulla')
+  );
+};
+
+const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose, gruppi:_gruppiCLF }) => {
   const docenti    = _docentiRaw    || [];
   const repertorio = _repertorioRaw || [];
   const collettivi = courses.filter(c => c.type === "collettivo");
+  const gruppiAll  = _gruppiCLF || [];
 
   // In modalità edit (initial presente) si salta lo step di selezione corso
   const initCourse = initial ? (courses.find(c => c.id === initial.courseId) || null) : null;
@@ -5401,6 +5820,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
   const [selStudents, setSelStudents]= useState(
     initial ? (initial.students || []).map(s => s.id).filter(Boolean) : []
   );
+  const [selGruppoId, setSelGruppoId] = useState(initial?.gruppoId || '');
   const [repertorioIds, setRepertorioIds] = useState(initial?.repertorioIds || []);
   const [showBranoForm, setShowBranoForm] = useState(false);
   const [newBranoForm, setNewBranoForm]   = useState({ title:'', composer:'', period:'', tonality:'', type:'collettivo', difficulty:'', notes:'' });
@@ -5431,15 +5851,37 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     ? students.filter(s => s.complementaryCourse === selCourse.id && s.status === "attivo")
     : [];
 
+  // Gruppi collettivi disponibili per il corso selezionato
+  const gruppiDelCorso = selCourse ? gruppiAll.filter(g => g.corsoId === selCourse.id) : [];
+  const selGruppo = gruppiDelCorso.find(g => g.id === selGruppoId) || null;
+  // Allievi provenienti dal gruppo attualmente selezionato (per distinguerli da quelli aggiunti manualmente)
+  const [groupMemberIds, setGroupMemberIds] = useState(
+    initial?.gruppoId ? (gruppiAll.find(g=>g.id===initial.gruppoId)?.allievi || []) : []
+  );
+
   const toggleStudent = id =>
     setSelStudents(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
   const selectAll   = () => setSelStudents(enrolled.map(s=>s.id));
-  const deselectAll = () => setSelStudents([]);
+  const deselectAll = () => { setSelStudents([]); setSelGruppoId(''); setGroupMemberIds([]); };
+
+  // Selezione di un gruppo: precompila gli allievi del gruppo mantenendo quelli aggiunti manualmente
+  const handleGruppoSelect = (gruppoId) => {
+    const g = gruppiDelCorso.find(x => x.id === gruppoId);
+    const newGroupIds = g ? (g.allievi||[]) : [];
+    setSelStudents(prev => {
+      const external = prev.filter(id => !groupMemberIds.includes(id)); // allievi aggiunti manualmente, non dal gruppo precedente
+      return Array.from(new Set([...external, ...newGroupIds]));
+    });
+    setGroupMemberIds(newGroupIds);
+    setSelGruppoId(gruppoId);
+  };
 
   // Quando cambia il corso resetta il docente se non è nel nuovo corso
   const handleCourseSelect = (c) => {
     setSelCourse(c);
     setSelStudents([]);
+    setSelGruppoId('');
+    setGroupMemberIds([]);
     // pre-seleziona il docente se c'è uno solo
     const docs = docenti.filter(d => (c.docenti||[]).includes(d.id));
     set("teacherId", docs.length === 1 ? docs[0].id : "");
@@ -5486,6 +5928,8 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
       students:      studObjs,
       repertorioIds: repertorioIds,
       durata: form.durata || 60,
+      gruppoId:   selGruppoId || null,
+      gruppoNome: selGruppo ? selGruppo.nome : null,
     });
   };
 
@@ -5646,6 +6090,30 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
           )
         )
 
+        /* Selezione gruppo collettivo */
+        , gruppiDelCorso.length > 0 && (
+          React.createElement('div', { style: {marginBottom:14} }
+            , React.createElement('label', { style: {fontSize:11, color:C.textMuted,
+                letterSpacing:"0.07em", textTransform:"uppercase", display:"block", marginBottom:6}}, "Gruppo"
+            )
+            , React.createElement('select', {
+                value: selGruppoId,
+                onChange: e => handleGruppoSelect(e.target.value),
+                style: {width:"100%", padding:"9px 10px", borderRadius:8, border:`1px solid ${C.border}`,
+                  fontSize:13, fontFamily:"'Open Sans',sans-serif", background:C.surface}
+              }
+              , React.createElement('option', {value:''}, 'Nessun gruppo (selezione manuale)')
+              , gruppiDelCorso.map(g => React.createElement('option', {key:g.id, value:g.id}
+                  , g.nome, ' (', (g.allievi||[]).length, ' allievi)'
+                  , [g.giorno,g.ora].filter(Boolean).length ? ' · '+[g.giorno,g.ora].filter(Boolean).join(' ') : ''
+                ))
+            )
+            , selGruppo && React.createElement('div', { style: {fontSize:11, color:C.purple, marginTop:5} }
+                , 'Allievi del gruppo precompilati. Puoi comunque aggiungere o togliere singoli allievi qui sotto.'
+              )
+          )
+        )
+
         /* Selezione allievi */
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 5577}}
           , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5578}}
@@ -5675,6 +6143,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
               , enrolled.map(s => {
                 const isSel = selStudents.includes(s.id);
                 const sc    = insHex(s.instrument);
+                const fromGruppo = groupMemberIds.includes(s.id);
                 return (
                   React.createElement('button', { key: s.id, onClick: () => toggleStudent(s.id),
                     style: {display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
@@ -5700,12 +6169,42 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
                       , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:isSel?sc:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5627}}, s.name)
                       , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5628}}, s.instrument, " · "  , s.level||"—")
                     )
+                    , fromGruppo && React.createElement('span', { style: {fontSize:9, color:C.purple, background:C.purpleBg, border:`1px solid ${C.purpleBorder}`, borderRadius:10, padding:"2px 7px", fontWeight:600} }, selGruppo?selGruppo.nome:'gruppo')
                     , isSel && React.createElement(Ic, { n: "check", size: 13, stroke: sc, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5630}})
                   )
                 );
               })
             )
           )
+
+          /* Allievi aggiunti manualmente, non iscritti al corso */
+          , (() => {
+              const enrolledIds = new Set(enrolled.map(s=>s.id));
+              const external = selStudents.filter(id => !enrolledIds.has(id)).map(id => students.find(s=>s.id===id)).filter(Boolean);
+              if (external.length === 0) return null;
+              return React.createElement('div', { style: {marginTop:10, display:"flex", flexDirection:"column", gap:5} }
+                , React.createElement('div', {style:{fontSize:10, color:C.textMuted, letterSpacing:"0.06em", textTransform:"uppercase"}}, "Allievi esterni aggiunti manualmente")
+                , external.map(s => {
+                    const sc = insHex(s.instrument);
+                    return React.createElement('div', {key:s.id, style:{display:"flex", alignItems:"center", gap:10, padding:"7px 12px", borderRadius:8, border:`1.5px dashed ${sc}`, background:`${sc}08`}}
+                      , React.createElement('div', { style: {width:26, height:26, borderRadius:"50%", flexShrink:0, background:`${sc}20`, border:`1px solid ${sc}40`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:700, color:sc} }, initials(s.name))
+                      , React.createElement('div', {style:{flex:1}}
+                        , React.createElement('div', {style:{fontSize:13, fontWeight:500}}, s.name)
+                        , React.createElement('div', {style:{fontSize:11, color:C.textMuted}}, s.instrument, ' · esterno al corso')
+                      )
+                      , React.createElement('button', {onClick: ()=>setSelStudents(prev=>prev.filter(id=>id!==s.id)),
+                          style:{padding:'4px 9px', borderRadius:6, border:'none', background:'transparent', color:C.red, fontSize:11, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}}, '✕')
+                    );
+                  })
+              );
+            })()
+
+          /* Aggiungi allievo esterno (non iscritto formalmente al corso, o fuori dal gruppo) */
+          , React.createElement(AggiungiAllievoEsterno, {
+              students: students,
+              excludeIds: selStudents,
+              onAdd: (studentId) => setSelStudents(prev => Array.from(new Set([...prev, studentId]))),
+            })
 
           /* Riepilogo */
           , selStudents.length > 0 && (
@@ -7345,7 +7844,7 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
   );
 };
 
-const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV, config:calConfig, onNavigate, onQuickAction }) => {
+const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV, config:calConfig, onNavigate, onQuickAction, gruppi:propGruppiCal }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
   const propStudents = _propStudentsRaw || [];
@@ -8314,6 +8813,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                     students: propStudents,
                     docenti: propDocenti,
                     repertorio: repertorio,
+                    gruppi: propGruppiCal || [],
                     onAddBrano: b => setRepertorio(p=>[...p,b]),
                     onSave: handleEdit,
                     onClose: closeModal,
@@ -8354,6 +8854,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                                     ? JSON.stringify(updated.repertorioIds) : null,
                   students:       updated.students && updated.students.length > 0
                                     ? JSON.stringify(updated.students) : null,
+                  motivo_assenza: updated.motivoAssenza || null,
                   updated_at:     new Date().toISOString(),
                 }).eq('id', updated.id).then(({ error }) => {
                   if (error) console.warn('[FM] onUpdateLesson error:', error.message);
@@ -8378,6 +8879,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               students: propStudents,
               docenti: propDocenti,
               repertorio: repertorio,
+              gruppi: propGruppiCal || [],
               onAddBrano: b => setRepertorio(p=>[...p,b]),
               onSave: handleAddCollective,
               onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6162}})

@@ -764,7 +764,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       , isColl(l)?`${l.room||"—"}`:`${l.instrument} · ${l.room||"—"}`
                     )
                     , l.attendance
-                      ? React.createElement(Badge, { label: l.attendance, color: l.attendance==="presente"?"green":l.attendance==="assente"?"red":"gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10344}})
+                      ? React.createElement(Badge, { label: (typeof ATT_STYLES!=="undefined"&&ATT_STYLES[l.attendance]&&ATT_STYLES[l.attendance].label) || l.attendance, color: l.attendance==="presente"?"green":l.attendance==="assente"?"red":"gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10344}})
                       : React.createElement('span', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10345}}, "—")
                     
                   )
@@ -918,7 +918,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   )
                   , React.createElement('div', { style: {textAlign:"right",display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10470}}
                     , React.createElement('div', { style: {fontSize:13,fontWeight:600,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10471}}, "€", selected.tariffaOra)
-                    , l.attendance && React.createElement(Badge, { label: l.attendance, color: l.attendance==="presente"?"green":l.attendance==="assente"?"red":"gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10472}})
+                    , l.attendance && React.createElement(Badge, { label: (typeof ATT_STYLES!=="undefined"&&ATT_STYLES[l.attendance]&&ATT_STYLES[l.attendance].label) || l.attendance, color: l.attendance==="presente"?"green":l.attendance==="assente"?"red":"gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10472}})
                   )
                 )
               ))
@@ -1051,7 +1051,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                         <td style="padding:8px 12px;font-size:13px;">${isColl(l)?(l.courseName||'Collettiva'):(l.student||'—')}</td>
                         <td style="padding:8px 12px;font-size:13px;">${l.topic||'—'}</td>
                         <td style="padding:8px 12px;font-size:13px;text-align:right;">€${selected.tariffaOra}</td>
-                        <td style="padding:8px 12px;font-size:12px;text-align:center;"><span style="background:${l.attendance==='presente'?'#dcfce7':l.attendance==='assente'?'#fee2e2':'#fef3c7'};color:${l.attendance==='presente'?'#166534':l.attendance==='assente'?'#991b1b':'#92400e'};padding:2px 8px;border-radius:20px;">${l.attendance||'—'}</span></td>
+                        <td style="padding:8px 12px;font-size:12px;text-align:center;"><span style="background:${l.attendance==='presente'?'#dcfce7':l.attendance==='assente'?'#fee2e2':'#fef3c7'};color:${l.attendance==='presente'?'#166534':l.attendance==='assente'?'#991b1b':'#92400e'};padding:2px 8px;border-radius:20px;">${(typeof ATT_STYLES!=="undefined"&&ATT_STYLES[l.attendance]&&ATT_STYLES[l.attendance].label)||l.attendance||'—'}</span></td>
                       </tr>`).join('');
                     const html = `<!DOCTYPE html><html lang="it"><head><meta charset="UTF-8"><title>Resoconto ${selected.nome||selected.name} — ${mLabel}</title>
 <style>body{font-family:'Open Sans',Arial,sans-serif;margin:0;padding:32px;color:#1a1a1a;background:#fff;}h1{font-size:22px;font-weight:700;margin:0 0 4px;}
