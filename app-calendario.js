@@ -529,13 +529,11 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
     persist('update', {...g, allievi: next});
   };
 
-  // Allievi iscritti a questo corso nell'anno selezionato (fonte: iscrizioni_anno)
-  const enrolledIds = new Set(
-    (iscrizioniAnno||[])
-      .filter(i => String(i.corsoId)===String(course.id) && (annoSel==null || String(i.annoInizio)===String(annoSel)))
-      .map(i => String(i.studentId))
-  );
-  const enrolledStudents = (students||[]).filter(s => enrolledIds.has(String(s.id)));
+  // Allievi iscritti a questo corso: la fonte reale usata in tutta l'app è
+  // s.complementaryCourse (impostato dal form allievo), non iscrizioni_anno per corso
+  // (quella tabella traccia l'iscrizione all'anno scolastico in generale, non al singolo corso).
+  // `students` qui è già filtrato a monte per l'anno scolastico attivo (studentsAnno in CorsiView).
+  const enrolledStudents = (students||[]).filter(s => s.complementaryCourse === course.id && s.status === "attivo");
 
   // Allievi già assegnati a QUALSIASI gruppo di questo corso (max 1 gruppo per corso)
   const assignedIds = new Set(gruppi.flatMap(g => (g.allievi||[]).map(String)));
@@ -5806,7 +5804,7 @@ const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd }) => {
   );
 };
 
-const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose, gruppi:_gruppiCLF }) => {
+const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose, gruppi:_gruppiCLF, iscrizioniAnno:_iscrCLF, annoSel:_annoSelCLF }) => {
   const docenti    = _docentiRaw    || [];
   const repertorio = _repertorioRaw || [];
   const collettivi = courses.filter(c => c.type === "collettivo");
@@ -5846,9 +5844,20 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     ? docenti.filter(d => (selCourse.docenti||[]).includes(d.id))
     : [];
 
-  // Allievi iscritti al corso e attivi
+  // Allievi iscritti all'anno scolastico attivo (stessa fonte usata altrove: iscrizioni_anno).
+  // Se non ci sono affatto iscrizioni per l'anno selezionato (funzione non utilizzata/non ancora
+  // popolata) non filtriamo, per non nascondere tutti gli allievi.
+  const idIscrittiAnno = new Set(
+    (_iscrCLF||[])
+      .filter(i => _annoSelCLF == null || String(i.annoInizio) === String(_annoSelCLF))
+      .map(i => String(i.studentId))
+  );
+  const filtraAnno = idIscrittiAnno.size > 0;
+
+  // Allievi iscritti al corso, attivi, e (se disponibile il dato) iscritti all'anno scolastico corrente
   const enrolled = selCourse
-    ? students.filter(s => s.complementaryCourse === selCourse.id && s.status === "attivo")
+    ? students.filter(s => s.complementaryCourse === selCourse.id && s.status === "attivo"
+        && (!filtraAnno || idIscrittiAnno.has(String(s.id))))
     : [];
 
   // Gruppi collettivi disponibili per il corso selezionato
@@ -7844,7 +7853,7 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
   );
 };
 
-const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV, config:calConfig, onNavigate, onQuickAction, gruppi:propGruppiCal }) => {
+const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV, config:calConfig, onNavigate, onQuickAction, gruppi:propGruppiCal, iscrizioniAnno:propIscrizioniCal }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
   const propStudents = _propStudentsRaw || [];
@@ -8814,6 +8823,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                     docenti: propDocenti,
                     repertorio: repertorio,
                     gruppi: propGruppiCal || [],
+                    iscrizioniAnno: propIscrizioniCal || [],
+                    annoSel: calConfig && calConfig.annoInizioAttivo,
                     onAddBrano: b => setRepertorio(p=>[...p,b]),
                     onSave: handleEdit,
                     onClose: closeModal,
@@ -8880,6 +8891,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               docenti: propDocenti,
               repertorio: repertorio,
               gruppi: propGruppiCal || [],
+              iscrizioniAnno: propIscrizioniCal || [],
+              annoSel: calConfig && calConfig.annoInizioAttivo,
               onAddBrano: b => setRepertorio(p=>[...p,b]),
               onSave: handleAddCollective,
               onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6162}})

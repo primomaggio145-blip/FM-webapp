@@ -1,9 +1,9 @@
-// Futuro Musica — Service Worker v5
+// Futuro Musica — Service Worker v6
 // STRATEGIA CACHE:
 //   - app.js, fm_sync.js, supabase_integration.js → NETWORK-FIRST (sempre freschi)
 //   - webapp.html, manifest.json, icone          → NETWORK-FIRST con fallback cache
-//   - API Supabase                               → solo network, mai cache
-const CACHE_VERSION = 'fm-v5';
+//   - API Supabase, font Google (googleapis/gstatic) → solo network, mai cache
+const CACHE_VERSION = 'fm-v6';
 
 // File pre-cachati all'install (solo per fallback offline)
 const CACHE_STATIC = [
@@ -43,12 +43,13 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // 1) API esterne → solo network, non intercettare
+  // 1) API esterne e font Google → solo network, non intercettare
   if (
     url.hostname.includes('supabase.co') ||
     url.hostname.includes('graph.facebook.com') ||
     url.hostname.includes('anthropic.com') ||
-    url.hostname.includes('googleapis.com')
+    url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('gstatic.com')
   ) {
     return;
   }

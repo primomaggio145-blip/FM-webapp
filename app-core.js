@@ -846,7 +846,7 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
     return `<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Ricevuta ${numRic}</title>
     <style>
-      @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;600;700&family=Open+Sans:wght@400;500;600&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;1,400&family=Open+Sans:wght@300;400;500;600&display=swap');
       @page { margin: 18mm 20mm; size: A4; }
       * { margin:0; padding:0; box-sizing:border-box; }
       body { font-family:'${stile.fontBody}',Arial,sans-serif; color:#1a1a2e; background:#fff; }
