@@ -1,6 +1,14 @@
 (function() {
   try {
 var _jsxFileName = ""; function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; }// React hooks are available globally via window.React when loaded via CDN
+// Deduplica un array di lezioni per id, mantenendo l'ultima occorrenza.
+// Rete di sicurezza contro doppioni visivi causati da race tra sync debounced e realtime.
+function dedupeLessonsById(arr) {
+  if (!Array.isArray(arr)) return arr;
+  const map = new Map();
+  arr.forEach(item => { if (item && item.id != null) map.set(String(item.id), item); });
+  return Array.from(map.values());
+}
 function App() {
   // ── TUTTI GLI HOOK IN CIMA — mai dopo un return condizionale ──
   const [user,           setUser]           = useState(null);
@@ -11,7 +19,7 @@ function App() {
   const [sharedStudents,       setSharedStudents]       = useState(_d.students   || INIT_STUDENTS);
   const [sharedCourses,        setSharedCourses]        = useState(_d.courses    || []);
   const [sharedDocenti,        setSharedDocenti]        = useState(_d.docenti    || INIT_DOCENTI_EXT);
-  const [sharedLessons,        setSharedLessons]        = useState(_d.lessons    || INIT_LESSONS);
+  const [sharedLessons,        setSharedLessons]        = useState(dedupeLessonsById(_d.lessons    || INIT_LESSONS));
   const [sharedRepertorio,     setSharedRepertorio]     = useState(_d.brani      || INIT_BRANI);
   const [sharedConcerti,       setSharedConcerti]       = useState(_d.concerti   || INIT_CONCERTI);
   const [sharedAllegati,       setSharedAllegati]       = useState(_d.allegati   || []);
@@ -135,7 +143,7 @@ function App() {
       if (data.students)       setSharedStudents(data.students);
       if (data.courses)        setSharedCourses(data.courses);
       if (data.docenti)        setSharedDocenti(data.docenti);
-      if (data.lessons)        setSharedLessons(data.lessons);
+      if (data.lessons)        setSharedLessons(dedupeLessonsById(data.lessons));
       if (data.brani)          setSharedRepertorio(data.brani);
       if (data.spese)          setSharedSpese(data.spese);
       if (data.entrate)        setSharedEntrate(data.entrate);

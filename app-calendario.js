@@ -5814,6 +5814,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
   const initCourse = initial ? (courses.find(c => c.id === initial.courseId) || null) : null;
 
   const [step,        setStep]       = useState(initial ? 2 : 1); // edit → salta al step 2
+  const [saving,      setSaving]     = useState(false); // guard anti doppio-click su "Crea lezione"
   const [selCourse,   setSelCourse]  = useState(initCourse);
   const [selStudents, setSelStudents]= useState(
     initial ? (initial.students || []).map(s => String(s.id)).filter(Boolean) : []
@@ -5908,8 +5909,10 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
   };
 
   const handleSave = () => {
+    if (saving) return; // previene doppio invio (doppio click) che creerebbe 2 lezioni distinte
     const e = validate();
     if (Object.keys(e).length) { setErr(e); return; }
+    setSaving(true);
     const teacherObj = docenti.find(d => d.id === form.teacherId);
     const prevAttById = {};
     (initial?.students || []).forEach(s => { if (s && s.id) prevAttById[String(s.id)] = s.attendance || ''; });
@@ -6334,9 +6337,9 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
         , React.createElement(Btn, { variant: "secondary", onClick: () => setStep(1), __self: this, __source: {fileName: _jsxFileName, lineNumber: 5651}}
           , React.createElement(Ic, { n: "left", size: 14, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5652}}), "Indietro"
         )
-        , React.createElement(Btn, { onClick: handleSave, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5654}}
-          , React.createElement(Ic, { n: "check", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 5655}}), "Crea lezione"
-           , selStudents.length>0?` (${selStudents.length} allievi)`:""
+        , React.createElement(Btn, { onClick: handleSave, disabled: saving, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5654}}
+          , React.createElement(Ic, { n: "check", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 5655}}), saving ? "Salvataggio…" : "Crea lezione"
+           , (!saving && selStudents.length>0)?` (${selStudents.length} allievi)`:""
         )
       )
     )

@@ -52,6 +52,15 @@
     base.annoCreazione = (r.anno_creazione != null) ? r.anno_creazione : null;
     return base;
   }
+  // Deduplica un array di record per id, mantenendo l'ultima occorrenza
+  // (usato per le lezioni: previene doppioni visivi da race tra sync debounced e realtime)
+  function dedupeById(arr) {
+    if (!Array.isArray(arr)) return arr;
+    const map = new Map();
+    arr.forEach(item => { if (item && item.id != null) map.set(String(item.id), item); });
+    return Array.from(map.values());
+  }
+
   function adaptLezione(r, allegatiAll) {
     // Collega gli allegati di questa lezione (dal array globale allegati)
     const allegati = allegatiAll
@@ -826,7 +835,7 @@
         students: (sS || []).map(adaptStudente),
         docenti:  (sD || []).map(adaptDocente),
         courses:  (sC || []).map(adaptCorso),
-        lessons:  (sL || []).map(r => adaptLezione(r, sAL || [])),
+        lessons:  dedupeById((sL || []).map(r => adaptLezione(r, sAL || []))),
         brani:    (sB || []).map(adaptBrano),
         spese:    (sP || []).map(adaptSpesa),
         entrate:  (sQ || []).map(adaptQuota),
@@ -889,9 +898,9 @@
                 sb.from('lezioni').select('*').gt('updated_at', recentThreshold).neq('data', todayISO),
               ]);
               const allFetched = [...(dToday||[]), ...(dRecent||[])];
-              const fetchedIds = new Set(allFetched.map(r => r.id));
-              const existing = (_prev[k] || []).filter(l => !fetchedIds.has(l.id));
-              const adapted = [...existing, ...allFetched.map(r => adaptLezione(r, []))];
+              const fetchedIds = new Set(allFetched.map(r => String(r.id)));
+              const existing = (_prev[k] || []).filter(l => !fetchedIds.has(String(l.id)));
+              const adapted = dedupeById([...existing, ...allFetched.map(r => adaptLezione(r, []))]);
               _prev[k] = adapted;
               if (window.__FM_RELOAD__) window.__FM_RELOAD__({ [k]: adapted });
               return;
@@ -965,7 +974,7 @@
         .gte('data', dataInizio).lte('data', dataFine)
         .order('data', { ascending: true });
       if (error) { warn('load lezioni anno', error.message); return null; }
-      const adapted = (data || []).map(r => adaptLezione(r, []));
+      const adapted = dedupeById((data || []).map(r => adaptLezione(r, [])));
       _prev.lessons = adapted;
       // Mantiene window.__FM_DATA__.lessons allineato: è uno snapshot fissato al boot,
       // altrimenti il prossimo __FM_FORCE_REFRESH__ calcolerebbe "untouched" contro dati
