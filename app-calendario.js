@@ -515,7 +515,7 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
   const addStudent = (gruppoId, studentId) => {
     const g = gruppi.find(x=>x.id===gruppoId);
     if (!g || !studentId) return;
-    const next = Array.from(new Set([...(g.allievi||[]), studentId]));
+    const next = Array.from(new Set([...(g.allievi||[]).map(String), String(studentId)]));
     setGruppi(prev => (prev||[]).map(x => x.id===gruppoId ? {...x, allievi: next} : x));
     persist('update', {...g, allievi: next});
     setAddingToGroupId(null);
@@ -5773,8 +5773,8 @@ const CalRepertorioTab = ({ repertorio, lessons, onAdd, onEdit, onDelete, canEdi
 const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd }) => {
   const [open, setOpen] = useState(false);
   const [val,  setVal]  = useState('');
-  const excluded = new Set(excludeIds||[]);
-  const candidati = (students||[]).filter(s => s.status==="attivo" && !excluded.has(s.id));
+  const excluded = new Set((excludeIds||[]).map(String));
+  const candidati = (students||[]).filter(s => s.status==="attivo" && !excluded.has(String(s.id)));
   if (!open) {
     return React.createElement('button', {
       onClick: () => setOpen(true),
@@ -5816,7 +5816,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
   const [step,        setStep]       = useState(initial ? 2 : 1); // edit → salta al step 2
   const [selCourse,   setSelCourse]  = useState(initCourse);
   const [selStudents, setSelStudents]= useState(
-    initial ? (initial.students || []).map(s => s.id).filter(Boolean) : []
+    initial ? (initial.students || []).map(s => String(s.id)).filter(Boolean) : []
   );
   const [selGruppoId, setSelGruppoId] = useState(initial?.gruppoId || '');
   const [repertorioIds, setRepertorioIds] = useState(initial?.repertorioIds || []);
@@ -5865,20 +5865,22 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
   const selGruppo = gruppiDelCorso.find(g => g.id === selGruppoId) || null;
   // Allievi provenienti dal gruppo attualmente selezionato (per distinguerli da quelli aggiunti manualmente)
   const [groupMemberIds, setGroupMemberIds] = useState(
-    initial?.gruppoId ? (gruppiAll.find(g=>g.id===initial.gruppoId)?.allievi || []) : []
+    initial?.gruppoId ? (gruppiAll.find(g=>g.id===initial.gruppoId)?.allievi || []).map(String) : []
   );
 
-  const toggleStudent = id =>
-    setSelStudents(p => p.includes(id) ? p.filter(x=>x!==id) : [...p, id]);
-  const selectAll   = () => setSelStudents(enrolled.map(s=>s.id));
+  const toggleStudent = id => {
+    const sid = String(id);
+    setSelStudents(p => p.map(String).includes(sid) ? p.filter(x=>String(x)!==sid) : [...p, sid]);
+  };
+  const selectAll   = () => setSelStudents(enrolled.map(s=>String(s.id)));
   const deselectAll = () => { setSelStudents([]); setSelGruppoId(''); setGroupMemberIds([]); };
 
   // Selezione di un gruppo: precompila gli allievi del gruppo mantenendo quelli aggiunti manualmente
   const handleGruppoSelect = (gruppoId) => {
     const g = gruppiDelCorso.find(x => x.id === gruppoId);
-    const newGroupIds = g ? (g.allievi||[]) : [];
+    const newGroupIds = (g ? (g.allievi||[]) : []).map(String);
     setSelStudents(prev => {
-      const external = prev.filter(id => !groupMemberIds.includes(id)); // allievi aggiunti manualmente, non dal gruppo precedente
+      const external = prev.map(String).filter(id => !groupMemberIds.map(String).includes(id)); // allievi aggiunti manualmente, non dal gruppo precedente
       return Array.from(new Set([...external, ...newGroupIds]));
     });
     setGroupMemberIds(newGroupIds);
@@ -5910,11 +5912,12 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     if (Object.keys(e).length) { setErr(e); return; }
     const teacherObj = docenti.find(d => d.id === form.teacherId);
     const prevAttById = {};
-    (initial?.students || []).forEach(s => { if (s && s.id) prevAttById[s.id] = s.attendance || ''; });
+    (initial?.students || []).forEach(s => { if (s && s.id) prevAttById[String(s.id)] = s.attendance || ''; });
     const studObjs   = selStudents.map(id => {
-      const s = students.find(x => x.id === id);
-      return { id: s.id, name: s.name, instrument: s.instrument, level: s.level||"", attendance: prevAttById[id] || '' };
-    });
+      const s = students.find(x => String(x.id) === String(id));
+      if (!s) return null;
+      return { id: s.id, name: s.name, instrument: s.instrument, level: s.level||"", attendance: prevAttById[String(id)] || '' };
+    }).filter(Boolean);
     onSave({
       id:         initial?.id || uid(),  // preserva id in edit mode
       tipo:       "collettivo",
@@ -6150,9 +6153,9 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
           ) : (
             React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5601}}
               , enrolled.map(s => {
-                const isSel = selStudents.includes(s.id);
+                const isSel = selStudents.map(String).includes(String(s.id));
                 const sc    = insHex(s.instrument);
-                const fromGruppo = groupMemberIds.includes(s.id);
+                const fromGruppo = groupMemberIds.map(String).includes(String(s.id));
                 return (
                   React.createElement('button', { key: s.id, onClick: () => toggleStudent(s.id),
                     style: {display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
@@ -6188,8 +6191,8 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
 
           /* Allievi aggiunti manualmente, non iscritti al corso */
           , (() => {
-              const enrolledIds = new Set(enrolled.map(s=>s.id));
-              const external = selStudents.filter(id => !enrolledIds.has(id)).map(id => students.find(s=>s.id===id)).filter(Boolean);
+              const enrolledIds = new Set(enrolled.map(s=>String(s.id)));
+              const external = selStudents.filter(id => !enrolledIds.has(String(id))).map(id => students.find(s=>String(s.id)===String(id))).filter(Boolean);
               if (external.length === 0) return null;
               return React.createElement('div', { style: {marginTop:10, display:"flex", flexDirection:"column", gap:5} }
                 , React.createElement('div', {style:{fontSize:10, color:C.textMuted, letterSpacing:"0.06em", textTransform:"uppercase"}}, "Allievi esterni aggiunti manualmente")
@@ -6201,7 +6204,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
                         , React.createElement('div', {style:{fontSize:13, fontWeight:500}}, s.name)
                         , React.createElement('div', {style:{fontSize:11, color:C.textMuted}}, s.instrument, ' · esterno al corso')
                       )
-                      , React.createElement('button', {onClick: ()=>setSelStudents(prev=>prev.filter(id=>id!==s.id)),
+                      , React.createElement('button', {onClick: ()=>setSelStudents(prev=>prev.filter(id=>String(id)!==String(s.id))),
                           style:{padding:'4px 9px', borderRadius:6, border:'none', background:'transparent', color:C.red, fontSize:11, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}}, '✕')
                     );
                   })
@@ -6212,7 +6215,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
           , React.createElement(AggiungiAllievoEsterno, {
               students: students,
               excludeIds: selStudents,
-              onAdd: (studentId) => setSelStudents(prev => Array.from(new Set([...prev, studentId]))),
+              onAdd: (studentId) => setSelStudents(prev => Array.from(new Set([...prev.map(String), String(studentId)]))),
             })
 
           /* Riepilogo */
