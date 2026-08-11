@@ -8105,7 +8105,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
       closeModal();
       // GCal: crea evento
-      gcalSyncLesson('sync_one', { ...data, id: lessonId });
+      gcalSyncLesson('sync_one', lesson);
     };
     const handleEdit = (data) => {
       // BLOCCO: lezioni recuperate non possono essere modificate
