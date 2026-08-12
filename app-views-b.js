@@ -1830,12 +1830,6 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                   /* ── Messaggi / Notifiche (dirette) ── */
                   , NavBtn({id:"messaggi",  label:"Messaggi",  icon:"mail"})
                   , NavBtn({id:"notifiche", label:"Notifiche", icon:"bell"})
-
-                  /* Separatore */
-                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
-
-                  /* ── Docenti → "Dati docente" (diretto) ── */
-                  , NavBtn({id:"docenti", label:"Dati docente", icon:"user"})
                 );
               }
 
@@ -1861,6 +1855,10 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                   , NavBtn({id:"contabilita", label:"Quote sociali",  icon:"euro"})
                   , NavBtn({id:"repertorio",  label:"Repertorio",     icon:"music"})
                   , NavBtn({id:"biblioteca",  label:"Manuali & Libri",icon:"courses"})
+
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
                   , NavBtn({id:"messaggi",    label:"Messaggi",       icon:"mail"})
                   , NavBtn({id:"notifiche",   label:"Notifiche",      icon:"bell"})
                 );
@@ -1909,6 +1907,21 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
             const isImpostActive = current === "docenti";
             return React.createElement('div', { style: {padding:"6px 8px",borderTop:"1px solid rgba(255,255,255,0.12)",flexShrink:0} }
               , React.createElement('div', {style:{fontSize:9,color:"rgba(255,255,255,0.45)",letterSpacing:".15em",textTransform:"uppercase",padding:"6px 4px 4px"}}, "Il mio profilo")
+              , React.createElement('button', {
+                  onClick: function(){ setView("docenti"); },
+                  style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
+                    borderRadius:0,border:"none",cursor:"pointer",
+                    background:isImpostActive?"rgba(255,255,255,0.15)":"transparent",
+                    color:isImpostActive?"#ffffff":C.sidebarText,
+                    fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:isImpostActive?600:400,
+                    textAlign:"left",transition:"all .15s",marginBottom:1,
+                    borderLeft:isImpostActive?"3px solid #8c1818":"3px solid transparent"},
+                  onMouseEnter:e=>{e.currentTarget.style.background="rgba(255,255,255,0.1)";e.currentTarget.style.color="#fff";},
+                  onMouseLeave:e=>{e.currentTarget.style.background=isImpostActive?"rgba(255,255,255,0.15)":"transparent";e.currentTarget.style.color=isImpostActive?"#fff":C.sidebarText;}
+                }
+                , React.createElement(Ic,{n:"user",size:14,stroke:isImpostActive?"#ffffff":C.sidebarText})
+                , "Dati docente"
+              )
               , React.createElement('button', {
                   onClick: function(){
                     setView("docenti");
