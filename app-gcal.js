@@ -322,8 +322,7 @@ window.GoogleCalendarSection = function(props) {
     }
     // Redirect URI = la webapp stessa (riceve il code e lo manda all'Edge Function)
     const redirectUri = encodeURIComponent(WEBAPP_URL);
-    const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events');
-    const authUrl =
+    const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly');
       'https://accounts.google.com/o/oauth2/v2/auth' +
       '?client_id=' + clientId +
       '&redirect_uri=' + redirectUri +
@@ -766,8 +765,7 @@ window.GoogleCalendarSectionSimple = function(props) {
       return;
     }
     const redirectUri = encodeURIComponent(WEBAPP_URL);
-    const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events');
-    window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?client_id='+clientId+'&redirect_uri='+redirectUri+'&response_type=code&scope='+scope+'&access_type=offline&prompt=consent';
+    const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly');
   };
 
   const handleDisconnect = async function() {
