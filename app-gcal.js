@@ -323,6 +323,7 @@ window.GoogleCalendarSection = function(props) {
     // Redirect URI = la webapp stessa (riceve il code e lo manda all'Edge Function)
     const redirectUri = encodeURIComponent(WEBAPP_URL);
     const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly');
+    const authUrl =
       'https://accounts.google.com/o/oauth2/v2/auth' +
       '?client_id=' + clientId +
       '&redirect_uri=' + redirectUri +
@@ -766,6 +767,7 @@ window.GoogleCalendarSectionSimple = function(props) {
     }
     const redirectUri = encodeURIComponent(WEBAPP_URL);
     const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly');
+    window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?client_id='+clientId+'&redirect_uri='+redirectUri+'&response_type=code&scope='+scope+'&access_type=offline&prompt=consent';
   };
 
   const handleDisconnect = async function() {
