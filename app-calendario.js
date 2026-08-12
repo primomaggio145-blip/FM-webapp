@@ -4051,9 +4051,17 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction }) => {
+const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser }) => {
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
+  // Per l'allievo: risolve il proprio id/nome per filtrare la presenza individuale
+  // nelle lezioni collettive, mostrando SOLO la propria riga e non quella di tutti.
+  const _myAllievoId = (appUser && appUser.allievoId) || null;
+  const _myAllievoNome = (
+    (_myAllievoId && (studentsList.find(s => String(s.id) === String(_myAllievoId)) || {}).name)
+    || (appUser && appUser.nome)
+    || ''
+  ).toLowerCase().trim();
   const hex = lessonHex(lesson);
 
   // Recupero scaduto: per admin mostra banner con possibilità di proroga
@@ -4183,13 +4191,21 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
           ))
         )
 
-        , lesson.tipo==="collettivo" && (lesson.students||[]).length > 0 && (
+        , (() => {
+            // Ruolo ALLIEVO: mostra solo la propria riga di presenza, non quella dell'intero gruppo
+            const _collStudents = role === 'allievo'
+              ? (lesson.students||[]).filter(s =>
+                  (_myAllievoId && String(s.id) === String(_myAllievoId)) ||
+                  (!_myAllievoId && _myAllievoNome && (s.name||'').toLowerCase().trim() === _myAllievoNome)
+                )
+              : (lesson.students||[]);
+            return lesson.tipo==="collettivo" && _collStudents.length > 0 && (
           React.createElement('div', { style: {padding:"12px 14px", background:C.purpleBg, borderRadius:8, border:`1px solid ${C.purpleBorder}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4566}}
-            , React.createElement('div', { style: {fontSize:10, color:C.purple, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4567}}, "Allievi ("
-               , (lesson.students||[]).length, ") · presenza individuale"
+            , React.createElement('div', { style: {fontSize:10, color:C.purple, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4567}}, role === 'allievo' ? "La tua presenza"
+               : "Allievi (" + _collStudents.length + ") · presenza individuale"
             )
             , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:5}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4570}}
-              , (lesson.students||[]).map(s => {
+              , _collStudents.map(s => {
                   const stAtt = s.attendance || '';
                   const setStAtt = (val) => {
                     if (!canEdit) return;
@@ -4280,7 +4296,8 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                 })
             )
           )
-        )
+        );
+          })()
 
         /* ── Argomento — inline editable ── */
         , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:4}}
@@ -8884,6 +8901,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             onClose: closeModal,
             onNavigate: onNavigate,
             onQuickAction: onQuickAction,
+            appUser: _appUserCV,
             role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6146}})
         )
         , modal === "delete" && selLesson && (
