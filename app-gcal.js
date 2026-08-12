@@ -10,7 +10,9 @@
 //      , React.createElement(ImpSection, {title:'Google Calendar', icon:'calendar'}
 //          , React.createElement(GoogleCalendarSection, {appUser: window.__appUser__||null})
 //        )
-// 4. Imposta GOOGLE_CLIENT_ID_FRONTEND qui sotto con il tuo Client ID Google
+// 4. Crea la tabella Supabase `app_settings` (vedi migrazione SQL allegata) —
+//    serve per salvare il Client ID configurato da UI (non serve più modificare
+//    il codice: usa il pulsante "🔑 Client ID" in Impostazioni → Google Calendar)
 // 5. Su Supabase → Edge Functions → Secrets aggiungi:
 //      GOOGLE_CLIENT_ID     = <Client ID>
 //      GOOGLE_CLIENT_SECRET = <Client Secret>
@@ -23,9 +25,47 @@
 // ── Configurazione ────────────────────────────────────────────────────────────
 const GCAL_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/gcal-sync';
 
-// ← Inserisci qui il tuo Google OAuth 2.0 Client ID
-// Ottienilo da: console.cloud.google.com → Credenziali → OAuth 2.0 Client ID
-const GOOGLE_CLIENT_ID_FRONTEND = '';
+// ← Google OAuth 2.0 Client ID
+// Ora configurabile da UI (pulsante "🔑 Configura Client ID" in Impostazioni →
+// Google Calendar, visibile per ADMIN) invece che modificando il codice.
+// Il valore è salvato sulla tabella Supabase `app_settings` (chiave
+// 'google_client_id_frontend') ed è quindi condiviso da tutti i ruoli
+// (docenti/allievi lo ricevono automaticamente una volta configurato).
+// Il valore letterale qui sotto resta solo come fallback iniziale.
+let GOOGLE_CLIENT_ID_FRONTEND = '';
+
+// ── Client ID dinamico: lettura/scrittura da Supabase (tabella app_settings) ──
+const GCAL_SETTINGS_TABLE = 'app_settings';
+const GCAL_SETTINGS_KEY   = 'google_client_id_frontend';
+
+async function fetchGcalClientId() {
+  try {
+    const sb = window.supabaseClient;
+    if (!sb) return GOOGLE_CLIENT_ID_FRONTEND;
+    const { data, error } = await sb.from(GCAL_SETTINGS_TABLE)
+      .select('value').eq('key', GCAL_SETTINGS_KEY).maybeSingle();
+    if (!error && data && data.value) {
+      GOOGLE_CLIENT_ID_FRONTEND = data.value;
+      window.__GCAL_CLIENT_ID__ = data.value;
+    }
+  } catch(e) { /* silenzioso */ }
+  return GOOGLE_CLIENT_ID_FRONTEND;
+}
+
+async function saveGcalClientId(id) {
+  const sb = window.supabaseClient;
+  if (!sb) throw new Error('Supabase non disponibile');
+  const { data: { session } } = await sb.auth.getSession();
+  const { error } = await sb.from(GCAL_SETTINGS_TABLE).upsert({
+    key: GCAL_SETTINGS_KEY,
+    value: id,
+    updated_at: new Date().toISOString(),
+    updated_by: session && session.user ? session.user.id : null
+  }, { onConflict: 'key' });
+  if (error) throw error;
+  GOOGLE_CLIENT_ID_FRONTEND = id;
+  window.__GCAL_CLIENT_ID__ = id;
+}
 
 // ── Utility: sync singola lezione in background ───────────────────────────────
 // Chiamata automaticamente da app-calendario.js e app-views-b.js
@@ -68,6 +108,10 @@ window.GoogleCalendarSection = function(props) {
   const [loading, setLoading] = _useState(true);
   const [syncing, setSyncing] = _useState(false);
   const [toast,   setToast]   = _useState(null);
+  const [clientId, setClientId] = _useState(GOOGLE_CLIENT_ID_FRONTEND);
+  const [showClientIdModal, setShowClientIdModal] = _useState(false);
+  const [clientIdInput, setClientIdInput] = _useState('');
+  const [savingClientId, setSavingClientId] = _useState(false);
 
   const showToast = function(ok, msg) {
     setToast({ok: ok, msg: msg});
@@ -93,6 +137,11 @@ window.GoogleCalendarSection = function(props) {
   }, []);
 
   _useEffect(function() { checkStatus(); }, [checkStatus]);
+
+  // Carica il Client ID Google salvato su Supabase (condiviso con tutti i ruoli)
+  _useEffect(function() {
+    fetchGcalClientId().then(function(id) { if (id) setClientId(id); });
+  }, []);
 
   // Gestisce ritorno da OAuth Google (gcal_code nel query string)
   _useEffect(function() {
@@ -148,15 +197,9 @@ window.GoogleCalendarSection = function(props) {
   const WEBAPP_URL = 'https://primomaggio145-blip.github.io/FM-webapp/webapp.html';
 
   const handleConnect = function() {
-    if (!GOOGLE_CLIENT_ID_FRONTEND) {
-      alert(
-        'Per attivare Google Calendar:\n\n' +
-        '1. Vai su console.cloud.google.com → Credenziali\n' +
-        '2. Crea un OAuth 2.0 Client ID (tipo: Web Application)\n' +
-        '3. Aggiungi come Authorized Redirect URI:\n   ' + WEBAPP_URL + '\n' +
-        '4. Copia il Client ID e incollalo in app-gcal.js\n' +
-        '   alla riga GOOGLE_CLIENT_ID_FRONTEND'
-      );
+    if (!clientId) {
+      setClientIdInput('');
+      setShowClientIdModal(true);
       return;
     }
     // Redirect URI = la webapp stessa (riceve il code e lo manda all'Edge Function)
@@ -164,12 +207,28 @@ window.GoogleCalendarSection = function(props) {
     const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events');
     const authUrl =
       'https://accounts.google.com/o/oauth2/v2/auth' +
-      '?client_id=' + GOOGLE_CLIENT_ID_FRONTEND +
+      '?client_id=' + clientId +
       '&redirect_uri=' + redirectUri +
       '&response_type=code' +
       '&scope=' + scope +
       '&access_type=offline&prompt=consent';
     window.location.href = authUrl;
+  };
+
+  const handleSaveClientId = async function() {
+    const val = (clientIdInput || '').trim();
+    if (!val) { showToast(false, 'Inserisci un Client ID valido'); return; }
+    setSavingClientId(true);
+    try {
+      await saveGcalClientId(val);
+      setClientId(val);
+      setShowClientIdModal(false);
+      setClientIdInput('');
+      showToast(true, '✅ Client ID salvato e attivo per tutti i ruoli');
+    } catch(e) {
+      showToast(false, 'Errore salvataggio: ' + (e && e.message || 'sconosciuto'));
+    }
+    setSavingClientId(false);
   };
 
   const handleDisconnect = async function() {
@@ -324,6 +383,10 @@ window.GoogleCalendarSection = function(props) {
               style: { padding: '9px 14px', borderRadius: 8, border: '1px solid '+(showConfig?C.tealBorder:C.border), background: showConfig?C.tealBg:C.bg, color: showConfig?C.teal:C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 5 }
             }, '⚙️ Impostazioni')
           , React.createElement('button', {
+              onClick: function() { setClientIdInput(clientId || ''); setShowClientIdModal(true); },
+              style: { padding: '9px 14px', borderRadius: 8, border: '1px solid '+C.border, background: C.bg, color: C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 5 }
+            }, '🔑 Client ID')
+          , React.createElement('button', {
               onClick: handleSyncAll,
               disabled: syncing,
               style: {
@@ -410,7 +473,7 @@ window.GoogleCalendarSection = function(props) {
           , 'Connetti il tuo Google Calendar per sincronizzare automaticamente le lezioni. '
           , 'Ogni lezione creata, modificata o eliminata verrà aggiornata in tempo reale.'
         )
-        , GOOGLE_CLIENT_ID_FRONTEND
+        , clientId
           ? React.createElement('button', {
               onClick: handleConnect,
               style: {
@@ -424,36 +487,84 @@ window.GoogleCalendarSection = function(props) {
             , React.createElement('span', { style: { fontSize: 16 } }, '📅')
             , 'Connetti Google Calendar'
             )
-          : React.createElement('div', {
-              style: {
-                padding: '12px 16px',
-                background: '#fef9c3', border: '1px solid #fde68a',
-                borderRadius: 8, fontSize: 12, color: '#92400e',
-                lineHeight: 1.8, fontFamily: "'Open Sans',sans-serif"
+          : React.createElement('div', null
+            , React.createElement('div', {
+                style: {
+                  padding: '12px 16px',
+                  background: '#fef9c3', border: '1px solid #fde68a',
+                  borderRadius: 8, fontSize: 12, color: '#92400e',
+                  lineHeight: 1.8, fontFamily: "'Open Sans',sans-serif",
+                  marginBottom: 10
+                }
               }
-            }
-            , React.createElement('strong', null, '⚙️ Configurazione richiesta')
-            , React.createElement('br', null)
-            , '1. Vai su '
-            , React.createElement('a', {
-                href: 'https://console.cloud.google.com/apis/credentials',
-                target: '_blank',
-                style: { color: '#1d4ed8' }
-              }, 'Google Cloud Console → Credenziali')
-            , React.createElement('br', null)
-            , '2. Crea un OAuth 2.0 Client ID (tipo: Web Application)'
-            , React.createElement('br', null)
-            , '3. Aggiungi come Authorized Redirect URI:'
-            , React.createElement('br', null)
-            , React.createElement('code', { style: { fontSize: 11, background: '#fef3c7', padding: '1px 4px' } },
-                GCAL_EDGE)
-            , React.createElement('br', null)
-            , '4. Copia il Client ID e incollalo in '
-            , React.createElement('code', { style: { fontSize: 11 } }, 'app-gcal.js')
-            , ' alla riga '
-            , React.createElement('code', { style: { fontSize: 11 } }, 'GOOGLE_CLIENT_ID_FRONTEND')
-            )
+              , React.createElement('strong', null, '⚙️ Configurazione richiesta')
+              , React.createElement('br', null)
+              , '1. Vai su '
+              , React.createElement('a', {
+                  href: 'https://console.cloud.google.com/apis/credentials',
+                  target: '_blank',
+                  style: { color: '#1d4ed8' }
+                }, 'Google Cloud Console → Credenziali')
+              , React.createElement('br', null)
+              , '2. Crea un OAuth 2.0 Client ID (tipo: Web Application)'
+              , React.createElement('br', null)
+              , '3. Aggiungi come Authorized Redirect URI:'
+              , React.createElement('br', null)
+              , React.createElement('code', { style: { fontSize: 11, background: '#fef3c7', padding: '1px 4px' } },
+                  WEBAPP_URL)
+              , React.createElement('br', null)
+              , '4. Copia il Client ID e inseriscilo col pulsante qui sotto — non serve modificare il codice'
+              )
+            , React.createElement('button', {
+                onClick: function() { setClientIdInput(''); setShowClientIdModal(true); },
+                style: {
+                  padding: '10px 20px', borderRadius: 8, border: 'none',
+                  background: C.teal, color: '#fff', cursor: 'pointer',
+                  fontSize: 13, fontWeight: 600, fontFamily: "'Open Sans',sans-serif",
+                  display: 'inline-flex', alignItems: 'center', gap: 8
+                }
+              }
+              , React.createElement('span', { style: { fontSize: 16 } }, '🔑')
+              , 'Configura Client ID'
+              )
+          )
       )
+    // Modal configurazione Client ID
+    , showClientIdModal && React.createElement('div', {
+        style: {
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex',
+          alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16
+        },
+        onClick: function(e) { if (e.target === e.currentTarget) setShowClientIdModal(false); }
+      }
+      , React.createElement('div', {
+          style: { background: C.surface || '#fff', borderRadius: 12, padding: 22, width: '100%', maxWidth: 440, boxShadow: '0 10px 40px rgba(0,0,0,.25)' }
+        }
+        , React.createElement('div', { style: { fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6, fontFamily: "'Open Sans',sans-serif" } }, '🔑 Configura Google Client ID')
+        , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, marginBottom: 14, fontFamily: "'Open Sans',sans-serif", lineHeight: 1.6 } },
+            'Incolla qui il Client ID OAuth 2.0 ottenuto da Google Cloud Console. Viene salvato centralmente su Supabase ed è reso disponibile automaticamente a tutti i ruoli (docenti e allievi inclusi), senza dover toccare il codice.')
+        , React.createElement('input', {
+            type: 'text',
+            value: clientIdInput,
+            onChange: function(e) { setClientIdInput(e.target.value); },
+            placeholder: 'xxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com',
+            autoFocus: true,
+            style: { width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: 7, border: '1px solid '+C.border, background: C.bg, color: C.text, fontSize: 13, fontFamily: 'monospace', marginBottom: 16 }
+          })
+        , React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end' } }
+          , React.createElement('button', {
+              onClick: function() { setShowClientIdModal(false); },
+              style: { padding: '8px 14px', borderRadius: 7, border: '1px solid '+C.border, background: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif" }
+            }, 'Annulla')
+          , React.createElement('button', {
+              onClick: handleSaveClientId,
+              disabled: savingClientId,
+              style: { padding: '8px 16px', borderRadius: 7, border: 'none', background: C.teal, color: '#fff', cursor: savingClientId ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: "'Open Sans',sans-serif" }
+            }, savingClientId ? '⏳ Salvataggio...' : '💾 Salva')
+        )
+      )
+    )
   );
 };
 
@@ -466,6 +577,7 @@ window.GoogleCalendarSectionSimple = function(props) {
   const [loading, setLoading] = React.useState(true);
   const [syncing, setSyncing] = React.useState(false);
   const [toast,   setToast]   = React.useState(null);
+  const [clientId, setClientId] = React.useState(GOOGLE_CLIENT_ID_FRONTEND);
 
   const showToast = function(ok, msg) {
     setToast({ok:ok, msg:msg});
@@ -485,6 +597,11 @@ window.GoogleCalendarSectionSimple = function(props) {
   }, []);
 
   React.useEffect(function(){ checkStatus(); }, [checkStatus]);
+
+  // Carica il Client ID Google configurato dall'amministratore (tabella app_settings)
+  React.useEffect(function() {
+    fetchGcalClientId().then(function(id) { if (id) setClientId(id); });
+  }, []);
 
   // Gestisce ritorno da OAuth Google
   React.useEffect(function() {
@@ -517,12 +634,13 @@ window.GoogleCalendarSectionSimple = function(props) {
   const WEBAPP_URL = 'https://primomaggio145-blip.github.io/FM-webapp/webapp.html';
 
   const handleConnect = function() {
-    if (!GOOGLE_CLIENT_ID_FRONTEND) {
-      alert('Inserisci il GOOGLE_CLIENT_ID_FRONTEND in app-gcal.js'); return;
+    if (!clientId) {
+      showToast(false, 'Google Calendar non è ancora configurato. Contatta l\'amministratore.');
+      return;
     }
     const redirectUri = encodeURIComponent(WEBAPP_URL);
     const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events');
-    window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?client_id='+GOOGLE_CLIENT_ID_FRONTEND+'&redirect_uri='+redirectUri+'&response_type=code&scope='+scope+'&access_type=offline&prompt=consent';
+    window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?client_id='+clientId+'&redirect_uri='+redirectUri+'&response_type=code&scope='+scope+'&access_type=offline&prompt=consent';
   };
 
   const handleDisconnect = async function() {
@@ -579,10 +697,10 @@ window.GoogleCalendarSectionSimple = function(props) {
       )
     , !loading && (!status||!status.connected) && React.createElement('div', null
         , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:14,fontFamily:"'Open Sans',sans-serif",lineHeight:1.6}},'Connetti Google Calendar per sincronizzare automaticamente le tue lezioni.')
-        , GOOGLE_CLIENT_ID_FRONTEND
+        , clientId
           ? React.createElement('button',{onClick:handleConnect,style:{padding:'10px 20px',borderRadius:8,border:'none',background:'#4285f4',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif",display:'inline-flex',alignItems:'center',gap:8}}
               ,React.createElement('span',{style:{fontSize:16}},'📅'),'Connetti Google Calendar')
-          : React.createElement('div',{style:{padding:'10px 14px',background:'#fef9c3',border:'1px solid #fde68a',borderRadius:8,fontSize:12,color:'#92400e',fontFamily:"'Open Sans',sans-serif"}},'⚙️ Inserisci GOOGLE_CLIENT_ID_FRONTEND in app-gcal.js')
+          : React.createElement('div',{style:{padding:'10px 14px',background:'#fef9c3',border:'1px solid #fde68a',borderRadius:8,fontSize:12,color:'#92400e',fontFamily:"'Open Sans',sans-serif",lineHeight:1.6}},'⚙️ Google Calendar non è ancora configurato. Contatta l\'amministratore per attivarlo dalle Impostazioni.')
       )
   );
 };
