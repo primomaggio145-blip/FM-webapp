@@ -1638,6 +1638,9 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
   };
   const [openGroups, setOpenGroups] = useState(initOpen);
   const toggleGroup = (id) => setOpenGroups(p => ({...p, [id]: !p[id]}));
+  // Distingue quale voce del footer "Il mio profilo" (docente) è attiva: 'dati' o 'impostazioni'.
+  // Necessario perché entrambe le voci puntano alla stessa view ("docenti") ma a tab diverse.
+  const [docenteProfiloTab, setDocenteProfiloTab] = useState('dati');
   // Quando cambia current, apri il gruppo corrispondente
   React.useEffect(() => {
     SIDEBAR_GROUPS.forEach(g => {
@@ -1904,26 +1907,28 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
         , (function(){
             const sideRuolo = _optionalChain([user, 'optionalAccess', _sdoc => _sdoc.ruolo]) || "admin";
             if(sideRuolo !== "docente") return null;
-            const isImpostActive = current === "docenti";
+            const isDatiActive = current === "docenti" && docenteProfiloTab === "dati";
+            const isImpostActive = current === "docenti" && docenteProfiloTab === "impostazioni";
             return React.createElement('div', { style: {padding:"6px 8px",borderTop:"1px solid rgba(255,255,255,0.12)",flexShrink:0} }
               , React.createElement('div', {style:{fontSize:9,color:"rgba(255,255,255,0.45)",letterSpacing:".15em",textTransform:"uppercase",padding:"6px 4px 4px"}}, "Il mio profilo")
               , React.createElement('button', {
-                  onClick: function(){ setView("docenti"); },
+                  onClick: function(){ setDocenteProfiloTab("dati"); setView("docenti"); },
                   style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
                     borderRadius:0,border:"none",cursor:"pointer",
-                    background:isImpostActive?"rgba(255,255,255,0.15)":"transparent",
-                    color:isImpostActive?"#ffffff":C.sidebarText,
-                    fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:isImpostActive?600:400,
+                    background:isDatiActive?"rgba(255,255,255,0.15)":"transparent",
+                    color:isDatiActive?"#ffffff":C.sidebarText,
+                    fontFamily:"'Open Sans',sans-serif",fontSize:12,fontWeight:isDatiActive?600:400,
                     textAlign:"left",transition:"all .15s",marginBottom:1,
-                    borderLeft:isImpostActive?"3px solid #8c1818":"3px solid transparent"},
+                    borderLeft:isDatiActive?"3px solid #8c1818":"3px solid transparent"},
                   onMouseEnter:e=>{e.currentTarget.style.background="rgba(255,255,255,0.1)";e.currentTarget.style.color="#fff";},
-                  onMouseLeave:e=>{e.currentTarget.style.background=isImpostActive?"rgba(255,255,255,0.15)":"transparent";e.currentTarget.style.color=isImpostActive?"#fff":C.sidebarText;}
+                  onMouseLeave:e=>{e.currentTarget.style.background=isDatiActive?"rgba(255,255,255,0.15)":"transparent";e.currentTarget.style.color=isDatiActive?"#fff":C.sidebarText;}
                 }
-                , React.createElement(Ic,{n:"user",size:14,stroke:isImpostActive?"#ffffff":C.sidebarText})
+                , React.createElement(Ic,{n:"user",size:14,stroke:isDatiActive?"#ffffff":C.sidebarText})
                 , "Dati docente"
               )
               , React.createElement('button', {
                   onClick: function(){
+                    setDocenteProfiloTab("impostazioni");
                     setView("docenti");
                     if(onQuickAction) setTimeout(()=>onQuickAction("showImpostazioni"), 120);
                   },
