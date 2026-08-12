@@ -189,14 +189,16 @@ function GcalCourseMapping(props) {
 window.gcalSyncLesson = async function(action, lesson) {
   try {
     const sb = window.supabaseClient;
-    if (!sb) return;
+    if (!sb) { console.warn('[FM][gcal] sync saltata: supabaseClient non disponibile'); return; }
     const { data: { session } } = await sb.auth.getSession();
-    if (!session?.user?.id) return;
+    if (!session?.user?.id) { console.warn('[FM][gcal] sync saltata: nessuna sessione utente'); return; }
     // Controlla se l'utente ha GCal connesso e abilitato
-    const { data: tokenRow } = await sb.from('google_calendar_tokens')
+    const { data: tokenRow, error: tokenErr } = await sb.from('google_calendar_tokens')
       .select('sync_enabled').eq('user_id', session.user.id).maybeSingle();
-    if (!tokenRow?.sync_enabled) return;
-    // Fire & forget — non blocca l'UI
+    if (tokenErr) { console.warn('[FM][gcal] sync saltata: errore lettura token', tokenErr); return; }
+    if (!tokenRow) { console.info('[FM][gcal] sync saltata: Google Calendar non connesso per questo utente'); return; }
+    if (!tokenRow.sync_enabled) { console.info('[FM][gcal] sync saltata: sync_enabled=false per questo utente'); return; }
+    // Fire & forget — non blocca l'UI, ma logga eventuali errori HTTP
     fetch(GCAL_EDGE, {
       method: 'POST',
       headers: {
@@ -209,8 +211,16 @@ window.gcalSyncLesson = async function(action, lesson) {
         lesson,
         lezione_id: lesson && lesson.id ? lesson.id : undefined,
       }),
-    }).catch(function() { /* silenzioso */ });
-  } catch(e) { /* silenzioso */ }
+    }).then(async function(res) {
+      let json = null;
+      try { json = await res.json(); } catch(e) {}
+      if (!res.ok || (json && json.ok === false)) {
+        console.warn('[FM][gcal] sync fallita:', (json && json.error) || res.status);
+      } else {
+        console.info('[FM][gcal] sync ok:', action, json);
+      }
+    }).catch(function(e) { console.warn('[FM][gcal] sync errore di rete:', e && e.message); });
+  } catch(e) { console.warn('[FM][gcal] sync errore imprevisto:', e && e.message); }
 };
 
 // ── Componente: sezione Google Calendar in Impostazioni ───────────────────────
