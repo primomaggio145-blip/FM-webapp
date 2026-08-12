@@ -67,6 +67,122 @@ async function saveGcalClientId(id) {
   window.__GCAL_CLIENT_ID__ = id;
 }
 
+// ── Componente condiviso: mappatura corso → calendario Google (per utente) ────
+// Ogni utente (admin, docente, allievo) sceglie autonomamente, per ciascun
+// corso/strumento, se sincronizzarlo e su quale dei propri calendari Google.
+function GcalCourseMapping(props) {
+  const userId = props.userId;
+  const [calendars, setCalendars] = React.useState([]);
+  const [mapping, setMapping]     = React.useState({});
+  const [loading, setLoading]     = React.useState(true);
+  const [error, setError]         = React.useState(null);
+  const [savingKey, setSavingKey] = React.useState(null);
+
+  const corsi = React.useMemo(function() {
+    const base = ((window.__FM_DATA__ && window.__FM_DATA__.courses) || [])
+      .map(function(c) { return c.name || c.nome || ''; })
+      .filter(Boolean);
+    const unique = Array.from(new Set(base)).sort(function(a,b){ return a.localeCompare(b); });
+    return unique.concat(['_collettivo', '_sala_prove']);
+  }, []);
+
+  const labelFor = function(corso) {
+    if (corso === '_collettivo') return '🎵 Lezioni collettive';
+    if (corso === '_sala_prove') return '🥁 Sala prove';
+    return corso;
+  };
+
+  const load = React.useCallback(async function() {
+    if (!userId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const sb = window.supabaseClient;
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) { setLoading(false); return; }
+      const res = await fetch(GCAL_EDGE, {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list_calendars', user_id: userId })
+      });
+      const json = await res.json();
+      if (json.ok) setCalendars(json.calendars || []);
+      else setError(json.error || 'Errore caricamento calendari');
+
+      const { data: rows, error: mapErr } = await sb.from('gcal_calendar_map')
+        .select('corso, calendar_id, enabled').eq('user_id', userId);
+      if (mapErr) throw mapErr;
+      const m = {};
+      (rows || []).forEach(function(r) { m[r.corso] = { calendar_id: r.calendar_id, enabled: r.enabled !== false }; });
+      setMapping(m);
+    } catch(e) {
+      setError((e && e.message) || 'Errore caricamento');
+    }
+    setLoading(false);
+  }, [userId]);
+
+  React.useEffect(function() { load(); }, [load]);
+
+  const updateRow = async function(corso, patch) {
+    setSavingKey(corso);
+    const current = mapping[corso] || { calendar_id: null, enabled: true };
+    const next = Object.assign({}, current, patch);
+    setMapping(function(m) { const copy = Object.assign({}, m); copy[corso] = next; return copy; });
+    try {
+      const sb = window.supabaseClient;
+      await sb.from('gcal_calendar_map').upsert({
+        user_id: userId,
+        corso: corso,
+        calendar_id: next.calendar_id || null,
+        enabled: next.enabled,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,corso' });
+    } catch(e) {
+      setError((e && e.message) || 'Errore salvataggio');
+    }
+    setSavingKey(null);
+  };
+
+  if (loading) {
+    return React.createElement('div', { style: { fontSize: 12, color: C.textMuted, fontFamily: "'Open Sans',sans-serif" } }, '⏳ Caricamento calendari...');
+  }
+
+  return React.createElement('div', null
+    , error && React.createElement('div', { style: { fontSize: 12, color: C.red, marginBottom: 8, fontFamily: "'Open Sans',sans-serif" } }, error)
+    , calendars.length === 0 && !error && React.createElement('div', { style: { fontSize: 12, color: C.textDim, marginBottom: 8, fontFamily: "'Open Sans',sans-serif" } }, 'Nessun calendario trovato sul tuo account Google.')
+    , corsi.length === 0 && React.createElement('div', { style: { fontSize: 12, color: C.textDim, fontFamily: "'Open Sans',sans-serif" } }, '(nessun corso trovato)')
+    , corsi.map(function(corso) {
+        const row = mapping[corso] || { calendar_id: null, enabled: true };
+        const busy = savingKey === corso;
+        return React.createElement('div', {
+            key: corso,
+            style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid '+C.border, opacity: busy ? 0.6 : 1 }
+          }
+          , React.createElement('input', {
+              type: 'checkbox',
+              checked: row.enabled !== false,
+              disabled: busy,
+              onChange: function(e) { updateRow(corso, { enabled: e.target.checked }); },
+              title: 'Sincronizza questo corso'
+            })
+          , React.createElement('span', { style: { fontSize: 13, color: C.text, flex: '1 1 auto', fontFamily: "'Open Sans',sans-serif" } }, labelFor(corso))
+          , React.createElement('select', {
+              value: row.calendar_id || '',
+              disabled: busy || row.enabled === false,
+              onChange: function(e) { updateRow(corso, { calendar_id: e.target.value || null }); },
+              style: { padding: '5px 8px', borderRadius: 6, border: '1px solid '+C.border, background: C.surface, color: C.text, fontSize: 12, fontFamily: "'Open Sans',sans-serif", maxWidth: 190 }
+            }
+            , React.createElement('option', { value: '' }, '📅 Calendario predefinito')
+            , calendars.map(function(cal) {
+                return React.createElement('option', { key: cal.id, value: cal.id }, cal.name + (cal.primary ? ' (principale)' : ''));
+              })
+            )
+        );
+      })
+    , React.createElement('div', { style: { fontSize: 11, color: C.textDim, marginTop: 8, fontFamily: "'Open Sans',sans-serif", lineHeight: 1.5 } }, '💡 Deseleziona un corso per escluderlo dalla sincronizzazione. Ogni corso può avere un calendario diverso — le modifiche si salvano subito, non serve premere "Salva".')
+  );
+}
+
 // ── Utility: sync singola lezione in background ───────────────────────────────
 // Chiamata automaticamente da app-calendario.js e app-views-b.js
 // quando una lezione viene creata/modificata/eliminata
@@ -112,6 +228,7 @@ window.GoogleCalendarSection = function(props) {
   const [showClientIdModal, setShowClientIdModal] = _useState(false);
   const [clientIdInput, setClientIdInput] = _useState('');
   const [savingClientId, setSavingClientId] = _useState(false);
+  const [userId, setUserId] = _useState(null);
 
   const showToast = function(ok, msg) {
     setToast({ok: ok, msg: msg});
@@ -124,6 +241,7 @@ window.GoogleCalendarSection = function(props) {
       if (!sb) { setLoading(false); return; }
       const { data: { session } } = await sb.auth.getSession();
       if (!session) { setLoading(false); return; }
+      setUserId(session.user.id);
       const res = await fetch(
         GCAL_EDGE + '?action=status&user_id=' + session.user.id,
         { headers: { 'Authorization': 'Bearer ' + session.access_token } }
@@ -455,6 +573,12 @@ window.GoogleCalendarSection = function(props) {
             )
             , filtroStrumento && React.createElement('div',{style:{fontSize:11,color:C.teal,marginTop:4,fontFamily:"'Open Sans',sans-serif"}},'Selezionati: ',filtroStrumento)
           )
+          , React.createElement('div', { style: { marginBottom: 14, paddingTop: 12, borderTop: '1px solid '+C.border } }
+            , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 8, fontFamily: "'Open Sans',sans-serif" } }, '🗓️ Calendario di destinazione per corso')
+            , userId
+              ? React.createElement(GcalCourseMapping, { userId: userId })
+              : React.createElement('div', { style: { fontSize: 12, color: C.textDim, fontFamily: "'Open Sans',sans-serif" } }, '⏳ In attesa della connessione...')
+          )
           , React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end' } }
             , React.createElement('button', { onClick: function(){setShowConfig(false);}, style: { padding: '8px 14px', borderRadius: 7, border: '1px solid '+C.border, background: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif" } }, 'Annulla')
             , React.createElement('button', { onClick: saveConfig, style: { padding: '8px 16px', borderRadius: 7, border: 'none', background: C.teal, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: "'Open Sans',sans-serif" } }, '💾 Salva')
@@ -578,6 +702,8 @@ window.GoogleCalendarSectionSimple = function(props) {
   const [syncing, setSyncing] = React.useState(false);
   const [toast,   setToast]   = React.useState(null);
   const [clientId, setClientId] = React.useState(GOOGLE_CLIENT_ID_FRONTEND);
+  const [userId, setUserId] = React.useState(null);
+  const [showConfig, setShowConfig] = React.useState(false);
 
   const showToast = function(ok, msg) {
     setToast({ok:ok, msg:msg});
@@ -589,6 +715,7 @@ window.GoogleCalendarSectionSimple = function(props) {
       const sb = window.supabaseClient; if (!sb) { setLoading(false); return; }
       const { data:{session} } = await sb.auth.getSession();
       if (!session) { setLoading(false); return; }
+      setUserId(session.user.id);
       const res = await fetch(GCAL_EDGE+'?action=status&user_id='+session.user.id,
         { headers: {'Authorization':'Bearer '+session.access_token} });
       setStatus(await res.json());
@@ -692,8 +819,20 @@ window.GoogleCalendarSectionSimple = function(props) {
           )
           , React.createElement('button',{onClick:handleDisconnect,style:{padding:'5px 12px',borderRadius:6,cursor:'pointer',border:'1px solid '+C.redBorder,background:C.redBg,color:C.red,fontSize:12,fontFamily:"'Open Sans',sans-serif"}},'Disconnetti')
         )
-        , React.createElement('button',{onClick:handleSyncAll,disabled:syncing,style:{padding:'9px 18px',borderRadius:8,border:'none',background:syncing?C.surface:C.teal,color:syncing?C.textMuted:'#fff',cursor:syncing?'wait':'pointer',fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif"}},syncing?'⏳ Sincronizzazione...':'🔄 Sincronizza le mie lezioni')
+        , React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } }
+          , React.createElement('button', {
+              onClick: function() { setShowConfig(!showConfig); },
+              style: { padding: '9px 14px', borderRadius: 8, border: '1px solid '+(showConfig?C.tealBorder:C.border), background: showConfig?C.tealBg:C.bg, color: showConfig?C.teal:C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 5 }
+            }, '⚙️ Impostazioni')
+          , React.createElement('button',{onClick:handleSyncAll,disabled:syncing,style:{padding:'9px 18px',borderRadius:8,border:'none',background:syncing?C.surface:C.teal,color:syncing?C.textMuted:'#fff',cursor:syncing?'wait':'pointer',fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif"}},syncing?'⏳ Sincronizzazione...':'🔄 Sincronizza le mie lezioni')
+        )
         , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:8,fontFamily:"'Open Sans',sans-serif",lineHeight:1.6}},'💡 Solo le tue lezioni vengono sincronizzate su Google Calendar.')
+        , showConfig && React.createElement('div', { style: { marginTop: 14, padding: 16, background: C.bg, border: '1px solid '+C.border, borderRadius: 10 } }
+          , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: "'Open Sans',sans-serif" } }, '🗓️ Calendario di destinazione per corso')
+          , userId
+            ? React.createElement(GcalCourseMapping, { userId: userId })
+            : React.createElement('div', { style: { fontSize: 12, color: C.textDim, fontFamily: "'Open Sans',sans-serif" } }, '⏳ In attesa della connessione...')
+        )
       )
     , !loading && (!status||!status.connected) && React.createElement('div', null
         , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:14,fontFamily:"'Open Sans',sans-serif",lineHeight:1.6}},'Connetti Google Calendar per sincronizzare automaticamente le tue lezioni.')
