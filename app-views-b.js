@@ -1572,8 +1572,8 @@ if ('serviceWorker' in navigator) {
 // Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
 const PWA_PERMS = {
   admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:true },
-  docente: {dashboard:true, allievi:false,docenti:true, corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false, biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
   band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true },
 };
 
@@ -1611,7 +1611,14 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
   const _permsSB     = IS_PWA
     ? (PWA_PERMS[_effRoleSB] || PWA_PERMS["admin"])
     : (ROLE_PERMS[_effRoleSB] || ROLE_PERMS["admin"]);
-  const FILTERED_ITEMS = NAV_ITEMS.filter(item => _permsSB[item.id] !== false);
+  // Etichette rinominate per ruolo (solo visualizzazione, l'id resta invariato)
+  const _labelOverridesSB = {
+    docente: { contabilita: "Compensi & Rimborsi", docenti: "Dati docente" },
+    allievo: { contabilita: "Quote sociali", allievi: "Dati allievo" },
+  }[_effRoleSB] || {};
+  const FILTERED_ITEMS = NAV_ITEMS
+    .filter(item => _permsSB[item.id] !== false)
+    .map(item => _labelOverridesSB[item.id] ? {...item, label:_labelOverridesSB[item.id]} : item);
   const BOTTOM_ITEMS   = FILTERED_ITEMS.slice(0, 5);
 
   // Gruppi collassabili (solo admin desktop)
@@ -1619,6 +1626,9 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
     { id:"scuola",   label:"Scuola",                icon:"graduation", items:["allievi","docenti","corsi","calendario"] },
     { id:"risorse",  label:"Risorse & Libri",        icon:"book",       items:["allegati","repertorio","biblioteca"] },
     { id:"notif",    label:"Notifiche & Reminders",  icon:"bell",       items:["notifiche","notifiche_settings","reminders"] },
+    // Gruppi specifici per il menu del ruolo DOCENTE
+    { id:"scuolaDoc",   label:"Scuola",          icon:"graduation", items:["allievi","calendario","concerti","contabilita"] },
+    { id:"risorseDoc",  label:"Risorse e libri", icon:"book",       items:["repertorio","allegati","biblioteca"] },
   ];
   // Auto-apri il gruppo che contiene la voce attiva
   const initOpen = () => {
@@ -1783,7 +1793,80 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                 );
               }
 
-              // NON-ADMIN: lista piatta originale
+              if(effRole === "docente") {
+                // DOCENTE: menu personalizzato — Dashboard | Scuola (allievi/calendario/concerti/Compensi & Rimborsi)
+                // | Risorse e libri (Repertorio/Allegati/Manuali & Libri) | Messaggi | Notifiche | Dati docente
+                return React.createElement(React.Fragment, null
+
+                  /* ── Dashboard (diretto) ── */
+                  , NavBtn({id:"dashboard", label:"Dashboard", icon:"grid"})
+
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
+                  /* ── Gruppo SCUOLA ── */
+                  , GroupHdr({id:"scuolaDoc", label:"Scuola", icon:"graduation"})
+                  , openGroups.scuolaDoc && ["allievi","calendario","concerti","contabilita"].map(id => {
+                      const it = NAV_ITEMS.find(x=>x.id===id);
+                      if(!it || perms[id]===false) return null;
+                      const lbl = id==="contabilita" ? "Compensi & Rimborsi" : it.label;
+                      return NavBtn({id:it.id, label:lbl, icon:it.icon, indent:true});
+                    })
+
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
+                  /* ── Gruppo RISORSE E LIBRI ── */
+                  , GroupHdr({id:"risorseDoc", label:"Risorse e libri", icon:"book"})
+                  , openGroups.risorseDoc && ["repertorio","allegati","biblioteca"].map(id => {
+                      const it = NAV_ITEMS.find(x=>x.id===id);
+                      if(!it || perms[id]===false) return null;
+                      return NavBtn({id:it.id, label:it.label, icon:it.icon, indent:true});
+                    })
+
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
+                  /* ── Messaggi / Notifiche (dirette) ── */
+                  , NavBtn({id:"messaggi",  label:"Messaggi",  icon:"mail"})
+                  , NavBtn({id:"notifiche", label:"Notifiche", icon:"bell"})
+
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
+                  /* ── Docenti → "Dati docente" (diretto) ── */
+                  , NavBtn({id:"docenti", label:"Dati docente", icon:"user"})
+                );
+              }
+
+              if(effRole === "allievo") {
+                // ALLIEVO: menu personalizzato — Dashboard | Dati allievo | Calendario, Quote sociali,
+                // Repertorio, Manuali & Libri, Messaggi, Notifiche (lista piatta)
+                return React.createElement(React.Fragment, null
+
+                  /* ── Dashboard (diretto) ── */
+                  , NavBtn({id:"dashboard", label:"Dashboard", icon:"grid"})
+
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
+                  /* ── Allievi → "Dati allievo" (diretto) ── */
+                  , NavBtn({id:"allievi", label:"Dati allievo", icon:"users"})
+
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
+                  /* ── Resto del menu (diretto, lista piatta) ── */
+                  , NavBtn({id:"calendario",  label:"Calendario",     icon:"calendar"})
+                  , NavBtn({id:"contabilita", label:"Quote sociali",  icon:"euro"})
+                  , NavBtn({id:"repertorio",  label:"Repertorio",     icon:"music"})
+                  , NavBtn({id:"biblioteca",  label:"Manuali & Libri",icon:"courses"})
+                  , NavBtn({id:"messaggi",    label:"Messaggi",       icon:"mail"})
+                  , NavBtn({id:"notifiche",   label:"Notifiche",      icon:"bell"})
+                );
+              }
+
+              // NON-ADMIN (altri ruoli, es. band): lista piatta originale
               return NAV_ITEMS.filter(item => perms[item.id] !== false).map(item => {
                 const active = current === item.id;
                 const userRole2 = (user&&user.ruolo)||'admin';
