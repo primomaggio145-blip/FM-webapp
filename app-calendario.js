@@ -8075,6 +8075,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       }
 
       closeModal();
+      // GCal: crea evento (mancava — questa è la creazione di una lezione individuale)
+      gcalSyncLesson('sync_one', { ...data, id: lessonId });
     };
     const handleAddProva   = (data)      => { setLessons(p => [...p, data]); closeModal(); };
     const handleIscrizioneProva = (id, studentName, iscritto) => {
