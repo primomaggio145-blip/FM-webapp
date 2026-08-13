@@ -10570,7 +10570,8 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
         ) : (
           React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5435}}
             , collettivi.map(c => {
-              const nIscritti = students.filter(s=>s.complementaryCourse===c.id&&s.status==="attivo").length;
+              const nIscritti = students.filter(s=>s.complementaryCourse===c.id&&s.status==="attivo"
+                && (!filtraAnno || idIscrittiAnno.has(String(s.id)))).length;
               const nDocenti  = (c.docenti||[]).length;
               const isS = _optionalChain([selCourse, 'optionalAccess', _53 => _53.id]) === c.id;
               return (
