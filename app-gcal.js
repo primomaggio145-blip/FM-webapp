@@ -414,20 +414,18 @@ window.GoogleCalendarSection = function(props) {
     setSyncing(false);
   };
 
-  // ── Configurazione filtri e caption ──────────────────────────────────────
+  // ── Configurazione caption evento ──────────────────────────────────────
+  // (i filtri docente/corso sono stati sostituiti dalla mappatura per corso
+  // qui sotto — "🗓️ Calendario di destinazione per corso" — che è più
+  // completa e viene applicata in modo coerente sia dalla sync automatica
+  // sia da "Sincronizza tutte le lezioni future")
   const [showConfig, setShowConfig] = React.useState(false);
   const [captionTpl, setCaptionTpl] = React.useState(
     (window.__gcalConfig__ && window.__gcalConfig__.captionTemplate) || '{studente} - {strumento}'
   );
-  const [filtroDocente,   setFiltroDocente]   = React.useState('');
-  const [filtroStrumento, setFiltroStrumento] = React.useState('');
 
   const saveConfig = function() {
-    const cfg = {
-      captionTemplate: captionTpl,
-      filtroDocente:   filtroDocente ? filtroDocente.split(',').map(s=>s.trim()).filter(Boolean) : [],
-      filtroCorso: filtroStrumento ? filtroStrumento.split(',').map(s=>s.trim()).filter(Boolean) : [],
-    };
+    const cfg = { captionTemplate: captionTpl };
     window.__gcalConfig__ = cfg;
     // Salva in localStorage per persistenza
     try { localStorage.setItem('fm_gcal_config', JSON.stringify(cfg)); } catch(e) {}
@@ -435,16 +433,17 @@ window.GoogleCalendarSection = function(props) {
     setShowConfig(false);
   };
 
-  // Carica config salvata
+  // Carica config salvata (rimuove eventuali filtroDocente/filtroCorso residui
+  // da versioni precedenti, ora sostituiti dalla mappatura per corso)
   React.useEffect(function() {
     try {
       const saved = localStorage.getItem('fm_gcal_config');
       if (saved) {
         const cfg = JSON.parse(saved);
-        window.__gcalConfig__ = cfg;
         if (cfg.captionTemplate) setCaptionTpl(cfg.captionTemplate);
-        if (cfg.filtroDocente)   setFiltroDocente(cfg.filtroDocente.join(', '));
-        if (cfg.filtroStrumento) setFiltroStrumento(cfg.filtroStrumento.join(', '));
+        const cleanCfg = { captionTemplate: cfg.captionTemplate || captionTpl };
+        window.__gcalConfig__ = cleanCfg;
+        localStorage.setItem('fm_gcal_config', JSON.stringify(cleanCfg));
       }
     } catch(e) {}
   }, []);
@@ -545,43 +544,6 @@ window.GoogleCalendarSection = function(props) {
             , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 4, fontFamily: "'Open Sans',sans-serif" } }, '📝 Titolo evento GCal')
             , React.createElement('input', { type: 'text', value: captionTpl, onChange: function(e){setCaptionTpl(e.target.value);}, placeholder: '{studente} - {strumento}', style: { width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: 7, border: '1px solid '+C.border, background: C.surface, color: C.text, fontSize: 13, fontFamily: "'Open Sans',sans-serif" } })
             , React.createElement('div', { style: { fontSize: 11, color: C.textDim, marginTop: 3, fontFamily: "'Open Sans',sans-serif" } }, 'Variabili: {studente} {strumento} {docente} {aula} {argomento} {tipo} {ora}')
-          )
-          , React.createElement('div', { style: { marginBottom: 10 } }
-            , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 6, fontFamily: "'Open Sans',sans-serif" } }, '👤 Sincronizza docenti (vuoto = tutti)')
-            , React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } }
-                , (window.__FM_DATA__&&window.__FM_DATA__.docenti||[]).map(function(d) {
-                    const nome = d.nome||d.name||'';
-                    const sel = filtroDocente ? filtroDocente.split(',').map(s=>s.trim()).includes(nome) : false;
-                    return React.createElement('button', { key: d.id||nome, onClick: function() {
-                        const cur = filtroDocente ? filtroDocente.split(',').map(s=>s.trim()).filter(Boolean) : [];
-                        const next = sel ? cur.filter(x=>x!==nome) : [...cur, nome];
-                        setFiltroDocente(next.join(', '));
-                      }, style: { padding: '4px 10px', borderRadius: 20, border: '1px solid '+(sel?C.teal:C.border), background: sel?C.tealBg:C.bg, color: sel?C.teal:C.textMuted, cursor: 'pointer', fontSize: 12, fontFamily: "'Open Sans',sans-serif" }
-                    }, nome);
-                  })
-                , (window.__FM_DATA__&&window.__FM_DATA__.docenti||[]).length===0 && React.createElement('span',{style:{fontSize:12,color:C.textDim,fontFamily:"'Open Sans',sans-serif"}},'(nessun docente trovato)')
-            )
-            , filtroDocente && React.createElement('div',{style:{fontSize:11,color:C.teal,marginTop:4,fontFamily:"'Open Sans',sans-serif"}},'Selezionati: ',filtroDocente)
-          )
-          , React.createElement('div', { style: { marginBottom: 14 } }
-            , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 6, fontFamily: "'Open Sans',sans-serif" } }, '🎵 Sincronizza corsi (vuoto = tutti)')
-            , React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 6 } }
-                , (window.__FM_DATA__&&window.__FM_DATA__.courses||[])
-                    .slice().sort(function(a,b){ return (a.name||a.nome||'').localeCompare(b.name||b.nome||''); })
-                    .map(function(c) {
-                        const nome = c.name||c.nome||'';
-                        if (!nome) return null;
-                        const sel = filtroStrumento ? filtroStrumento.split(',').map(s=>s.trim()).includes(nome) : false;
-                        return React.createElement('button', { key: c.id||nome, onClick: function() {
-                            const cur = filtroStrumento ? filtroStrumento.split(',').map(s=>s.trim()).filter(Boolean) : [];
-                            const next = sel ? cur.filter(x=>x!==nome) : [...cur, nome];
-                            setFiltroStrumento(next.join(', '));
-                          }, style: { padding: '4px 10px', borderRadius: 20, border: '1px solid '+(sel?C.teal:C.border), background: sel?C.tealBg:C.bg, color: sel?C.teal:C.textMuted, cursor: 'pointer', fontSize: 12, fontFamily: "'Open Sans',sans-serif" }
-                        }, nome);
-                      })
-                , (window.__FM_DATA__&&window.__FM_DATA__.courses||[]).length===0 && React.createElement('span',{style:{fontSize:12,color:C.textDim,fontFamily:"'Open Sans',sans-serif"}},'(nessun corso trovato)')
-            )
-            , filtroStrumento && React.createElement('div',{style:{fontSize:11,color:C.teal,marginTop:4,fontFamily:"'Open Sans',sans-serif"}},'Selezionati: ',filtroStrumento)
           )
           , React.createElement('div', { style: { marginBottom: 14, paddingTop: 12, borderTop: '1px solid '+C.border } }
             , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 8, fontFamily: "'Open Sans',sans-serif" } }, '🗓️ Calendario di destinazione per corso')

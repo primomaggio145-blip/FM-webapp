@@ -3251,23 +3251,9 @@ const lessonHex   = l => isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaPr
 
 // ── Google Calendar auto-sync ─────────────────────────────────────────────────
 // Chiama la Edge Function gcal-sync per create/update/delete in background
-
-// Controlla filtri GCal configurati
-const gcalShouldSync = (lesson) => {
-  const cfg = window.__gcalConfig__ || {};
-  // Filtro per docente
-  if (cfg.filtroDocente && cfg.filtroDocente.length > 0) {
-    const d = (lesson.teacher||lesson.docente||'').toLowerCase();
-    if (!cfg.filtroDocente.some(x => x.toLowerCase()===d)) return false;
-  }
-  // Filtro per corso (courseName o instrument come fallback)
-  const filtroCorso = cfg.filtroCorso || cfg.filtroStrumento || [];
-  if (filtroCorso.length > 0) {
-    const corsoLezione = (lesson.courseName||lesson.corso_nome||lesson.instrument||lesson.strumento||'').toLowerCase();
-    if (!filtroCorso.some(x => x.toLowerCase()===corsoLezione)) return false;
-  }
-  return true;
-};
+// NB: il filtro per corso/docente NON è più applicato qui — è centralizzato
+// lato server nella tabella gcal_calendar_map (mappatura per corso, per utente),
+// così la sync automatica e "Sincronizza tutte" si comportano sempre allo stesso modo.
 
 // Costruisce titolo evento GCal con template configurabile
 window.gcalBuildCaption = (lesson, tpl) => {
@@ -3285,20 +3271,29 @@ window.gcalBuildCaption = (lesson, tpl) => {
 
 const gcalSyncLesson = async (action, lesson) => {
   try {
-    const sb = window.supabaseClient; if (!sb) return;
+    const sb = window.supabaseClient; if (!sb) { console.warn('[FM][gcal] sync saltata: supabaseClient non disponibile'); return; }
     const { data:{session} } = await sb.auth.getSession();
-    if (!session?.user?.id) return;
-    const { data: tokenRow } = await sb.from('google_calendar_tokens')
+    if (!session?.user?.id) { console.warn('[FM][gcal] sync saltata: nessuna sessione utente'); return; }
+    const { data: tokenRow, error: tokenErr } = await sb.from('google_calendar_tokens')
       .select('sync_enabled').eq('user_id', session.user.id).maybeSingle();
-    if (!tokenRow?.sync_enabled) return;
-    if (action === 'sync_one' && lesson && !gcalShouldSync(lesson)) return;
+    if (tokenErr) { console.warn('[FM][gcal] sync saltata: errore lettura token', tokenErr); return; }
+    if (!tokenRow) { console.info('[FM][gcal] sync saltata: Google Calendar non connesso per questo utente'); return; }
+    if (!tokenRow.sync_enabled) { console.info('[FM][gcal] sync saltata: sync_enabled=false per questo utente'); return; }
     const lessonOut = lesson ? { ...lesson, _gcalCaption: window.gcalBuildCaption(lesson) } : lesson;
     fetch(GCAL_EDGE, {
       method: 'POST',
       headers: { 'Authorization': 'Bearer '+session.access_token, 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, user_id: session.user.id, lesson: lessonOut, lezione_id: lesson&&lesson.id }),
-    }).catch(() => null);
-  } catch(e) { /* silenzioso */ }
+    }).then(async function(res) {
+      let json = null;
+      try { json = await res.json(); } catch(e) {}
+      if (!res.ok || (json && json.ok === false)) {
+        console.warn('[FM][gcal] sync fallita:', (json && json.error) || res.status);
+      } else {
+        console.info('[FM][gcal] sync ok:', action, json);
+      }
+    }).catch((e) => console.warn('[FM][gcal] sync errore di rete:', e && e.message));
+  } catch(e) { console.warn('[FM][gcal] sync errore imprevisto:', e && e.message); }
 };
 const GCAL_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/gcal-sync';
 const studentInLesson = (l, name, studentId) => {
