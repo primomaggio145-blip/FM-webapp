@@ -239,6 +239,15 @@ const G = `
   }
   /* Nascondi pulsante Sito Web esterno */
   #sito-web-fab, .sito-web-btn, a[href*="futuro-musica"], a[href*="index.html"].fab { display:none!important; }
+
+  /* ── TABELLE: sempre scorrevoli in orizzontale su mobile/PWA ──────────────────
+     Rete di sicurezza globale: garantisce lo scroll orizzontale anche per le
+     tabelle non già racchiuse in .table-scroll / .table-outer / .resp-table.
+     display:block sulla tabella genera un contesto a blocco scrollabile mentre
+     thead/tbody/tr mantengono il layout tabellare tramite box anonimi. */
+  @media (max-width:767px){
+    table{ display:block!important; max-width:100%; overflow-x:auto!important; -webkit-overflow-scrolling:touch!important; }
+  }
   `;
 
 // ── RESPONSIVE HOOK ──────────────────────────────────────────────────────────
@@ -12501,6 +12510,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
   const repertorio    = propRepertorio    || _repertorioLocal;
   const setRepertorio = propSetRepertorio || _setRepertorioLocal;
     const [viewMode,  setViewMode]  = useState("day");
+    // In PWA/mobile la vista MESE è nascosta: se risultasse selezionata (es. resize
+    // da desktop a mobile), torna automaticamente a SETTIMANA.
+    React.useEffect(() => {
+      if ((IS_PWA || isMobile) && viewMode === "month") setViewMode("week");
+    }, [IS_PWA, isMobile, viewMode]);
     const [curDate,   setCurDate]   = useState(new Date(today));
     const [modal,     setModal]     = useState(null);
     const [selLesson, setSelLesson] = useState(null);
@@ -13319,7 +13333,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               , React.createElement(RefreshBtn)
               , React.createElement('div', { style: {display:"flex", background:C.surface, border:`1px solid ${C.border}`,
                 borderRadius:8, overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6007}}
-                , [["day","Giorno","day"],["week","Settimana","week"],["month","Mese","cal"]].map(([v, lbl, icon]) => (
+                , (
+                    (IS_PWA || isMobile)
+                      ? [["day","Giorno","day"],["week","Settimana","week"]]
+                      : [["day","Giorno","day"],["week","Settimana","week"],["month","Mese","cal"]]
+                  ).map(([v, lbl, icon]) => (
                   React.createElement('button', { key: v, onClick: () => setViewMode(v),
                     style: {padding:"7px 10px", border:"none",
                       background: viewMode === v ? `${C.gold}20` : "transparent",
@@ -20641,10 +20659,19 @@ if ('serviceWorker' in navigator) {
 // Modifica qui per personalizzare cosa appare nella versione PWA per ogni ruolo.
 // Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
 const PWA_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:true, googleCalendar:false },
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, googleCalendar:true  },
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:true, googleCalendar:false },
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, googleCalendar:true  },
   allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false, biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, googleCalendar:true  },
   band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true, googleCalendar:false },
+};
+
+// Etichette abbreviate SOLO per la modalità PWA/mobile (bottom-nav e menu "Altro").
+// Il desktop continua a usare le etichette complete di NAV_ITEMS / _labelOverridesSB.
+const PWA_LABEL_OVERRIDES = {
+  dashboard:  "Home",
+  calendario: "Lezioni",
+  allievi:    "Dati",   // sovrascrive "Allievi" / "Dati Allievo"
+  docenti:    "Dati",   // sovrascrive "Docenti" / "Dati docente"
 };
 
 const NAV_ITEMS = [
@@ -20689,7 +20716,9 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
   }[_effRoleSB] || {};
   const FILTERED_ITEMS = NAV_ITEMS
     .filter(item => _permsSB[item.id] !== false)
-    .map(item => _labelOverridesSB[item.id] ? {...item, label:_labelOverridesSB[item.id]} : item);
+    .map(item => _labelOverridesSB[item.id] ? {...item, label:_labelOverridesSB[item.id]} : item)
+    // Etichette abbreviate SOLO in modalità PWA/mobile (dopo gli override di ruolo, così prevalgono)
+    .map(item => (IS_PWA && PWA_LABEL_OVERRIDES[item.id]) ? {...item, label:PWA_LABEL_OVERRIDES[item.id]} : item);
   const BOTTOM_ITEMS   = FILTERED_ITEMS.slice(0, 5);
 
   // Gruppi collassabili (solo admin desktop)
@@ -21092,7 +21121,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
               , React.createElement(Ic, { n: item.icon, size: 20, stroke: active?"#ffffff":C.sidebarText, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10660}})
               , React.createElement('span', { style: {fontSize:9,letterSpacing:"0.04em",fontFamily:"'Open Sans',sans-serif",
                 fontWeight:active?600:400,textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10661}}
-                , item.label.slice(0,6)
+                , item.label.slice(0,7)
               )
             )
           );

@@ -237,6 +237,15 @@ const G = `
   }
   /* Nascondi pulsante Sito Web esterno */
   #sito-web-fab, .sito-web-btn, a[href*="futuro-musica"], a[href*="index.html"].fab { display:none!important; }
+
+  /* ── TABELLE: sempre scorrevoli in orizzontale su mobile/PWA ──────────────────
+     Rete di sicurezza globale: garantisce lo scroll orizzontale anche per le
+     tabelle non già racchiuse in .table-scroll / .table-outer / .resp-table.
+     display:block sulla tabella genera un contesto a blocco scrollabile mentre
+     thead/tbody/tr mantengono il layout tabellare tramite box anonimi. */
+  @media (max-width:767px){
+    table{ display:block!important; max-width:100%; overflow-x:auto!important; -webkit-overflow-scrolling:touch!important; }
+  }
   `;
 
 // ── RESPONSIVE HOOK ──────────────────────────────────────────────────────────

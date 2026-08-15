@@ -7907,6 +7907,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
   const repertorio    = propRepertorio    || _repertorioLocal;
   const setRepertorio = propSetRepertorio || _setRepertorioLocal;
     const [viewMode,  setViewMode]  = useState("day");
+    // In PWA/mobile la vista MESE è nascosta: se risultasse selezionata (es. resize
+    // da desktop a mobile), torna automaticamente a SETTIMANA.
+    React.useEffect(() => {
+      if ((IS_PWA || isMobile) && viewMode === "month") setViewMode("week");
+    }, [IS_PWA, isMobile, viewMode]);
     const [curDate,   setCurDate]   = useState(new Date(today));
     const [modal,     setModal]     = useState(null);
     const [selLesson, setSelLesson] = useState(null);
@@ -8725,7 +8730,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               , React.createElement(RefreshBtn)
               , React.createElement('div', { style: {display:"flex", background:C.surface, border:`1px solid ${C.border}`,
                 borderRadius:8, overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6007}}
-                , [["day","Giorno","day"],["week","Settimana","week"],["month","Mese","cal"]].map(([v, lbl, icon]) => (
+                , (
+                    (IS_PWA || isMobile)
+                      ? [["day","Giorno","day"],["week","Settimana","week"]]
+                      : [["day","Giorno","day"],["week","Settimana","week"],["month","Mese","cal"]]
+                  ).map(([v, lbl, icon]) => (
                   React.createElement('button', { key: v, onClick: () => setViewMode(v),
                     style: {padding:"7px 10px", border:"none",
                       background: viewMode === v ? `${C.gold}20` : "transparent",
