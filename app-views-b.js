@@ -64,6 +64,11 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     } else if (_qaDocView === "showCompenso") {
       setTab("compenso");
       if (_clearQaDocView) _clearQaDocView();
+    } else if (_qaDocView === "showProfiloDocente") {
+      // "Dati docente" nel footer sidebar: torna sempre alla tab Profilo,
+      // anche se in precedenza era stata aperta la tab Impostazioni.
+      setTab("profilo");
+      if (_clearQaDocView) _clearQaDocView();
     }
   }, [_qaDocView]);
 
@@ -1507,11 +1512,11 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
 // ═══════════════════════════════════════════════════════════════════════════════
 // Permessi navigazione per ruolo (sidebar): false = voce nascosta
 const ROLE_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true,  notifiche_settings:true,  sala_prove:true,  messaggi:true  },
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, messaggi:true  },
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, messaggi:true  },
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true,  notifiche_settings:true,  sala_prove:true,  messaggi:true, googleCalendar:false },
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, messaggi:true, googleCalendar:true  },
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, messaggi:true, googleCalendar:true  },
   // Ruolo band: accede solo alla sala prove
-  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false,biblioteca:false,utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true,  messaggi:false },
+  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false,biblioteca:false,utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true,  messaggi:false, googleCalendar:false },
 };
 
 // Rileva se l'app è aperta come PWA (standalone) — usato per menu più snello
@@ -1571,10 +1576,10 @@ if ('serviceWorker' in navigator) {
 // Modifica qui per personalizzare cosa appare nella versione PWA per ogni ruolo.
 // Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
 const PWA_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:true },
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false, biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false},
-  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true },
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:true, googleCalendar:false },
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, googleCalendar:true  },
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false, biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, googleCalendar:true  },
+  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true, googleCalendar:false },
 };
 
 const NAV_ITEMS = [
@@ -1601,6 +1606,7 @@ const NAV_ITEMS = [
   { id:"reminders",          label:"Reminders WA",       icon:"phone"   },
   { id:"notifiche_settings", label:"Config. Notifiche",  icon:"bell"    },
   { id:"sala_prove",  label:"Sala Prove",   icon:"drum"     },
+  { id:"googleCalendar", label:"Google Calendar", icon:"calendar" },
 ];
 
 const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction }) => {
@@ -1833,6 +1839,9 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                   /* ── Messaggi / Notifiche (dirette) ── */
                   , NavBtn({id:"messaggi",  label:"Messaggi",  icon:"mail"})
                   , NavBtn({id:"notifiche", label:"Notifiche", icon:"bell"})
+
+                  /* ── Google Calendar (diretto) ── */
+                  , NavBtn({id:"googleCalendar", label:"Google Calendar", icon:"calendar"})
                 );
               }
 
@@ -1864,6 +1873,9 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
 
                   , NavBtn({id:"messaggi",    label:"Messaggi",       icon:"mail"})
                   , NavBtn({id:"notifiche",   label:"Notifiche",      icon:"bell"})
+
+                  /* ── Google Calendar (diretto) ── */
+                  , NavBtn({id:"googleCalendar", label:"Google Calendar", icon:"calendar"})
                 );
               }
 
@@ -1912,7 +1924,11 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
             return React.createElement('div', { style: {padding:"6px 8px",borderTop:"1px solid rgba(255,255,255,0.12)",flexShrink:0} }
               , React.createElement('div', {style:{fontSize:9,color:"rgba(255,255,255,0.45)",letterSpacing:".15em",textTransform:"uppercase",padding:"6px 4px 4px"}}, "Il mio profilo")
               , React.createElement('button', {
-                  onClick: function(){ setDocenteProfiloTab("dati"); setView("docenti"); },
+                  onClick: function(){
+                    setDocenteProfiloTab("dati");
+                    setView("docenti");
+                    if(onQuickAction) setTimeout(()=>onQuickAction("showProfiloDocente"), 120);
+                  },
                   style:{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"7px 10px",
                     borderRadius:0,border:"none",cursor:"pointer",
                     background:isDatiActive?"rgba(255,255,255,0.15)":"transparent",

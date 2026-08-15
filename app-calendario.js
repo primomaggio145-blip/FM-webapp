@@ -2890,21 +2890,6 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       , _ruoloAV==="admin" && modal==="edit" && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], role: propUserRuoloAV||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
       , _ruoloAV==="admin" && modal==="delete" && selected && React.createElement(ConfirmDelete, { label: selected.name, description: "Questa azione è irreversibile."   , onConfirm: handleDeleteStudent, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3911}})
 
-      /* ── Google Calendar per allievo ── */
-      , _ruoloAV==="allievo" && React.createElement('div', {style:{padding:"16px", maxWidth:600}}
-          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
-            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
-              , React.createElement('span',{style:{fontSize:16}},'📅')
-              , React.createElement('span',{style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Google Calendar")
-            )
-            , React.createElement('div',{style:{padding:"16px 20px"}}
-              , typeof GoogleCalendarSectionSimple !== 'undefined'
-                ? React.createElement(GoogleCalendarSectionSimple, {appUser: _appUserAV, userRuolo: 'allievo'})
-                : React.createElement('div',{style:{fontSize:13,color:C.textMuted}},'⏳ Caricamento...')
-            )
-          )
-        )
-
       /* ── Modal Importa iscrizioni da anno precedente ── */
       , showImportModal && React.createElement(ImportaIscrizioniModal, {
           annoCorrente: annoSel,
@@ -7868,6 +7853,43 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
       )
       /* ── MODALS ── */
       , modal==="add" && React.createElement(AddModal)
+    )
+  );
+};
+
+// ── Google Calendar — pagina dedicata (menu DOCENTE / ALLIEVO) ────────────────
+// Stessa impaginazione delle altre view (header con icona/titolo + area contenuto)
+// così la sezione risulta "in linea" con il resto del menu, invece di essere
+// una card infilata in fondo alla scheda Allievo/Docente.
+const GoogleCalendarPageView = ({ userRuolo, appUser }) => {
+  const ruolo = userRuolo || "allievo";
+  return (
+    React.createElement('div', { style:{display:"flex",flexDirection:"column",height:"100%",overflow:"hidden"} }
+      /* ── HEADER ── */
+      , React.createElement('div', { style:{padding:"0 24px",height:56,display:"flex",alignItems:"center",
+          justifyContent:"space-between",flexShrink:0,borderBottom:`1px solid ${C.border}`,background:C.surface} }
+        , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:10}}
+          , React.createElement(Ic, {n:"calendar", size:18, stroke:C.gold})
+          , React.createElement('span', {style:{fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,
+              letterSpacing:"0.05em",textTransform:"uppercase"}}, "Google Calendar")
+        )
+      )
+      /* ── CONTENUTO ── */
+      , React.createElement('div', { style:{flex:1,overflow:"auto",padding:"16px 24px"} }
+        , React.createElement('div', {style:{maxWidth:600}}
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
+              , React.createElement('span',{style:{fontSize:16}},'📅')
+              , React.createElement('span',{style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Sincronizzazione lezioni")
+            )
+            , React.createElement('div',{style:{padding:"16px 20px"}}
+              , typeof GoogleCalendarSectionSimple !== 'undefined'
+                ? React.createElement(GoogleCalendarSectionSimple, {appUser: appUser, userRuolo: ruolo})
+                : React.createElement('div',{style:{fontSize:13,color:C.textMuted}},'⏳ Caricamento modulo Google Calendar...')
+            )
+          )
+        )
+      )
     )
   );
 };

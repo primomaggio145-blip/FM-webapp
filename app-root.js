@@ -727,6 +727,7 @@ function App() {
       case 'notifiche_settings': return React.createElement(NotificheSettingsView, { ruolo: user?.ruolo||"admin" });
       case 'reminders':   return React.createElement(RemindersView, { ruolo: user?.ruolo||"admin" });
       case 'sala_prove':  return React.createElement(SalaProveStandaloneView, { appUser: user, userRuolo: user?.ruolo||"band", lessons: sharedLessons });
+      case 'googleCalendar': return React.createElement(GoogleCalendarPageView, { userRuolo: user?.ruolo||"allievo", appUser: user });
       default: return null;
     }
   };
