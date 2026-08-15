@@ -6914,7 +6914,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 
       , React.createElement('div', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3780}}, filtered.length, " alliev" , filtered.length!==1?"i":"o", " trovat" , filtered.length!==1?"i":"o")
 
-      , React.createElement('div', { className: "table-outer", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3782}}
+      , React.createElement('div', { className: "table-outer", style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflowX:"auto",overflowY:"hidden",WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3782}}
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3783}}
         , filtered.length===0
           ? React.createElement('div', { style: {textAlign:"center",padding:"48px 0",color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3785}}, React.createElement(Ic, { n: "search", size: 28, color: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3785}}), React.createElement('p', { style: {marginTop:12,fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3785}}, "Nessun allievo trovato"  ))
@@ -20670,8 +20670,7 @@ const PWA_PERMS = {
 const PWA_LABEL_OVERRIDES = {
   dashboard:  "Home",
   calendario: "Lezioni",
-  allievi:    "Dati",   // sovrascrive "Allievi" / "Dati Allievo"
-  docenti:    "Dati",   // sovrascrive "Docenti" / "Dati docente"
+  docenti:    "Dati",   // sovrascrive "Docenti" / "Dati docente" (ruolo docente)
 };
 
 const NAV_ITEMS = [
@@ -20718,7 +20717,10 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
     .filter(item => _permsSB[item.id] !== false)
     .map(item => _labelOverridesSB[item.id] ? {...item, label:_labelOverridesSB[item.id]} : item)
     // Etichette abbreviate SOLO in modalità PWA/mobile (dopo gli override di ruolo, così prevalgono)
-    .map(item => (IS_PWA && PWA_LABEL_OVERRIDES[item.id]) ? {...item, label:PWA_LABEL_OVERRIDES[item.id]} : item);
+    .map(item => (IS_PWA && PWA_LABEL_OVERRIDES[item.id]) ? {...item, label:PWA_LABEL_OVERRIDES[item.id]} : item)
+    // Voce "allievi" in PWA/mobile: dipende da chi ha fatto login (non dal ruolo visualizzato)
+    // — ADMIN/DOCENTE vedono "Allievi", l'ALLIEVO vede "Dati"
+    .map(item => (IS_PWA && item.id === "allievi") ? {...item, label: _userRoleSB === "allievo" ? "Dati" : "Allievi"} : item);
   const BOTTOM_ITEMS   = FILTERED_ITEMS.slice(0, 5);
 
   // Gruppi collassabili (solo admin desktop)

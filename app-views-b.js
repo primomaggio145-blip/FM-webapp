@@ -1587,8 +1587,7 @@ const PWA_PERMS = {
 const PWA_LABEL_OVERRIDES = {
   dashboard:  "Home",
   calendario: "Lezioni",
-  allievi:    "Dati",   // sovrascrive "Allievi" / "Dati Allievo"
-  docenti:    "Dati",   // sovrascrive "Docenti" / "Dati docente"
+  docenti:    "Dati",   // sovrascrive "Docenti" / "Dati docente" (ruolo docente)
 };
 
 const NAV_ITEMS = [
@@ -1635,7 +1634,10 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
     .filter(item => _permsSB[item.id] !== false)
     .map(item => _labelOverridesSB[item.id] ? {...item, label:_labelOverridesSB[item.id]} : item)
     // Etichette abbreviate SOLO in modalità PWA/mobile (dopo gli override di ruolo, così prevalgono)
-    .map(item => (IS_PWA && PWA_LABEL_OVERRIDES[item.id]) ? {...item, label:PWA_LABEL_OVERRIDES[item.id]} : item);
+    .map(item => (IS_PWA && PWA_LABEL_OVERRIDES[item.id]) ? {...item, label:PWA_LABEL_OVERRIDES[item.id]} : item)
+    // Voce "allievi" in PWA/mobile: dipende da chi ha fatto login (non dal ruolo visualizzato)
+    // — ADMIN/DOCENTE vedono "Allievi", l'ALLIEVO vede "Dati"
+    .map(item => (IS_PWA && item.id === "allievi") ? {...item, label: _userRoleSB === "allievo" ? "Dati" : "Allievi"} : item);
   const BOTTOM_ITEMS   = FILTERED_ITEMS.slice(0, 5);
 
   // Gruppi collassabili (solo admin desktop)
