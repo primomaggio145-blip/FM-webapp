@@ -4977,9 +4977,44 @@ const DayView = ({ date, lessons, onSelect, isMobile, config }) => {
 };
 
 // ─── VISTA SETTIMANALE ────────────────────────────────────────────────────────
-const WeekView = ({ weekStart, lessons, onSelect, config }) => {
+const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
   // Solo Lun–Sab (6 giorni, no domenica)
   const days      = Array.from({length:6}, (_, i) => addDays(weekStart, i));
+
+  // ── PWA/Mobile: agenda verticale (un blocco per giorno) invece della griglia oraria a colonne ──
+  // Evita lo scroll orizzontale mantenendo tutte le informazioni (orario, presenze, docente, aula, allievi...)
+  // riusando le stesse card di DayView, impilate per giorno.
+  if (isMobile) {
+    return (
+      React.createElement('div', { style:{display:"flex", flexDirection:"column", gap:18} }
+        , days.map((d, i) => {
+            const ds = yyyymmdd(d);
+            const isToday   = isSameDay(d, today);
+            const isSab     = d.getDay() === 6;
+            const chiuso    = isGiornoChiuso(ds, config);
+            const holiday   = getHoliday(ds);
+            const nLezioni  = lessons.filter(l => l.date === ds).length;
+            return React.createElement('div', { key:i }
+              , React.createElement('div', { style:{
+                  display:"flex", alignItems:"center", gap:8, padding:"6px 2px",
+                  borderBottom:`2px solid ${isToday?C.gold:C.border}`, marginBottom:8,
+                  position:"sticky", top:0, background:C.bg, zIndex:3 } }
+                , React.createElement('span', { style:{
+                    fontFamily:"'Oswald',sans-serif", fontSize:15, fontWeight:600,
+                    color: isToday?C.gold: isSab ? "#b45309" : C.text } }
+                  , DAYS_FULL[i], " ", d.getDate())
+                , (holiday || chiuso) && React.createElement('span', { style:{fontSize:14} }, (chiuso||holiday).emoji)
+                , React.createElement('span', { style:{fontSize:11, color:C.textDim, marginLeft:"auto"} }
+                  , nLezioni>0 ? `${nLezioni} lezion${nLezioni!==1?"i":"e"}` : "")
+              )
+              , React.createElement(DayView, { date:d, lessons:lessons, isMobile:true, config:config, onSelect:onSelect })
+            );
+          })
+      )
+    );
+  }
+
+  // ── Desktop: griglia oraria a colonne (Lun–Sab) ──
   const HOUR_H    = 64;   // px per 1 ora
   const H_START   = 8;    // prima riga visibile
   const H_END     = 22;   // ultima riga visibile (esclusa)
@@ -8851,9 +8886,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
           /* Contenuto */
           , React.createElement('div', { style: {flex:1, padding: isMobile ? "0 8px 8px" : "0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
-            , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"visible"}, className: "table-scroll", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
+            , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"visible"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
               , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, isMobile: isMobile, config: calConfig, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
-              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, config: calConfig, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
+              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, config: calConfig, isMobile: isMobile, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
               , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, config: calConfig, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
             )
           )
