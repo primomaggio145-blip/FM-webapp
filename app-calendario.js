@@ -4980,46 +4980,12 @@ const DayView = ({ date, lessons, onSelect, isMobile, config }) => {
 const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
   // Solo Lun–Sab (6 giorni, no domenica)
   const days      = Array.from({length:6}, (_, i) => addDays(weekStart, i));
-
-  // ── PWA/Mobile: agenda verticale (un blocco per giorno) invece della griglia oraria a colonne ──
-  // Evita lo scroll orizzontale mantenendo tutte le informazioni (orario, presenze, docente, aula, allievi...)
-  // riusando le stesse card di DayView, impilate per giorno.
-  if (isMobile) {
-    return (
-      React.createElement('div', { style:{display:"flex", flexDirection:"column", gap:18} }
-        , days.map((d, i) => {
-            const ds = yyyymmdd(d);
-            const isToday   = isSameDay(d, today);
-            const isSab     = d.getDay() === 6;
-            const chiuso    = isGiornoChiuso(ds, config);
-            const holiday   = getHoliday(ds);
-            const nLezioni  = lessons.filter(l => l.date === ds).length;
-            return React.createElement('div', { key:i }
-              , React.createElement('div', { style:{
-                  display:"flex", alignItems:"center", gap:8, padding:"6px 2px",
-                  borderBottom:`2px solid ${isToday?C.gold:C.border}`, marginBottom:8,
-                  position:"sticky", top:0, background:C.bg, zIndex:3 } }
-                , React.createElement('span', { style:{
-                    fontFamily:"'Oswald',sans-serif", fontSize:15, fontWeight:600,
-                    color: isToday?C.gold: isSab ? "#b45309" : C.text } }
-                  , DAYS_FULL[i], " ", d.getDate())
-                , (holiday || chiuso) && React.createElement('span', { style:{fontSize:14} }, (chiuso||holiday).emoji)
-                , React.createElement('span', { style:{fontSize:11, color:C.textDim, marginLeft:"auto"} }
-                  , nLezioni>0 ? `${nLezioni} lezion${nLezioni!==1?"i":"e"}` : "")
-              )
-              , React.createElement(DayView, { date:d, lessons:lessons, isMobile:true, config:config, onSelect:onSelect })
-            );
-          })
-      )
-    );
-  }
-
-  // ── Desktop: griglia oraria a colonne (Lun–Sab) ──
   const HOUR_H    = 64;   // px per 1 ora
   const H_START   = 8;    // prima riga visibile
   const H_END     = 22;   // ultima riga visibile (esclusa)
   const N_HOURS   = H_END - H_START;
   const SAB_AFTERNOON_START = 13; // sabato pomeriggio dalle 13:00
+  const GUTTER_W  = isMobile ? 22 : 52; // colonna etichette ore: più stretta su mobile per far stare le 6 colonne senza scroll
 
   // "HH:MM:SS" | "HH:MM" → numero decimale di ore
   const toH = (t) => {
@@ -5081,12 +5047,13 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
   const TOTAL_H = N_HOURS * HOUR_H;
 
   return (
-    React.createElement('div', { style:{overflowX:"auto", WebkitOverflowScrolling:"touch"}}
-      , React.createElement('div', { style:{minWidth:440}}
+    // Su mobile/PWA niente overflow-x: la griglia sta nella larghezza dello schermo (colonne 1fr che si comprimono)
+    React.createElement('div', { style: isMobile ? {} : {overflowX:"auto", WebkitOverflowScrolling:"touch"}}
+      , React.createElement('div', { style: isMobile ? {} : {minWidth:440}}
 
         /* ── HEADER ── */
         , React.createElement('div', { style:{display:"grid",
-            gridTemplateColumns:`52px repeat(6,1fr)`,
+            gridTemplateColumns:`${GUTTER_W}px repeat(6,1fr)`,
             borderBottom:`1px solid ${C.border}`,
             position:"sticky", top:0, background:C.surface, zIndex:4}}
           , React.createElement('div')
@@ -5096,32 +5063,34 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
             const holiday = getHoliday(yyyymmdd(d));
             const chiuso  = isGiornoChiuso(yyyymmdd(d), config);
             return React.createElement('div', { key:i,
-              style:{padding:"6px 4px", textAlign:"center",
+              style:{padding: isMobile ? "4px 1px" : "6px 4px", textAlign:"center",
                 borderLeft:`1px solid ${C.border}`, minWidth:0, overflow:"hidden",
                 background: chiuso ? chiuso.bg : isSab ? "#f9f5f0" : undefined,
                 backgroundImage: chiuso ? CHIUSO_PATTERN : undefined}}
-              , React.createElement('div',{style:{fontSize:11,
+              , React.createElement('div',{style:{fontSize: isMobile ? 9 : 11,
                   color: chiuso ? chiuso.color : isSab ? "#b45309" : C.textMuted,
-                  letterSpacing:"0.06em",textTransform:"uppercase"}},DAYS_SHORT[i])
+                  letterSpacing:"0.02em",textTransform:"uppercase"}}, isMobile ? DAYS_SHORT[i].slice(0,1) : DAYS_SHORT[i])
               , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",
-                  fontSize:20,fontWeight:600,marginTop:1,
+                  fontSize: isMobile ? 15 : 20,fontWeight:600,marginTop:1,
                   color: chiuso ? chiuso.color : isToday?C.gold: isSab ? "#b45309" : C.text,
                   background:isToday?`${C.gold}15`:undefined,
                   borderRadius:isToday?6:undefined,
-                  padding:isToday?"1px 6px":undefined}},d.getDate())
-              , chiuso && React.createElement('div',{style:{fontSize:8,color:chiuso.color,fontWeight:600,
+                  padding:isToday?(isMobile?"1px 3px":"1px 6px"):undefined}},d.getDate())
+              , chiuso && !isMobile && React.createElement('div',{style:{fontSize:8,color:chiuso.color,fontWeight:600,
                   marginTop:1,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},
                   chiuso.emoji,' ',chiuso.label)
-              , !chiuso && holiday && React.createElement('div',{style:{fontSize:8,color:'#b91c1c',fontWeight:600,
+              , !chiuso && holiday && !isMobile && React.createElement('div',{style:{fontSize:8,color:'#b91c1c',fontWeight:600,
                   marginTop:1,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},
                   holiday.emoji,' ',holiday.label)
+              , (chiuso || holiday) && isMobile && React.createElement('div',{style:{fontSize:9,marginTop:1}}
+                  , (chiuso||holiday).emoji)
             );
           })
         )
 
         /* ── BODY ── */
         , React.createElement('div', { style:{display:"grid",
-            gridTemplateColumns:`52px repeat(6,1fr)`}}
+            gridTemplateColumns:`${GUTTER_W}px repeat(6,1fr)`}}
 
           /* Colonna etichette ore */
           , React.createElement('div', { style:{position:"relative", height:TOTAL_H}}
@@ -5132,10 +5101,10 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
                   left:0, right:0, height:HOUR_H,
                   borderTop:`1px solid ${C.border}20`,
                   display:"flex", alignItems:"flex-start",
-                  padding:"3px 6px 0 0",
+                  padding: isMobile ? "2px 2px 0 0" : "3px 6px 0 0",
                   justifyContent:"flex-end"}}
-                , React.createElement('span',{style:{fontSize:10,color:C.textDim}},
-                    `${String(h).padStart(2,"0")}:00`)
+                , React.createElement('span',{style:{fontSize: isMobile ? 8 : 10,color:C.textDim}},
+                    isMobile ? String(h) : `${String(h).padStart(2,"0")}:00`)
               )
             )
           )
@@ -5175,7 +5144,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
                     backgroundColor: chiuso.tipo==='festività' ? "rgba(254,242,242,0.6)" : "rgba(243,244,246,0.6)",
                     zIndex:1, pointerEvents:"none"
                   }}
-                , React.createElement('div',{style:{
+                , !isMobile && React.createElement('div',{style:{
                     fontSize:9, color:chiuso.color, fontWeight:700,
                     letterSpacing:"0.06em", textTransform:"uppercase",
                     padding:"4px 5px", opacity:0.9, lineHeight:1.3,
@@ -5194,7 +5163,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
                     borderTop:"1.5px dashed #f5d0a0",
                     zIndex:1, pointerEvents:"none"
                   }}
-                , React.createElement('div',{style:{
+                , !isMobile && React.createElement('div',{style:{
                     fontSize:9,color:"#b45309",fontWeight:600,
                     letterSpacing:"0.06em",textTransform:"uppercase",
                     padding:"3px 5px",opacity:0.7
@@ -5214,6 +5183,48 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
                 const accent  = isSala ? (pending?"#f59e0b":C.orange2) : hex;
                 const normHour = String(l.hour||"").slice(0,5);
                 const normFine = String(l.oraFine||"").slice(0,5);
+                const dotHex  = !isSala && (l.attendance || l.inRecupero)
+                  ? (l.inRecupero && !l.attendance ? '#f59e0b' : attHex(l.attendance))
+                  : null;
+
+                // ── Mobile: cella ultra-compatta — solo puntino presenza + allievo + corso ──
+                if (isMobile) {
+                  const nome = isSala ? `🤘 ${normHour}`
+                    : isColl(l)  ? (l.courseName||"Coll.")
+                    : isProva(l) ? (l.contactName||"Prova")
+                    : (l.student||"").split(" ")[0];
+                  const corso = isSala ? normFine
+                    : isColl(l)  ? `${(l.students||[]).length} all.`
+                    : (l.instrument||"");
+                  return React.createElement('div', { key:l.id,
+                    onClick: ()=>onSelect(l),
+                    style:{
+                      position:"absolute",
+                      top:    l._top + 1,
+                      left:   `calc(${lPct}% + 1px)`,
+                      width:  `calc(${wPct}% - 2px)`,
+                      height: l._h,
+                      background: bg,
+                      border:`1px solid ${bord}`,
+                      borderLeft:`2px solid ${accent}`,
+                      borderRadius:3,
+                      cursor:"pointer",
+                      zIndex:2,
+                      overflow:"hidden",
+                      padding:"1px 2px",
+                      boxSizing:"border-box",
+                      display:"flex", flexDirection:"column", gap:0,
+                    }}
+                    , React.createElement('div',{style:{display:"flex",alignItems:"center",gap:2,overflow:"hidden"}}
+                      , dotHex && React.createElement('div',{style:{width:4,height:4,borderRadius:"50%",
+                          background:dotHex, flexShrink:0}})
+                      , React.createElement('span',{style:{fontSize:8,fontWeight:700,color:accent,
+                          whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:1.2}}, nome)
+                    )
+                    , l._h > 24 && corso && React.createElement('span',{style:{fontSize:7,color:accent,
+                        opacity:0.8,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:1.2}}, corso)
+                  );
+                }
 
                 return React.createElement('div', { key:l.id,
                   onClick: ()=>onSelect(l),
