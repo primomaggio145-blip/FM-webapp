@@ -15,6 +15,7 @@ function App() {
   const [view,           setView]           = useState("dashboard");
   const [panKey,         setPanKey]         = useState(0);
   const [schermata,      setSchermata]      = useState("login");
+  const [showEsciMsg,    setShowEsciMsg]    = useState(false);
   const _d = window.__FM_DATA__ || {};
   const [sharedStudents,       setSharedStudents]       = useState(_d.students   || INIT_STUDENTS);
   const [sharedCourses,        setSharedCourses]        = useState(_d.courses    || []);
@@ -750,17 +751,19 @@ function App() {
 
   // Esci senza fare signOut — la sessione rimane attiva per le notifiche PWA
   // La prossima apertura dell'app riprende automaticamente la sessione
+  //
+  // NOTA: su Android e iOS non esiste nessuna API web che permetta a una PWA
+  // di chiudersi da sola (stessa restrizione delle app native — è il sistema
+  // operativo a gestire la chiusura, non l'app stessa). Invece di fingere di
+  // riuscirci, mostriamo le istruzioni corrette per la piattaforma e dopo
+  // qualche secondo reindirizziamo comunque al sito.
+  const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
   const handleEsciSenzaLogout = () => {
     if (IS_PWA) {
-      // In PWA: prova a chiudere davvero la finestra/app.
-      // window.close() funziona solo se il sistema/browser lo permette
-      // (restrizione di sicurezza comune per finestre non aperte da script);
-      // su molte combinazioni Android/iOS in modalità standalone funziona,
-      // ma se non funziona non deve restare "morta" — fallback al sito.
-      window.close();
+      setShowEsciMsg(true);
       setTimeout(() => {
         window.location.href = 'https://primomaggio145-blip.github.io/FM-webapp/';
-      }, 300);
+      }, 3500);
     } else {
       // Browser mobile o desktop: reindirizza sempre al sito
       window.location.href = 'https://primomaggio145-blip.github.io/FM-webapp/';
@@ -783,6 +786,21 @@ function App() {
          i position:fixed dentro vengono trappola da esso. Qui siamo nel Fragment
          root, quindi position:fixed si aggancia al viewport come previsto.  */
       , globalModal
+
+      /* Messaggio istruzioni chiusura PWA (Android/iOS non permettono la
+         chiusura via script) — poi reindirizza comunque al sito */
+      , showEsciMsg && React.createElement('div', {style:{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:99999}}
+          , React.createElement('div', {style:{background:C.surface,borderRadius:14,padding:28,maxWidth:360,width:'88%',textAlign:'center',boxShadow:'0 10px 40px rgba(0,0,0,.35)'}}
+            , React.createElement('div',{style:{fontSize:32,marginBottom:12}}, '👋')
+            , React.createElement('div',{style:{fontSize:15,fontWeight:700,color:C.text,fontFamily:"'Oswald',sans-serif",marginBottom:10}}, 'Per chiudere l\'app')
+            , React.createElement('div',{style:{fontSize:13,color:C.textMuted,lineHeight:1.6,marginBottom:6}},
+                isIOSDevice
+                  ? 'Scorri verso l\'alto dal basso dello schermo (o premi due volte il tasto Home) e trascina Futuro Musica fuori dallo schermo.'
+                  : 'Apri le app recenti (tasto quadrato o gesto di scorrimento) e scorri via Futuro Musica.'
+              )
+            , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:14}}, 'Nel frattempo ti reindirizziamo al sito...')
+          )
+        )
       /* Modal recupero scaduto — solo admin, position:fixed fuori da main-scroll */
       , recuperoScadutoModal && React.createElement(RecuperoScadutoModal, {
           lesson: recuperoScadutoModal.lesson,
