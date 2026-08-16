@@ -364,8 +364,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                 , tab==="catalogo"&&(
                   React.createElement(React.Fragment, null
                     /* Filtri */
-                    , React.createElement('div', { style: {display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7814}}
-                      , React.createElement('div', { style: {position:"relative",flex:"1 1 220px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7815}}
+                    , React.createElement('div', { style: {display:"flex",gap:10,flexWrap:"nowrap",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7814}}
+                      , React.createElement('div', { style: {position:"relative",flex:"1 1 220px",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7815}}
                         , React.createElement('span', { style: {position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7816}}
                           , React.createElement(Ic, { n: "search", size: 14, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7817}})
                         )
@@ -381,18 +381,18 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                       ].map((f,i)=>(
                         React.createElement('select', { key: i, value: f.val, onChange: e=>f.set(e.target.value),
                           style: {background:C.surface,border:`1px solid ${f.val?C.goldDim:C.border}`,
-                            borderRadius:8,color:f.val?C.gold:C.textMuted,fontSize:13,
+                            borderRadius:8,color:f.val?C.gold:C.textMuted,fontSize:13,flexShrink:0,
                             padding:"9px 12px",fontFamily:"'Open Sans',sans-serif",appearance:"none",cursor:"pointer"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7829}}
                           , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7833}}, f.ph)
                           , f.opts.map(o=>React.createElement('option', { key: o.id, value: o.id, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7834}}, o.label))
                         )
                       ))
                       , (search||fStrumento||fTonalita||fStato)&&(
-                        React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setSearch("");setFStrumento("");setFTonalita("");setFStato("");}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7838}}
+                        React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setSearch("");setFStrumento("");setFTonalita("");setFStato("");}, style:{flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7838}}
                           , React.createElement(Ic, { n: "x", size: 12, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7839}}), "Azzera"
                         )
                       )
-                      , React.createElement('span', { style: {fontSize:12,color:C.textDim,marginLeft:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7842}}, filtrati.length, " brani" )
+                      , React.createElement('span', { style: {fontSize:12,color:C.textDim,marginLeft:"auto",flexShrink:0,whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7842}}, filtrati.length, " brani" )
                     )
 
                     /* ── GRID ── */
@@ -460,7 +460,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
 
                     /* ── LIST ── */
                     , layout==="list"&&(
-                      React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7956}}
+                      React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflowX:"auto",overflowY:"hidden",WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7956}}
                         , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 1fr 0.8fr 0.8fr 0.9fr auto",minWidth:560,
                           padding:"8px 20px",borderBottom:`1px solid ${C.border}`,background:C.bg}}
                           , ["Brano","Tipo","Strumento","Tonalità","Allievi","Lezioni","Stato",""].map(h=>(
@@ -2912,20 +2912,20 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
         )
         , React.createElement(RefreshBtn)
       )
-      , React.createElement('div', { style: {display:"flex", gap:12, marginBottom:20, flexWrap:"wrap"}}
+      , React.createElement('div', { style: {display:"flex", gap:12, marginBottom:20, flexWrap:"nowrap", overflowX:"auto", WebkitOverflowScrolling:"touch"}}
         , React.createElement('input', { value: search, onChange: e=>setSearch(e.target.value),
           placeholder: "Cerca per nome file o descrizione...",
-          style: {flex:"1 1 220px", padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`,
+          style: {flex:"1 1 220px", flexShrink:0, padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`,
             background:C.surface, color:C.text, fontSize:13, fontFamily:"'Open Sans',sans-serif",
             outline:"none"}})
         , React.createElement('select', { value: fCorso, onChange: e=>setFCorso(e.target.value),
-          style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`,
+          style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`, flexShrink:0,
             background:C.surface, color:fCorso?C.text:C.textMuted, fontSize:13, fontFamily:"'Open Sans',sans-serif", cursor:"pointer"}}
           , React.createElement('option', {value:""}, "Tutti gli strumenti")
           , corsiList.map(c=>React.createElement('option', {key:c,value:c}, c))
         )
         , React.createElement('select', { value: fTipo, onChange: e=>setFTipo(e.target.value),
-          style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`,
+          style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`, flexShrink:0,
             background:C.surface, color:fTipo?C.text:C.textMuted, fontSize:12,
             fontFamily:"'Open Sans',sans-serif", outline:"none"}}
           , React.createElement('option', {value:""}, "Tutti i tipi")
