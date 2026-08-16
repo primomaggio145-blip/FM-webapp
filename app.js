@@ -9583,7 +9583,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config }) => {
 const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
   // Solo Lun–Sab (6 giorni, no domenica)
   const days      = Array.from({length:6}, (_, i) => addDays(weekStart, i));
-  const HOUR_H    = 64;   // px per 1 ora
+  const HOUR_H    = isMobile ? 42 : 64;   // px per 1 ora — su mobile ridotta: alle celle bastano 2-3 righe di testo
   const H_START   = 8;    // prima riga visibile
   const H_END     = 22;   // ultima riga visibile (esclusa)
   const N_HOURS   = H_END - H_START;
@@ -13430,10 +13430,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             return (
               React.createElement('div', { style: {padding:"6px 16px 8px", background:C.surface,
                 borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center",
-                gap:8, flexWrap:"wrap", flexShrink:0, overflowX:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6054}}
-                , React.createElement(Ic, { n: "filter", size: 13, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6057}})
+                gap:8, flexWrap:"nowrap", flexShrink:0, overflowX:"auto", WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6054}}
+                , React.createElement(Ic, { n: "filter", size: 13, stroke: C.textDim, style:{flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6057}})
                 /* Filtro corso/strumento */
-                , React.createElement('div', { style: {position:"relative", display:"flex", alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6059}}
+                , React.createElement('div', { style: {position:"relative", display:"flex", alignItems:"center", flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6059}}
                   , React.createElement('select', { value: filterCorso, onChange: e=>setFilterCorso(e.target.value),
                     style: {appearance:"none", background:filterCorso?C.goldBg:C.bg,
                       border:`1px solid ${filterCorso?C.goldDim:C.border}`, borderRadius:8,
@@ -13451,7 +13451,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                     style: {position:"absolute", right:8, pointerEvents:"none", transform:"rotate(90deg)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6073}})
                 )
                 /* Filtro docente */
-                , React.createElement('div', { style: {position:"relative", display:"flex", alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6077}}
+                , React.createElement('div', { style: {position:"relative", display:"flex", alignItems:"center", flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6077}}
                   , React.createElement('select', { value: filterDocente, onChange: e=>setFilterDocente(e.target.value),
                     style: {appearance:"none", background:filterDocente?C.goldBg:C.bg,
                       border:`1px solid ${filterDocente?C.goldDim:C.border}`, borderRadius:8,
@@ -13464,7 +13464,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                     style: {position:"absolute", right:8, pointerEvents:"none", transform:"rotate(90deg)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6086}})
                 )
                 /* Filtro tipo lezione */
-                , React.createElement('div', { style: {position:"relative", display:"flex", alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6090}}
+                , React.createElement('div', { style: {position:"relative", display:"flex", alignItems:"center", flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6090}}
                   , React.createElement('select', { value: filterTipo, onChange: e=>setFilterTipo(e.target.value),
                     style: {appearance:"none", background:filterTipo?C.tealBg:C.bg,
                       border:`1px solid ${filterTipo?C.tealBorder:C.border}`, borderRadius:8,
@@ -13484,13 +13484,13 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   React.createElement('button', { onClick: ()=>{setFilterCorso(""); setFilterDocente(""); setFilterTipo("");},
                     style: {display:"flex", alignItems:"center", gap:5, padding:"5px 10px",
                       borderRadius:8, border:`1px solid ${C.border}`, background:C.bg,
-                      cursor:"pointer", fontSize:11, color:C.textMuted,
+                      cursor:"pointer", fontSize:11, color:C.textMuted, flexShrink:0,
                       fontFamily:"'Open Sans',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6107}}
                     , React.createElement(Ic, { n: "x", size: 11, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6112}}), "Reset"
                   )
                 )
                 , hasFilter && (
-                  React.createElement('span', { style: {fontSize:11, color:C.textDim, marginLeft:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6116}}
+                  React.createElement('span', { style: {fontSize:11, color:C.textDim, marginLeft:4, flexShrink:0, whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6116}}
                     , visibleLessons.length, " lezione/i"
                   )
                 )
