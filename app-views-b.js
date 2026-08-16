@@ -1584,10 +1584,22 @@ const PWA_PERMS = {
 
 // Etichette abbreviate SOLO per la modalità PWA/mobile (bottom-nav e menu "Altro").
 // Il desktop continua a usare le etichette complete di NAV_ITEMS / _labelOverridesSB.
+// Valgono per qualunque ruolo:
 const PWA_LABEL_OVERRIDES = {
   dashboard:  "Home",
   calendario: "Lezioni",
-  docenti:    "Dati",   // sovrascrive "Docenti" / "Dati docente" (ruolo docente)
+};
+// Valgono solo per chi ha fatto login con quel ruolo specifico (chiave = _userRoleSB):
+const PWA_ROLE_LABEL_OVERRIDES = {
+  docenti:     { docente: "Dati" },                                // "Docenti" / "Dati docente" -> "Dati" (solo DOCENTE)
+  allievi:     { admin: "Allievi", docente: "Allievi", allievo: "Dati" }, // ADMIN/DOCENTE: "Allievi" — ALLIEVO: "Dati"
+  contabilita: { docente: "Mensili", allievo: "QUOTE" },            // "Compensi & Rimborsi" -> "Mensili" (DOCENTE) — "Quote sociali" -> "QUOTE" (ALLIEVO)
+  repertorio:  { allievo: "BRANI" },                                // "Repertorio" -> "BRANI" (solo ALLIEVO)
+};
+// Ordine custom della bottom-nav SOLO per la modalità PWA/mobile, per ruolo di login.
+// Gli id non elencati qui mantengono l'ordine di NAV_ITEMS e finiscono, se non tra i primi 5, nel menu "Altro".
+const PWA_NAV_ORDER = {
+  docente: ["dashboard","docenti","allievi","calendario","contabilita"],
 };
 
 const NAV_ITEMS = [
@@ -1630,14 +1642,26 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
     docente: { contabilita: "Compensi & Rimborsi", docenti: "Dati docente" },
     allievo: { contabilita: "Quote sociali", allievi: "Dati allievo" },
   }[_effRoleSB] || {};
-  const FILTERED_ITEMS = NAV_ITEMS
-    .filter(item => _permsSB[item.id] !== false)
-    .map(item => _labelOverridesSB[item.id] ? {...item, label:_labelOverridesSB[item.id]} : item)
-    // Etichette abbreviate SOLO in modalità PWA/mobile (dopo gli override di ruolo, così prevalgono)
-    .map(item => (IS_PWA && PWA_LABEL_OVERRIDES[item.id]) ? {...item, label:PWA_LABEL_OVERRIDES[item.id]} : item)
-    // Voce "allievi" in PWA/mobile: dipende da chi ha fatto login (non dal ruolo visualizzato)
-    // — ADMIN/DOCENTE vedono "Allievi", l'ALLIEVO vede "Dati"
-    .map(item => (IS_PWA && item.id === "allievi") ? {...item, label: _userRoleSB === "allievo" ? "Dati" : "Allievi"} : item);
+  const FILTERED_ITEMS = (() => {
+    let items = NAV_ITEMS
+      .filter(item => _permsSB[item.id] !== false)
+      .map(item => _labelOverridesSB[item.id] ? {...item, label:_labelOverridesSB[item.id]} : item)
+      // Etichette abbreviate SOLO in modalità PWA/mobile (dopo gli override di ruolo, così prevalgono)
+      .map(item => (IS_PWA && PWA_LABEL_OVERRIDES[item.id]) ? {...item, label:PWA_LABEL_OVERRIDES[item.id]} : item)
+      // Etichette PWA/mobile che dipendono da chi ha fatto login (_userRoleSB), non dal ruolo visualizzato
+      .map(item => {
+        const roleMap = IS_PWA && PWA_ROLE_LABEL_OVERRIDES[item.id];
+        return (roleMap && roleMap[_userRoleSB]) ? {...item, label: roleMap[_userRoleSB]} : item;
+      });
+    // Ordine custom bottom-nav per ruolo (solo PWA/mobile) — il resto ("Altro") resta invariato
+    const order = IS_PWA && PWA_NAV_ORDER[_userRoleSB];
+    if (order) {
+      const head = order.map(id => items.find(it => it.id === id)).filter(Boolean);
+      const tail = items.filter(it => !order.includes(it.id));
+      items = [...head, ...tail];
+    }
+    return items;
+  })();
   const BOTTOM_ITEMS   = FILTERED_ITEMS.slice(0, 5);
 
   // Gruppi collassabili (solo admin desktop)

@@ -10153,7 +10153,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                     , React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7163}}, qFiltrate.length, " entrate · "   , fmt(totQFiltrate))
                   )
 
-                  , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7166}}
+                  , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflowX:"auto",overflowY:"hidden",WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7166}}
                     , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 100px auto",minWidth:480,
                       padding:"9px 18px",borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7167}}
                       , React.createElement('div',{onClick:()=>handleSortSp("desc"),     style:{fontSize:10,color:sortKeySp==="desc"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Descrizione", React.createElement('span',{style:{opacity:sortKeySp==="desc"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="desc"?"▲":"▼"))
