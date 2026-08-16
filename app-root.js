@@ -2760,6 +2760,7 @@ serve(async (req) => {
 };
 
 const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser, lessons, students, richieste }) => {
+  const isMobile = useIsMobile();
   const [filter, setFilter] = useState('non_lette');
   const [marking, setMarking] = useState(false);
   const [allNotifiche, setAllNotifiche] = useState(null);
@@ -3004,19 +3005,24 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
     return '🔔';
   };
 
-  return React.createElement('div', {style:{maxWidth:700, margin:'0 auto', padding:'28px 24px'}}
+  return React.createElement('div', {style:{maxWidth:700, margin:'0 auto', padding: isMobile ? '16px 12px' : '28px 24px'}}
     // Header
-    , React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}
+    , React.createElement('div', {style: isMobile
+        ? {display:'flex', flexDirection:'column', gap:12, marginBottom:20}
+        : {display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}
       , React.createElement('div', null
-        , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,margin:0}}, '🔔 Notifiche')
+        , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize: isMobile ? 22 : 28,fontWeight:600,margin:0}}, '🔔 Notifiche')
         , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}},
             nonLette.length > 0 ? `${nonLette.length} non lette su ${mieNotifiche.length} totali` : `${mieNotifiche.length} notifiche · tutte lette`)
       )
-      , React.createElement('div', {style:{display:'flex',gap:8,flexShrink:0}}
+      , React.createElement('div', {style: isMobile
+          ? {display:'flex', flexDirection:'column', gap:8, width:'100%'}
+          : {display:'flex',gap:8,flexShrink:0}}
           , nonLette.length > 0 && React.createElement('button', {
               onClick: markAllRead, disabled: marking,
-              style:{padding:'9px 18px',borderRadius:8,border:'none',background:C.green,color:'#fff',
-                fontSize:13,fontWeight:600,cursor:marking?'wait':'pointer',fontFamily:"'Open Sans',sans-serif",opacity:marking?0.7:1}}
+              style:{padding: isMobile ? '10px 14px' : '9px 18px', borderRadius:8,border:'none',background:C.green,color:'#fff',
+                fontSize:13,fontWeight:600,cursor:marking?'wait':'pointer',fontFamily:"'Open Sans',sans-serif",opacity:marking?0.7:1,
+                width: isMobile ? '100%' : undefined, boxSizing:'border-box'}}
             , marking ? '...' : `✓ Segna tutte come lette (${nonLette.length})`
           )
           , mieNotifiche.some(n => n.letto && !n._isLive) && React.createElement('button', {
@@ -3040,8 +3046,9 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
                   }
                 }
               },
-              style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.textMuted,
-                fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
+              style:{padding: isMobile ? '10px 14px' : '9px 18px', borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.textMuted,
+                fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",
+                width: isMobile ? '100%' : undefined, boxSizing:'border-box'}}
             , '🗑️ Elimina lette'
           )
         )
