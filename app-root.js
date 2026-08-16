@@ -752,14 +752,18 @@ function App() {
   // La prossima apertura dell'app riprende automaticamente la sessione
   const handleEsciSenzaLogout = () => {
     if (IS_PWA) {
-      // In PWA: minimizza tornando alla home dello smartphone
-      window.history.back();
+      // In PWA: prova a chiudere davvero la finestra/app.
+      // window.close() funziona solo se il sistema/browser lo permette
+      // (restrizione di sicurezza comune per finestre non aperte da script);
+      // su molte combinazioni Android/iOS in modalità standalone funziona,
+      // ma se non funziona non deve restare "morta" — fallback al sito.
+      window.close();
+      setTimeout(() => {
+        window.location.href = 'https://primomaggio145-blip.github.io/FM-webapp/';
+      }, 300);
     } else {
-      // Su browser desktop: chiude il tab se possibile, altrimenti avvisa
-      const closed = window.close();
-      if (closed === false || closed === undefined) {
-        window.alert('Puoi chiudere questo tab manualmente (Ctrl+W / Cmd+W).\nLa sessione rimarrà attiva — al prossimo accesso entrerai direttamente.');
-      }
+      // Browser mobile o desktop: reindirizza sempre al sito
+      window.location.href = 'https://primomaggio145-blip.github.io/FM-webapp/';
     }
   };
 
