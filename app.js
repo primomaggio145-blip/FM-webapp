@@ -23267,7 +23267,8 @@ const RecuperoScadutoModal = ({ lesson, onExtend, onDismiss, setLessons }) => {
 // ─── NOTIFICHE VIEW ────────────────────────────────────────────────────────────
 // ─── REMINDERS VIEW ───────────────────────────────────────────────────────────
 const SUPABASE_URL_WA  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
-const SERVICE_ROLE_KEY_WA = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjM2MTQ0MCwiZXhwIjoyMDg3OTM3NDQwfQ.REDACTED_OLD_SERVICE_ROLE';
+// NOTA SICUREZZA: la service_role/secret key NON deve mai comparire nel codice
+// client-side. Lo snippet SQL sottostante usa un placeholder da sostituire a mano.
 
 const REMINDER_DEFAULTS = [
   { id:'individuale', label:'Lezioni individuali', icon:'user',     dest:'allievo',  oraDefault:'09:00', giornoDefault:'daily',   desc:'Reminder lezione individuale del giorno seguente' },
@@ -23456,7 +23457,7 @@ const ReminderWizard = ({ onClose, onSave }) => {
                 if(form.giorno==='daily')   cron = `${mm} ${hh} * * *`;
                 if(form.giorno==='weekly')  cron = `${mm} ${hh} * * ${form.giornoSett||1}`;
                 if(form.giorno==='monthly') cron = `${mm} ${hh} ${form.giornoMese||1} * *`;
-                return `SELECT cron.schedule(\n  '${form.id||'nuovo_tipo'}-reminder',\n  '${cron}',\n  $$\n  SELECT net.http_post(\n    url := 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/whatsapp-reminder?tipo=${form.id||'nuovo_tipo'}',\n    headers := '{"Authorization":"Bearer ${SERVICE_ROLE_KEY_WA.slice(0,20)}...","Content-Type":"application/json"}'::jsonb,\n    body := '{}'::jsonb\n  );\n  $$\n);`;
+                return `SELECT cron.schedule(\n  '${form.id||'nuovo_tipo'}-reminder',\n  '${cron}',\n  $$\n  SELECT net.http_post(\n    url := 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/whatsapp-reminder?tipo=${form.id||'nuovo_tipo'}',\n    headers := '{"Authorization":"Bearer REDACTED_SECRET_KEY_2","Content-Type":"application/json"}'::jsonb,\n    body := '{}'::jsonb\n  );\n  $$\n);\n-- Sostituisci <LA_TUA_SECRET_KEY_QUI> con la tua secret key (Settings > API Keys).`;
               })()
             )
           )
@@ -24175,7 +24176,7 @@ const GIORNI_SETTIMANA = [
 ];
 
 const WA_SUPABASE_URL = 'https://ocsxrjommtrjelnbihfr.supabase.co';
-const WA_SERVICE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MjM2MTQ0MCwiZXhwIjoyMDg3OTM3NDQwfQ.REDACTED_OLD_SERVICE_ROLE';
+// Service_role key rimossa dal client — nessun fallback a privilegi elevati.
 
 const RemindersView = ({ ruolo }) => {
   const [log,          setLog]          = useState([]);
@@ -24288,9 +24289,10 @@ const RemindersView = ({ ruolo }) => {
     try {
       const sb = window.supabaseClient;
       if (!sb) { toast(false, 'Supabase non disponibile'); setSending(p=>({...p,[tipoId]:false})); return; }
-      // Recupera il token di sessione per l'Authorization header (evita il CORS del service role key)
+      // Recupera il token di sessione per l'Authorization header. Nessun fallback a chiavi privilegiate.
       const { data: { session } } = await sb.auth.getSession();
-      const token = session?.access_token || WA_SERVICE_KEY;
+      const token = session?.access_token;
+      if (!token) { toast(false, 'Sessione scaduta: effettua di nuovo il login'); setSending(p=>({...p,[tipoId]:false})); return; }
       // fetch con il token di sessione — il CORS è gestito dall'Edge Function
       const res = await fetch(
         `${WA_SUPABASE_URL}/functions/v1/whatsapp-reminder?tipo=${tipoId}`,
@@ -25853,7 +25855,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     };
 
     const SUPABASE_URL  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
-    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jc3hyam9tbXRyamVsbmJpaGZyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIzNjE0NDAsImV4cCI6MjA4NzkzNzQ0MH0.REDACTED_OLD_ANON';
+    const SUPABASE_ANON = 'sb_publishable_hoDexm3CUGWCnH6OrjbQ7Q_zMutnDcO'; // publishable key
 
     // Token sessione — OBBLIGATORIO per operazioni di scrittura
     let authToken = SUPABASE_ANON;
