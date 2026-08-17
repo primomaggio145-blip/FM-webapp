@@ -1473,7 +1473,7 @@ const ReminderWizard = ({ onClose, onSave }) => {
                 if(form.giorno==='daily')   cron = `${mm} ${hh} * * *`;
                 if(form.giorno==='weekly')  cron = `${mm} ${hh} * * ${form.giornoSett||1}`;
                 if(form.giorno==='monthly') cron = `${mm} ${hh} ${form.giornoMese||1} * *`;
-                return `SELECT cron.schedule(\n  '${form.id||'nuovo_tipo'}-reminder',\n  '${cron}',\n  $$\n  SELECT net.http_post(\n    url := 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/whatsapp-reminder?tipo=${form.id||'nuovo_tipo'}',\n    headers := '{"Authorization":"Bearer REDACTED_SECRET_KEY_2","Content-Type":"application/json"}'::jsonb,\n    body := '{}'::jsonb\n  );\n  $$\n);\n-- ⚠️ Sostituisci <LA_TUA_SECRET_KEY_QUI> con la tua secret key\n-- (Supabase > Settings > API Keys). Non incollarla mai nel codice sorgente.`;
+                return `SELECT cron.schedule(\n  '${form.id||'nuovo_tipo'}-reminder',\n  '${cron}',\n  $$\n  SELECT net.http_post(\n    url := 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/whatsapp-reminder?tipo=${form.id||'nuovo_tipo'}',\n    headers := '{"Authorization":"Bearer REDACTED_SECRET_KEY_1","Content-Type":"application/json"}'::jsonb,\n    body := '{}'::jsonb\n  );\n  $$\n);\n-- ⚠️ Sostituisci <LA_TUA_SECRET_KEY_QUI> con la tua secret key\n-- (Supabase > Settings > API Keys). Non incollarla mai nel codice sorgente.`;
               })()
             )
           )
