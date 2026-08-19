@@ -1629,7 +1629,9 @@ const NAV_ITEMS = [
   { id:"googleCalendar", label:"Google Calendar", icon:"calendar" },
 ];
 
-const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction }) => {
+const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction, config }) => {
+  const [sidebarLogoOk, setSidebarLogoOk] = useState(true);
+  const sidebarNomeScuola = (config && config.nomeScuola) || "Futuro Musica";
   const ruoloHex = {admin:C.gold, docente:C.teal, allievo:C.blue}[_optionalChain([user, 'optionalAccess', _89 => _89.ruolo])] || C.gold;
   const ini = _optionalChain([user, 'optionalAccess', _90 => _90.nome]) ? user.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase() : "??";
   const _userRoleSB  = (user && user.ruolo) || "admin";
@@ -1699,12 +1701,15 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
         /* Logo */
         , React.createElement('div', { style: {padding:"18px 16px",borderBottom:"1px solid rgba(255,255,255,0.15)",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10585}}
           , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10586}}
-            , React.createElement('div', { style: {width:32,height:32,borderRadius:0,background:"#8c1818",
-              display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10587}}
-              , React.createElement(Ic, { n: "music", size: 15, stroke: "#fff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10589}})
-            )
+            , sidebarLogoOk
+              ? React.createElement('img', {src:SCHOOL_LOGO_URL(192), onError:()=>setSidebarLogoOk(false),
+                  style:{width:32,height:32,borderRadius:6,objectFit:'contain',background:'#fff',flexShrink:0}})
+              : React.createElement('div', { style: {width:32,height:32,borderRadius:0,background:"#8c1818",
+                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10587}}
+                  , React.createElement(Ic, { n: "music", size: 15, stroke: "#fff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10589}})
+                )
             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10591}}
-              , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:15,fontWeight:600,lineHeight:1.2,color:"#fff",letterSpacing:"0.05em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10592}}, "Futuro Musica"
+              , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:15,fontWeight:600,lineHeight:1.2,color:"#fff",letterSpacing:"0.05em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10592}}, sidebarNomeScuola
 
               )
               , React.createElement('div', { style: {fontSize:9,color:"rgba(255,255,255,0.55)",letterSpacing:"0.15em",textTransform:"uppercase",marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10595}}, "gestionale"

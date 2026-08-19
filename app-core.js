@@ -266,6 +266,13 @@ const useIsMobile = () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ICONE — superset di tutti i moduli
 // ═══════════════════════════════════════════════════════════════════════════════
+// ─── LOGO SCUOLA (bucket Storage pubblico "branding") ──────────────────────────
+// URL prevedibile e costante (stesso nome file sempre sovrascritto all'upload),
+// così funziona ANCHE nelle schermate pre-login (login/registrazione) senza
+// dover interrogare il database — indipendente dalle policy RLS sulle tabelle.
+const SCHOOL_LOGO_URL = (size) =>
+  `https://ocsxrjommtrjelnbihfr.supabase.co/storage/v1/object/public/branding/icon-${size}.png`;
+
 const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
   const p = {
     users:    React.createElement(React.Fragment, null, React.createElement('path', { d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"          , __self: this, __source: {fileName: _jsxFileName, lineNumber: 253}}), React.createElement('circle', { cx: "9", cy: "7", r: "4", __self: this, __source: {fileName: _jsxFileName, lineNumber: 253}}), React.createElement('path', { d: "M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"            , __self: this, __source: {fileName: _jsxFileName, lineNumber: 253}})),
@@ -1123,6 +1130,16 @@ const PanelloSinistra = ()=>{
     {x:"40%",y:"30%",delay:1.8,size:10,anim:"floatC 7.5s 1.8s ease-in-out infinite"},
   ];
 
+  // Nome scuola: window.__FM_DATA__ viene popolato PRIMA del mount React
+  // (vedi fm_sync.js), quindi è già disponibile anche in questa schermata
+  // pre-login se la tabella sito_config è leggibile pubblicamente.
+  const _schoolCfg = (typeof window !== 'undefined' && window.__FM_DATA__ && window.__FM_DATA__.config) || {};
+  const nomeScuolaDisplay = _schoolCfg.nomeScuola || "Futuro Musica";
+
+  // Logo: prova l'immagine caricata dalla scuola, fallback al logo di default
+  // (icona nota musicale) se non è mai stata caricata nessuna immagine.
+  const [logoOk, setLogoOk] = useState(true);
+
   return(
     React.createElement('div', { style: {flex:"0 0 46%",background:`linear-gradient(160deg,#123a7a 0%,#1a4fa0 40%,#0d2d6b 100%)`,
       position:"relative",overflow:"hidden",display:"flex",flexDirection:"column",
@@ -1156,11 +1173,14 @@ const PanelloSinistra = ()=>{
       /* Contenuto */
       , React.createElement('div', { style: {position:"relative",zIndex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 766}}
         , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10,marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 767}}
-          , React.createElement('div', { style: {width:34,height:34,borderRadius:0,background:"#8c1818",
-            display:"flex",alignItems:"center",justifyContent:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 768}}
-            , React.createElement(Ic, { n: "music", size: 17, stroke: "#fff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 770}})
-          )
-          , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:16,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:"#fff"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 772}}, "Futuro Musica"
+          , logoOk
+            ? React.createElement('img', {src:SCHOOL_LOGO_URL(192), onError:()=>setLogoOk(false),
+                style:{width:34,height:34,borderRadius:6,objectFit:'contain',background:'#fff',flexShrink:0}})
+            : React.createElement('div', { style: {width:34,height:34,borderRadius:0,background:"#8c1818",
+                display:"flex",alignItems:"center",justifyContent:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 768}}
+                , React.createElement(Ic, { n: "music", size: 17, stroke: "#fff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 770}})
+              )
+          , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:16,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:"#fff"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 772}}, nomeScuolaDisplay
 
           )
         )

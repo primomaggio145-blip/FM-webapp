@@ -775,7 +775,7 @@ function App() {
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
       , React.createElement('div', { style: {display:"flex",height:"100dvh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), config: sharedConfig, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , React.createElement('div', { key: view, className: "main-scroll", style: {flex:1,overflow:"auto",background:C.bg,animation:"fadeIn 0.25s ease",
           paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 4px)",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10788}}
           , renderCurrentView()
@@ -3291,6 +3291,73 @@ const CATEGORIE_RESET = [
   {id:'anniScolastici', label:'🗓️ Archivio anni scolastici', desc:'Anni scolastici configurati e relativo stato attivo'},
 ];
 
+// ─── LOGO SCUOLA (upload icone 192/512 su bucket Storage pubblico "branding") ──
+const LogoScuolaSection = ({ showToast }) => {
+  const [uploading, setUploading] = React.useState({192:false, 512:false});
+  const [cacheBust, setCacheBust] = React.useState(Date.now());
+  const [previewOk, setPreviewOk] = React.useState({192:true, 512:true});
+
+  const validaEUpload = (size, file) => {
+    if (!file) return;
+    if (!/image\/(png|jpeg|webp)/.test(file.type)) {
+      showToast && showToast(false, 'Formato non valido — usa PNG, JPG o WEBP');
+      return;
+    }
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = async () => {
+      URL.revokeObjectURL(url);
+      if (img.width !== size || img.height !== size) {
+        showToast && showToast(false, `L'immagine deve essere esattamente ${size}×${size} px (questa è ${img.width}×${img.height} px)`);
+        return;
+      }
+      setUploading(prev => ({...prev, [size]: true}));
+      try {
+        const sb = window.supabaseClient;
+        const { error } = await sb.storage.from('branding').upload(`icon-${size}.png`, file, {
+          upsert: true, contentType: file.type || 'image/png',
+        });
+        if (error) {
+          showToast && showToast(false, `Errore caricamento: ${error.message}`);
+        } else {
+          showToast && showToast(true, `✅ Icona ${size}×${size} aggiornata in tutta l'app`);
+          setCacheBust(Date.now());
+          setPreviewOk(prev => ({...prev, [size]: true}));
+        }
+      } catch(e) {
+        showToast && showToast(false, e?.message || 'Errore di rete');
+      }
+      setUploading(prev => ({...prev, [size]: false}));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); showToast && showToast(false, 'File immagine non valido'); };
+    img.src = url;
+  };
+
+  return React.createElement(ImpSection, {title:"Logo scuola", icon:"upload"}
+    , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:16,lineHeight:1.5}},
+        "Il logo caricato qui viene usato in tutta l'app: schermata di login, registrazione, menu laterale e icona dell'app installata (PWA). Servono due dimensioni esatte: 192×192 e 512×512 pixel, PNG con sfondo pieno o trasparente."
+      )
+    , React.createElement('div', {style:{display:'flex',gap:24,flexWrap:'wrap'}}
+      , [192,512].map(size => React.createElement('div', {key:size, style:{textAlign:'center'}}
+          , React.createElement('div', {style:{width:size===192?90:110,height:size===192?90:110,borderRadius:10,border:`1px dashed ${C.border}`,
+                display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 10px',overflow:'hidden',background:'#fff'}}
+              , previewOk[size]
+                ? React.createElement('img', {src:`${SCHOOL_LOGO_URL(size)}?v=${cacheBust}`, onError:()=>setPreviewOk(prev=>({...prev,[size]:false})),
+                    style:{width:'100%',height:'100%',objectFit:'contain'}})
+                : React.createElement('div', {style:{fontSize:10,color:C.textDim}}, 'Nessuna icona')
+            )
+          , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:8}}, `${size}×${size} px`)
+          , React.createElement('label', {style:{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,
+                background:C.bg,color:C.text,cursor:uploading[size]?'not-allowed':'pointer',fontSize:12,fontWeight:600}}
+              , uploading[size] ? '⏳ Carico...' : '📤 Carica'
+              , React.createElement('input', {type:'file', accept:'image/png,image/jpeg,image/webp', style:{display:'none'}, disabled:uploading[size],
+                  onChange: e => { validaEUpload(size, e.target.files[0]); e.target.value=''; }})
+            )
+        ))
+      )
+  );
+};
+
 const ResetDatiSection = ({ anniScolastici: propAnniReset, setAnniScolastici: propSetAnniReset } = {}) => {
   const [selected, setSelected] = React.useState({});
   const [counts, setCounts] = React.useState({});
@@ -4011,6 +4078,9 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         , React.createElement(Input,{label:"Anno scolastico", value:draft.annoScolastico||"", onChange:e=>setD("annoScolastico",e.target.value), placeholder:"2024/2025"})
       )
     )
+
+    /* ── Logo scuola ──────────────────────────────────────────────────────── */
+    , activeTab==="scuola" && React.createElement(LogoScuolaSection, {showToast})
 
     /* ── Sale lezioni ──────────────────────────────────────────────────────── */
     , activeTab==="scuola" && React.createElement(ImpSection, {title:"Sale e aule", icon:"home"}
