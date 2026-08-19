@@ -612,8 +612,13 @@ function App() {
     };
 
     // ── beforeunload: avvisa sempre quando l'utente prova a uscire ──────────
+    // ECCEZIONE: quando l'uscita è volontaria (pulsante ESCI), window.__FM_ALLOW_EXIT__
+    // viene impostato a true PRIMA della navigazione, per non mostrare il popup
+    // nativo del browser ("Le modifiche potrebbero non essere salvate") che
+    // altrimenti scatterebbe comunque, dato che è generico e non sa distinguere
+    // un'uscita voluta da una accidentale.
     const handleBeforeUnload = (e) => {
-      // Mostra sempre il dialog nativo del browser quando si è loggati
+      if (window.__FM_ALLOW_EXIT__) return;
       e.preventDefault();
       e.returnValue = ''; // stringa vuota = il browser usa il suo testo standard
       return '';
@@ -759,15 +764,11 @@ function App() {
   // qualche secondo reindirizziamo comunque al sito.
   const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
   const handleEsciSenzaLogout = () => {
-    if (IS_PWA) {
-      setShowEsciMsg(true);
-      setTimeout(() => {
-        window.location.href = 'https://primomaggio145-blip.github.io/FM-webapp/';
-      }, 3500);
-    } else {
-      // Browser mobile o desktop: reindirizza sempre al sito
+    window.__FM_ALLOW_EXIT__ = true; // sopprime il popup nativo "vuoi uscire dal sito?"
+    setShowEsciMsg(true);
+    setTimeout(() => {
       window.location.href = 'https://primomaggio145-blip.github.io/FM-webapp/';
-    }
+    }, IS_PWA ? 3500 : 1600);
   };
 
   return (
@@ -787,16 +788,21 @@ function App() {
          root, quindi position:fixed si aggancia al viewport come previsto.  */
       , globalModal
 
-      /* Messaggio istruzioni chiusura PWA (Android/iOS non permettono la
-         chiusura via script) — poi reindirizza comunque al sito */
+      /* Messaggio di saluto all'uscita — in PWA mostra anche le istruzioni per
+         chiudere l'app (Android/iOS non lo permettono via script), in browser
+         desktop/mobile è solo un saluto. Poi reindirizza comunque al sito. */
       , showEsciMsg && React.createElement('div', {style:{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:99999}}
           , React.createElement('div', {style:{background:C.surface,borderRadius:14,padding:28,maxWidth:360,width:'88%',textAlign:'center',boxShadow:'0 10px 40px rgba(0,0,0,.35)'}}
             , React.createElement('div',{style:{fontSize:32,marginBottom:12}}, '👋')
-            , React.createElement('div',{style:{fontSize:15,fontWeight:700,color:C.text,fontFamily:"'Oswald',sans-serif",marginBottom:10}}, 'Per chiudere l\'app')
-            , React.createElement('div',{style:{fontSize:13,color:C.textMuted,lineHeight:1.6,marginBottom:6}},
+            , React.createElement('div',{style:{fontSize:15,fontWeight:700,color:C.text,fontFamily:"'Oswald',sans-serif",marginBottom:10}},
+                IS_PWA ? 'Per chiudere l\'app' : 'A presto!')
+            , IS_PWA && React.createElement('div',{style:{fontSize:13,color:C.textMuted,lineHeight:1.6,marginBottom:6}},
                 isIOSDevice
                   ? 'Scorri verso l\'alto dal basso dello schermo (o premi due volte il tasto Home) e trascina Futuro Musica fuori dallo schermo.'
                   : 'Apri le app recenti (tasto quadrato o gesto di scorrimento) e scorri via Futuro Musica.'
+              )
+            , !IS_PWA && React.createElement('div',{style:{fontSize:13,color:C.textMuted,lineHeight:1.6,marginBottom:6}},
+                'Grazie per aver usato Futuro Musica.'
               )
             , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:14}}, 'Nel frattempo ti reindirizziamo al sito...')
           )
