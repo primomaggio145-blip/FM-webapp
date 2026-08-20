@@ -916,7 +916,13 @@
       <!-- Gallery posts -->
       <div class="social-posts-header">
         <h3>📸 Contenuti Gallery <span style="font-size:12px;color:#999;font-weight:400;" id="posts-count"></span></h3>
+        <button class="btn-add-post" id="btn-ig-sync" onclick="syncInstagramNow()" title="Scarica subito gli ultimi post dall'account Instagram collegato"
+          style="background:#fff;border:1.5px solid #d5006d;color:#d5006d;">🔄 Sincronizza da Instagram</button>
         <button class="btn-add-post" onclick="addPost()">＋ Aggiungi Contenuto</button>
+      </div>
+      <div style="font-size:11px;color:#999;margin:-8px 0 12px;">
+        La sincronizzazione automatica gira anche da sola ogni 2 ore. I post con il bollino "AUTO" sono stati importati
+        automaticamente da Instagram; puoi comunque modificarli o nasconderli come tutti gli altri.
       </div>
 
       <div class="posts-grid-admin" id="posts-grid"></div>
@@ -1107,6 +1113,11 @@ const ADMIN_PASSWORD = 'futuromusica2025'; // ← cambia questa password!
 // Sostituisci con i tuoi valori da Supabase → Settings → API
 const SUPABASE_URL = 'https://ocsxrjommtrjelnbihfr.supabase.co';  // ← Project URL
 const SUPABASE_KEY = 'sb_publishable_hoDexm3CUGWCnH6OrjbQ7Q_zMutnDcO';    // ← anon public key
+// Stessa stringa impostata come secret "FM_SYNC_SECRET" della Edge Function instagram-sync
+// (vedi SETUP-INSTAGRAM.md). Non è un segreto "duro": come ADMIN_PASSWORD qui sopra, chiunque
+// legga il sorgente di questa pagina lo vede — serve solo a filtrare chiamate accidentali/random
+// all'endpoint pubblico della function, non è la protezione principale dei dati.
+const FM_SYNC_SECRET = 'CAMBIA-QUESTA-STRINGA-CON-QUELLA-DELLA-EDGE-FUNCTION';
 
 // Client globale (inizializzato dopo login)
 let db = null;
@@ -1590,6 +1601,7 @@ function renderPosts() {
              onclick="document.getElementById('img-input-${i}')&&document.getElementById('img-input-${i}').focus()">📷</div>` : ''}
         <span class="post-tipo-badge">${tipoLabel}</span>
         <span class="post-fonte-badge ${fbig}">${fbig==='ig'?'IG':'FB'}</span>
+        ${p.auto ? '<span class="post-fonte-badge" style="left:auto;right:6px;top:32px;background:#d5006d;color:#fff;">AUTO</span>' : ''}
         <span class="post-drag-handle">⠿</span>
       </div>
       <div class="post-body-admin">
@@ -1670,6 +1682,38 @@ async function saveSocial() {
   }
   await saveData();
   showToast('\u2705 Social & Gallery salvato!');
+}
+
+// Richiama la Edge Function instagram-sync per scaricare subito gli ultimi post
+// dall'account Instagram collegato (la stessa cosa che gira da sola ogni 2 ore via
+// GitHub Actions). Ricarica poi i dati da Supabase per mostrare i nuovi post.
+async function syncInstagramNow() {
+  const btn = document.getElementById('btn-ig-sync');
+  const originalLabel = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sincronizzo...'; }
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/instagram-sync`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'apikey': SUPABASE_KEY,
+        'X-Sync-Secret': FM_SYNC_SECRET,
+        'Content-Type': 'application/json',
+      },
+    });
+    const out = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      alert('Sync fallita: ' + (out.error || res.status));
+      return;
+    }
+    await loadDataFromSupabase();
+    loadSocial();
+    alert(out.nuovi > 0 ? `✅ Importati ${out.nuovi} nuovi post da Instagram.` : 'ℹ️ Nessun post nuovo da importare.');
+  } catch (e) {
+    alert('Errore di rete durante la sync: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+  }
 }
 
 function addPost() {
