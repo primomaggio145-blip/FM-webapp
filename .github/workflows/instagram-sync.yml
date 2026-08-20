@@ -6,12 +6,17 @@ name: Instagram Sync
 #
 # Può anche essere avviato a mano dal tab "Actions" di GitHub con "Run workflow".
 #
-# Secrets richiesti in questo repository (Settings → Secrets and variables → Actions):
-#   SUPABASE_FUNCTION_URL   es. https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/instagram-sync
-#   SUPABASE_ANON_KEY       la chiave "anon public" del progetto (serve solo per passare
-#                            i controlli di rete di Supabase; l'autorizzazione vera è il
-#                            secret FM_SYNC_SECRET, verificato dentro la function)
-#   FM_SYNC_SECRET          la stessa stringa segreta impostata come secret della Edge Function
+# Secrets usati (riutilizza quelli già presenti nel repo per il backup DB):
+#   SUPABASE_URL              già esistente — usato per costruire l'URL della function
+#   SUPABASE_SERVICE_ROLE_KEY già esistente — usato come header di autorizzazione
+#                              verso la Edge Function (necessario perché Supabase
+#                              richiede sempre una chiave valida per superare il
+#                              suo gateway, anche se poi l'autorizzazione "vera" la
+#                              fa la function stessa controllando FM_SYNC_SECRET)
+#   FM_SYNC_SECRET             NUOVO — va creato apposta (Settings → Secrets and
+#                              variables → Actions → New repository secret),
+#                              deve combaciare con il secret omonimo impostato
+#                              sulla Edge Function su Supabase.
 
 on:
   schedule:
@@ -26,9 +31,9 @@ jobs:
       - name: Richiama la function instagram-sync
         run: |
           HTTP_CODE=$(curl -s -o response.json -w "%{http_code}" \
-            -X POST "${{ secrets.SUPABASE_FUNCTION_URL }}" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
-            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -X POST "${{ secrets.SUPABASE_URL }}/functions/v1/instagram-sync" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "X-Sync-Secret: ${{ secrets.FM_SYNC_SECRET }}" \
             -H "Content-Type: application/json")
           echo "--- Risposta (HTTP $HTTP_CODE) ---"
