@@ -1,0 +1,41 @@
+name: Instagram Sync
+
+# Chiama periodicamente la Edge Function "instagram-sync" su Supabase, che
+# scarica gli ultimi post dall'account Instagram collegato e li aggiunge
+# alla sezione SOCIAL del sito (se non già presenti).
+#
+# Può anche essere avviato a mano dal tab "Actions" di GitHub con "Run workflow".
+#
+# Secrets richiesti in questo repository (Settings → Secrets and variables → Actions):
+#   SUPABASE_FUNCTION_URL   es. https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/instagram-sync
+#   SUPABASE_ANON_KEY       la chiave "anon public" del progetto (serve solo per passare
+#                            i controlli di rete di Supabase; l'autorizzazione vera è il
+#                            secret FM_SYNC_SECRET, verificato dentro la function)
+#   FM_SYNC_SECRET          la stessa stringa segreta impostata come secret della Edge Function
+
+on:
+  schedule:
+    # ogni 2 ore
+    - cron: '0 */2 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Richiama la function instagram-sync
+        run: |
+          HTTP_CODE=$(curl -s -o response.json -w "%{http_code}" \
+            -X POST "${{ secrets.SUPABASE_FUNCTION_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "X-Sync-Secret: ${{ secrets.FM_SYNC_SECRET }}" \
+            -H "Content-Type: application/json")
+          echo "--- Risposta (HTTP $HTTP_CODE) ---"
+          cat response.json
+          echo
+          if [ "$HTTP_CODE" -ge 300 ]; then
+            echo "❌ Sync fallita"
+            exit 1
+          fi
+          echo "✅ Sync completata"
