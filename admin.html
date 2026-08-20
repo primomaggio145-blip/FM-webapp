@@ -6,6 +6,8 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Admin — Futuro Musica</title>
+<link id="fm-favicon" rel="icon" type="image/png" href="icons/icon-192.png">
+<link id="fm-apple-icon" rel="apple-touch-icon" href="icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -1200,6 +1202,22 @@ let DATA = JSON.parse(JSON.stringify(DEFAULT_DATA));
 let currentPhotoTarget = null; // { type: 'corsi'|'comp', index: n }
 
 // ─────────────── AUTH ───────────────
+// Icone dal bucket "branding" (Supabase Storage): le stesse caricate da
+// LogoScuolaSection nella web-app (Impostazioni → Scuola), usate qui per
+// favicon/apple-touch-icon con fallback automatico alle icone statiche locali.
+function syncBrandingIcons() {
+  const base = 'https://ocsxrjommtrjelnbihfr.supabase.co/storage/v1/object/public/branding/';
+  const url192 = base + 'icon-192.png?v=' + Date.now();
+  const testImg = new Image();
+  testImg.onload = () => {
+    const fav = document.getElementById('fm-favicon');
+    const apple = document.getElementById('fm-apple-icon');
+    if (fav) fav.href = url192;
+    if (apple) apple.href = url192;
+  };
+  testImg.src = url192;
+}
+
 async function doLogin() {
   const pwd = document.getElementById('pwd-input').value;
   if (pwd === ADMIN_PASSWORD) {
@@ -1207,6 +1225,7 @@ async function doLogin() {
     document.getElementById('admin-app').style.display = 'block';
     // Mostra spinner
     document.getElementById('panel-title').textContent = 'Caricamento...';
+    syncBrandingIcons();
     initSupabase();
     await loadData();
     renderAll();
@@ -2110,7 +2129,7 @@ function renderCorsi() {
          ondragend="cardDragEnd(event)">
       <div class="card-top-bar">
         <span class="card-drag-handle" title="Trascina per riordinare">⠿</span>
-        <span class="card-top-name">${c.nome}</span>
+        <span class="card-top-name">${c.nome}${c.tipo === 'collettivo' ? ' <span style="font-size:10px;font-weight:700;background:#7b3ff2;color:#fff;padding:2px 7px;border-radius:8px;vertical-align:middle;">COLLETTIVO</span>' : ''}</span>
         <button class="vis-toggle-btn ${vis ? 'on' : 'off'}" onclick="toggleItem('corsi',${i})">
           <span class="vis-dot"></span>${vis ? '👁 Visibile' : '🙈 Nascosto'}
         </button>

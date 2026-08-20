@@ -2960,7 +2960,10 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
     // L'anno di creazione è sempre l'anno ATTIVO (non quello eventualmente sfogliato nel selettore)
     const annoCreazione = propAnnoIniziCV != null ? Number(propAnnoIniziCV) : Number(annoSel);
     if (sb) {
-      const row = { id:newId, nome:d.name||d.nome||'', tipo:d.type||d.tipo||'individuale', descrizione:d.description||d.descrizione||null, visible:true, anno_creazione: annoCreazione };
+      // I corsi collettivi nascono NON visibili sul sito (l'admin li abilita manualmente
+      // dal pannello se/quando vuole mostrarli); gli individuali restano visibili di default.
+      const tipoCorso = d.type || d.tipo || 'individuale';
+      const row = { id:newId, nome:d.name||d.nome||'', tipo:tipoCorso, descrizione:d.description||d.descrizione||null, visible: tipoCorso !== 'collettivo', anno_creazione: annoCreazione };
       const { error } = await sb.from('corsi').insert(row);
       if (error) console.warn('[FM] handleAddCourse error:', error.message);
       // Persiste l'assegnazione docenti su corsi_docenti (senza questo si perde al riavvio)

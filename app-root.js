@@ -3990,25 +3990,18 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
       rows.push({
         chiave,
         valore: valore == null ? '' : typeof valore === 'object' ? JSON.stringify(valore) : String(valore),
+        updated_at: new Date().toISOString(),
       });
     });
 
     try {
-      // 1. DELETE tutto tranne una chiave impossibile
-      const delRes = await fetch(`${SUPABASE_URL}/rest/v1/sito_config?chiave=neq.___x___`, {
-        method: 'DELETE', headers
-      });
-      if (!delRes.ok && delRes.status !== 404) {
-        const body = await delRes.text();
-        restore();
-        showPopup(false, `Delete fallita (${delRes.status}): ${body.slice(0,80)}`);
-        return;
-      }
-
-      // 2. INSERT tutte le righe
-      const insRes = await fetch(`${SUPABASE_URL}/rest/v1/sito_config`, {
+      // UPSERT riga per riga (onConflict su chiave) invece di DELETE+INSERT globale:
+      // il DELETE indiscriminato su tutta la tabella cancellava anche le chiavi
+      // gestite da admin.html (testi sito, social_posts, nav_visibili, sezioni_visibili,
+      // ecc.) ogni volta che si salvava da qui, anche se non toccate in questa vista.
+      const insRes = await fetch(`${SUPABASE_URL}/rest/v1/sito_config?on_conflict=chiave`, {
         method: 'POST',
-        headers: { ...headers, 'Prefer': 'return=minimal' },
+        headers: { ...headers, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(rows),
       });
 

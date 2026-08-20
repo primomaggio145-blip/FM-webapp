@@ -6,6 +6,11 @@
 <style id="fm-vis">/* fm-vis-placeholder */</style>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>FM Musica e Spettacolo — Associazione di Promozione Sociale</title>
+<!-- Icone caricate dinamicamente dal bucket "branding" su Supabase (vedi script fine pagina).
+     Questi href sono placeholder sostituiti via JS non appena la pagina carica, con fallback
+     automatico alle icone statiche in /icons se il bucket non è raggiungibile. -->
+<link id="fm-favicon" rel="icon" type="image/png" href="icons/icon-192.png">
+<link id="fm-apple-icon" rel="apple-touch-icon" href="icons/icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Open+Sans:wght@300;400;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -1313,7 +1318,10 @@
 
   function renderCorsi(corsi) {
     if (!el('corsi-grid')) return;
-    const visible = corsi.filter(c => c.visible !== false);
+    // I corsi collettivi (tabella "corsi", colonna tipo='collettivo') devono comparire
+    // solo se esplicitamente resi visibili dall'admin (visible === true); i corsi
+    // individuali restano visibili di default, come finora (visible !== false).
+    const visible = corsi.filter(c => c.tipo === 'collettivo' ? c.visible === true : c.visible !== false);
     if (!visible.length) return;
     el('corsi-grid').innerHTML = visible.map(c => `
       <div class="corso-card reveal">
@@ -1514,19 +1522,42 @@
     }
   }
 
+  // I campi "Identità scuola" salvati dalla web-app (Impostazioni → Scuola:
+  // nomeScuola, indirizzo, telefono, email) hanno priorità sui campi storici
+  // gestiti da admin.html (contatti_*), usati come fallback se i primi sono vuoti.
+  // Così i due pannelli restano sincronizzati sugli stessi dati di contatto.
+  function scuolaInfo(cfg) {
+    return {
+      nome:      cfg.nomeScuola || '',
+      indirizzo: cfg.indirizzo  || cfg.contatti_indirizzo || '',
+      citta:     cfg.contatti_citta || '',
+      telefono:  cfg.telefono   || cfg.contatti_phone || '',
+      email:     cfg.email      || cfg.contatti_email || '',
+    };
+  }
+
+  function applyBranding(cfg) {
+    const info = scuolaInfo(cfg);
+    if (info.nome) {
+      document.title = info.nome + ' — Associazione di Promozione Sociale';
+      document.querySelectorAll('[data-scuola-nome]').forEach(n => n.textContent = info.nome);
+    }
+  }
+
   function renderContatti(cfg) {
     if (!el('contatti-info')) return;
+    const info = scuolaInfo(cfg);
     el('contatti-info').innerHTML = `
       <span class="section-eyebrow">Dove siamo</span>
       <h2>Vieni a trovarci</h2>
       <div style="width:40px;height:3px;background:rgba(255,255,255,.3);margin-bottom:28px;"></div>
       <div class="contact-item"><div class="contact-icon">📍</div>
         <div class="contact-info-text"><h4>Indirizzo</h4>
-          <p>${cfg.contatti_indirizzo || ''}<br>${cfg.contatti_citta || ''}</p></div></div>
+          <p>${info.indirizzo}<br>${info.citta}</p></div></div>
       <div class="contact-item"><div class="contact-icon">📞</div>
-        <div class="contact-info-text"><h4>Telefono</h4><p>${cfg.contatti_phone || ''}</p></div></div>
+        <div class="contact-info-text"><h4>Telefono</h4><p>${info.telefono}</p></div></div>
       <div class="contact-item"><div class="contact-icon">✉️</div>
-        <div class="contact-info-text"><h4>Email</h4><p>${cfg.contatti_email || ''}</p></div></div>
+        <div class="contact-info-text"><h4>Email</h4><p>${info.email}</p></div></div>
       <div class="contact-item"><div class="contact-icon">🕐</div>
         <div class="contact-info-text"><h4>Orari Segreteria</h4>
           <p>Lun – Ven: ${cfg.contatti_orari_lv || ''}<br>Sabato: ${cfg.contatti_orari_sab || ''}</p></div></div>`;
@@ -1613,6 +1644,7 @@
       if (concertiRes.data) renderConcerti(concertiRes.data);
       if (attivitaRes.data) renderAttivita(attivitaRes.data);
       renderContatti(cfg);
+      applyBranding(cfg);
       // Social gallery — legge da sito_config chiave 'social_posts'
       try {
         const socialCfg = cfg.social_posts ? JSON.parse(cfg.social_posts) : null;
@@ -1636,6 +1668,8 @@
           const c2 = {};
           (data||[]).forEach(r => { c2[r.chiave] = r.valore; });
           applyTesti(c2);
+          renderContatti(c2);
+          applyBranding(c2);
           const v2 = c2.sezioni_visibili ? JSON.parse(c2.sezioni_visibili) : {};
           const o2 = c2.sezioni_ordine   ? JSON.parse(c2.sezioni_ordine)   : [];
           applySezioni(v2, o2);
@@ -1672,6 +1706,34 @@
       applySezioni(vis, ordine);
     } catch(e) { console.warn('localStorage fallback error:', e); }
   }
+
+  // ── Icone dal bucket "branding" (Supabase Storage) ────────────────
+  // LogoScuolaSection nella web-app carica icon-192.png / icon-512.png
+  // su questo bucket pubblico; qui li usiamo per favicon, apple-touch-icon
+  // e logo in navbar/footer, con fallback automatico alle icone statiche
+  // locali se il bucket è vuoto o irraggiungibile.
+  function syncBrandingIcons() {
+    const base = 'https://ocsxrjommtrjelnbihfr.supabase.co/storage/v1/object/public/branding/';
+    const bust = '?v=' + Date.now();
+    const url192 = base + 'icon-192.png' + bust;
+    const url512 = base + 'icon-512.png' + bust;
+
+    const testImg = new Image();
+    testImg.onload = () => {
+      const fav = document.getElementById('fm-favicon');
+      const apple = document.getElementById('fm-apple-icon');
+      if (fav) fav.href = url192;
+      if (apple) apple.href = url192;
+      document.querySelectorAll('.nav-logo img, .footer-logo img, [data-branding-logo]').forEach(img => {
+        img.dataset.fallbackSrc = img.dataset.fallbackSrc || img.src;
+        img.src = url512;
+        img.onerror = () => { img.src = img.dataset.fallbackSrc; };
+      });
+    };
+    testImg.onerror = () => console.log('Bucket branding: nessuna icona custom, uso quelle statiche.');
+    testImg.src = url192;
+  }
+  syncBrandingIcons();
 
   // ── Avvio ────────────────────────────────────────────────────────
   await loadFromSupabase();
