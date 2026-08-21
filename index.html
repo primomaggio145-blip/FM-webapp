@@ -413,6 +413,18 @@
   /* Grid post social */
   .posts-carousel-wrap { max-width: 1200px; margin: 0 auto; }
   /* ========== SOCIAL: carosello post (auto Instagram + manuali) ========== */
+  .social-featured-wrap { display: none; } /* di default nascosto: appare solo da desktop, vedi media query sotto */
+  .social-featured {
+    width: 100%; max-width: 480px; margin: 0 auto 20px;
+    border-radius: 12px; overflow: hidden; position: relative;
+    background: rgba(255,255,255,0.06); min-height: 320px;
+  }
+  .social-featured .gallery-item,
+  .social-featured .gallery-item-embed { width: 100%; height: 100%; cursor: default; }
+  .social-featured .gallery-item { height: 480px; border-radius: 12px; }
+  @media (min-width: 901px) {
+    .social-featured-wrap { display: block; }
+  }
   .posts-carousel-wrap { position: relative; }
   .posts-carousel {
     display: flex;
@@ -428,17 +440,20 @@
   .posts-carousel::-webkit-scrollbar { display: none; }
   .gallery-item {
     flex: 0 0 auto;
-    width: 230px; height: 300px;
+    width: 230px; height: 230px;
     scroll-snap-align: start;
     background: rgba(255,255,255,0.07);
     display: flex; align-items: center; justify-content: center;
     overflow: hidden; cursor: pointer; position: relative;
-    border-radius: 10px; transition: transform 0.25s;
+    border-radius: 10px; transition: transform 0.25s, outline 0.15s;
+    outline: 2px solid transparent; outline-offset: 2px;
   }
   .gallery-item:hover { transform: translateY(-4px); }
-  /* Post con embed ufficiale Instagram/Facebook */
+  .gallery-item.is-featured { outline-color: rgba(255,255,255,0.7); }
+  /* Post con embed ufficiale Instagram/Facebook: spazio limitato per evitare il footer
+     bianco troppo lungo che Instagram aggiunge sotto l'immagine (like/commenti/didascalia) */
   .gallery-item-embed {
-    width: 300px; height: auto !important;
+    width: 230px; height: 230px !important;
     background: #fff; border-radius: 10px; overflow: hidden;
     display: flex; align-items: flex-start; justify-content: center; padding: 0;
   }
@@ -717,7 +732,7 @@
   .carousel-dots span.active { background: rgba(255,255,255,0.85); width: 16px; border-radius: 4px; }
   @media (max-width: 700px) {
     .carousel-arrow { display: none; }
-    .gallery-item { width: 200px; height: 260px; }
+    .gallery-item, .gallery-item-embed { width: 190px; height: 190px !important; }
   }
 </style>
 </head>
@@ -1125,7 +1140,12 @@
     </div>
   </div>
 
-  <!-- Carousel dei post -->
+  <!-- Post in primo piano (solo desktop): grande, con sotto la striscia di tutti i post -->
+  <div class="social-featured-wrap" id="social-featured-wrap">
+    <div class="social-featured" id="social-featured"><!-- popolato via JS --></div>
+  </div>
+
+  <!-- Striscia di tutti i post: su desktop seleziona il "primo piano", su mobile è il carosello -->
   <div class="posts-carousel-wrap">
     <button class="carousel-arrow prev" id="carousel-prev" aria-label="Post precedenti" onclick="scrollGallery(-1)">‹</button>
     <div class="posts-carousel" id="gallery-grid">
@@ -1444,43 +1464,54 @@
     if (igLink && socialData.ig_url) igLink.href = socialData.ig_url;
 
     const posts = (socialData.posts || []).filter(p => p.visible !== false).slice(0, 15);
+    currentGalleryPosts = posts;
     if (!posts.length) {
       grid.innerHTML = '';
+      const feat = document.getElementById('social-featured');
+      if (feat) feat.innerHTML = '';
       renderGalleryDots(0);
       return;
     }
 
     const tipoIcon   = { foto:'📷', reel:'🎬', storia:'⏱' };
     const fonteLabel = { facebook:'Facebook', instagram:'Instagram' };
-    const fonteBg    = { facebook:'#1877f2', instagram:'linear-gradient(135deg,#f9ce34,#ee2a7b,#6228d7)' };
     const fonteChar  = { facebook:'𝒇', instagram:'◈' };
 
-    // Fallback card (quando img non carica o non c'è img)
+    // Fallback card (quando img non carica o non c'è img) — niente testo di didascalia,
+    // solo icona/fonte, come richiesto.
     function makeFallbackCard(p) {
       const icon  = tipoIcon[p.tipo]  || '📷';
       const fonte = fonteLabel[p.fonte] || 'Social';
-      const bg    = fonteBg[p.fonte]   || '#555';
       const char  = fonteChar[p.fonte] || '◈';
       return `<div style="width:100%;height:100%;display:flex;flex-direction:column;
         align-items:center;justify-content:center;gap:10px;
         background:rgba(255,255,255,0.04);padding:20px;box-sizing:border-box;">
         <span style="font-size:2rem;opacity:0.7;">${char}</span>
         <span style="font-size:10px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.1em;">${icon} ${fonte}</span>
-        ${p.caption ? `<span style="font-size:12px;color:rgba(255,255,255,0.8);text-align:center;line-height:1.4;">${p.caption}</span>` : ''}
         <span style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:4px;">Clicca per vedere il post</span>
       </div>`;
+    }
+
+    // Ripulisce l'embed ufficiale Instagram/Facebook: rimuove lo <script>, e forza la
+    // versione COMPATTA (senza didascalia/like/commenti sotto l'immagine) togliendo
+    // l'attributo data-instgrm-captioned, che è la causa della lunga fascia bianca sotto.
+    function cleanEmbed(embed) {
+      return embed
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/\s*data-instgrm-captioned(="[^"]*")?/gi, '')
+        .trim();
     }
 
     // Se ci sono post con embed, li raccogliamo per processarli dopo il render
     let hasEmbeds = false;
 
-    grid.innerHTML = posts.map(p => {
+    function cardHTML(p, idx, { featured } = {}) {
       // ── Caso EMBED ufficiale ────────────────────────────────────
       if (p._mode === 'embed' && p.embed && p.embed.trim()) {
         hasEmbeds = true;
-        // Estrai solo il <blockquote> dall'embed code (rimuove lo script tag se presente)
-        const embedClean = p.embed.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '').trim();
-        return `<div class="gallery-item gallery-item-embed">${embedClean}</div>`;
+        const cls = featured ? 'gallery-item-embed' : `gallery-item gallery-item-embed${idx===featuredIndex?' is-featured':''}`;
+        const click = featured ? '' : ` onclick="selectFeaturedPost(${idx})"`;
+        return `<div class="${cls}"${click}>${cleanEmbed(p.embed)}</div>`;
       }
 
       const link = p.url && p.url !== '#' ? p.url : null;
@@ -1488,14 +1519,10 @@
       const icon = tipoIcon[p.tipo] || '📷';
       const fonte = fonteLabel[p.fonte] || 'Social';
 
-      // contenuto interno: immagine + fallback inline via onerror
       const imgHtml = hasImg
-        ? `<img src="${p.img}" alt="${p.caption || ''}"
+        ? `<img src="${p.img}" alt=""
              style="width:100%;height:100%;object-fit:cover;transition:transform 0.4s;display:block;"
-             onerror="
-               this.style.display='none';
-               this.nextElementSibling.style.display='flex';
-             ">
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
            <div style="display:none;width:100%;height:100%;position:absolute;top:0;left:0;">
              ${makeFallbackCard(p)}
            </div>`
@@ -1503,58 +1530,82 @@
              ${makeFallbackCard(p)}
            </div>`;
 
-      const captionBar = p.caption
-        ? `<span style="position:absolute;bottom:0;left:0;right:0;padding:8px 10px;
-            background:linear-gradient(transparent,rgba(0,0,0,0.75));color:#fff;font-size:11px;
-            opacity:0;transition:opacity 0.25s;pointer-events:none;line-height:1.3;"
-            class="post-cap">${p.caption}</span>`
-        : '';
-
       const labelBadge = `<span class="gallery-label">${icon} ${fonte}</span>`;
+      const inner = `${imgHtml}${labelBadge}`;
+      const hover = `this.querySelector('img') && (this.querySelector('img').style.transform='${featured ? '' : 'scale(1.08)'}')`;
 
-      const inner = `${imgHtml}${labelBadge}${captionBar}`;
+      if (featured) {
+        // Nel pannello "in primo piano" il click apre il post originale (se c'è un link)
+        return link
+          ? `<a href="${link}" target="_blank" rel="noopener" class="gallery-item" style="display:block;position:relative;overflow:hidden;">${inner}</a>`
+          : `<div class="gallery-item" style="position:relative;overflow:hidden;">${inner}</div>`;
+      }
 
-      const hoverIn  = `this.querySelector('img') && (this.querySelector('img').style.transform='scale(1.08)');` +
-                       `const c=this.querySelector('.post-cap');if(c)c.style.opacity='1'`;
-      const hoverOut = `this.querySelector('img') && (this.querySelector('img').style.transform='');` +
-                       `const c=this.querySelector('.post-cap');if(c)c.style.opacity='0'`;
+      // Nella striscia: click seleziona come "in primo piano" (desktop) — su mobile,
+      // dove il pannello featured è nascosto via CSS, apriamo comunque il link diretto.
+      const isFeaturedCls = idx === featuredIndex ? ' is-featured' : '';
+      return `<div class="gallery-item${isFeaturedCls}" style="position:relative;overflow:hidden;"
+                onmouseover="this.querySelector('img') && (this.querySelector('img').style.transform='scale(1.08)')"
+                onmouseout="this.querySelector('img') && (this.querySelector('img').style.transform='')"
+                onclick="selectFeaturedPost(${idx})">${inner}</div>`;
+    }
 
-      return link
-        ? `<a href="${link}" target="_blank" rel="noopener"
-             class="gallery-item"
-             style="display:block;position:relative;overflow:hidden;cursor:pointer;"
-             onmouseover="${hoverIn}" onmouseout="${hoverOut}">${inner}</a>`
-        : `<div class="gallery-item"
-               style="position:relative;overflow:hidden;"
-               onmouseover="${hoverIn}" onmouseout="${hoverOut}">${inner}</div>`;
-    }).join('');
+    grid.innerHTML = posts.map((p, i) => cardHTML(p, i)).join('');
+    const featEl = document.getElementById('social-featured');
+    function updateFeatured(idx) {
+      if (!featEl) return;
+      const fp = posts[idx] || posts[0];
+      if (!fp) { featEl.innerHTML = ''; return; }
+      featEl.innerHTML = cardHTML(fp, idx, { featured: true });
+      if (fp._mode === 'embed' && fp.embed) {
+        setTimeout(() => {
+          if (window.instgrm && window.instgrm.Embeds) window.instgrm.Embeds.process();
+          if (window.FB && window.FB.XFBML) window.FB.XFBML.parse(featEl);
+        }, 300);
+      }
+    }
+    updateFeatured(featuredIndex);
+    window.__fmUpdateFeatured = updateFeatured; // usata da selectFeaturedPost
 
     // Processa gli embed Instagram/Facebook dopo l'inserimento nel DOM
     if (hasEmbeds) {
-      if (window.instgrm && window.instgrm.Embeds) {
-        window.instgrm.Embeds.process();
-      } else {
-        // Se lo script non è ancora caricato, aspetta e riprova
-        setTimeout(() => {
-          if (window.instgrm && window.instgrm.Embeds) window.instgrm.Embeds.process();
-          // Per Facebook embeds
-          if (window.FB && window.FB.XFBML) window.FB.XFBML.parse(document.getElementById('gallery-grid'));
-        }, 1500);
-      }
+      const process = () => {
+        if (window.instgrm && window.instgrm.Embeds) window.instgrm.Embeds.process();
+        if (window.FB && window.FB.XFBML) {
+          window.FB.XFBML.parse(document.getElementById('gallery-grid'));
+          window.FB.XFBML.parse(featEl);
+        }
+      };
+      if (window.instgrm && window.instgrm.Embeds) process();
+      else setTimeout(process, 1500);
     }
 
     renderGalleryDots(posts.length);
     initGalleryDrag();
   }
 
+  // ── Pannello "in primo piano" (solo desktop) ────────────────────
+  let currentGalleryPosts = [];
+  let featuredIndex = 0;
+
+  window.selectFeaturedPost = function(idx) {
+    if (window.innerWidth < 901) return; // su mobile non c'è il pannello featured: il click apre il link diretto
+    featuredIndex = idx;
+    document.querySelectorAll('#gallery-grid .gallery-item, #gallery-grid .gallery-item-embed')
+      .forEach((el, i) => el.classList.toggle('is-featured', i === idx));
+    if (window.__fmUpdateFeatured) window.__fmUpdateFeatured(idx);
+  };
+
   // ── Carosello SOCIAL: frecce, puntini, drag col mouse, swipe touch nativo ──
-  function scrollGallery(dir) {
+  // Esposta su window: l'intero script gira dentro una IIFE, e l'onclick="scrollGallery(...)"
+  // nell'HTML cerca la funzione nello scope globale, non in quello dello script.
+  window.scrollGallery = function(dir) {
     const grid = document.getElementById('gallery-grid');
     if (!grid) return;
     const card = grid.querySelector('.gallery-item, .gallery-item-embed');
     const step = card ? (card.offsetWidth + 16) * 2 : 460; // scorre di ~2 card per volta
     grid.scrollBy({ left: dir * step, behavior: 'smooth' });
-  }
+  };
 
   function renderGalleryDots(count) {
     const dots = document.getElementById('gallery-dots');
