@@ -1492,47 +1492,42 @@
       </div>`;
     }
 
-    // Ripulisce l'embed ufficiale Instagram/Facebook: rimuove lo <script>, e forza la
-    // versione COMPATTA (senza didascalia/like/commenti sotto l'immagine) togliendo
-    // l'attributo data-instgrm-captioned, che è la causa della lunga fascia bianca sotto.
-    function cleanEmbed(embed) {
-      return embed
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-        .replace(/\s*data-instgrm-captioned(="[^"]*")?/gi, '')
-        .trim();
-    }
-
-    // Se ci sono post con embed, li raccogliamo per processarli dopo il render
-    let hasEmbeds = false;
+    // NB: qui non usiamo più gli embed ufficiali Instagram/Facebook (blockquote+iframe):
+    // portano con sé intestazione profilo, footer e paginazione, e i click al loro
+    // interno non arrivano al nostro codice (impossibile selezionarli nel carosello).
+    // Mostriamo sempre e solo l'immagine/video del post (p.img / p.video_url).
 
     function cardHTML(p, idx, { featured } = {}) {
-      // ── Caso EMBED ufficiale ────────────────────────────────────
-      if (p._mode === 'embed' && p.embed && p.embed.trim()) {
-        hasEmbeds = true;
-        const cls = featured ? 'gallery-item-embed' : `gallery-item gallery-item-embed${idx===featuredIndex?' is-featured':''}`;
-        const click = featured ? '' : ` onclick="selectFeaturedPost(${idx})"`;
-        return `<div class="${cls}"${click}>${cleanEmbed(p.embed)}</div>`;
-      }
-
+      // Il widget ufficiale Instagram (embed) porta con sé intestazione profilo,
+      // pulsante "Visualizza profilo", paginazione e footer — e siccome è un iframe,
+      // i click al suo interno non arrivano mai al nostro codice (non si può selezionare
+      // il post nel carosello). Per questo qui mostriamo SEMPRE solo l'immagine/video
+      // del post (p.img / p.video_url), mai il widget grezzo — anche per i post creati
+      // in modalità "embed" da admin.html, se hanno comunque un'immagine impostata.
       const link = p.url && p.url !== '#' ? p.url : null;
+      const hasVideo = p.video_url && p.video_url.trim() !== '';
       const hasImg = p.img && p.img.trim() !== '';
       const icon = tipoIcon[p.tipo] || '📷';
       const fonte = fonteLabel[p.fonte] || 'Social';
+      const fit = featured ? 'contain' : 'cover'; // nel pannello grande niente ritaglio: si vede il post intero
 
-      const imgHtml = hasImg
-        ? `<img src="${p.img}" alt=""
-             style="width:100%;height:100%;object-fit:cover;transition:transform 0.4s;display:block;"
+      let mediaHtml;
+      if (hasVideo) {
+        mediaHtml = `<video src="${p.video_url}" poster="${p.img || ''}" style="width:100%;height:100%;object-fit:${fit};display:block;background:#000;"
+             muted loop playsinline ${featured ? 'controls' : 'autoplay'}
              onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-           <div style="display:none;width:100%;height:100%;position:absolute;top:0;left:0;">
-             ${makeFallbackCard(p)}
-           </div>`
-        : `<div style="width:100%;height:100%;position:absolute;top:0;left:0;">
-             ${makeFallbackCard(p)}
-           </div>`;
+           <div style="display:none;width:100%;height:100%;position:absolute;top:0;left:0;">${makeFallbackCard(p)}</div>`;
+      } else if (hasImg) {
+        mediaHtml = `<img src="${p.img}" alt=""
+             style="width:100%;height:100%;object-fit:${fit};transition:transform 0.4s;display:block;background:#000;"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+           <div style="display:none;width:100%;height:100%;position:absolute;top:0;left:0;">${makeFallbackCard(p)}</div>`;
+      } else {
+        mediaHtml = `<div style="width:100%;height:100%;position:absolute;top:0;left:0;">${makeFallbackCard(p)}</div>`;
+      }
 
       const labelBadge = `<span class="gallery-label">${icon} ${fonte}</span>`;
-      const inner = `${imgHtml}${labelBadge}`;
-      const hover = `this.querySelector('img') && (this.querySelector('img').style.transform='${featured ? '' : 'scale(1.08)'}')`;
+      const inner = `${mediaHtml}${labelBadge}`;
 
       if (featured) {
         // Nel pannello "in primo piano" il click apre il post originale (se c'è un link)
@@ -1545,8 +1540,8 @@
       // dove il pannello featured è nascosto via CSS, apriamo comunque il link diretto.
       const isFeaturedCls = idx === featuredIndex ? ' is-featured' : '';
       return `<div class="gallery-item${isFeaturedCls}" style="position:relative;overflow:hidden;"
-                onmouseover="this.querySelector('img') && (this.querySelector('img').style.transform='scale(1.08)')"
-                onmouseout="this.querySelector('img') && (this.querySelector('img').style.transform='')"
+                onmouseover="this.querySelector('img,video') && (this.querySelector('img,video').style.transform='scale(1.08)')"
+                onmouseout="this.querySelector('img,video') && (this.querySelector('img,video').style.transform='')"
                 onclick="selectFeaturedPost(${idx})">${inner}</div>`;
     }
 
@@ -1557,28 +1552,9 @@
       const fp = posts[idx] || posts[0];
       if (!fp) { featEl.innerHTML = ''; return; }
       featEl.innerHTML = cardHTML(fp, idx, { featured: true });
-      if (fp._mode === 'embed' && fp.embed) {
-        setTimeout(() => {
-          if (window.instgrm && window.instgrm.Embeds) window.instgrm.Embeds.process();
-          if (window.FB && window.FB.XFBML) window.FB.XFBML.parse(featEl);
-        }, 300);
-      }
     }
     updateFeatured(featuredIndex);
     window.__fmUpdateFeatured = updateFeatured; // usata da selectFeaturedPost
-
-    // Processa gli embed Instagram/Facebook dopo l'inserimento nel DOM
-    if (hasEmbeds) {
-      const process = () => {
-        if (window.instgrm && window.instgrm.Embeds) window.instgrm.Embeds.process();
-        if (window.FB && window.FB.XFBML) {
-          window.FB.XFBML.parse(document.getElementById('gallery-grid'));
-          window.FB.XFBML.parse(featEl);
-        }
-      };
-      if (window.instgrm && window.instgrm.Embeds) process();
-      else setTimeout(process, 1500);
-    }
 
     renderGalleryDots(posts.length);
     initGalleryDrag();
