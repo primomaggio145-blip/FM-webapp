@@ -619,10 +619,11 @@
   <div class="login-card">
     <div style="font-family:'Oswald',sans-serif;font-size:1.3rem;font-weight:700;color:var(--blue-dark);margin-bottom:4px;">FUTURO MUSICA</div>
     <div style="font-size:0.72rem;letter-spacing:0.2em;text-transform:uppercase;color:var(--gray);margin-bottom:24px;">Pannello di Amministrazione</div>
-    <p>Inserisci la password per accedere</p>
-    <input type="password" id="pwd-input" placeholder="Password admin" onkeydown="if(event.key==='Enter')doLogin()">
+    <p>Accedi con le stesse credenziali usate nella web-app (ruolo Amministratore)</p>
+    <input type="email" id="email-input" placeholder="Email" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('pwd-input').focus()">
+    <input type="password" id="pwd-input" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
     <button onclick="doLogin()">Accedi</button>
-    <div class="login-error" id="login-error">Password errata. Riprova.</div>
+    <div class="login-error" id="login-error">Credenziali non valide.</div>
   </div>
 </div>
 
@@ -1107,14 +1108,15 @@
 const LOGO_SRC = JSON.parse(document.getElementById('d-logo').textContent);
 const SITE_TEMPLATE = JSON.parse(document.getElementById('d-template').textContent);
 // ─────────────── DATA ───────────────
-const ADMIN_PASSWORD = 'futuromusica2025'; // ← cambia questa password!
+// Nota: l'accesso al pannello ora usa il vero login Supabase (email + password
+// dell'account con ruolo "admin" nella web-app), non più una password locale.
 
 // ─── SUPABASE CONFIG ────────────────────────────────────────────────
 // Sostituisci con i tuoi valori da Supabase → Settings → API
 const SUPABASE_URL = 'https://ocsxrjommtrjelnbihfr.supabase.co';  // ← Project URL
 const SUPABASE_KEY = 'sb_publishable_hoDexm3CUGWCnH6OrjbQ7Q_zMutnDcO';    // ← anon public key
 // Stessa stringa impostata come secret "FM_SYNC_SECRET" della Edge Function instagram-sync
-// (vedi SETUP-INSTAGRAM.md). Non è un segreto "duro": come ADMIN_PASSWORD qui sopra, chiunque
+// (vedi SETUP-INSTAGRAM.md). Non è un segreto "duro": chiunque legga il sorgente di questa
 // legga il sorgente di questa pagina lo vede — serve solo a filtrare chiamate accidentali/random
 // all'endpoint pubblico della function, non è la protezione principale dei dati.
 const FM_SYNC_SECRET = 'CAMBIA-QUESTA-STRINGA-CON-QUELLA-DELLA-EDGE-FUNCTION';
@@ -1126,10 +1128,17 @@ let DB_READY = false;
 function initSupabase() {
   try {
     if (!window.supabase || SUPABASE_URL.includes('XXXXX')) {
-      console.warn('Supabase non configurato — uso localStorage come fallback');
+      console.warn('Supabase non configurato — impossibile autenticarsi');
       return false;
     }
-    db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    if (db) return true; // già inizializzato
+    db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false, // qui non serve: niente link di invito email in admin.html
+      }
+    });
     window._sbClient = db; // esposto per saveMenuNav e saveAttivitaStandalone
     DB_READY = true;
     console.log('✅ Supabase connesso');
@@ -1230,29 +1239,72 @@ function syncBrandingIcons() {
 }
 
 async function doLogin() {
+  const email = document.getElementById('email-input').value.trim();
   const pwd = document.getElementById('pwd-input').value;
-  if (pwd === ADMIN_PASSWORD) {
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('admin-app').style.display = 'block';
-    // Mostra spinner
-    document.getElementById('panel-title').textContent = 'Caricamento...';
-    syncBrandingIcons();
-    initSupabase();
-    await loadData();
-    renderAll();
-    // Avvia realtime se Supabase disponibile
-    if (DB_READY) startRealtime();
-  } else {
-    document.getElementById('login-error').style.display = 'block';
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+
+  if (!initSupabase()) {
+    errEl.textContent = 'Supabase non configurato: impossibile effettuare il login.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const { data, error } = await db.auth.signInWithPassword({ email, password: pwd });
+  if (error) {
+    errEl.textContent = 'Email o password errate.';
+    errEl.style.display = 'block';
     document.getElementById('pwd-input').value = '';
-    document.getElementById('pwd-input').focus();
+    return;
+  }
+
+  const { data: profilo, error: profErr } = await db.from('profili').select('ruolo').eq('id', data.user.id).maybeSingle();
+  if (profErr || !profilo || profilo.ruolo !== 'admin') {
+    await db.auth.signOut();
+    errEl.textContent = "Questo account non ha i permessi da amministratore.";
+    errEl.style.display = 'block';
+    document.getElementById('pwd-input').value = '';
+    return;
+  }
+
+  await enterAdminApp();
+}
+
+// Se una sessione valida è già presente (es. ricarica pagina), entra direttamente
+// senza richiedere di nuovo email/password — la sessione persiste grazie a
+// persistSession:true nella configurazione del client Supabase.
+async function tryResumeSession() {
+  if (!initSupabase()) return;
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) return;
+  const { data: profilo } = await db.from('profili').select('ruolo').eq('id', session.user.id).maybeSingle();
+  if (profilo && profilo.ruolo === 'admin') {
+    await enterAdminApp();
+  } else {
+    await db.auth.signOut();
   }
 }
-function logout() {
+
+async function enterAdminApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('admin-app').style.display = 'block';
+  document.getElementById('panel-title').textContent = 'Caricamento...';
+  syncBrandingIcons();
+  await loadData();
+  renderAll();
+  if (DB_READY) startRealtime();
+}
+
+async function logout() {
+  if (db) { try { await db.auth.signOut(); } catch (e) {} }
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('admin-app').style.display = 'none';
+  document.getElementById('email-input').value = '';
   document.getElementById('pwd-input').value = '';
 }
+
+// Prova a ripristinare la sessione appena la pagina è pronta
+tryResumeSession();
 
 // ─────────────── LOCAL STORAGE ───────────────
 async function loadData() {
