@@ -3,7 +3,7 @@
 //   - app.js, fm_sync.js, supabase_integration.js → NETWORK-FIRST (sempre freschi)
 //   - webapp.html, manifest.json, icone          → NETWORK-FIRST con fallback cache
 //   - API Supabase, font Google (googleapis/gstatic) → solo network, mai cache
-const CACHE_VERSION = 'fm-v6';
+const CACHE_VERSION = 'fm-v7';
 
 // File pre-cachati all'install (solo per fallback offline)
 const CACHE_STATIC = [

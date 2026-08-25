@@ -1075,10 +1075,15 @@
       './app-root.js',
       './app-gcal.js',
     ];
+    // Cache-busting: senza questo, dopo un deploy il browser/CDN di GitHub Pages può
+    // continuare a servire versioni vecchie di questi file finché non si fa un hard
+    // refresh — window.__FM_BUILD__ è impostato in webapp.html con un timestamp
+    // univoco per ogni caricamento pagina, quindi ogni URL è sempre "nuovo" per la cache.
+    const V = window.__FM_BUILD__ ? ('?v=' + window.__FM_BUILD__) : '';
     let idx = 0;
     function loadNext() {
       if (idx >= MODULES.length) { callback(); return; }
-      const src = MODULES[idx++];
+      const src = MODULES[idx++] + V;
       const script = document.createElement('script');
       script.src = src;
       script.onload = loadNext;

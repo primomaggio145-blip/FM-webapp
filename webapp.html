@@ -30,10 +30,18 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <!-- 1. Supabase SDK -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <!-- 2. Client Supabase + FMAdapter -->
-  <script src="supabase_integration.js"></script>
-  <!-- 3. fm_sync: carica i dati da Supabase, poi carica app.js, poi monta React -->
-  <script src="fm_sync.js"></script>
+  <!--
+    Cache-busting: senza questo, dopo un deploy il browser (o la CDN di GitHub Pages)
+    può continuare a servire versioni vecchie di supabase_integration.js/fm_sync.js
+    finché l'utente non fa un hard refresh. window.__FM_BUILD__ è un timestamp
+    univoco per ogni caricamento pagina, quindi l'URL è sempre "nuovo" per la cache.
+    fm_sync.js riusa lo stesso valore per i moduli app-*.js che carica dinamicamente.
+  -->
+  <script>
+    window.__FM_BUILD__ = Date.now();
+    document.write('<script src="supabase_integration.js?v=' + window.__FM_BUILD__ + '"><\/script>');
+    document.write('<script src="fm_sync.js?v=' + window.__FM_BUILD__ + '"><\/script>');
+  </script>
 
   <style>
     /* ── Reset base ── */
