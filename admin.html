@@ -1687,8 +1687,21 @@ function renderPosts() {
         ` : `
           <input id="img-input-${i}" type="url" value="${p.img||''}" placeholder="URL immagine / copertina (https://...)"
             onchange="DATA.social.posts[${i}].img=this.value; renderPosts()">
-          <input type="url" value="${p.video_url||''}" placeholder="URL video (solo per i reel — opzionale)"
-            onchange="DATA.social.posts[${i}].video_url=this.value">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input id="video-input-${i}" type="url" value="${p.video_url||''}" placeholder="URL video (solo per i reel — opzionale)" style="flex:1;"
+              onchange="DATA.social.posts[${i}].video_url=this.value">
+            <label class="btn-upload-video" style="flex-shrink:0;cursor:pointer;background:#333;color:#fff;font-size:11px;
+              padding:7px 10px;border-radius:6px;white-space:nowrap;">
+              📤 Carica
+              <input type="file" accept="video/mp4,video/quicktime,video/webm" style="display:none;"
+                onchange="uploadReelVideo(${i}, this.files[0])">
+            </label>
+          </div>
+          <div style="font-size:10px;color:#999;line-height:1.5;">
+            Instagram non offre un link diretto al file video dei reel: per mostrarlo davvero
+            (non solo la copertina) scarica il video dal tuo telefono/computer e caricalo qui con "📤 Carica" —
+            va sul tuo storage Supabase e il campo si compila da solo.
+          </div>
           <input type="url" value="${p.url||''}" placeholder="Link al post originale"
             onchange="DATA.social.posts[${i}].url=this.value">
         `}
@@ -2567,6 +2580,79 @@ function updateStats() {
   if(sc)  sc.textContent  = DATA.concerti.length;
   if(sk)  sk.textContent  = (DATA.corsi || []).length;
   if(sco) sco.textContent = (DATA.complementari || []).length;
+}
+
+// ─────────────── UPLOAD VIDEO REEL ───────────────
+// Carica il file video scelto dall'utente sul bucket pubblico "social-media"
+// (vedi migration_social_media_bucket.sql) e compila da sola il campo URL video.
+async function uploadReelVideo(index, file) {
+  if (!file) return;
+  if (!db) { showToast('Supabase non connesso', true); return; }
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('Video troppo grande (max 50MB): comprimilo prima di caricarlo', true);
+    return;
+  }
+  showToast('Caricamento video in corso...');
+  const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
+  const path = `reels/${DATA.social.posts[index].id}-${Date.now()}.${ext}`;
+  try {
+    const { error: upErr } = await db.storage.from('social-media').upload(path, file, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: file.type || 'video/mp4',
+    });
+    if (upErr) throw upErr;
+    const { data: pub } = db.storage.from('social-media').getPublicUrl(path);
+    DATA.social.posts[index].video_url = pub.publicUrl;
+
+    // Se manca una copertina, ne estrae una dal primo fotogramma del video e la carica come JPEG
+    if (!DATA.social.posts[index].img) {
+      try {
+        const posterUrl = await extractVideoPoster(file);
+        if (posterUrl) DATA.social.posts[index].img = posterUrl;
+      } catch (e) { console.warn('Estrazione copertina fallita:', e); }
+    }
+
+    renderPosts();
+    saveData();
+    showToast('✓ Video caricato');
+  } catch (e) {
+    console.error(e);
+    showToast('Errore upload: ' + (e.message || e), true);
+  }
+}
+
+// Estrae un fotogramma dal video (a 0.3s) e lo carica come immagine di copertina
+function extractVideoPoster(file) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.src = URL.createObjectURL(file);
+    video.addEventListener('loadeddata', () => {
+      video.currentTime = Math.min(0.3, (video.duration || 1) / 2);
+    });
+    video.addEventListener('seeked', async () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0);
+        canvas.toBlob(async (blob) => {
+          if (!blob) { resolve(null); return; }
+          const path = `reels-cover/cover-${Date.now()}.jpg`;
+          const { error } = await db.storage.from('social-media').upload(path, blob, {
+            cacheControl: '3600', upsert: true, contentType: 'image/jpeg',
+          });
+          URL.revokeObjectURL(video.src);
+          if (error) { resolve(null); return; }
+          const { data: pub } = db.storage.from('social-media').getPublicUrl(path);
+          resolve(pub.publicUrl);
+        }, 'image/jpeg', 0.85);
+      } catch (e) { reject(e); }
+    });
+    video.addEventListener('error', () => resolve(null));
+  });
 }
 
 // ─────────────── PHOTO MODAL ───────────────

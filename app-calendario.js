@@ -821,7 +821,19 @@ const emptyStudent = { name:"",email:"",phone:"",instrument:"",teacher:"",status
 const validate = f => {
   const e = {};
   if(!f.name.trim()) e.name="Nome obbligatorio";
-  if(f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email="Email non valida";
+  if(!f.email || !f.email.trim()) e.email="Email obbligatoria";
+  else if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email="Email non valida";
+  if(!f.phone || !f.phone.trim()) e.phone="Telefono obbligatorio";
+  if(!f.birthdate) e.birthdate="Data di nascita obbligatoria";
+  if(!f.enrollDate) e.enrollDate="Data iscrizione obbligatoria";
+  if(!f.codiceFiscale || !f.codiceFiscale.trim()) e.codiceFiscale="Codice fiscale obbligatorio";
+  // Allievo minorenne: la ricevuta va intestata a un adulto (es. genitore) → nome obbligatorio
+  if(f.birthdate && typeof age === 'function') {
+    const eta = age(f.birthdate);
+    if(eta != null && eta < 18 && (!f.nomeRicevuta || !f.nomeRicevuta.trim())) {
+      e.nomeRicevuta = "Nome per ricevuta obbligatorio (allievo minorenne)";
+    }
+  }
   if(!f.instrument) e.instrument="Corso individuale obbligatorio";
   if(!f.teacher)    e.teacher="Insegnante obbligatorio";
   // Ogni corso individuale extra richiede un insegnante assegnato, esattamente come il corso principale:
@@ -866,18 +878,18 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
 
         , React.createElement(SectionDivider, { label: "Dati anagrafici" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 2944}})
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}, React.createElement(Input, { label: roleSF==="docente"?"Nome (sola lettura)":"Nome completo *", value: f.name, onChange: roleSF==="docente"?undefined:e=>set("name",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.name, placeholder: "Es. Sofia Marchetti", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}))
-        , React.createElement(Input, { label: "Email", type: "email", value: f.email, onChange: roleSF==="docente"?undefined:e=>set("email",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.email, placeholder: "email@esempio.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2946}})
-        , React.createElement(Input, { label: "Telefono", value: f.phone, onChange: roleSF==="docente"?undefined:e=>set("phone",e.target.value), readOnly: roleSF==="docente", placeholder: "333 1234567", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2947}})
-        , React.createElement(Input, { label: "Data di nascita", type: "date", value: f.birthdate, onChange: roleSF==="docente"?undefined:e=>set("birthdate",e.target.value), readOnly: roleSF==="docente", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2948}})
-        , React.createElement(Input, { label: "Data iscrizione", type: "date", value: f.enrollDate, onChange: roleSF==="docente"?undefined:e=>set("enrollDate",e.target.value), readOnly: roleSF==="docente", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2949}})
+        , React.createElement(Input, { label: "Email *", type: "email", value: f.email, onChange: roleSF==="docente"?undefined:e=>set("email",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.email, placeholder: "email@esempio.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2946}})
+        , React.createElement(Input, { label: "Telefono *", value: f.phone, onChange: roleSF==="docente"?undefined:e=>set("phone",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.phone, placeholder: "333 1234567", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2947}})
+        , React.createElement(Input, { label: "Data di nascita *", type: "date", value: f.birthdate, onChange: roleSF==="docente"?undefined:e=>set("birthdate",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.birthdate, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2948}})
+        , React.createElement(Input, { label: "Data iscrizione *", type: "date", value: f.enrollDate, onChange: roleSF==="docente"?undefined:e=>set("enrollDate",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.enrollDate, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2949}})
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2950}}
-          , React.createElement(Input, { label: "Nome per ricevuta"  , value: f.nomeRicevuta||"", onChange: e=>set("nomeRicevuta",e.target.value),
-            placeholder: f.name||"Lascia vuoto per usare il nome dell'allievo", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2951}})
-          , React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2953}}, "Per allievi minorenni inserire il nome del genitore/tutore intestatario della ricevuta."
+          , React.createElement(Input, { label: (typeof age === 'function' && f.birthdate && age(f.birthdate) < 18) ? "Nome per ricevuta *" : "Nome per ricevuta", value: f.nomeRicevuta||"", onChange: e=>set("nomeRicevuta",e.target.value),
+            error: errors.nomeRicevuta, placeholder: f.name||"Lascia vuoto per usare il nome dell'allievo", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2951}})
+          , React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2953}}, "Per allievi minorenni è obbligatorio inserire il nome del genitore/tutore intestatario della ricevuta."
 
           )
         )
-        , React.createElement(Input, { label: "Codice fiscale", value: f.codiceFiscale||"", onChange: e=>set("codiceFiscale",(e.target.value||"").toUpperCase()), placeholder: "RSSMRA85T10A562S", maxLength: 16, style:{textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2954}})
+        , React.createElement(Input, { label: "Codice fiscale *", value: f.codiceFiscale||"", onChange: e=>set("codiceFiscale",(e.target.value||"").toUpperCase()), error: errors.codiceFiscale, placeholder: "RSSMRA85T10A562S", maxLength: 16, style:{textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2954}})
 
         , React.createElement(SectionDivider, { label: "Corsi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2958}})
 
