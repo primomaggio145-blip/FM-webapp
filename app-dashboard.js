@@ -1094,7 +1094,7 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                       )
                     )
                     , [
-                        rs.showNominativo!==false   && ["Ricevuta da","Giulia Romano"],
+                        rs.showNominativo!==false   && ["SOCIO","Giulia Romano"],
                         rs.showDataNascita!==false  && ["Data di nascita","30/09/2011"],
                         rs.showDataPagamento!==false&& ["Data pagamento","11/02/2026"],
                         rs.showDescrizione!==false  && ["Descrizione","Quota mensile Febbraio 2026"],

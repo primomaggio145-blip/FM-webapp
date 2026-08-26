@@ -902,7 +902,7 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
       </div>
     </div>
     <table>
-      ${stile.showNominativo!==false?`<tr><td class="k">Ricevuta da</td><td class="v">${intestatario}</td></tr>`:""}
+      ${stile.showNominativo!==false?`<tr><td class="k">SOCIO</td><td class="v">${intestatario}</td></tr>`:""}
       ${student&&student.codiceFiscale?`<tr><td class="k">Codice fiscale</td><td class="v">${student.codiceFiscale}</td></tr>`:""}
       ${nascitaRow}
       ${stile.showDataPagamento!==false?`<tr><td class="k">Data pagamento</td><td class="v">${dataPag}</td></tr>`:""}

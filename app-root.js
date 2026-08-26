@@ -3358,6 +3358,113 @@ const LogoScuolaSection = ({ showToast }) => {
   );
 };
 
+// ─── ESPORTA RICEVUTE (CSV filtrabile) ─────────────────────────────────────────
+const csvEscape = (v) => {
+  const s = v===null || v===undefined ? '' : String(v);
+  return /[",\n;]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+};
+
+const EsportaRicevuteSection = ({ anniScolastici: propAnniExp, showToast }) => {
+  const [dataDa, setDataDa] = React.useState('');
+  const [dataA, setDataA] = React.useState('');
+  const [annoSel, setAnnoSel] = React.useState('');
+  const [metodoSel, setMetodoSel] = React.useState('');
+  const [statoSel, setStatoSel] = React.useState('pagato');
+  const [soloEmesse, setSoloEmesse] = React.useState(true);
+  const [loading, setLoading] = React.useState(false);
+
+  const handleExport = async () => {
+    setLoading(true);
+    try {
+      const sb = window.supabaseClient;
+      let q = sb.from('quote').select('num_ricevuta, data_pagamento, studente_nome, importo, metodo, stato, mese, anno, anno_scolastico, note, no_ricevuta');
+      if (dataDa) q = q.gte('data_pagamento', dataDa);
+      if (dataA) q = q.lte('data_pagamento', dataA);
+      if (annoSel) q = q.eq('anno_scolastico', parseInt(annoSel));
+      if (metodoSel) q = q.eq('metodo', metodoSel);
+      if (statoSel) q = q.eq('stato', statoSel);
+      if (soloEmesse) q = q.eq('no_ricevuta', false).not('num_ricevuta', 'is', null).neq('num_ricevuta', '');
+      q = q.order('data_pagamento', {ascending: true});
+
+      const { data, error } = await q;
+      if (error) { showToast && showToast(false, `Errore: ${error.message}`); setLoading(false); return; }
+      if (!data || data.length === 0) { showToast && showToast(false, 'Nessuna ricevuta trovata con questi filtri'); setLoading(false); return; }
+
+      const header = ['N. Ricevuta','Data pagamento','Socio','Importo €','Metodo','Stato','Mese','Anno','Anno scolastico','Note'];
+      const righe = data.map(r => [
+        r.num_ricevuta, r.data_pagamento, r.studente_nome, r.importo, r.metodo, r.stato, r.mese, r.anno, r.anno_scolastico, r.note
+      ].map(csvEscape).join(';'));
+      const csv = '\uFEFF' + header.join(';') + '\n' + righe.join('\n'); // BOM per Excel
+
+      const stamp = new Date().toISOString().slice(0,10);
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `ricevute-${stamp}.csv`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      showToast && showToast(true, `✅ ${data.length} ricevute esportate`);
+    } catch(e) {
+      showToast && showToast(false, e?.message || 'Errore di rete');
+    }
+    setLoading(false);
+  };
+
+  const anniOrdinati = (propAnniExp||[]).slice().sort((a,b)=>(b.annoInizio||0)-(a.annoInizio||0));
+
+  return React.createElement(ImpSection, {title:"Esporta ricevute", icon:"download"}
+    , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:14,lineHeight:1.5}},
+        "Scarica l'elenco delle ricevute in formato CSV (apribile con Excel), filtrando per data, anno scolastico, metodo o stato."
+      )
+    , React.createElement('div', {style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14},className:'form-2col'}
+      , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'block',marginBottom:4}}, 'Data da')
+          , React.createElement('input',{type:'date', value:dataDa, onChange:e=>setDataDa(e.target.value),
+              style:{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,boxSizing:'border-box'}})
+        )
+      , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'block',marginBottom:4}}, 'Data a')
+          , React.createElement('input',{type:'date', value:dataA, onChange:e=>setDataA(e.target.value),
+              style:{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,boxSizing:'border-box'}})
+        )
+      , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'block',marginBottom:4}}, 'Anno scolastico')
+          , React.createElement('select',{value:annoSel, onChange:e=>setAnnoSel(e.target.value),
+              style:{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,boxSizing:'border-box'}}
+            , React.createElement('option',{value:''}, 'Tutti')
+            , anniOrdinati.map(a => React.createElement('option',{key:a.annoInizio, value:a.annoInizio}, a.label||`${a.annoInizio}/${a.annoFine||a.annoInizio+1}`))
+            )
+        )
+      , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'block',marginBottom:4}}, 'Metodo')
+          , React.createElement('select',{value:metodoSel, onChange:e=>setMetodoSel(e.target.value),
+              style:{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,boxSizing:'border-box'}}
+            , React.createElement('option',{value:''}, 'Tutti')
+            , ['Contanti','Bonifico bancario','Carta','Assegno','PayPal'].map(m => React.createElement('option',{key:m, value:m}, m))
+            )
+        )
+      , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'block',marginBottom:4}}, 'Stato')
+          , React.createElement('select',{value:statoSel, onChange:e=>setStatoSel(e.target.value),
+              style:{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,boxSizing:'border-box'}}
+            , React.createElement('option',{value:''}, 'Tutti')
+            , [['pagato','Pagato'],['da pagare','Da pagare'],['in ritardo','In ritardo'],['esonerato','Esonerato']].map(([v,l]) => React.createElement('option',{key:v, value:v}, l))
+            )
+        )
+      , React.createElement('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.textMuted,marginTop:6}}
+          , React.createElement('input',{type:'checkbox', checked:soloEmesse, onChange:e=>setSoloEmesse(e.target.checked), style:{width:15,height:15}})
+          , 'Solo ricevute con numero effettivamente emesso'
+        )
+      )
+    , React.createElement('button', {onClick:handleExport, disabled:loading,
+        style:{padding:'10px 20px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:loading?'not-allowed':'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:8}}
+      , React.createElement(Ic,{n:'download',size:15,stroke:'#fff'})
+      , loading ? '⏳ Esporto...' : '📥 Scarica CSV'
+      )
+  );
+};
+
 const ResetDatiSection = ({ anniScolastici: propAnniReset, setAnniScolastici: propSetAnniReset } = {}) => {
   const [selected, setSelected] = React.useState({});
   const [counts, setCounts] = React.useState({});
@@ -4157,7 +4264,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
             )
           )
           , [
-              rs.showNominativo!==false   && ["Ricevuta da","Giulia Romano"],
+              rs.showNominativo!==false   && ["SOCIO","Giulia Romano"],
               rs.showDataNascita!==false  && ["Data di nascita","30/09/2011"],
               rs.showDataPagamento!==false&& ["Data pagamento","01/03/2026"],
               rs.showDescrizione!==false  && ["Descrizione","Quota mensile Marzo 2026"],
@@ -4254,6 +4361,9 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
           );
         })()
     )
+
+    /* ── Esporta ricevute ─────────────────────────────────────────────────── */
+    , activeTab==="anno" && React.createElement(EsportaRicevuteSection, {anniScolastici: propAnni, showToast})
 
     /* ── Anni scolastici ────────────────────────────────────────────────────── */
     , activeTab==="anno" && React.createElement(ImpSection, {title:"Archivio anni scolastici", icon:"cal"}
