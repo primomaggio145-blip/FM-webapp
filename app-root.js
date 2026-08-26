@@ -3370,13 +3370,19 @@ const EsportaRicevuteSection = ({ anniScolastici: propAnniExp, showToast }) => {
   const [annoSel, setAnnoSel] = React.useState('');
   const [metodoSel, setMetodoSel] = React.useState('');
   const [statoSel, setStatoSel] = React.useState('pagato');
-  const [soloEmesse, setSoloEmesse] = React.useState(true);
+  const [soloEmesse, setSoloEmesse] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
+  const [localMsg, setLocalMsg] = React.useState(null); // messaggio visibile qui, non solo nel toast in alto
 
   const handleExport = async () => {
     setLoading(true);
+    setLocalMsg(null);
     try {
       const sb = window.supabaseClient;
+      if (!sb) {
+        const err = 'Connessione a Supabase non disponibile — ricarica la pagina';
+        setLocalMsg({ok:false, testo:err}); showToast && showToast(false, err); setLoading(false); return;
+      }
       let q = sb.from('quote').select('num_ricevuta, data_pagamento, studente_nome, importo, metodo, stato, mese, anno, anno_scolastico, note, no_ricevuta');
       if (dataDa) q = q.gte('data_pagamento', dataDa);
       if (dataA) q = q.lte('data_pagamento', dataA);
@@ -3387,8 +3393,15 @@ const EsportaRicevuteSection = ({ anniScolastici: propAnniExp, showToast }) => {
       q = q.order('data_pagamento', {ascending: true});
 
       const { data, error } = await q;
-      if (error) { showToast && showToast(false, `Errore: ${error.message}`); setLoading(false); return; }
-      if (!data || data.length === 0) { showToast && showToast(false, 'Nessuna ricevuta trovata con questi filtri'); setLoading(false); return; }
+      if (error) {
+        console.error('[EsportaRicevute] errore query:', error);
+        const msg = `Errore: ${error.message}`;
+        setLocalMsg({ok:false, testo:msg}); showToast && showToast(false, msg); setLoading(false); return;
+      }
+      if (!data || data.length === 0) {
+        const msg = 'Nessuna ricevuta trovata con questi filtri — prova ad allargare il periodo o togliere qualche filtro';
+        setLocalMsg({ok:false, testo:msg}); showToast && showToast(false, msg); setLoading(false); return;
+      }
 
       const header = ['N. Ricevuta','Data pagamento','Socio','Importo €','Metodo','Stato','Mese','Anno','Anno scolastico','Note'];
       const righe = data.map(r => [
@@ -3404,9 +3417,14 @@ const EsportaRicevuteSection = ({ anniScolastici: propAnniExp, showToast }) => {
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      showToast && showToast(true, `✅ ${data.length} ricevute esportate`);
+      const msg = `✅ ${data.length} ricevute esportate`;
+      setLocalMsg({ok:true, testo:msg});
+      showToast && showToast(true, msg);
     } catch(e) {
-      showToast && showToast(false, e?.message || 'Errore di rete');
+      console.error('[EsportaRicevute] errore imprevisto:', e);
+      const msg = e?.message || 'Errore imprevisto — controlla la console del browser (F12)';
+      setLocalMsg({ok:false, testo:msg});
+      showToast && showToast(false, msg);
     }
     setLoading(false);
   };
@@ -3454,7 +3472,7 @@ const EsportaRicevuteSection = ({ anniScolastici: propAnniExp, showToast }) => {
         )
       , React.createElement('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.textMuted,marginTop:6}}
           , React.createElement('input',{type:'checkbox', checked:soloEmesse, onChange:e=>setSoloEmesse(e.target.checked), style:{width:15,height:15}})
-          , 'Solo ricevute con numero effettivamente emesso'
+          , 'Solo ricevute con numero effettivamente emesso (deseleziona se non trovi risultati)'
         )
       )
     , React.createElement('button', {onClick:handleExport, disabled:loading,
@@ -3462,6 +3480,8 @@ const EsportaRicevuteSection = ({ anniScolastici: propAnniExp, showToast }) => {
       , React.createElement(Ic,{n:'download',size:15,stroke:'#fff'})
       , loading ? '⏳ Esporto...' : '📥 Scarica CSV'
       )
+    , localMsg && React.createElement('div',{style:{marginTop:12,padding:'10px 14px',borderRadius:8,fontSize:12,fontWeight:600,
+        background:localMsg.ok?C.greenBg:C.redBg,border:`1px solid ${localMsg.ok?C.greenBorder:C.redBorder}`,color:localMsg.ok?C.green:C.red}}, localMsg.testo)
   );
 };
 
@@ -4160,8 +4180,10 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         )
     )
 
-    /* ── Toast di conferma/errore (es. handleSetAttivo, handleAddAnno, ecc.) ── */
-    , toast && React.createElement('div',{style:{padding:'10px 14px',borderRadius:8,marginBottom:16,fontSize:13,background:toast.ok?C.greenBg:C.redBg,border:`1px solid ${toast.ok?C.greenBorder:C.redBorder}`,color:toast.ok?C.green:C.red}}, toast.msg)
+    /* ── Toast di conferma/errore (es. handleSetAttivo, handleAddAnno, export ricevute, ecc.) ── */
+    , toast && React.createElement('div',{style:{position:'fixed',top:20,left:'50%',transform:'translateX(-50%)',zIndex:99999,
+        padding:'12px 20px',borderRadius:10,fontSize:13,fontWeight:600,maxWidth:'90%',boxShadow:'0 6px 24px rgba(0,0,0,.2)',
+        background:toast.ok?C.greenBg:C.redBg,border:`1px solid ${toast.ok?C.greenBorder:C.redBorder}`,color:toast.ok?C.green:C.red}}, toast.msg)
 
     , activeTab==="scuola" && React.createElement(ImpSection, {title:"Identità scuola", icon:"flag"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
