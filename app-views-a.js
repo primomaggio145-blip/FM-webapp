@@ -2677,17 +2677,27 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
       })
     : lessons;
   const _avLessonIds = new Set(_avLessons.map(l=>l.id));
+  // Corso reale della lezione: corsi collettivi hanno courseName, corsi individuali hanno instrument
+  // (il campo "corso" salvato in passato sugli allegati conteneva solo lo strumento, per questo
+  // il filtro non intercettava i corsi collettivi — qui si ricalcola dalla lezione corrente)
+  const _getLezioneCorso = (lezioneId) => {
+    if (!lezioneId) return null;
+    const l = lessons.find(x => x.id === lezioneId);
+    if (!l) return null;
+    return l.courseName || l.instrument || null;
+  };
   // Filtra allegati DB per docente (solo lezioni visibili)
-  const fromDB = (_avRuolo === 'docente' && _avNome)
+  const fromDB = ((_avRuolo === 'docente' && _avNome)
     ? (propAllegati||[]).filter(a => !a.lezioneId || _avLessonIds.has(a.lezioneId))
-    : (propAllegati || []);
+    : (propAllegati || [])
+  ).map(a => ({...a, corso: _getLezioneCorso(a.lezioneId) || a.corso}));
   const fromLessons = [];
   _avLessons.forEach(l => {
     (l.allegati||[]).forEach(a => {
       if (!fromDB.find(x=>x.id===a.id)) {
         fromLessons.push({
           id: a.id, lezioneId: l.id, allievoId: l.studentId||null,
-          allievoNome: l.student||null, corso: l.instrument||null,
+          allievoNome: l.student||null, corso: l.courseName || l.instrument || null,
           descrizione: a.descrizione||null, fileUrl: a.fileUrl||null,
           fileName: a.fileName||null, fileType: a.fileType||null, createdAt: a.createdAt||null,
         });
@@ -2922,7 +2932,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
         , React.createElement('select', { value: fCorso, onChange: e=>setFCorso(e.target.value),
           style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`, flexShrink:0,
             background:C.surface, color:fCorso?C.text:C.textMuted, fontSize:13, fontFamily:"'Open Sans',sans-serif", cursor:"pointer"}}
-          , React.createElement('option', {value:""}, "Tutti gli strumenti")
+          , React.createElement('option', {value:""}, "Tutti i corsi")
           , corsiList.map(c=>React.createElement('option', {key:c,value:c}, c))
         )
         , React.createElement('select', { value: fTipo, onChange: e=>setFTipo(e.target.value),
