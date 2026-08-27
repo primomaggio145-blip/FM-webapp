@@ -2856,7 +2856,8 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
             });
           }
         } else {
-          // è una cartella — scendi ricorsivamente
+          // è una cartella — scendi ricorsivamente (esclusa "modulistica": riservata a Impostazioni→Modulistica)
+          if (item.name && item.name.toLowerCase() === 'modulistica') continue;
           const subPath = prefix ? `${prefix}/${item.name}` : item.name;
           const sub = await listAll(subPath);
           files.push(...sub);
