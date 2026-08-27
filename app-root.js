@@ -1918,10 +1918,11 @@ const NotificheSettingsView = ({ ruolo }) => {
                   // Ricarica la lista
                   const sb = window.supabaseClient;
                   if (sb) {
-                    const { data } = await sb.from('push_subscriptions')
+                    const { data, error } = await sb.from('push_subscriptions')
                       .select('id, nome, ruolo, created_at, updated_at, endpoint')
                       .order('updated_at', { ascending: false });
-                    setPushSubs(data || []);
+                    if (error) { console.warn('[FM] errore lettura push_subscriptions:', error.message); setPushSubs([]); }
+                    else setPushSubs(data || []);
                   }
                 } else {
                   showToast(false, 'Registrazione fallita — controlla che il Service Worker sia attivo');
@@ -1936,9 +1937,15 @@ const NotificheSettingsView = ({ ruolo }) => {
           , React.createElement('button', {
               onClick: async () => {
                 const sb = window.supabaseClient; if (!sb) return;
-                const { data } = await sb.from('push_subscriptions')
+                const { data, error } = await sb.from('push_subscriptions')
                   .select('id, nome, ruolo, created_at, updated_at, endpoint')
                   .order('updated_at', { ascending: false });
+                if (error) {
+                  console.warn('[FM] errore lettura push_subscriptions:', error.message);
+                  showToast(false, 'Errore permessi (RLS) su push_subscriptions: ' + error.message);
+                  setPushSubs([]);
+                  return;
+                }
                 setPushSubs(data || []);
               },
               style: { padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.border}`,
