@@ -4476,10 +4476,11 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                         corso: lesson.instrument||'', lezioneId: lesson.id,
                         allievoNome: lesson.student||'', createdAt: new Date().toISOString(),
                       };
-                      // Salva subito su Supabase allegati (NO id: lascia auto UUID)
+                      // Salva subito su Supabase allegati (id generato lato client: la colonna non ha default)
                       if (sb && fileUrl) {
                         try {
                           const { data: insData, error: insErr } = await sb.from('allegati').insert({
+                            id: attId,
                             lezione_id: lesson.id,
                             allievo_nome: lesson.student||'',
                             corso: lesson.instrument||'',
