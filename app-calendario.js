@@ -2460,8 +2460,8 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
     const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
     const settimane = Math.max(giorni,1)/7;
     return {
-      individuale: Math.round(nCorsiIndividuali*(PUNTI_CORSO_INDIVIDUALE/4)*settimane*10)/10,
-      collettiva:  Math.round(nCorsiCollettivi*(PUNTI_CORSO_COLLETTIVO/4)*settimane*10)/10,
+      individuale: Math.round(nCorsiIndividuali*(PUNTI_CORSO_INDIVIDUALE/4)*settimane),
+      collettiva:  Math.round(nCorsiCollettivi*(PUNTI_CORSO_COLLETTIVO/4)*settimane),
     };
   };
 
@@ -2500,18 +2500,24 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
     const soglie = sogliaAllievo(s);
     const isEccInd  = s.sogliaIndividualeEcc!=null;
     const isEccColl = s.sogliaCollettivaEcc!=null;
-    const sogliaInd  = isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale;
-    const sogliaColl = isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva;
+    const sogliaInd  = Math.round(isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale);
+    const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
     const countInd  = contInd[nome]||0;
     const countColl = contColl[nome]||0;
-    report.push({ id:s.id, nome, tipo:'Individuali', count:countInd,  soglia:Math.round(sogliaInd*10)/10,  delta:Math.round((countInd-sogliaInd)*10)/10,   isEccezione:isEccInd });
-    report.push({ id:s.id, nome, tipo:'Collettive',  count:countColl, soglia:Math.round(sogliaColl*10)/10, delta:Math.round((countColl-sogliaColl)*10)/10, isEccezione:isEccColl });
+    const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
+    const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
+    // Stato complessivo dell'allievo: la carenza (sotto soglia), su uno qualsiasi dei due tipi,
+    // ha priorità — poi l'eccedenza — altrimenti è in linea su entrambi.
+    const deltaPeggiore = Math.min(individuale.delta, collettiva.delta) < 0
+      ? Math.min(individuale.delta, collettiva.delta)
+      : Math.max(individuale.delta, collettiva.delta);
+    report.push({ id:s.id, nome, individuale, collettiva, deltaPeggiore });
   });
-  report.sort((a,b)=> a.nome===b.nome ? (a.tipo==='Individuali'?-1:1) : b.delta-a.delta);
+  report.sort((a,b)=>a.deltaPeggiore-b.deltaPeggiore);
 
-  const superano    = report.filter(r=>r.delta>0);
-  const inLinea     = report.filter(r=>r.delta===0);
-  const sottosoglia = report.filter(r=>r.delta<0);
+  const superano    = report.filter(r=>r.deltaPeggiore>0);
+  const inLinea     = report.filter(r=>r.deltaPeggiore===0);
+  const sottosoglia = report.filter(r=>r.deltaPeggiore<0);
 
   const filtrato = reportFiltro==='oltre' ? superano
     : reportFiltro==='sotto' ? sottosoglia
@@ -2549,30 +2555,38 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
       , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
         , React.createElement('thead',null
           , React.createElement('tr',{style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
-            , ['Allievo','Tipo','Lezioni svolte','Soglia','Differenza','Stato'].map(h=>
+            , ['Allievo','Individuali','Collettive','Stato'].map(h=>
                 React.createElement('th',{key:h,style:{padding:'9px 16px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.07em',color:C.textMuted,fontWeight:600}},h))
           )
         )
         , React.createElement('tbody',null
           , filtrato.map((r,i)=>{
-              const clr = r.delta>0?C.orange : r.delta<0?C.blue : C.green;
-              const bg  = r.delta>0?C.orangeBg : r.delta<0?C.blueBg : C.greenBg;
-              const bd  = r.delta>0?C.orangeBorder : r.delta<0?C.blueBorder : C.greenBorder;
-              const lbl = r.delta>0?`+${r.delta} extra` : r.delta<0?`${r.delta} mancanti`:'✓ In linea';
-              return React.createElement('tr',{key:(r.id||r.nome)+'-'+r.tipo,
+              const cella = (stat) => {
+                const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
+                const lbl = stat.delta>0?`+${stat.delta}`:stat.delta<0?`${stat.delta}`:'0';
+                return React.createElement('div',{style:{display:'flex',alignItems:'baseline',gap:6}}
+                  , React.createElement('span',{style:{fontSize:13,fontWeight:700,color:C.text}}, stat.count)
+                  , React.createElement('span',{style:{fontSize:11,color:C.textMuted}}, `/ ${stat.soglia}`)
+                  , React.createElement('span',{style:{fontSize:11,fontWeight:700,color:clr}}, lbl)
+                  , stat.isEccezione && React.createElement('span',{style:{fontSize:10,color:C.gold}},'(ecc.)')
+                );
+              };
+              const clrStato = r.deltaPeggiore>0?C.orange : r.deltaPeggiore<0?C.blue : C.green;
+              const bgStato  = r.deltaPeggiore>0?C.orangeBg : r.deltaPeggiore<0?C.blueBg : C.greenBg;
+              const bdStato  = r.deltaPeggiore>0?C.orangeBorder : r.deltaPeggiore<0?C.blueBorder : C.greenBorder;
+              const lblStato = r.deltaPeggiore>0?'Oltre soglia' : r.deltaPeggiore<0?'Sotto soglia':'✓ In linea';
+              return React.createElement('tr',{key:r.id||r.nome,
                   style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg,cursor:'pointer',transition:'background .1s'},
                   onMouseEnter:e=>e.currentTarget.style.background=C.bg,
                   onMouseLeave:e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg,
                   onClick:()=>{ const s=(students||[]).find(st=>(st.name||st.nome||'')===r.nome); if(s&&onSelectAllievo) onSelectAllievo(s); }}
                 , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:600,color:C.text}}, r.nome)
-                , React.createElement('td',{style:{padding:'10px 16px',fontSize:12,color:C.textMuted}}, r.tipo)
-                , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,color:C.text,fontWeight:700}}, r.count)
-                , React.createElement('td',{style:{padding:'10px 16px',fontSize:12,color:C.textMuted}}, r.soglia, r.isEccezione&&React.createElement('span',{style:{fontSize:10,color:C.gold,marginLeft:6}},'(eccezione)'))
-                , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:700,color:clr}}, r.delta>0?`+${r.delta}`:r.delta<0?r.delta:'0')
-                , React.createElement('td',{style:{padding:'10px 16px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bg,color:clr,border:`1px solid ${bd}`,borderRadius:20,padding:'3px 10px'}},lbl))
+                , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.individuale))
+                , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.collettiva))
+                , React.createElement('td',{style:{padding:'10px 16px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bgStato,color:clrStato,border:`1px solid ${bdStato}`,borderRadius:20,padding:'3px 10px'}},lblStato))
               );
             })
-          , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:6,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
+          , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:4,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
         )
       )
       , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:6}}
