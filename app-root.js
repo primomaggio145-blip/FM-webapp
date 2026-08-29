@@ -27,6 +27,17 @@ function App() {
   const [sharedRichieste,      setSharedRichieste]      = useState([]);
   const [sharedNotifiche,      setSharedNotifiche]      = useState([]);
   const [sharedConfig,         setSharedConfig]         = useState(_d.config ? {...CONFIG_DEFAULT, ..._d.config} : CONFIG_DEFAULT);
+
+  // Applica subito il colore accento salvato (anche al primo caricamento,
+  // non solo quando l'admin lo cambia in Impostazioni). Forza un re-render
+  // immediato: mutare le proprietà di C da solo non fa ripartire React.
+  const [, _forceAccentRerender] = useState(0);
+  useEffect(() => {
+    if (sharedConfig.accentColor) {
+      applyAccentColor(sharedConfig.accentColor);
+      _forceAccentRerender(n => n+1);
+    }
+  }, [sharedConfig.accentColor]);
   // Esponi config globalmente per componenti che non ricevono la prop (es. WeekCalSala)
   React.useEffect(() => { window.__FM_CONFIG__ = sharedConfig; }, [sharedConfig]);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
@@ -4713,27 +4724,111 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
 
     /* ── Pannelli Dashboard ── */
     , activeTab==="generale" && React.createElement(ImpSection, {title:"Pannelli Dashboard", icon:"grid"}
-      , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Scegli quali sezioni mostrare nella dashboard. Le KPI card sono sempre visibili.")
+      , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Attiva/disattiva e riordina i pannelli della dashboard con le frecce ▲▼. Le KPI card sono sempre visibili.")
       , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:6}}
-        , PANNELLI_DEF.map(function(p){
-          const on = panels[p.id]!==false;
-          return React.createElement('div', {key:p.id,
-            style:{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",
-              borderRadius:10,border:`1px solid ${on&&!p.sempre?C.goldDim:C.border}`,
-              background:on&&!p.sempre?C.goldBg:C.bg,transition:"all .15s",opacity:p.sempre?0.6:1}},
-            React.createElement('div', {style:{width:32,height:32,borderRadius:8,
-              background:on?`${C.gold}18`:C.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},
-              React.createElement(Ic,{n:p.icon,size:15,stroke:on?C.gold:C.textDim})
-            ),
-            React.createElement('div', {style:{flex:1}},
-              React.createElement('div',{style:{fontSize:13,fontWeight:500,color:on?C.text:C.textMuted}}, p.label),
-              React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, p.desc)
-            ),
-            p.sempre
-              ? React.createElement('span',{style:{fontSize:10,color:C.textDim,letterSpacing:".06em"}}, "FISSO")
-              : React.createElement(Toggle, {value:on, onChange:function(v){ setPanels(function(prev){ return Object.assign({},prev,{[p.id]:v}); }); }})
+        , (() => {
+            const order = (panels.panelOrder && panels.panelOrder.length > 0)
+              ? panels.panelOrder
+              : PANNELLI_DEF.map(p=>p.id);
+            const ordered = order
+              .map(id => PANNELLI_DEF.find(p=>p.id===id))
+              .filter(Boolean)
+              .concat(PANNELLI_DEF.filter(p=>!order.includes(p.id)));
+
+            const movePanel = (idx, dir) => {
+              const newOrder = ordered.map(p=>p.id);
+              const target = idx + dir;
+              if (target < 0 || target >= newOrder.length) return;
+              [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
+              setPanels(prev => ({...prev, panelOrder: newOrder}));
+            };
+
+            return ordered.map((p, idx) => {
+              const on = panels[p.id]!==false;
+              return React.createElement('div', {key:p.id,
+                style:{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",
+                  borderRadius:10,border:`1px solid ${on&&!p.sempre?C.goldDim:C.border}`,
+                  background:on&&!p.sempre?C.goldBg:C.bg,transition:"all .15s",opacity:p.sempre?0.6:1}}
+                , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}
+                  , React.createElement('button',{onClick:()=>movePanel(idx,-1),disabled:idx===0,
+                      style:{padding:'1px 5px',borderRadius:4,border:`1px solid ${C.border}`,background:'none',cursor:idx===0?'not-allowed':'pointer',color:idx===0?C.textDim:C.textMuted,fontSize:10,lineHeight:1,opacity:idx===0?0.3:1}},'▲')
+                  , React.createElement('button',{onClick:()=>movePanel(idx,+1),disabled:idx===ordered.length-1,
+                      style:{padding:'1px 5px',borderRadius:4,border:`1px solid ${C.border}`,background:'none',cursor:idx===ordered.length-1?'not-allowed':'pointer',color:idx===ordered.length-1?C.textDim:C.textMuted,fontSize:10,lineHeight:1,opacity:idx===ordered.length-1?0.3:1}},'▼')
+                  )
+                , React.createElement('div', {style:{width:32,height:32,borderRadius:8,
+                    background:on?`${C.gold}18`:C.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                  , React.createElement(Ic,{n:p.icon,size:15,stroke:on?C.gold:C.textDim})
+                  )
+                , React.createElement('div', {style:{flex:1}}
+                  , React.createElement('div',{style:{fontSize:13,fontWeight:500,color:on?C.text:C.textMuted}}, p.label)
+                  , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, p.desc)
+                  )
+                , p.sempre
+                  ? React.createElement('span',{style:{fontSize:10,color:C.textDim,letterSpacing:".06em"}}, "FISSO")
+                  : React.createElement(Toggle, {value:on, onChange:function(v){ setPanels(function(prev){ return Object.assign({},prev,{[p.id]:v}); }); }})
+              );
+            });
+          })()
+      )
+    )
+
+    /* ── Ordine KPI cards ────────────────────────────────────────────────── */
+    , activeTab==="generale" && React.createElement(ImpSection, {title:"Ordine KPI cards", icon:"chart"}
+      , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Cambia l'ordine delle card riassuntive in cima alla dashboard.")
+      , (() => {
+          const ALL_KPI_DEF = [
+            {id:'allievi', icon:'users',    label:'Allievi attivi'},
+            {id:'lezioni', icon:'calendar', label:'Lezioni oggi'},
+            {id:'entrate', icon:'up',       label:'Entrate mese'},
+            {id:'uscite',  icon:'down',     label:'Uscite mese'},
+            {id:'saldo',   icon:'chart',    label:'Saldo anno'},
+          ];
+          const kpiOrder = (panels.kpiOrder && panels.kpiOrder.length > 0)
+            ? panels.kpiOrder
+            : ALL_KPI_DEF.map(k=>k.id);
+          const ordered = kpiOrder
+            .map(id => ALL_KPI_DEF.find(k=>k.id===id))
+            .filter(Boolean)
+            .concat(ALL_KPI_DEF.filter(k=>!kpiOrder.includes(k.id)));
+
+          const moveKpi = (idx, dir) => {
+            const newOrder = ordered.map(k=>k.id);
+            const target = idx + dir;
+            if (target < 0 || target >= newOrder.length) return;
+            [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
+            setPanels(prev => ({...prev, kpiOrder: newOrder}));
+          };
+
+          return React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}}
+            , ordered.map((k, idx) => React.createElement('div', {key:k.id,
+                  style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',
+                    borderRadius:10,border:`1px solid ${C.border}`,background:C.bg}}
+                , React.createElement('div',{style:{width:24,height:24,borderRadius:6,background:`${C.gold}18`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+                  , React.createElement(Ic,{n:k.icon,size:13,stroke:C.gold}))
+                , React.createElement('span',{style:{flex:1,fontSize:13,color:C.text,fontWeight:500}}, k.label)
+                , React.createElement('span',{style:{fontSize:11,color:C.textDim,marginRight:4}}, `#${idx+1}`)
+                , React.createElement('button',{onClick:()=>moveKpi(idx,-1),disabled:idx===0,
+                    style:{padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'none',cursor:idx===0?'not-allowed':'pointer',color:idx===0?C.textDim:C.text,fontFamily:"'Open Sans',sans-serif",fontSize:13,opacity:idx===0?0.4:1}},'▲')
+                , React.createElement('button',{onClick:()=>moveKpi(idx,+1),disabled:idx===ordered.length-1,
+                    style:{padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'none',cursor:idx===ordered.length-1?'not-allowed':'pointer',color:idx===ordered.length-1?C.textDim:C.text,fontFamily:"'Open Sans',sans-serif",fontSize:13,opacity:idx===ordered.length-1?0.4:1}},'▼')
+              ))
           );
-        })
+        })()
+    )
+
+    /* ── Soglie lezioni mensili ──────────────────────────────────────────── */
+    , activeTab==="generale" && React.createElement(ImpSection, {title:"Soglie lezioni mensili", icon:"alert"}
+      , React.createElement('p', {style:{fontSize:12,color:C.textMuted,marginBottom:12,lineHeight:1.5}}
+        , 'Definisci quante lezioni standard prevede il mese. Vengono generate notifiche per gli allievi che superano queste soglie (salvo eccezioni individuali), e sono usate anche dal report "Lezioni mese" in dashboard.')
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10},className:"form-2col"}
+        , React.createElement(Input,{label:"Lezioni individuali / mese", type:"number",
+            value: draft.sogliaLezioniIndividuali != null ? draft.sogliaLezioniIndividuali : 4,
+            onChange: e => setD("sogliaLezioniIndividuali", Math.max(1, parseInt(e.target.value)||4)),
+            placeholder:"4"})
+        , React.createElement(Input,{label:"Lezioni collettive / mese", type:"number",
+            value: draft.sogliaLezioniCollettive != null ? draft.sogliaLezioniCollettive : 4,
+            onChange: e => setD("sogliaLezioniCollettive", Math.max(1, parseInt(e.target.value)||4)),
+            placeholder:"4"})
       )
     )
 

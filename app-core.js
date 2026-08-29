@@ -20,6 +20,42 @@ const C = {
   sidebar:"#1a4fa0", sidebarActive:"#123a7a", sidebarText:"rgba(255,255,255,0.85)", sidebarActiveTxt:"#ffffff",
 };
 
+// ─── COLORE ACCENTO PERSONALIZZABILE ───────────────────────────────────────────
+// C è un oggetto condiviso letto "dal vivo" ad ogni render da tutti i componenti
+// (C.gold, C.sidebar, ecc. non vengono mai copiati in variabili locali stabili).
+// Per questo, MUTARE le sue proprietà quando l'admin sceglie un nuovo colore
+// accento in Impostazioni fa sì che l'intera app si aggiorni, senza dover
+// toccare ogni singolo utilizzo di C.gold sparso nel codice.
+const _shadeHex = (hex, percent) => {
+  hex = String(hex||'#1a4fa0').replace('#','');
+  if (hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const num = parseInt(hex,16) || 0x1a4fa0;
+  const amt = Math.round(255*percent/100);
+  let r = ((num>>16)&0xff) + amt, g = ((num>>8)&0xff) + amt, b = (num&0xff) + amt;
+  r = Math.max(0,Math.min(255,r)); g = Math.max(0,Math.min(255,g)); b = Math.max(0,Math.min(255,b));
+  return '#' + ((r<<16)|(g<<8)|b).toString(16).padStart(6,'0');
+};
+const _hexToRgba = (hex, alpha) => {
+  hex = String(hex||'#1a4fa0').replace('#','');
+  if (hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const num = parseInt(hex,16) || 0x1a4fa0;
+  const r=(num>>16)&0xff, g=(num>>8)&0xff, b=num&0xff;
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+// Applica il colore accento scelto in Impostazioni → Stile grafico a tutta l'app.
+// Richiamata da un useEffect nel componente App ogni volta che cambia config.accentColor.
+const applyAccentColor = (hex) => {
+  if (!hex) return;
+  C.gold = hex;
+  C.goldDim = _shadeHex(hex, -22);
+  C.goldLight = _shadeHex(hex, 18);
+  C.goldBg = _hexToRgba(hex, 0.09);
+  C.blue = hex; // "blue" nella palette è di fatto un alias dell'accento principale
+  C.blueBg = _hexToRgba(hex, 0.07);
+  C.sidebar = hex;
+  C.sidebarActive = _shadeHex(hex, -22);
+};
+
 const G = `
   @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;1,400&family=Open+Sans:wght@300;400;500;600&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
