@@ -7730,11 +7730,15 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
   const [filterCat,  setFilterCat]  = useState("");
+  const [filterCorso,setFilterCorso]= useState("");
   const [uploading,  setUploading]  = useState(false);
   const [modal,      setModal]      = useState(null); // "add"
   const [delTarget,  setDelTarget]  = useState(null);
+  const [rinominaTarget, setRinominaTarget] = useState(null);
 
   const CATEGORIE = ["Teoria","Solfeggio","Metodo","Spartito","Manuale","Altro"];
+  // Elenco corsi/strumenti per il campo e il filtro (stessa fonte usata da Repertorio)
+  const CORSI = (window.__FM_DATA__?.courses||[]).map(c => c.name||c.nome).filter(Boolean);
 
   // ── Carica da Supabase Storage bucket "biblioteca" ──────────────────────────
   const carica = React.useCallback(async () => {
@@ -7768,11 +7772,39 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
     setDelTarget(null);
   };
 
+  // Rinomina il file fisico nello storage (mantenendo l'estensione) + il titolo mostrato
+  const rinomina = async (item, nuovoTitolo) => {
+    const titolo = (nuovoTitolo||'').trim();
+    if (!titolo) return;
+    try {
+      const sb = window.supabaseClient;
+      let storagePath = item.storage_path, fileUrl = item.file_url, fileName = item.file_name;
+      if (item.storage_path) {
+        const ext = (item.file_name||'').includes('.') ? item.file_name.slice(item.file_name.lastIndexOf('.')) : '';
+        const safeName = titolo.replace(/[^a-zA-Z0-9._-]/g,'_');
+        const dir = item.storage_path.includes('/') ? item.storage_path.slice(0, item.storage_path.lastIndexOf('/')+1) : '';
+        const newPath = `${dir}${Date.now()}_${safeName}${ext}`;
+        const { error: mvErr } = await sb.storage.from("biblioteca").move(item.storage_path, newPath);
+        if (mvErr) throw mvErr;
+        storagePath = newPath;
+        fileName = safeName+ext;
+        const { data: urlData } = sb.storage.from("biblioteca").getPublicUrl(newPath);
+        fileUrl = urlData?.publicUrl || item.file_url;
+      }
+      const { error } = await sb.from("biblioteca").update({titolo, storage_path:storagePath, file_url:fileUrl, file_name:fileName}).eq("id", item.id);
+      if (error) throw error;
+      setLibri(p => p.map(x => x.id===item.id ? {...x, titolo, storage_path:storagePath, file_url:fileUrl, file_name:fileName} : x));
+    } catch(e) { alert("Errore rinomina: " + e.message); }
+    setRinominaTarget(null);
+  };
+
+
   // ── Form upload ─────────────────────────────────────────────────────────────
   const AddModal = () => {
     const [titolo,    setTitolo]    = useState("");
     const [autore,    setAutore]    = useState("");
     const [categoria, setCategoria] = useState("Manuale");
+    const [corso,     setCorso]     = useState("");
     const [desc,      setDesc]      = useState("");
     const [file,      setFile]      = useState(null);
     const [err,       setErr]       = useState("");
@@ -7795,6 +7827,7 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
           titolo: titolo.trim(),
           autore: autore.trim() || null,
           categoria,
+          corso: corso || null,
           descrizione: desc.trim() || null,
           file_url: fileUrl,
           file_name: file.name,
@@ -7839,6 +7872,16 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
               , CATEGORIE.map(c => React.createElement('option', {key:c, value:c}, c))
             )
           )
+          , React.createElement('div', null
+            , React.createElement('label', {style:lblS}, "Corso / Strumento")
+            , React.createElement('select', { value:corso, onChange:e=>setCorso(e.target.value),
+                style:{...inpS, appearance:"none", cursor:"pointer"} }
+              , React.createElement('option', {value:""}, "Generale (tutti i corsi)")
+              , CORSI.map(c => React.createElement('option', {key:c, value:c}, c))
+            )
+          )
+        )
+        , React.createElement('div', { className:"form-2col" }
           , React.createElement('div', null
             , React.createElement('label', {style:lblS}, "Descrizione breve")
             , React.createElement('input', { value:desc, onChange:e=>setDesc(e.target.value),
@@ -7886,7 +7929,8 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
     const q = search.toLowerCase();
     const matchQ = !q || (l.titolo||"").toLowerCase().includes(q) || (l.autore||"").toLowerCase().includes(q);
     const matchC = !filterCat || l.categoria === filterCat;
-    return matchQ && matchC;
+    const matchCorso = !filterCorso || l.corso === filterCorso;
+    return matchQ && matchC && matchCorso;
   });
 
   return (
@@ -7920,6 +7964,13 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
               fontFamily:"'Open Sans',sans-serif",cursor:"pointer"} }
           , React.createElement('option',{value:""},"Tutte le categorie")
           , CATEGORIE.map(c=>React.createElement('option',{key:c,value:c},c))
+        )
+        , React.createElement('select', { value:filterCorso, onChange:e=>setFilterCorso(e.target.value),
+            style:{padding:"8px 12px",border:`1px solid ${filterCorso?C.gold:C.border}`,borderRadius:8,
+              fontSize:12,color:filterCorso?C.gold:C.textMuted,background:filterCorso?C.goldBg:C.bg,
+              fontFamily:"'Open Sans',sans-serif",cursor:"pointer"} }
+          , React.createElement('option',{value:""},"Tutti i corsi")
+          , CORSI.map(c=>React.createElement('option',{key:c,value:c},c))
         )
       )
       /* ── LISTA ── */
@@ -7957,6 +8008,9 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
                   , React.createElement('span',{style:{fontSize:10,background:cc.bg,color:cc.tx,
                       border:`1px solid ${cc.bd}`,borderRadius:10,padding:"2px 8px",fontWeight:600}},
                       item.categoria||"Altro")
+                  , item.corso && React.createElement('span',{style:{fontSize:10,background:C.blueBg,color:C.blue,
+                      border:`1px solid ${C.blueBorder}`,borderRadius:10,padding:"2px 8px",fontWeight:600}},
+                      item.corso)
                 )
                 , item.autore && React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:2}},
                     item.autore)
@@ -7979,7 +8033,18 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
                   , React.createElement(Ic,{n:"download",size:13,stroke:C.gold}), " Scarica"
                 )
                 , canUpload && React.createElement('button', {
+                    onClick:()=>setRinominaTarget(item),
+                    title:"Rinomina",
+                    style:{display:"flex",alignItems:"center",padding:"7px 10px",
+                      background:"none",border:`1px solid ${C.border}`,borderRadius:8,
+                      color:C.textDim,cursor:"pointer"},
+                    onMouseEnter:e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;},
+                    onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textDim;}}
+                  , React.createElement(Ic,{n:"edit",size:13,stroke:"currentColor"})
+                )
+                , canUpload && React.createElement('button', {
                     onClick:()=>elimina(item),
+                    title:"Elimina",
                     style:{display:"flex",alignItems:"center",padding:"7px 10px",
                       background:"none",border:`1px solid ${C.border}`,borderRadius:8,
                       color:C.textDim,cursor:"pointer"},
@@ -7994,6 +8059,19 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
       )
       /* ── MODALS ── */
       , modal==="add" && React.createElement(AddModal)
+      , rinominaTarget && React.createElement(Modal, { title:"Rinomina "+(rinominaTarget.titolo||""), onClose:()=>setRinominaTarget(null) }
+        , React.createElement('div', { style:{padding:"16px 22px", display:"flex", flexDirection:"column", gap:12} }
+          , React.createElement('label', {style:{fontSize:11, color:C.textMuted, fontWeight:600, letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:2, display:"block"}}, "Nuovo titolo")
+          , React.createElement('input', { id:"_rinominaInput", autoFocus:true, defaultValue:rinominaTarget.titolo||"",
+              style:{width:"100%", padding:"9px 12px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13,
+                color:C.text, background:C.bg, fontFamily:"'Open Sans',sans-serif", boxSizing:"border-box"},
+              onKeyDown:e=>{ if(e.key==='Enter') rinomina(rinominaTarget, e.target.value); } })
+          , React.createElement('div', {style:{display:"flex",gap:10,justifyContent:"flex-end"}}
+            , React.createElement(Btn, {variant:"secondary", onClick:()=>setRinominaTarget(null)}, "Annulla")
+            , React.createElement(Btn, {onClick:()=>{ const v=document.getElementById('_rinominaInput')?.value; rinomina(rinominaTarget, v); }}, "Salva")
+          )
+        )
+      )
     )
   );
 };

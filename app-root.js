@@ -5070,6 +5070,25 @@ const ModulisticaView = () => {
     setDocs(prev=>prev.filter(d=>d.id!==id));
   };
 
+  const renameDoc = async (doc) => {
+    const nuovoNome = prompt('Nuovo nome file (con estensione):', doc.name);
+    if (nuovoNome == null) return;
+    const nome = nuovoNome.trim();
+    if (!nome || nome === doc.name) return;
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    const safeName = nome.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const fromPath = MOD_PREFIX + doc.id;
+    const toPath   = MOD_PREFIX + safeName;
+    const { error } = await sb.storage.from(BUCKET).move(fromPath, toPath);
+    if (error) { alert('Errore rinomina: '+error.message); return; }
+    // La chiave dei metadati (categoria) è il nome file: la riassocia al nuovo nome
+    const meta = {};
+    docs.forEach(d => { meta[d.id === doc.id ? safeName : d.id] = d.categoria; });
+    await saveMeta(meta);
+    await loadDocs();
+  };
+
   const updateCat = async (id, cat) => {
     setDocs(prev=>prev.map(d=>d.id===id?{...d,categoria:cat}:d));
     const meta = {};
@@ -5156,7 +5175,14 @@ const ModulisticaView = () => {
                   borderRadius:7,background:C.goldBg,border:`1px solid ${C.goldDim}`,color:C.gold,fontSize:11,textDecoration:"none",fontFamily:"'Open Sans',sans-serif"}}
               , React.createElement(Ic,{n:"download",size:12,stroke:C.gold}), " Scarica"
             )
-            , React.createElement('button', {onClick:()=>removeDoc(doc.id),
+            , React.createElement('button', {onClick:()=>renameDoc(doc), title:"Rinomina file",
+                style:{padding:"7px 10px",borderRadius:7,border:`1px solid ${C.border}`,background:"none",
+                  color:C.textDim,cursor:"pointer"},
+                onMouseEnter:e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;},
+                onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textDim;}}
+              , React.createElement(Ic,{n:"edit",size:12,stroke:"currentColor"})
+            )
+            , React.createElement('button', {onClick:()=>removeDoc(doc.id), title:"Elimina",
                 style:{padding:"7px 10px",borderRadius:7,border:`1px solid ${C.border}`,background:"none",
                   color:C.textDim,cursor:"pointer"},
                 onMouseEnter:e=>{e.currentTarget.style.borderColor=C.red;e.currentTarget.style.color=C.red;},

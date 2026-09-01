@@ -2665,18 +2665,40 @@ const _Portal = ({ children }) => {
 const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani, setBrani:propSetBrani, userRuolo:_avRuolo, appUser:_avUser }) => {
   const lessons   = propLessons   || [];
   const students  = propStudents  || [];
+  const courses   = propCourses   || [];
   const brani     = propBrani     || [];
   // Merge: allegati da propAllegati (DB) + allegati embedded nelle lezioni (lesson.allegati)
-  // Filtra lezioni per docente se necessario
+  // Visibilità per ruolo: admin vede tutto; i corsi/lezioni collettivi sono SEMPRE visibili
+  // a prescindere dal ruolo; docente vede solo le proprie lezioni individuali (match sul nome
+  // docente); allievo vede solo le proprie lezioni individuali (match su ID o nome allievo).
   const _avNome = (_avUser && _avUser.nome) || '';
-  const _avLessons = _avRuolo === 'docente' && _avNome
-    ? lessons.filter(l => {
-        const t = (l.teacher||'').toLowerCase().trim();
-        const k = _avNome.toLowerCase().trim();
-        return t === k || t.includes(k) || k.includes(t);
-      })
-    : lessons;
+  const _avDocenteId = (_avUser && _avUser.docenteId) || null;
+  const _avAllievoId = (_avUser && _avUser.allievoId) || null;
+
+  const _isCollLezione = (l) => {
+    try { if (typeof isColl === 'function') return isColl(l); } catch(e) {}
+    return l && l.tipo === 'collettivo';
+  };
+  const _isMyLessonDocente = (l) => {
+    const t = (l.teacher||'').toLowerCase().trim();
+    const k = _avNome.toLowerCase().trim();
+    return !!t && !!k && (t === k || t.includes(k) || k.includes(t));
+  };
+  const _isMyLessonAllievo = (l) => {
+    try { if (typeof studentInLesson === 'function') return studentInLesson(l, _avNome, _avAllievoId); } catch(e) {}
+    if (_avAllievoId != null && l.studentId != null) return String(l.studentId) === String(_avAllievoId);
+    const ln = (l.student||'').toLowerCase().trim(), nn = _avNome.toLowerCase().trim();
+    return !!ln && !!nn && (ln === nn || ln.includes(nn) || nn.includes(ln));
+  };
+  const _avLessons = lessons.filter(l => {
+    if (_avRuolo === 'admin' || !_avRuolo) return true;
+    if (_isCollLezione(l)) return true; // corsi collettivi sempre visibili
+    if (_avRuolo === 'docente') return _isMyLessonDocente(l);
+    if (_avRuolo === 'allievo') return _isMyLessonAllievo(l);
+    return true;
+  });
   const _avLessonIds = new Set(_avLessons.map(l=>l.id));
+  const _avScoped = _avRuolo === 'docente' || _avRuolo === 'allievo';
   // Corso reale della lezione: corsi collettivi hanno courseName, corsi individuali hanno instrument
   // (il campo "corso" salvato in passato sugli allegati conteneva solo lo strumento, per questo
   // il filtro non intercettava i corsi collettivi — qui si ricalcola dalla lezione corrente)
@@ -2686,11 +2708,11 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     if (!l) return null;
     return l.courseName || l.instrument || null;
   };
-  // Filtra allegati DB per docente (solo lezioni visibili)
-  const fromDB = ((_avRuolo === 'docente' && _avNome)
+  // Filtra allegati DB in base alle lezioni visibili per il ruolo loggato
+  const fromDB = (_avScoped
     ? (propAllegati||[]).filter(a => !a.lezioneId || _avLessonIds.has(a.lezioneId))
     : (propAllegati || [])
-  ).map(a => ({...a, corso: _getLezioneCorso(a.lezioneId) || a.corso}));
+  ).map(a => ({...a, corso: _getLezioneCorso(a.lezioneId) || a.corso, _source:'db'}));
   const fromLessons = [];
   _avLessons.forEach(l => {
     (l.allegati||[]).forEach(a => {
@@ -2700,6 +2722,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
           allievoNome: l.student||null, corso: l.courseName || l.instrument || null,
           descrizione: a.descrizione||null, fileUrl: a.fileUrl||null,
           fileName: a.fileName||null, fileType: a.fileType||null, createdAt: a.createdAt||null,
+          _source:'embed',
         });
       }
     });
@@ -2711,6 +2734,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   const [fTipo,   setFTipo]   = useState(""); // 'lezione'|'spartito'|'file_brano'
   const [editAllegato, setEditAllegato] = useState(null);
   const [editAllegatoDesc, setEditAllegatoDesc] = useState('');
+  const [editAllegatoName, setEditAllegatoName] = useState('');
   const [confirmDelAll, setConfirmDelAll] = useState(null);
 
   // Sync modali verso lo slot globale di App (fuori da main-scroll animato)
@@ -2721,6 +2745,54 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   const _closeEditAll = () => {
     setEditAllegato(null);
     if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
+  };
+
+  // Rinomina fisicamente il file nello storage bucket "allegati" (mantiene la cartella,
+  // cambia solo il nome) e aggiorna il record collegato (DB, lezione embedded, o brano).
+  const handleRenameAllegato = async (a, nuovoNome) => {
+    const nome = (nuovoNome||'').trim();
+    if (!nome || nome === a.fileName) return true;
+    const sb = window.supabaseClient;
+    if (!sb) { alert('Connessione a Supabase non disponibile'); return false; }
+    const bucket = 'allegati';
+    const currentPath = a.storagePath || (a.fileUrl ? a.fileUrl.split(`/object/public/${bucket}/`)[1] : null);
+    let newUrl = a.fileUrl, newPath = currentPath;
+    if (currentPath) {
+      const dir = currentPath.includes('/') ? currentPath.slice(0, currentPath.lastIndexOf('/')+1) : '';
+      const safeName = nome.replace(/[^a-zA-Z0-9._-]/g,'_');
+      newPath = dir + safeName;
+      if (newPath !== currentPath) {
+        const { error: mvErr } = await sb.storage.from(bucket).move(currentPath, newPath);
+        if (mvErr) { alert('Errore rinomina file: '+mvErr.message); return false; }
+        const { data: urlData } = sb.storage.from(bucket).getPublicUrl(newPath);
+        newUrl = urlData?.publicUrl || a.fileUrl;
+      }
+    }
+    if (a._categoria === 'lezione') {
+      if (a._source === 'embed' && a.lezioneId) {
+        const lesson = lessons.find(l => l.id === a.lezioneId);
+        const nuoviAllegati = (lesson?.allegati||[]).map(x => x.id===a.id ? {...x, fileName:nome, fileUrl:newUrl} : x);
+        const { error } = await sb.from('lezioni').update({allegati:nuoviAllegati}).eq('id', a.lezioneId);
+        if (error) { alert('Errore: '+error.message); return false; }
+      } else {
+        const { error } = await sb.from('allegati').update({file_name:nome, file_url:newUrl}).eq('id', a.id);
+        if (error) { alert('Errore: '+error.message); return false; }
+        if (propSetAllegati) propSetAllegati(p => p.map(x => x.id===a.id ? {...x, fileName:nome, fileUrl:newUrl} : x));
+      }
+    } else if ((a._categoria === 'spartito' || a._categoria === 'file_brano') && a.branoId) {
+      const brano = brani.find(b => b.id === a.branoId);
+      if (brano) {
+        const vIdx = a.versioneIdx != null ? a.versioneIdx : 0;
+        const campo = a._categoria === 'spartito' ? 'spartiti' : 'allegati';
+        const nuoveVersioni = (brano.versioni||[]).map((v,i) => i!==vIdx ? v : {...v, [campo]: (v[campo]||[]).map(f => f.id===a.id ? {...f, fileName:nome, fileUrl:newUrl, storagePath:newPath} : f)});
+        const { error } = await sb.from('brani').update({versioni:nuoveVersioni}).eq('id', a.branoId);
+        if (error) { alert('Errore rinomina file brano: '+error.message); return false; }
+        if (propSetBrani) propSetBrani(p => p.map(b => b.id===a.branoId ? {...b, versioni:nuoveVersioni} : b));
+      }
+    } else if (a._categoria === 'storage_orphan') {
+      _rescanStorage();
+    }
+    return true;
   };
 
   const handleDeleteAllegato = async (allegatoDaEliminare) => {
@@ -2801,9 +2873,29 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
 
   // Modal inline: niente __FM_SHOW_MODAL__ (può non essere definito)
   // Renderizzati direttamente nel return della AllegatiView
-  // Unisce allegati lezioni + spartiti/allegati di TUTTE le versioni dei brani
+  // Visibilità brani per ruolo: stesso criterio usato in RepertorioView — un brano senza
+  // "strumento" è un brano d'insieme/collettivo e resta sempre visibile a tutti; un brano
+  // legato a uno strumento specifico è visibile solo al docente di quel corso o all'allievo
+  // che lo studia.
+  const _myCorsiDocente = (_avRuolo === 'docente' && _avDocenteId)
+    ? courses.filter(c => (c.docenti||[]).map(String).includes(String(_avDocenteId))).map(c => c.name||c.nome).filter(Boolean)
+    : [];
+  const _myStudentRec = _avRuolo === 'allievo'
+    ? students.find(s => (_avAllievoId != null && String(s.id) === String(_avAllievoId)) || (s.name||s.nome||'').toLowerCase() === _avNome.toLowerCase())
+    : null;
+  const _myStrumenti = _myStudentRec
+    ? [_myStudentRec.instrument, _myStudentRec.complementaryCourse, ...(_myStudentRec.extraInstruments||[])].filter(Boolean)
+    : [];
+  const braniVisibili = brani.filter(b => {
+    if (_avRuolo === 'admin' || !_avRuolo) return true;
+    if (!b.strumento) return true; // brano d'insieme/collettivo: sempre visibile
+    if (_avRuolo === 'docente') return _myCorsiDocente.length === 0 || _myCorsiDocente.includes(b.strumento);
+    if (_avRuolo === 'allievo') return _myStrumenti.length === 0 || _myStrumenti.includes(b.strumento);
+    return true;
+  });
+  // Unisce allegati lezioni + spartiti/allegati di TUTTE le versioni dei brani visibili
   const allegatiBrani = [];
-  brani.forEach(b => {
+  braniVisibili.forEach(b => {
     (b.versioni||[]).forEach((v, vIdx) => {
       const tonLabel = v.tonalita ? ` (${v.tonalita})` : '';
       (v.spartiti||[]).forEach(s => {
@@ -2834,10 +2926,14 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   ];
 
   // Scansione storage bucket: trova file caricati direttamente senza record in DB
+  // (solo per admin: non essendo collegati a lezione/corso non sono attribuibili a un ruolo)
   const [storageOrphans, setStorageOrphans] = useState([]);
   const [scanningStorage, setScanningStorage] = useState(false);
+  const [_rescanTick, _setRescanTick] = useState(0);
+  const _rescanStorage = () => _setRescanTick(t => t+1);
 
   React.useEffect(function() {
+    if (_avRuolo !== 'admin') { setStorageOrphans([]); return; }
     const sb = window.supabaseClient;
     if (!sb) return;
     setScanningStorage(true);
@@ -2880,7 +2976,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
       setStorageOrphans(orphans);
       setScanningStorage(false);
     }).catch(function() { setScanningStorage(false); });
-  }, [allegatiLezioni.length]);
+  }, [allegatiLezioni.length, _avRuolo, _rescanTick]);
 
   const allegatiAll = [...allegati, ...storageOrphans];
 
@@ -3002,10 +3098,10 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
                             padding:"5px 9px", borderRadius:7, border:`1px solid ${C.blueBorder}`, background:C.blueBg}}
                           , React.createElement(Ic, {n:"download", size:12, stroke:C.blue}), "Apri"
                         )
-                      , a._categoria==='lezione' && React.createElement('button',{onClick:()=>{setEditAllegato(a);setEditAllegatoDesc(a.descrizione||'');},
+                      , React.createElement('button',{onClick:()=>{setEditAllegato(a);setEditAllegatoDesc(a.descrizione||'');setEditAllegatoName(a.fileName||'');},
                           style:{display:'flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 9px',borderRadius:7,
                             border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
-                          , React.createElement(Ic,{n:'edit',size:11,stroke:C.text}), 'Modifica'
+                          , React.createElement(Ic,{n:'edit',size:11,stroke:C.text}), a._categoria==='lezione' ? 'Modifica' : 'Rinomina'
                         )
                       , React.createElement('button',{onClick:()=>setConfirmDelAll(a),
                           style:{display:'flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 9px',borderRadius:7,
@@ -3032,20 +3128,31 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
           )
         )
 
-      /* ── Modal modifica descrizione allegato (inline) ── */
+      /* ── Modal modifica/rinomina allegato (inline) ── */
       , editAllegato && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
           , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:440,width:'90%',border:`1px solid ${C.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}
-            , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}},'Modifica allegato')
-            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
-            , React.createElement('input',{type:'text',autoFocus:true,value:editAllegatoDesc,
-                onChange:e=>setEditAllegatoDesc(e.target.value),
+            , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}}, editAllegato._categoria==='lezione' ? 'Modifica allegato' : 'Rinomina file')
+            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Nome file')
+            , React.createElement('input',{type:'text',autoFocus:true,value:editAllegatoName,
+                onChange:e=>setEditAllegatoName(e.target.value),
                 style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none',boxSizing:'border-box',marginBottom:18}})
+            , editAllegato._categoria==='lezione' && React.createElement(React.Fragment, null
+              , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
+              , React.createElement('input',{type:'text',value:editAllegatoDesc,
+                  onChange:e=>setEditAllegatoDesc(e.target.value),
+                  style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none',boxSizing:'border-box',marginBottom:18}})
+            )
             , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
               , React.createElement('button',{onClick:()=>setEditAllegato(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
               , React.createElement('button',{onClick:async()=>{
-                    if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===editAllegato.id?{...x,descrizione:editAllegatoDesc}:x));
-                    const sb2=window.supabaseClient;
-                    if(sb2){ const {error}=await sb2.from('allegati').update({descrizione:editAllegatoDesc}).eq('id',editAllegato.id); if(error) console.warn('[FM] edit allegato:',error.message); }
+                    const target = editAllegato;
+                    const ok = await handleRenameAllegato(target, editAllegatoName);
+                    if (!ok) return;
+                    if (target._categoria === 'lezione' && editAllegatoDesc !== (target.descrizione||'')) {
+                      if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===target.id?{...x,descrizione:editAllegatoDesc}:x));
+                      const sb2=window.supabaseClient;
+                      if(sb2){ const {error}=await sb2.from('allegati').update({descrizione:editAllegatoDesc}).eq('id',target.id); if(error) console.warn('[FM] edit allegato:',error.message); }
+                    }
                     setEditAllegato(null);
                   },style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.gold,color:'#0d1f4a',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},'Salva')
             )
