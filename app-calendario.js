@@ -2730,6 +2730,29 @@ const ImportaIscrizioniModal = ({ annoCorrente, anniDisp, allStudents, studentsN
 };
 
 
+// Esegue insert/update su Supabase tollerando colonne non ancora presenti nello schema
+// (es. 'nome_ricevuta' aggiunta lato client prima di essere creata a DB): se l'errore indica
+// una colonna mancante, la rimuove dalla riga e riprova, così l'allievo viene comunque salvato
+// invece di fallire del tutto e finire nel fallback "solo locale" (che sembra salvato ma non lo è).
+const supabaseUpsertConFallbackColonne = async (sb, table, row, { isUpdate=false, matchId=null } = {}) => {
+  let currentRow = { ...row };
+  for (let tentativi = 0; tentativi < 6; tentativi++) {
+    const result = isUpdate
+      ? await sb.from(table).update(currentRow).eq('id', matchId)
+      : await sb.from(table).insert(currentRow).select().single();
+    const { error } = result;
+    if (!error) return result;
+    const m = /Could not find the '([^']+)' column/.exec(error.message||'');
+    if (m && Object.prototype.hasOwnProperty.call(currentRow, m[1])) {
+      console.warn(`[FM] Colonna '${m[1]}' non presente su ${table} — l'allievo viene salvato senza questo campo. Aggiungi la colonna al DB per non perderlo.`);
+      delete currentRow[m[1]];
+      continue;
+    }
+    return result; // errore di altro tipo: esce e lascia gestire al chiamante
+  }
+  return { error: { message: 'Troppe colonne mancanti nello schema — salvataggio annullato.' } };
+};
+
 const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV, iscrizioniAnno:propIscrizioniAnno, setIscrizioniAnno:propSetIscrizioniAnno, anniScolastici:propAnniScolasticiAV, gruppi:propGruppiAV }) => {
   const _ruoloAV = propUserRuoloAV || "admin";
   const _nomeAV  = (_appUserAV && _appUserAV.nome) || "";
@@ -2830,7 +2853,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
         extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
       };
-      const { data: inserted, error } = await sb.from('studenti').insert(row).select().single();
+      const { data: inserted, error } = await supabaseUpsertConFallbackColonne(sb, 'studenti', row, { isUpdate:false });
       if (!error && inserted) {
         // Usa l'ID intero reale restituito da Supabase
         const FA = window.FMAdapter;
@@ -2890,7 +2913,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
         extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
       };
-      const { error } = await sb.from('studenti').update(row).eq('id', d.id);
+      const { error } = await supabaseUpsertConFallbackColonne(sb, 'studenti', row, { isUpdate:true, matchId:d.id });
       if (error) console.warn('[FM] handleEditStudent error:', error.message);
       // Aggiorna anche l'iscrizione dell'anno selezionato se corso/docente sono cambiati
       try {
