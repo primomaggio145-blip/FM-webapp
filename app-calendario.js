@@ -4556,10 +4556,19 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                         corso: lesson.instrument||'', lezioneId: lesson.id,
                         allievoNome: lesson.student||'', createdAt: new Date().toISOString(),
                       };
-                      // Salva subito su Supabase allegati (NO id: lascia auto UUID)
+                      // Salva subito su Supabase allegati — genera l'id lato client: la colonna
+                      // "id" non ha un default DB (gen_random_uuid()), quindi va sempre passato
+                      // esplicitamente per evitare "null value in column id violates not-null constraint"
                       if (sb && fileUrl) {
                         try {
+                          const newId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                            ? crypto.randomUUID()
+                            : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                                const r = Math.random()*16|0, v = c==='x' ? r : (r&0x3|0x8);
+                                return v.toString(16);
+                              });
                           const { data: insData, error: insErr } = await sb.from('allegati').insert({
+                            id: newId,
                             lezione_id: lesson.id,
                             allievo_nome: lesson.student||'',
                             corso: lesson.instrument||'',
@@ -4569,7 +4578,8 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                             descrizione: '',
                           }).select('id').maybeSingle();
                           if (!insErr && insData?.id) attRow.id = insData.id;
-                          else if (insErr) console.warn('[FM] allegato DB error', insErr.message);
+                          else if (!insErr) attRow.id = newId;
+                          else console.warn('[FM] allegato DB error', insErr.message);
                         } catch(dbErr) { console.warn('[FM] allegato DB error', dbErr); }
                       }
                       newAllegati.push(attRow);
@@ -7822,8 +7832,16 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
         if (upErr) throw upErr;
         const { data: urlData } = sb.storage.from("biblioteca").getPublicUrl(storagePath);
         const fileUrl = urlData?.publicUrl || null;
-        // Salva record
+        // Salva record — genera l'id lato client per non dipendere da un default DB
+        // sulla colonna "id" (stesso problema riscontrato sulla tabella "allegati")
+        const newId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+              const r = Math.random()*16|0, v = c==='x' ? r : (r&0x3|0x8);
+              return v.toString(16);
+            });
         const row = {
+          id: newId,
           titolo: titolo.trim(),
           autore: autore.trim() || null,
           categoria,
