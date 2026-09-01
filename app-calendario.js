@@ -866,9 +866,12 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
     return individuali.length > 0 ? individuali.sort() : INSTRUMENTS;
   }, [courses]);
 
+  const [saving, setSaving] = useState(false);
   const handleSubmit = () => {
+    if (saving) return; // blocco anti doppio-click: un doppio invio creerebbe un allievo duplicato a DB
     const e = validate(f);
     if(Object.keys(e).length){ setErrors(e); return; }
+    setSaving(true);
     onSave({...f, monthlyFee:Number(f.monthlyFee), lessons:f.lessons||[]});
   };
 
@@ -1062,7 +1065,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
       )
       , React.createElement('div', { style: {padding:"16px 24px",borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"flex-end",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3009}}
         , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3010}}, "Annulla")
-        , React.createElement(Btn, { onClick: handleSubmit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3011}}, React.createElement(Ic, { n: "check", size: 14, color: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3011}}), _optionalChain([initial, 'optionalAccess', _30 => _30.id])?"Salva modifiche":"Aggiungi allievo")
+        , React.createElement(Btn, { onClick: handleSubmit, disabled: saving, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3011}}, React.createElement(Ic, { n: "check", size: 14, color: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3011}}), saving?"Salvataggio…":(_optionalChain([initial, 'optionalAccess', _30 => _30.id])?"Salva modifiche":"Aggiungi allievo"))
       )
     )
   );
@@ -2823,6 +2826,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         monthly_fee: parseFloat(d.monthlyFee)||0, fee_type: d.feeType||'fisso',
         birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
         complementary_course: d.complementaryCourse||null, notes: d.notes||null,
+        nome_ricevuta: d.nomeRicevuta||null, codice_fiscale: d.codiceFiscale||null,
         extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
         extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
       };
@@ -2836,24 +2840,31 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         newStudent.extraTeachers = d.extraTeachers||{};
         newStudent.lessons = [];
         setStudents(p => [...p, newStudent]);
-        // Crea automaticamente l'iscrizione per l'anno scolastico attualmente selezionato
-        try {
-          const corso = courses.find(c=>(c.name||c.nome)===d.instrument || String(c.id)===String(d.courseId));
-          const { data: iscrData } = await sb.from('iscrizioni_anno').upsert({
-            studente_id: inserted.id, anno_inizio: annoSel,
-            corso_id: corso?String(corso.id):null, corso_nome: corso?(corso.name||corso.nome):(d.instrument||''),
-            docente_id: null, docente_nome: d.teacher||'',
-            data_iscrizione: yyyymmdd(new Date()),
-          }, {onConflict:'studente_id,anno_inizio'}).select().single();
-          if (iscrData) {
-            setIscrizioniAnno(p => [...p, {
-              id: iscrData.id, studentId: iscrData.studente_id, annoInizio: iscrData.anno_inizio,
-              corsoId: iscrData.corso_id||'', corsoNome: iscrData.corso_nome||'',
-              docenteId: iscrData.docente_id||'', docenteNome: iscrData.docente_nome||'',
-              dataIscrizione: iscrData.data_iscrizione||'',
-            }]);
-          }
-        } catch(e) { console.warn('[FM] auto-iscrizione error:', e?.message); }
+        // Crea automaticamente l'iscrizione per l'anno scolastico attualmente selezionato.
+        // Senza un anno valido l'iscrizione non può essere creata: l'allievo resterebbe
+        // "scollegato" — meglio avvisare subito piuttosto che fallire in silenzio.
+        if (annoSel == null) {
+          console.warn('[FM] auto-iscrizione saltata: nessun anno scolastico selezionato — allievo creato ma non collegato a un anno.');
+        } else {
+          try {
+            const corso = courses.find(c=>(c.name||c.nome)===d.instrument || String(c.id)===String(d.courseId));
+            const { data: iscrData, error: iscrErr } = await sb.from('iscrizioni_anno').upsert({
+              studente_id: inserted.id, anno_inizio: annoSel,
+              corso_id: corso?String(corso.id):null, corso_nome: corso?(corso.name||corso.nome):(d.instrument||''),
+              docente_id: null, docente_nome: d.teacher||'',
+              data_iscrizione: yyyymmdd(new Date()),
+            }, {onConflict:'studente_id,anno_inizio'}).select().single();
+            if (iscrErr) console.warn('[FM] auto-iscrizione fallita — allievo creato ma NON collegato all\'anno scolastico:', iscrErr.message);
+            if (iscrData) {
+              setIscrizioniAnno(p => [...p, {
+                id: iscrData.id, studentId: iscrData.studente_id, annoInizio: iscrData.anno_inizio,
+                corsoId: iscrData.corso_id||'', corsoNome: iscrData.corso_nome||'',
+                docenteId: iscrData.docente_id||'', docenteNome: iscrData.docente_nome||'',
+                dataIscrizione: iscrData.data_iscrizione||'',
+              }]);
+            }
+          } catch(e) { console.warn('[FM] auto-iscrizione error:', e?.message); }
+        }
       } else if (error) {
         console.warn('[FM] handleAddStudent error:', error.message);
         // Fallback offline
@@ -2875,6 +2886,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         monthly_fee: parseFloat(d.monthlyFee)||0, fee_type: d.feeType||'fisso',
         birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
         complementary_course: d.complementaryCourse||null, notes: d.notes||null,
+        nome_ricevuta: d.nomeRicevuta||null, codice_fiscale: d.codiceFiscale||null,
         extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
         extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
       };
