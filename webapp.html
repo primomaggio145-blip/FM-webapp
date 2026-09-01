@@ -146,6 +146,28 @@
   <!-- ── Registrazione Service Worker per PWA ── -->
   <script>
     if ('serviceWorker' in navigator) {
+      // Ricarica automaticamente la pagina quando un nuovo Service Worker prende il
+      // controllo. Senza questo, dopo un deploy il nuovo SW viene installato e attivato
+      // "in background" ma la pagina già aperta continua a girare con codice/dati della
+      // versione precedente finché l'utente non fa un hard refresh manuale — ed è anche
+      // la causa più probabile dei dati vuoti su un refresh normale: se il cambio di
+      // controllo avviene A META' caricamento, le fetch in corso possono essere interrotte.
+      // Il guard "reloading" evita loop: dopo il reload la pagina riparte già con
+      // l'ultimo controller attivo, quindi non scatta un altro controllerchange subito dopo.
+      let reloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function() {
+        if (reloading) return;
+        reloading = true;
+        window.location.reload();
+      });
+      // Segnale esplicito ridondante già inviato da service-worker.js su 'activate'
+      navigator.serviceWorker.addEventListener('message', function(event) {
+        if (event.data && event.data.type === 'SW_UPDATED' && !reloading) {
+          reloading = true;
+          window.location.reload();
+        }
+      });
+
       window.addEventListener('load', function() {
         navigator.serviceWorker.register('/FM-webapp/service-worker.js', {
           scope: '/FM-webapp/'
