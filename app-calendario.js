@@ -2730,27 +2730,53 @@ const ImportaIscrizioniModal = ({ annoCorrente, anniDisp, allStudents, studentsN
 };
 
 
-// Esegue insert/update su Supabase tollerando colonne non ancora presenti nello schema
-// (es. 'nome_ricevuta' aggiunta lato client prima di essere creata a DB): se l'errore indica
-// una colonna mancante, la rimuove dalla riga e riprova, così l'allievo viene comunque salvato
-// invece di fallire del tutto e finire nel fallback "solo locale" (che sembra salvato ma non lo è).
+// Esegue un salvataggio su Supabase tollerando colonne non ancora presenti nello schema
+// (es. 'nome_ricevuta'/'codice_fiscale' aggiunte lato client prima di essere create a DB).
+//
+// ATTENZIONE: un INSERT che fallisce per "colonna non trovata" può comunque aver scritto la riga
+// a livello di database prima di fallire sulla risposta — ripetere l'INSERT per "riprovare senza
+// quel campo" crea quindi allievi duplicati reali (è il bug appena riscontrato). Per questo:
+//   - l'INSERT viene tentato UNA SOLA VOLTA, mai ripetuto;
+//   - eventuali colonne mancanti vengono invece rimosse e riscritte con un UPDATE separato,
+//     che non può mai creare righe duplicate anche se va ripetuto.
 const supabaseUpsertConFallbackColonne = async (sb, table, row, { isUpdate=false, matchId=null } = {}) => {
-  let currentRow = { ...row };
-  for (let tentativi = 0; tentativi < 6; tentativi++) {
-    const result = isUpdate
-      ? await sb.from(table).update(currentRow).eq('id', matchId)
-      : await sb.from(table).insert(currentRow).select().single();
-    const { error } = result;
-    if (!error) return result;
-    const m = /Could not find the '([^']+)' column/.exec(error.message||'');
-    if (m && Object.prototype.hasOwnProperty.call(currentRow, m[1])) {
-      console.warn(`[FM] Colonna '${m[1]}' non presente su ${table} — l'allievo viene salvato senza questo campo. Aggiungi la colonna al DB per non perderlo.`);
-      delete currentRow[m[1]];
-      continue;
+  if (isUpdate) {
+    // UPDATE: nessun rischio di duplicati anche ripetendo — può tranquillamente riprovare.
+    let currentRow = { ...row };
+    for (let tentativi = 0; tentativi < 6; tentativi++) {
+      const result = await sb.from(table).update(currentRow).eq('id', matchId);
+      const { error } = result;
+      if (!error) return result;
+      const m = /Could not find the '([^']+)' column/.exec(error.message||'');
+      if (m && Object.prototype.hasOwnProperty.call(currentRow, m[1])) {
+        console.warn(`[FM] Colonna '${m[1]}' non presente su ${table} — allievo aggiornato senza questo campo. Aggiungi la colonna al DB per non perderlo.`);
+        delete currentRow[m[1]];
+        continue;
+      }
+      return result;
     }
-    return result; // errore di altro tipo: esce e lascia gestire al chiamante
+    return { error: { message: 'Troppe colonne mancanti nello schema — salvataggio annullato.' } };
   }
-  return { error: { message: 'Troppe colonne mancanti nello schema — salvataggio annullato.' } };
+
+  // INSERT: un SOLO tentativo, mai ripetuto, per non creare righe duplicate.
+  const primo = await sb.from(table).insert(row).select().single();
+  if (!primo.error) return primo;
+  const m = /Could not find the '([^']+)' column/.exec(primo.error.message||'');
+  if (!m || !Object.prototype.hasOwnProperty.call(row, m[1])) return primo; // errore non recuperabile
+
+  // Colonna mancante: rifà l'insert SENZA quel campo (e senza eventuali altri campi opzionali noti
+  // problematici), poi prova ad aggiungerli con un UPDATE separato — mai un secondo INSERT.
+  console.warn(`[FM] Colonna '${m[1]}' non presente su ${table} — creo l'allievo senza questo campo, poi provo ad aggiungerlo con un update.`);
+  const rowSenzaColonnaMancante = { ...row };
+  delete rowSenzaColonnaMancante[m[1]];
+  const secondo = await sb.from(table).insert(rowSenzaColonnaMancante).select().single();
+  if (secondo.error || !secondo.data) return secondo;
+
+  // Prova a recuperare il campo scartato (e altri eventualmente mancanti) via UPDATE — sicuro anche se fallisce.
+  const extra = { [m[1]]: row[m[1]] };
+  const upd = await supabaseUpsertConFallbackColonne(sb, table, extra, { isUpdate:true, matchId: secondo.data.id });
+  if (upd.error) console.warn(`[FM] Campo '${m[1]}' non salvato (colonna assente su ${table}): aggiungila al DB con ALTER TABLE.`);
+  return secondo;
 };
 
 const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV, iscrizioniAnno:propIscrizioniAnno, setIscrizioniAnno:propSetIscrizioniAnno, anniScolastici:propAnniScolasticiAV, gruppi:propGruppiAV }) => {
