@@ -2409,115 +2409,44 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
   // Valori per corso (configurabili a livello globale, con fallback ai valori richiesti)
   const PUNTI_CORSO_INDIVIDUALE = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
   const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
+  // Soglia di default per un allievo: 4 lezioni/mese per ogni corso individuale
+  // (principale + extra, tutti allo stesso livello) + 2 lezioni/mese per il corso collettivo (max 1).
+  // Se l'allievo ha un'eccezione impostata in scheda (sogliaIndividualeEcc), quella prevale sempre.
+  const sogliaDefaultAllievo = (s) => {
+    const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
+    const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
+    return nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE + nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO;
+  };
 
   const [reportOpen, setReportOpen] = useState(false);
   const [reportMese, setReportMese] = useState(meseCurr);
   const [reportAnno, setReportAnno] = useState(annoCurr);
   const [reportFiltro, setReportFiltro] = useState('tutti');
 
-  // Ultimo mese che contiene effettivamente delle lezioni (esclude lezioni programmate nel futuro):
-  // serve per capire se il mese selezionato è "in corso" (dati parziali) e va quindi prorata la soglia.
-  const oggiYM = annoCurr*12 + meseCurr;
-  let ultimoMeseConLezioni = null;
+  const contInd = {};
   (lessons||[]).forEach(l => {
-    if (!l.date) return;
-    const [ly,lm] = l.date.split('-').map(Number);
-    if (!ly||!lm) return;
-    const ym = ly*12+lm;
-    if (ym > oggiYM) return; // ignora lezioni future
-    if (!ultimoMeseConLezioni || ym > ultimoMeseConLezioni.ym) ultimoMeseConLezioni = { anno:ly, mese:lm, ym };
-  });
-  const isUltimoMeseConLezioni = !!ultimoMeseConLezioni && ultimoMeseConLezioni.anno===reportAnno && ultimoMeseConLezioni.mese===reportMese;
-
-  // Soglia di un allievo per il mese selezionato — normalmente flat (4/mese a corso individuale,
-  // 2/mese per il corso collettivo), MA per il mese d'iscrizione e per l'ultimo mese con lezioni
-  // (entrambi mesi "parziali") viene calcolata in proporzione alle settimane effettivamente trascorse:
-  // lezioni attese = (punti/4 a settimana) × nr. corsi × nr. settimane dalla data di riferimento.
-  const sogliaAllievo = (s) => {
-    const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
-    const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
-    const enroll = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
-    const isMeseIscrizione = enroll && enroll.getFullYear()===reportAnno && (enroll.getMonth()+1)===reportMese;
-
-    if (!isMeseIscrizione && !isUltimoMeseConLezioni) {
-      // Mese "pieno" ordinario: soglia standard
-      return {
-        individuale: nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE,
-        collettiva:  nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO,
-      };
-    }
-    // Mese parziale: calcola le settimane effettive del periodo di riferimento
-    const inizioMese = new Date(reportAnno, reportMese-1, 1);
-    const fineMese    = new Date(reportAnno, reportMese, 0);
-    let dataInizio = inizioMese;
-    if (isMeseIscrizione && enroll > inizioMese) dataInizio = enroll;
-    let dataFine = fineMese;
-    if (isUltimoMeseConLezioni) {
-      const oggiCap = now3 < fineMese ? now3 : fineMese;
-      if (oggiCap < dataFine) dataFine = oggiCap;
-    }
-    if (dataFine < dataInizio) dataFine = dataInizio;
-    const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
-    const settimane = Math.max(giorni,1)/7;
-    return {
-      individuale: Math.round(nCorsiIndividuali*(PUNTI_CORSO_INDIVIDUALE/4)*settimane),
-      collettiva:  Math.round(nCorsiCollettivi*(PUNTI_CORSO_COLLETTIVO/4)*settimane),
-    };
-  };
-
-  // Conteggio lezioni svolte nel mese selezionato, separato per individuali/collettive.
-  // Deduplica per id lezione: un record duplicato (bug di sincronizzazione a monte) non deve
-  // essere contato due volte — questa è l'unica vista impattata dal problema, quindi la protezione
-  // va messa qui.
-  const contInd = {}, contColl = {};
-  const lezioniGiaContate = new Set();
-  (lessons||[]).forEach(l => {
+    if (isColl(l)||l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
+    if (l.attendance==='recuperata') return;
     if (!l.date) return;
     const [ly,lm] = l.date.split('-').map(Number);
     if (ly!==reportAnno||lm!==reportMese) return;
-    if (l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
-    const lid = l.id!=null ? String(l.id) : `${l.date}|${l.hour}|${l.student||l.courseId||''}`;
-    if (lezioniGiaContate.has(lid)) return; // record duplicato: già conteggiato
-    lezioniGiaContate.add(lid);
-    if (isColl(l)) {
-      (l.students||[]).forEach(st => {
-        if (!st || !st.name) return;
-        if (studAttendance(l, st.name, st.id)==='recuperata') return;
-        contColl[st.name] = (contColl[st.name]||0)+1;
-      });
-    } else {
-      if (l.attendance==='recuperata') return;
-      const k = l.student||String(l.studentId||''); if(!k) return;
-      contInd[k] = (contInd[k]||0)+1;
-    }
+    const k = l.student||String(l.studentId||''); if(!k) return;
+    contInd[k] = (contInd[k]||0)+1;
   });
 
   const allieviAttivi = (students||[]).filter(s=>s.status==='attivo'||!s.status);
-  const report = [];
-  allieviAttivi.forEach(s => {
+  const report = allieviAttivi.map(s => {
     const nome = s.name||s.nome||'';
-    if (!nome) return;
-    const soglie = sogliaAllievo(s);
-    const isEccInd  = s.sogliaIndividualeEcc!=null;
-    const isEccColl = s.sogliaCollettivaEcc!=null;
-    const sogliaInd  = Math.round(isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale);
-    const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
-    const countInd  = contInd[nome]||0;
-    const countColl = contColl[nome]||0;
-    const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
-    const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
-    // Stato complessivo dell'allievo: la carenza (sotto soglia), su uno qualsiasi dei due tipi,
-    // ha priorità — poi l'eccedenza — altrimenti è in linea su entrambi.
-    const deltaPeggiore = Math.min(individuale.delta, collettiva.delta) < 0
-      ? Math.min(individuale.delta, collettiva.delta)
-      : Math.max(individuale.delta, collettiva.delta);
-    report.push({ id:s.id, nome, individuale, collettiva, deltaPeggiore });
-  });
-  report.sort((a,b)=>a.deltaPeggiore-b.deltaPeggiore);
+    const isEccezione = s.sogliaIndividualeEcc!=null;
+    const soglia = isEccezione ? Number(s.sogliaIndividualeEcc) : sogliaDefaultAllievo(s);
+    const count  = contInd[nome]||0;
+    const delta  = count - soglia;
+    return { id:s.id, nome, count, soglia, delta, isEccezione };
+  }).filter(r=>r.nome).sort((a,b)=>b.delta-a.delta);
 
-  const superano    = report.filter(r=>r.deltaPeggiore>0);
-  const inLinea     = report.filter(r=>r.deltaPeggiore===0);
-  const sottosoglia = report.filter(r=>r.deltaPeggiore<0);
+  const superano    = report.filter(r=>r.delta>0);
+  const inLinea     = report.filter(r=>r.delta===0);
+  const sottosoglia = report.filter(r=>r.delta<0);
 
   const filtrato = reportFiltro==='oltre' ? superano
     : reportFiltro==='sotto' ? sottosoglia
@@ -2555,42 +2484,33 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
       , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
         , React.createElement('thead',null
           , React.createElement('tr',{style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
-            , ['Allievo','Individuali','Collettive','Stato'].map(h=>
+            , ['Allievo','Lezioni svolte','Soglia','Differenza','Stato'].map(h=>
                 React.createElement('th',{key:h,style:{padding:'9px 16px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.07em',color:C.textMuted,fontWeight:600}},h))
           )
         )
         , React.createElement('tbody',null
           , filtrato.map((r,i)=>{
-              const cella = (stat) => {
-                const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
-                const lbl = stat.delta>0?`+${stat.delta}`:stat.delta<0?`${stat.delta}`:'0';
-                return React.createElement('div',{style:{display:'flex',alignItems:'baseline',gap:6}}
-                  , React.createElement('span',{style:{fontSize:13,fontWeight:700,color:C.text}}, stat.count)
-                  , React.createElement('span',{style:{fontSize:11,color:C.textMuted}}, `/ ${stat.soglia}`)
-                  , React.createElement('span',{style:{fontSize:11,fontWeight:700,color:clr}}, lbl)
-                  , stat.isEccezione && React.createElement('span',{style:{fontSize:10,color:C.gold}},'(ecc.)')
-                );
-              };
-              const clrStato = r.deltaPeggiore>0?C.orange : r.deltaPeggiore<0?C.blue : C.green;
-              const bgStato  = r.deltaPeggiore>0?C.orangeBg : r.deltaPeggiore<0?C.blueBg : C.greenBg;
-              const bdStato  = r.deltaPeggiore>0?C.orangeBorder : r.deltaPeggiore<0?C.blueBorder : C.greenBorder;
-              const lblStato = r.deltaPeggiore>0?'Oltre soglia' : r.deltaPeggiore<0?'Sotto soglia':'✓ In linea';
+              const clr = r.delta>0?C.orange : r.delta<0?C.blue : C.green;
+              const bg  = r.delta>0?C.orangeBg : r.delta<0?C.blueBg : C.greenBg;
+              const bd  = r.delta>0?C.orangeBorder : r.delta<0?C.blueBorder : C.greenBorder;
+              const lbl = r.delta>0?`+${r.delta} extra` : r.delta<0?`${r.delta} mancanti`:'✓ In linea';
               return React.createElement('tr',{key:r.id||r.nome,
                   style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg,cursor:'pointer',transition:'background .1s'},
                   onMouseEnter:e=>e.currentTarget.style.background=C.bg,
                   onMouseLeave:e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg,
                   onClick:()=>{ const s=(students||[]).find(st=>(st.name||st.nome||'')===r.nome); if(s&&onSelectAllievo) onSelectAllievo(s); }}
                 , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:600,color:C.text}}, r.nome)
-                , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.individuale))
-                , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.collettiva))
-                , React.createElement('td',{style:{padding:'10px 16px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bgStato,color:clrStato,border:`1px solid ${bdStato}`,borderRadius:20,padding:'3px 10px'}},lblStato))
+                , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,color:C.text,fontWeight:700}}, r.count)
+                , React.createElement('td',{style:{padding:'10px 16px',fontSize:12,color:C.textMuted}}, r.soglia, r.isEccezione&&React.createElement('span',{style:{fontSize:10,color:C.gold,marginLeft:6}},'(eccezione)'))
+                , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:700,color:clr}}, r.delta>0?`+${r.delta}`:r.delta<0?r.delta:'0')
+                , React.createElement('td',{style:{padding:'10px 16px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bg,color:clr,border:`1px solid ${bd}`,borderRadius:20,padding:'3px 10px'}},lbl))
               );
             })
-          , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:4,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
+          , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:5,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
         )
       )
-      , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:6}}
-        , `Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · mese d'iscrizione e mese in corso calcolati in proporzione alle settimane trascorse · ${allieviAttivi.length} allievi attivi`
+      , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between'}}
+        , `Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · ${report.length} allievi attivi`
         , React.createElement('span',null,'Clicca su un allievo per aprire il profilo')
       )
     )
@@ -4556,10 +4476,11 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                         corso: lesson.instrument||'', lezioneId: lesson.id,
                         allievoNome: lesson.student||'', createdAt: new Date().toISOString(),
                       };
-                      // Salva subito su Supabase allegati (NO id: lascia auto UUID)
+                      // Salva subito su Supabase allegati (id generato lato client: la colonna non ha default)
                       if (sb && fileUrl) {
                         try {
                           const { data: insData, error: insErr } = await sb.from('allegati').insert({
+                            id: attId,
                             lezione_id: lesson.id,
                             allievo_nome: lesson.student||'',
                             corso: lesson.instrument||'',
