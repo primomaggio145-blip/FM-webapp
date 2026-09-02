@@ -2927,7 +2927,14 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         newStudent.extraInstruments = d.extraInstruments||[];
         newStudent.extraTeachers = d.extraTeachers||{};
         newStudent.lessons = [];
-        setStudents(p => [...p, newStudent]);
+        let listaAggiornata;
+        setStudents(p => { listaAggiornata = [...p, newStudent]; return listaAggiornata; });
+        // CAUSA REALE DEI DOPPIONI: fm_sync.js confronta lo stato locale con la propria
+        // baseline (_prev) per capire cosa sincronizzare da solo in automatico. Se non gli
+        // diciamo che questo allievo è già stato scritto qui sopra, al giro successivo lo
+        // vede come "nuovo" (non presente nella sua baseline) e lo inserisce DI NUOVO — da qui
+        // il secondo record, sempre privo dei campi che il suo adattatore non conosceva ancora.
+        if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ students: listaAggiornata });
         // Crea automaticamente l'iscrizione per l'anno scolastico attualmente selezionato.
         // Senza un anno valido l'iscrizione non può essere creata: l'allievo resterebbe
         // "scollegato" — meglio avvisare subito piuttosto che fallire in silenzio.
@@ -3001,7 +3008,11 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         }
       } catch(e) { console.warn('[FM] update iscrizione error:', e?.message); }
     }
-    setStudents(p => p.map(s => s.id===d.id ? {...s,...d} : s));
+    let listaAggiornata;
+    setStudents(p => { listaAggiornata = p.map(s => s.id===d.id ? {...s,...d} : s); return listaAggiornata; });
+    // Stesso motivo del fix in handleAddStudent: allinea la baseline di fm_sync.js dopo la
+    // scrittura diretta, così non rileva questo record come "diverso" e non lo riscrive da solo.
+    if (window.__FM_UPDATE_PREV__ && listaAggiornata) window.__FM_UPDATE_PREV__({ students: listaAggiornata });
     if (_optionalChain([selected, 'optionalAccess', _43 => _43.id])===d.id) setSelected(p=>({...p,...d}));
     closeModal();
   };
