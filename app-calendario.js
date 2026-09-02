@@ -867,10 +867,14 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
   }, [courses]);
 
   const [saving, setSaving] = useState(false);
+  const savingRef = React.useRef(false); // guard sincrono: uno state da solo non basta, un secondo
+  // click arrivato prima del re-render vedrebbe ancora saving=false e passerebbe comunque (causa
+  // reale dei doppioni riscontrati: 2 insert distinti dallo stesso submit).
   const handleSubmit = () => {
-    if (saving) return; // blocco anti doppio-click: un doppio invio creerebbe un allievo duplicato a DB
+    if (savingRef.current) return; // blocco anti doppio-click: un doppio invio creerebbe un allievo duplicato a DB
     const e = validate(f);
     if(Object.keys(e).length){ setErrors(e); return; }
+    savingRef.current = true;
     setSaving(true);
     onSave({...f, monthlyFee:Number(f.monthlyFee), lessons:f.lessons||[]});
   };
@@ -2783,6 +2787,9 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const _ruoloAV = propUserRuoloAV || "admin";
   const _nomeAV  = (_appUserAV && _appUserAV.nome) || "";
   const isMobile = useIsMobile();
+  // Guard sincrono (ref, non state) contro un secondo handleAddStudent lanciato mentre il primo
+  // è ancora in corso — vedi commento in handleAddStudent per il motivo.
+  const addStudentInFlightRef = React.useRef(false);
   const [_students, _setStudents] = useState(INIT_STUDENTS);
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
   const _allStudents = _nullishCoalesce(propStudents, () => ( _students));
@@ -2866,6 +2873,13 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   },[qaAV]);
 
   const handleAddStudent = async (d) => {
+    // Guard sincrono a livello di vista: se un salvataggio è già in corso (es. l'admin ha chiuso
+    // il modale con la X prima che finisse e ne ha riaperto un altro), un secondo invio in
+    // parallelo creerebbe comunque un allievo duplicato — il guard nel form da solo non basta
+    // perché si smonta con la chiusura del modale.
+    if (addStudentInFlightRef.current) { console.warn('[FM] Salvataggio allievo già in corso: richiesta ignorata per evitare un duplicato.'); return; }
+    addStudentInFlightRef.current = true;
+    try {
     const sb = window.supabaseClient;
     if (sb) {
       const row = {
@@ -2923,6 +2937,9 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       setStudents(p => [...p, {...d, id: uid(), lessons:[]}]);
     }
     closeModal();
+    } finally {
+      addStudentInFlightRef.current = false;
+    }
   };
 
   const handleEditStudent = async (d) => {
