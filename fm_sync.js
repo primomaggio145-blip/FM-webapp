@@ -38,6 +38,11 @@
     base.repertorio      = parseJson(r.repertorio, []);
     base.extraInstruments = parseJson(r.extra_instruments, []);
     base.extraTeachers    = parseJson(r.extra_teachers, {});
+    // FMAdapter.studente() potrebbe non conoscere ancora questi due campi (aggiunti di recente
+    // allo schema): recuperiamo qui il dato grezzo, altrimenti si perde in lettura anche se
+    // scritto correttamente su database — non sovrascrive se FMAdapter li mappa già da solo.
+    if (base.nomeRicevuta === undefined) base.nomeRicevuta = r.nome_ricevuta || '';
+    if (base.codiceFiscale === undefined) base.codiceFiscale = r.codice_fiscale || '';
     return base;
   }
   function adaptDocente(r) {

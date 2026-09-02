@@ -2927,6 +2927,11 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         newStudent.extraInstruments = d.extraInstruments||[];
         newStudent.extraTeachers = d.extraTeachers||{};
         newStudent.lessons = [];
+        // FA.studente() potrebbe non conoscere ancora questi due campi (aggiunti di recente):
+        // li impostiamo qui direttamente dai dati appena inviati, altrimenti l'allievo appare
+        // subito in scheda senza nome per ricevuta / codice fiscale finché non si ricarica.
+        if (newStudent.nomeRicevuta === undefined || newStudent.nomeRicevuta === null) newStudent.nomeRicevuta = d.nomeRicevuta || '';
+        if (newStudent.codiceFiscale === undefined || newStudent.codiceFiscale === null) newStudent.codiceFiscale = d.codiceFiscale || '';
         let listaAggiornata;
         setStudents(p => { listaAggiornata = [...p, newStudent]; return listaAggiornata; });
         // CAUSA REALE DEI DOPPIONI: fm_sync.js confronta lo stato locale con la propria

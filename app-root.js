@@ -294,6 +294,11 @@ function App() {
               base.repertorio = pj(r.repertorio, []);
               base.extraInstruments = pj(r.extra_instruments, []);
               base.extraTeachers = pj(r.extra_teachers, {});
+              // FA.studente() potrebbe non conoscere ancora questi due campi (aggiunti di
+              // recente allo schema): senza questo recupero si perdono al reload completo
+              // della pagina anche se scritti correttamente su database.
+              if (base.nomeRicevuta === undefined) base.nomeRicevuta = r.nome_ricevuta || '';
+              if (base.codiceFiscale === undefined) base.codiceFiscale = r.codice_fiscale || '';
               return base;
             }),
             docenti:  (sD||[]).map(r => { const b = FA ? FA.docente(r) : r; b.annoCreazione = (r.anno_creazione != null) ? r.anno_creazione : null; return b; }),
