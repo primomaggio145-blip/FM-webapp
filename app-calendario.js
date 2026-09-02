@@ -2882,6 +2882,31 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
     try {
     const sb = window.supabaseClient;
     if (sb) {
+      // Rete di sicurezza definitiva: prima di inserire, verifica su Supabase (non solo in
+      // locale) se un allievo con lo stesso nome+email+telefono+data di nascita è già stato
+      // creato negli ultimissimi secondi. I guard sopra proteggono dal doppio click, ma qui
+      // si continuano a vedere due INSERT reali nonostante il pulsante fosse disabilitato:
+      // questo controllo blocca il secondo inserimento indipendentemente dalla causa esatta
+      // (qualunque essa sia) che fa scattare due chiamate di salvataggio.
+      try {
+        const { data: possibiliDup } = await sb.from('studenti')
+          .select('id, created_at')
+          .eq('nome', d.name||'')
+          .eq('email', d.email||'')
+          .eq('phone', d.phone||'')
+          .eq('birthdate', d.birthdate||'')
+          .order('created_at', { ascending:false })
+          .limit(1);
+        if (possibiliDup && possibiliDup.length>0) {
+          const msFa = Date.now() - new Date(possibiliDup[0].created_at).getTime();
+          if (msFa >= 0 && msFa < 20000) {
+            console.warn(`[FM] Allievo identico creato ${Math.round(msFa/1000)}s fa: secondo inserimento bloccato per evitare un duplicato.`);
+            closeModal();
+            return;
+          }
+        }
+      } catch(eDup) { /* se il controllo anti-duplicato fallisce, si procede comunque con l'inserimento normale */ }
+
       const row = {
         nome: d.name||'', email: d.email||null, phone: d.phone||null,
         strumento: d.instrument||null, docente: d.teacher||null,
