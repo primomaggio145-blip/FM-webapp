@@ -1503,20 +1503,27 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
       /* ── INFORMAZIONI ── */
       , tab==="info" && (
         React.createElement('div', { style: {display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3261}}
-          , [
-            // email e telefono: solo admin/allievo, non docente
-            ...(sdRuolo !== "docente" ? [
-              {icon:"mail",    label:"Email",       value:student.email||"—"},
-              {icon:"phone",   label:"Telefono",     value:student.phone||"—"},
-            ] : []),
-            {icon:"user",    label:"Età",          value:student.birthdate?`${age(student.birthdate)} anni`:"—"},
-            {icon:"music",   label:"Livello",      value:student.level||"—"},
-            {icon:"calendar",label:"Iscritto dal", value:fmtDate(student.enrollDate)||"—"},
-            // quota mensile: solo admin/allievo, non docente
-            ...(sdRuolo !== "docente" ? [
-              {icon:"euro",    label:"Quota mensile",value:`€ ${student.monthlyFee} (${student.feeType})`},
-            ] : []),
-          ].map(r => (
+          , (() => {
+              const etaAllievo = student.birthdate && typeof age === 'function' ? age(student.birthdate) : null;
+              const isMinorenne = etaAllievo != null && etaAllievo < 18;
+              const nomeRicevutaVal = (student.nomeRicevuta && student.nomeRicevuta.trim())
+                ? student.nomeRicevuta
+                : (isMinorenne ? "⚠ Da compilare (obbligatorio per minorenni)" : (student.name || "—"));
+              return [
+                // email e telefono: solo admin/allievo, non docente
+                ...(sdRuolo !== "docente" ? [
+                  {icon:"mail",    label:"Email",       value:student.email||"—"},
+                  {icon:"phone",   label:"Telefono",     value:student.phone||"—"},
+                ] : []),
+                {icon:"user",    label:"Età",          value:student.birthdate?`${etaAllievo} anni`:"—"},
+                {icon:"calendar",label:"Iscritto dal", value:fmtDate(student.enrollDate)||"—"},
+                // nome per ricevuta e quota mensile: solo admin/allievo, non docente
+                ...(sdRuolo !== "docente" ? [
+                  {icon:"receipt", label:isMinorenne?"Nome per ricevuta (minorenne)":"Nome per ricevuta", value:nomeRicevutaVal},
+                  {icon:"euro",    label:"Quota mensile",value:`€ ${student.monthlyFee} (${student.feeType})`},
+                ] : []),
+              ];
+            })().map(r => (
             React.createElement('div', { key: r.label, style: {display:"flex",gap:12,alignItems:"flex-start",padding:"14px 16px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3270}}
               , React.createElement(Ic, { n: r.icon, size: 16, accentHex: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3271}})
               , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3272}}
