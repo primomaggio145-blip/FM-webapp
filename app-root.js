@@ -4745,7 +4745,9 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
               const target = idx + dir;
               if (target < 0 || target >= newOrder.length) return;
               [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
-              setPanels(prev => ({...prev, panelOrder: newOrder}));
+              const newPanels = {...panels, panelOrder: newOrder};
+              setPanels(() => newPanels);
+              if (window.__FM_PERSIST_PANELS__) window.__FM_PERSIST_PANELS__(newPanels);
             };
 
             return ordered.map((p, idx) => {
@@ -4770,7 +4772,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
                   )
                 , p.sempre
                   ? React.createElement('span',{style:{fontSize:10,color:C.textDim,letterSpacing:".06em"}}, "FISSO")
-                  : React.createElement(Toggle, {value:on, onChange:function(v){ setPanels(function(prev){ return Object.assign({},prev,{[p.id]:v}); }); }})
+                  : React.createElement(Toggle, {value:on, onChange:function(v){ const newPanels=Object.assign({},panels,{[p.id]:v}); setPanels(()=>newPanels); if (window.__FM_PERSIST_PANELS__) window.__FM_PERSIST_PANELS__(newPanels); }})
               );
             });
           })()
@@ -4801,7 +4803,9 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
             const target = idx + dir;
             if (target < 0 || target >= newOrder.length) return;
             [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
-            setPanels(prev => ({...prev, kpiOrder: newOrder}));
+            const newPanels = {...panels, kpiOrder: newOrder};
+            setPanels(() => newPanels);
+            if (window.__FM_PERSIST_PANELS__) window.__FM_PERSIST_PANELS__(newPanels);
           };
 
           return React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}}

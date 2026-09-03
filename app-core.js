@@ -1758,3 +1758,22 @@ const FormSetPassword = ({onSuccess}) => {
 
 
 const oggi   = new Date();
+
+// ── Persistenza immediata ordine/visibilità pannelli Dashboard ──────────────
+// Prima, il riordino (frecce ▲▼) e i toggle visibilità aggiornavano SOLO lo stato
+// React locale (setPanels/onPanels): la scrittura su Supabase avveniva solo come
+// effetto collaterale del salvataggio (slegato) in Impostazioni Generali. Se l'utente
+// riordinava le card senza mai aprire e salvare quella scheda, l'ordine si perdeva
+// al riavvio. Questo helper scrive subito la chiave 'dashboardPanels' in sito_config,
+// indipendentemente da dove viene richiamato il riordino (Dashboard o Impostazioni).
+window.__FM_PERSIST_PANELS__ = function(newPanels) {
+  const sb = window.supabaseClient;
+  if (!sb) return;
+  (async () => {
+    try {
+      await sb.from('sito_config').delete().eq('chiave', 'dashboardPanels');
+      const { error } = await sb.from('sito_config').insert({ chiave: 'dashboardPanels', valore: JSON.stringify(newPanels || {}) });
+      if (error) console.warn('[FM] errore salvataggio ordine pannelli:', error.message);
+    } catch(e) { console.warn('[FM] errore salvataggio ordine pannelli:', e && e.message); }
+  })();
+};
