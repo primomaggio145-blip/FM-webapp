@@ -404,7 +404,7 @@ const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, o
           React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2736}}
             , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 2737}}
               , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2738}}
-                , ["Allievo","Insegnante","Livello","Quota mensile","Stato"].map(h=>(
+                , ["Allievo","Insegnante","Quota mensile","Stato"].map(h=>(
                   React.createElement('th', { key: h, style: {padding:"11px 20px",textAlign:"left",fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2740}}, h)
                 ))
               )
@@ -428,7 +428,6 @@ const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, o
                       )
                     )
                     , React.createElement('td', { style: {padding:"13px 20px",fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2762}}, s.teacher)
-                    , React.createElement('td', { style: {padding:"13px 20px",fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2763}}, s.level||"—")
                     , React.createElement('td', { style: {padding:"13px 20px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2764}}
                       , React.createElement('div', { style: {fontSize:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2765}}, "€ " , s.monthlyFee)
                       , React.createElement('div', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2766}}, s.feeType)
@@ -1532,16 +1531,6 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
               )
             )
           ))
-          , comp && (
-            React.createElement('div', { style: {display:"flex",gap:12,alignItems:"flex-start",padding:"14px 16px",background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3279}}
-              , React.createElement(Ic, { n: "group", size: 16, accentHex: C.purple, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3280}})
-              , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3281}}
-                , React.createElement('div', { style: {fontSize:11,color:C.purple,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3,opacity:0.7}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3282}}, "Corso complementare" )
-                , React.createElement('div', { style: {fontSize:14,color:C.purple,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3283}}, comp.name)
-                , comp.description && React.createElement('div', { style: {fontSize:12,color:C.textMuted,marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3284}}, comp.description)
-              )
-            )
-          )
           , myGruppi.length > 0 && (
             React.createElement('div', { style: {gridColumn:"1/-1",display:"flex",flexDirection:"column",gap:8,padding:"14px 16px",background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:10}}
               , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
@@ -2917,7 +2906,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       const row = {
         nome: d.name||'', email: d.email||null, phone: d.phone||null,
         strumento: d.instrument||null, docente: d.teacher||null,
-        livello: d.level||'Principiante', status: d.status||'attivo',
+        status: d.status||'attivo',
         monthly_fee: parseFloat(d.monthlyFee)||0, fee_type: d.feeType||'fisso',
         birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
         complementary_course: d.complementaryCourse||null, notes: d.notes||null,
@@ -2992,7 +2981,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       const row = {
         nome: d.name||'', email: d.email||null, phone: d.phone||null,
         strumento: d.instrument||null, docente: d.teacher||null,
-        livello: d.level||'Principiante', status: d.status||'attivo',
+        status: d.status||'attivo',
         monthly_fee: parseFloat(d.monthlyFee)||0, fee_type: d.feeType||'fisso',
         birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
         complementary_course: d.complementaryCourse||null, notes: d.notes||null,
@@ -6457,7 +6446,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
                     )
                     , React.createElement('div', { style: {flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5626}}
                       , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:isSel?sc:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5627}}, s.name)
-                      , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5628}}, s.instrument, " · "  , s.level||"—")
+                      , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5628}}, s.instrument)
                     )
                     , fromGruppo && React.createElement('span', { style: {fontSize:9, color:C.purple, background:C.purpleBg, border:`1px solid ${C.purpleBorder}`, borderRadius:10, padding:"2px 7px", fontWeight:600} }, selGruppo?selGruppo.nome:'gruppo')
                     , isSel && React.createElement(Ic, { n: "check", size: 13, stroke: sc, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5630}})
