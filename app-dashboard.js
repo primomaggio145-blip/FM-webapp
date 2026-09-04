@@ -1833,7 +1833,9 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
   const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
 
   // Sezioni collassabili indipendenti
-  const [reportFiltro, setReportFiltro] = useState('tutti');
+  const [openOltre,   setOpenOltre]   = useState(true);
+  const [openInLinea, setOpenInLinea] = useState(false);
+  const [openSotto,   setOpenSotto]   = useState(false);
 
   // ── Da qui in poi: IDENTICA logica di calcolo di ReportLezioniMensile (AllieviView),
   // per garantire che i due report mostrino sempre gli stessi numeri ──────────────────
@@ -1931,18 +1933,44 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
   const cella = (stat) => {
     const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
     const lbl = stat.delta>0?`+${stat.delta}`:stat.delta<0?`${stat.delta}`:'0';
-    return React.createElement('div',{style:{display:'flex',alignItems:'baseline',gap:6}}
-      , React.createElement('span',{style:{fontSize:13,fontWeight:700,color:C.text}}, stat.count)
-      , React.createElement('span',{style:{fontSize:11,color:C.textMuted}}, `/ ${stat.soglia}`)
-      , React.createElement('span',{style:{fontSize:11,fontWeight:700,color:clr}}, lbl)
-      , stat.isEccezione && React.createElement('span',{style:{fontSize:10,color:C.gold}},'(ecc.)')
+    return React.createElement('div',{style:{display:'flex',alignItems:'baseline',gap:4,whiteSpace:'nowrap'}}
+      , React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.text}}, stat.count)
+      , React.createElement('span',{style:{fontSize:10,color:C.textMuted}}, `/${stat.soglia}`)
+      , React.createElement('span',{style:{fontSize:10,fontWeight:700,color:clr}}, lbl)
+      , stat.isEccezione && React.createElement('span',{style:{fontSize:9,color:C.gold}},'(ecc.)')
     );
   };
 
-  const filtrato = reportFiltro==='oltre' ? superano
-    : reportFiltro==='inlinea' ? inLinea
-    : reportFiltro==='sotto' ? sottosoglia
-    : report;
+  const RigaAllievo = (r) => React.createElement('div',{key:r.id||r.nome,
+      style:{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:`1px solid ${C.border}44`,cursor:'pointer'},
+      onClick:()=>onNavigate('allievi')}
+    , React.createElement('span',{style:{fontSize:12,color:C.text,fontWeight:600,flex:'1 1 auto',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, r.nome)
+    , React.createElement('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,minWidth:52}}
+        , React.createElement('span',{style:{fontSize:8,color:C.textDim,textTransform:'uppercase',letterSpacing:'.04em'}},'Ind.')
+        , cella(r.individuale)
+      )
+    , React.createElement('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,minWidth:52}}
+        , React.createElement('span',{style:{fontSize:8,color:C.textDim,textTransform:'uppercase',letterSpacing:'.04em'}},'Coll.')
+        , cella(r.collettiva)
+      )
+  );
+
+  const ColSection = ({ title, color, icon, items, open, onToggle }) =>
+    React.createElement('div', {style:{borderBottom:`1px solid ${C.border}`}}
+      , React.createElement('div', {
+          onClick: onToggle,
+          style:{padding:'10px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,
+            background: open ? `${color}08` : 'transparent', transition:'background .15s'}}
+        , React.createElement(Ic,{n:icon,size:12,stroke:color})
+        , React.createElement('span',{style:{fontSize:11,color,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em',flex:1}}, title, ` (${items.length})`)
+        , React.createElement(Ic,{n:open?'chevron-up':'chevron-down',size:13,stroke:C.textMuted})
+      )
+      , open && React.createElement('div', {style:{padding:'2px 16px 8px',maxHeight:280,overflowY:'auto'}}
+        , items.length === 0
+          ? React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic',padding:'6px 0'}},'Nessuno')
+          : items.map(RigaAllievo)
+      )
+    );
 
   return React.createElement('div', {style:{marginBottom:16}}
     , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}
@@ -1953,44 +1981,16 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
           , React.createElement('span',{style:{fontSize:12,fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted}},
               `Report lezioni · ${MESI_FULL[meseCurr-1]} ${annoCurr}`)
         )
-        , React.createElement('div',{style:{display:'flex',gap:4}}
-          , [{id:'tutti',label:`Tutti (${report.length})`},{id:'oltre',label:`🔴 Oltre (${superano.length})`},{id:'inlinea',label:`🟢 In linea (${inLinea.length})`},{id:'sotto',label:`🔵 Sotto (${sottosoglia.length})`}]
-            .map(f=>React.createElement('button',{key:f.id,onClick:()=>setReportFiltro(f.id),
-                style:{padding:'5px 12px',borderRadius:20,border:`1px solid ${reportFiltro===f.id?C.gold:C.border}`,
-                  background:reportFiltro===f.id?C.goldBg:'none',color:reportFiltro===f.id?C.gold:C.textMuted,
-                  cursor:'pointer',fontSize:11,fontWeight:reportFiltro===f.id?700:400,fontFamily:"'Open Sans',sans-serif"}},f.label))
+        , React.createElement('div',{style:{display:'flex',gap:6}}
+          , superano.length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px solid ${C.orangeBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`${superano.length} oltre`)
+          , inLinea.length>0&&React.createElement('span',{style:{background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`${inLinea.length} ok`)
+          , sottosoglia.length>0&&React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`${sottosoglia.length} sotto`)
         )
       )
-      /* Tabella — stesse colonne di REPORT LEZIONI in ALLIEVI */
-      , React.createElement('div',{style:{maxHeight:340,overflowY:'auto'}}
-        , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
-          , React.createElement('thead',null
-            , React.createElement('tr',{style:{background:C.bg,borderBottom:`2px solid ${C.border}`,position:'sticky',top:0}}
-              , ['Allievo','Individuali','Collettive','Stato'].map(h=>
-                  React.createElement('th',{key:h,style:{padding:'9px 16px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.07em',color:C.textMuted,fontWeight:600,background:C.bg}},h))
-            )
-          )
-          , React.createElement('tbody',null
-            , filtrato.map((r,i)=>{
-                const clrStato = r.deltaPeggiore>0?C.orange : r.deltaPeggiore<0?C.blue : C.green;
-                const bgStato  = r.deltaPeggiore>0?C.orangeBg : r.deltaPeggiore<0?C.blueBg : C.greenBg;
-                const bdStato  = r.deltaPeggiore>0?C.orangeBorder : r.deltaPeggiore<0?C.blueBorder : C.greenBorder;
-                const lblStato = r.deltaPeggiore>0?'Oltre soglia' : r.deltaPeggiore<0?'Sotto soglia':'✓ In linea';
-                return React.createElement('tr',{key:r.id||r.nome,
-                    style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg,cursor:'pointer',transition:'background .1s'},
-                    onMouseEnter:e=>e.currentTarget.style.background=C.bg,
-                    onMouseLeave:e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg,
-                    onClick:()=>onNavigate('allievi')}
-                  , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:600,color:C.text}}, r.nome)
-                  , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.individuale))
-                  , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.collettiva))
-                  , React.createElement('td',{style:{padding:'10px 16px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bgStato,color:clrStato,border:`1px solid ${bdStato}`,borderRadius:20,padding:'3px 10px'}},lblStato))
-                );
-              })
-            , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:4,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
-          )
-        )
-      )
+      /* Sezioni collassabili — Individuali e Collettive mostrate separatamente per riga */
+      , React.createElement(ColSection, { title:'Oltre soglia', color:C.orange, icon:'alert', items:superano, open:openOltre, onToggle:()=>setOpenOltre(p=>!p) })
+      , React.createElement(ColSection, { title:'In linea', color:C.green, icon:'check', items:inLinea, open:openInLinea, onToggle:()=>setOpenInLinea(p=>!p) })
+      , React.createElement(ColSection, { title:'Sotto soglia', color:C.blue, icon:'clock', items:sottosoglia, open:openSotto, onToggle:()=>setOpenSotto(p=>!p) })
       /* Footer */
       , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:6}}
         , React.createElement('span',{style:{fontSize:11,color:C.textDim}},`Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · ${report.length} allievi attivi`)
@@ -2954,7 +2954,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             , ruolo === "admin" && isVisible("report") && React.createElement('div',{style:{...(window.__dash_panel_order__&&window.__dash_panel_order__('report'))}}
               , React.createElement(ReportLezioniCard, {
                   lessons: _lessons,
-                  students: ALLIEVI_LIVE,
+                  students: _studentsAnno,
                   config,
                   onNavigate,
                 })

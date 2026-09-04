@@ -50,7 +50,7 @@ function App() {
   }, [sharedIscrizioniAnno, sharedAnniScolastici]);
   const [sharedEntrate,         setSharedEntrate]         = useState(_d.entrate  || INIT_ENTRATE_QUOTE);
   // ── Stato globale per pannelli dashboard e ruolo simulazione ──
-  const [sharedPanels,  setSharedPanels]  = useState({});
+  const [sharedPanels,  setSharedPanels]  = useState(_d.dashboardPanels || {});
   const [sharedRuolo,   setSharedRuolo]   = useState("admin");
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
 
