@@ -2213,6 +2213,7 @@ const REMINDER_TYPES = [
   { id:'docente',     label:'Calendario docenti',  icon:'calendar', dest:'Docente', scheduleDefault:'08:00', cronDefault:'0 8 * * *', desc:'Riepilogo lezioni del giorno per il docente'      },
   { id:'pagamento',   label:'Pagamento mensile',   icon:'euro',     dest:'Allievo', scheduleDefault:'09:00', cronDefault:'0 9 1 * *', desc:'Promemoria quota mensile non ancora pagata'       },
   { id:'recupero',    label:'Recuperi in scadenza',icon:'clock',    dest:'Allievo', scheduleDefault:'09:00', cronDefault:'0 9 * * *', desc:'Avviso recupero che scade entro 3 giorni'         },
+  { id:'compleanno',  label:'Compleanno allievo',  icon:'star2',    dest:'Allievo', scheduleDefault:'08:00', cronDefault:'0 8 * * *', desc:'Auguri di compleanno (testo diverso per minorenni)' },
 ];
 
 const GIORNI_SETTIMANA = [
@@ -2439,7 +2440,7 @@ const RemindersView = ({ ruolo }) => {
           const isEdit= editingId === tipo.id;
           const isOn  = cfg.attivo !== false;
           // tipo potrebbe non esistere come colonna — cerca nel lezione_id e dettaglio come fallback
-          const VALID_TIPI = new Set(['individuale','collettivo','docente','pagamento','recupero']);
+          const VALID_TIPI = new Set(['individuale','collettivo','docente','pagamento','recupero','compleanno']);
           const matchTipo = (r) => {
             // Usa r.tipo SOLO se è un tipo reminder valido (non un wamid o stringa casuale)
             if (r.tipo && VALID_TIPI.has(r.tipo)) return r.tipo === tipo.id;
@@ -2591,12 +2592,13 @@ const RemindersView = ({ ruolo }) => {
                     , React.createElement('td',{style:{padding:'9px 14px',fontSize:12,color:C.textMuted,whiteSpace:'nowrap'}}, r.created_at ? new Date(r.created_at).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—')
                     , React.createElement('td',{style:{padding:'9px 14px',fontSize:12,fontFamily:'monospace',color:C.text}}, r.telefono||'—')
                     , React.createElement('td',{style:{padding:'9px 14px'}}, (() => {
-                        const VALID_T = new Set(['individuale','collettivo','docente','pagamento','recupero']);
+                        const VALID_T = new Set(['individuale','collettivo','docente','pagamento','recupero','compleanno']);
                         const lid = String(r.lezione_id||'');
                         // Ricava il tipo: preferisci r.tipo solo se è un tipo valido
                         let label = VALID_T.has(r.tipo) ? r.tipo
                           : lid.startsWith('docente_') ? 'docente'
                           : lid.startsWith('pagamento_') ? 'pagamento'
+                          : lid.startsWith('compleanno_') ? 'compleanno'
                           : lid.match(/^[0-9a-f-]{36}$/i) ? 'lezione'
                           : '—';
                         return React.createElement('span',{style:{fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:'2px 8px',color:C.textMuted}}, label);
