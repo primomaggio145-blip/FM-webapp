@@ -1768,12 +1768,25 @@ const oggi   = new Date();
 // indipendentemente da dove viene richiamato il riordino (Dashboard o Impostazioni).
 window.__FM_PERSIST_PANELS__ = function(newPanels) {
   const sb = window.supabaseClient;
-  if (!sb) return;
+  if (!sb) { console.warn('[FM] __FM_PERSIST_PANELS__: supabaseClient non disponibile'); return; }
   (async () => {
     try {
-      await sb.from('sito_config').delete().eq('chiave', 'dashboardPanels');
+      const del = await sb.from('sito_config').delete().eq('chiave', 'dashboardPanels');
+      if (del && del.error) {
+        console.warn('[FM] errore DELETE dashboardPanels:', del.error.message);
+        alert('Impossibile salvare l\'ordine: permessi insufficienti sul database (RLS - DELETE su sito_config).\n' + del.error.message);
+        return;
+      }
       const { error } = await sb.from('sito_config').insert({ chiave: 'dashboardPanels', valore: JSON.stringify(newPanels || {}) });
-      if (error) console.warn('[FM] errore salvataggio ordine pannelli:', error.message);
-    } catch(e) { console.warn('[FM] errore salvataggio ordine pannelli:', e && e.message); }
+      if (error) {
+        console.warn('[FM] errore INSERT dashboardPanels:', error.message);
+        alert('Impossibile salvare l\'ordine: permessi insufficienti sul database (RLS - INSERT su sito_config).\n' + error.message);
+        return;
+      }
+      console.log('[FM] Ordine pannelli salvato su sito_config:', newPanels);
+    } catch(e) {
+      console.warn('[FM] errore salvataggio ordine pannelli:', e && e.message);
+      alert('Errore durante il salvataggio dell\'ordine: ' + (e && e.message));
+    }
   })();
 };

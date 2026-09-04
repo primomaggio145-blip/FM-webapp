@@ -1833,9 +1833,7 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
   const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
 
   // Sezioni collassabili indipendenti
-  const [openOltre,   setOpenOltre]   = useState(true);
-  const [openInLinea, setOpenInLinea] = useState(false);
-  const [openSotto,   setOpenSotto]   = useState(false);
+  const [reportFiltro, setReportFiltro] = useState('tutti');
 
   // ── Da qui in poi: IDENTICA logica di calcolo di ReportLezioniMensile (AllieviView),
   // per garantire che i due report mostrino sempre gli stessi numeri ──────────────────
@@ -1915,76 +1913,87 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
     const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
     const countInd  = contInd[nome]||0;
     const countColl = contColl[nome]||0;
-    const deltaInd  = countInd-sogliaInd;
-    const deltaColl = countColl-sogliaColl;
+    const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
+    const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
     // Stato complessivo: la carenza (su uno qualsiasi dei due tipi) ha priorità, poi l'eccedenza
     // — identico criterio di ReportLezioniMensile
-    const delta = Math.min(deltaInd, deltaColl) < 0 ? Math.min(deltaInd, deltaColl) : Math.max(deltaInd, deltaColl);
-    return { nome, count: countInd+countColl, soglia: sogliaInd+sogliaColl, delta };
+    const deltaPeggiore = Math.min(individuale.delta, collettiva.delta) < 0
+      ? Math.min(individuale.delta, collettiva.delta)
+      : Math.max(individuale.delta, collettiva.delta);
+    return { id:s.id, nome, individuale, collettiva, deltaPeggiore };
   }).filter(r=>r.nome);
+  report.sort((a,b)=>a.deltaPeggiore-b.deltaPeggiore);
 
-  const superano    = report.filter(r=>r.delta>0).sort((a,b)=>b.delta-a.delta);
-  const inLinea     = report.filter(r=>r.delta===0);
-  const sottosoglia = report.filter(r=>r.delta<0).sort((a,b)=>a.delta-b.delta);
+  const superano    = report.filter(r=>r.deltaPeggiore>0);
+  const inLinea     = report.filter(r=>r.deltaPeggiore===0);
+  const sottosoglia = report.filter(r=>r.deltaPeggiore<0);
 
-  const ColSection = ({ title, color, icon, items, open, onToggle, renderItem }) =>
-    React.createElement('div', {style:{borderBottom:`1px solid ${C.border}`}}
-      , React.createElement('div', {
-          onClick: onToggle,
-          style:{padding:'10px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,
-            background: open ? `${color}08` : 'transparent',
-            transition:'background .15s'}}
-        , React.createElement(Ic,{n:icon,size:12,stroke:color})
-        , React.createElement('span',{style:{fontSize:11,color,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em',flex:1}}, title, ` (${items.length})`)
-        , React.createElement(Ic,{n:open?'chevron-up':'chevron-down',size:13,stroke:C.textMuted})
-      )
-      , open && React.createElement('div', {style:{padding:'4px 16px 10px'}}
-        , items.length === 0
-          ? React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic',padding:'4px 0'}},'Nessuno')
-          : items.map(r => React.createElement('div',{key:r.nome,
-              style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:`1px solid ${C.border}44`}}
-            , React.createElement('span',{style:{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'65%'}}, r.nome)
-            , renderItem(r)
-          ))
-      )
+  const cella = (stat) => {
+    const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
+    const lbl = stat.delta>0?`+${stat.delta}`:stat.delta<0?`${stat.delta}`:'0';
+    return React.createElement('div',{style:{display:'flex',alignItems:'baseline',gap:6}}
+      , React.createElement('span',{style:{fontSize:13,fontWeight:700,color:C.text}}, stat.count)
+      , React.createElement('span',{style:{fontSize:11,color:C.textMuted}}, `/ ${stat.soglia}`)
+      , React.createElement('span',{style:{fontSize:11,fontWeight:700,color:clr}}, lbl)
+      , stat.isEccezione && React.createElement('span',{style:{fontSize:10,color:C.gold}},'(ecc.)')
     );
+  };
+
+  const filtrato = reportFiltro==='oltre' ? superano
+    : reportFiltro==='inlinea' ? inLinea
+    : reportFiltro==='sotto' ? sottosoglia
+    : report;
 
   return React.createElement('div', {style:{marginBottom:16}}
     , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}
       /* Header */
-      , React.createElement('div', {style:{padding:'14px 18px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}
+      , React.createElement('div', {style:{padding:'14px 18px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}
         , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8}}
           , React.createElement(Ic,{n:'chart',size:14,stroke:C.gold})
           , React.createElement('span',{style:{fontSize:12,fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted}},
               `Report lezioni · ${MESI_FULL[meseCurr-1]} ${annoCurr}`)
         )
-        , React.createElement('div',{style:{display:'flex',gap:6}}
-          , superano.length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px solid ${C.orangeBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`${superano.length} oltre`)
-          , inLinea.length>0&&React.createElement('span',{style:{background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`${inLinea.length} ok`)
-          , sottosoglia.length>0&&React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`${sottosoglia.length} sotto`)
+        , React.createElement('div',{style:{display:'flex',gap:4}}
+          , [{id:'tutti',label:`Tutti (${report.length})`},{id:'oltre',label:`🔴 Oltre (${superano.length})`},{id:'inlinea',label:`🟢 In linea (${inLinea.length})`},{id:'sotto',label:`🔵 Sotto (${sottosoglia.length})`}]
+            .map(f=>React.createElement('button',{key:f.id,onClick:()=>setReportFiltro(f.id),
+                style:{padding:'5px 12px',borderRadius:20,border:`1px solid ${reportFiltro===f.id?C.gold:C.border}`,
+                  background:reportFiltro===f.id?C.goldBg:'none',color:reportFiltro===f.id?C.gold:C.textMuted,
+                  cursor:'pointer',fontSize:11,fontWeight:reportFiltro===f.id?700:400,fontFamily:"'Open Sans',sans-serif"}},f.label))
         )
       )
-      /* Sezioni collassabili */
-      , React.createElement(ColSection, {
-          title:'Oltre soglia', color:C.orange, icon:'alert',
-          items:superano, open:openOltre, onToggle:()=>setOpenOltre(p=>!p),
-          renderItem: r => React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.orange,whiteSpace:'nowrap'}},
-            `${r.count}/${r.soglia} `, React.createElement('span',{style:{fontSize:10}},`+${r.delta}`))
-        })
-      , React.createElement(ColSection, {
-          title:'In linea', color:C.green, icon:'check',
-          items:inLinea, open:openInLinea, onToggle:()=>setOpenInLinea(p=>!p),
-          renderItem: r => React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.green}},`${r.count}/${r.soglia}`)
-        })
-      , React.createElement(ColSection, {
-          title:'Sotto soglia', color:C.blue, icon:'clock',
-          items:sottosoglia, open:openSotto, onToggle:()=>setOpenSotto(p=>!p),
-          renderItem: r => React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.blue,whiteSpace:'nowrap'}},
-            `${r.count}/${r.soglia} `, React.createElement('span',{style:{fontSize:10}},`${r.delta}`))
-        })
+      /* Tabella — stesse colonne di REPORT LEZIONI in ALLIEVI */
+      , React.createElement('div',{style:{maxHeight:340,overflowY:'auto'}}
+        , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
+          , React.createElement('thead',null
+            , React.createElement('tr',{style:{background:C.bg,borderBottom:`2px solid ${C.border}`,position:'sticky',top:0}}
+              , ['Allievo','Individuali','Collettive','Stato'].map(h=>
+                  React.createElement('th',{key:h,style:{padding:'9px 16px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.07em',color:C.textMuted,fontWeight:600,background:C.bg}},h))
+            )
+          )
+          , React.createElement('tbody',null
+            , filtrato.map((r,i)=>{
+                const clrStato = r.deltaPeggiore>0?C.orange : r.deltaPeggiore<0?C.blue : C.green;
+                const bgStato  = r.deltaPeggiore>0?C.orangeBg : r.deltaPeggiore<0?C.blueBg : C.greenBg;
+                const bdStato  = r.deltaPeggiore>0?C.orangeBorder : r.deltaPeggiore<0?C.blueBorder : C.greenBorder;
+                const lblStato = r.deltaPeggiore>0?'Oltre soglia' : r.deltaPeggiore<0?'Sotto soglia':'✓ In linea';
+                return React.createElement('tr',{key:r.id||r.nome,
+                    style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg,cursor:'pointer',transition:'background .1s'},
+                    onMouseEnter:e=>e.currentTarget.style.background=C.bg,
+                    onMouseLeave:e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg,
+                    onClick:()=>onNavigate('allievi')}
+                  , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:600,color:C.text}}, r.nome)
+                  , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.individuale))
+                  , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.collettiva))
+                  , React.createElement('td',{style:{padding:'10px 16px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bgStato,color:clrStato,border:`1px solid ${bdStato}`,borderRadius:20,padding:'3px 10px'}},lblStato))
+                );
+              })
+            , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:4,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
+          )
+        )
+      )
       /* Footer */
-      , React.createElement('div',{style:{padding:'10px 18px',display:'flex',justifyContent:'space-between',alignItems:'center'}}
-        , React.createElement('span',{style:{fontSize:11,color:C.textDim}},`Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese (individuale) + ${PUNTI_CORSO_COLLETTIVO} (collettiva) · ${report.length} allievi attivi`)
+      , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:6}}
+        , React.createElement('span',{style:{fontSize:11,color:C.textDim}},`Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · ${report.length} allievi attivi`)
         , React.createElement('button',{onClick:()=>onNavigate('allievi'),
             style:{background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.gold,fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:4}}
           , React.createElement(Ic,{n:'users',size:12,stroke:C.gold}), ' Gestisci allievi →')
