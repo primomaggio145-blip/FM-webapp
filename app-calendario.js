@@ -3092,6 +3092,23 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             onUpdateStudent: d=>setStudents(p=>p.map(s=>s.id===d.id?d:s)), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3893}}
           )
         )
+        /* ── Fallback diagnostico: l'allievo loggato non ha trovato un record collegato ──
+           Evita un pannello completamente vuoto (nessun messaggio) quando `selected`
+           resta null: mostra il motivo più probabile e i valori usati per il match,
+           così è possibile capire subito se manca il collegamento allievoId ↔ students. ── */
+        , view==="detail" && !selected && _ruoloAV==="allievo" && (
+          React.createElement('div', {style:{padding:"32px 24px",maxWidth:520}}
+            , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"20px 22px"}}
+              , React.createElement('div', {style:{fontSize:15,fontWeight:700,marginBottom:8,color:C.text}}, "⚠️ Nessuna scheda allievo collegata a questo account")
+              , React.createElement('div', {style:{fontSize:13,color:C.textMuted,lineHeight:1.6,marginBottom:10}}
+                , "Il tuo account utente non risulta collegato a nessuna scheda nella tabella Allievi. Contatta l'amministratore della scuola per verificare il collegamento."
+              )
+              , React.createElement('div', {style:{fontSize:11,color:C.textDim,fontFamily:"monospace",background:C.bg,borderRadius:8,padding:"8px 10px"}}
+                , `allievoId cercato: ${_avAllievoId || "(nessuno)"} · nome cercato: "${_nomeAV || "(vuoto)"}" · allievi totali caricati: ${(_allStudents||[]).length}`
+              )
+            )
+          )
+        )
       )
       , _ruoloAV==="admin" && modal==="add" && React.createElement(Modal, { title: "Nuovo allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}, React.createElement(StudentForm, { onSave: handleAddStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}))
       , _ruoloAV==="admin" && modal==="edit" && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], role: propUserRuoloAV||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
