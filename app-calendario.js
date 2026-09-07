@@ -1412,7 +1412,8 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
       , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,marginBottom:24,padding:"16px 20px",borderTop:`3px solid ${accentHex}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3206}}
         , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3207}}
           , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3208}}
-            , React.createElement('div', { style: {width:60,height:60,borderRadius:"50%",background:`${accentHex}20`,border:`2px solid ${accentHex}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,accentHex,fontFamily:"'Oswald',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3209}}
+            /* Cerchio iniziali: nascosto in PWA/mobile per snellire l'header */
+            , !isMobile && React.createElement('div', { style: {width:60,height:60,borderRadius:"50%",background:`${accentHex}20`,border:`2px solid ${accentHex}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,accentHex,fontFamily:"'Oswald',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3209}}
               , initials(student.name)
             )
             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3212}}
@@ -1421,12 +1422,13 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                 /* Corsi individuali dell'allievo — tutti allo stesso livello, ciascuno col proprio insegnante */
                 , student.instrument && React.createElement('span', {style:{display:"inline-flex",alignItems:"center",gap:4}}
                   , React.createElement(Badge, { label: student.instrument, accentHex: "gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3215}})
-                  , student.teacher && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + student.teacher + ")")
+                  /* Nome del maestro: nascosto in PWA/mobile */
+                  , !isMobile && student.teacher && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + student.teacher + ")")
                 )
                 , (student.extraInstruments||[]).map(ins =>
                     React.createElement('span', {key:ins, style:{display:"inline-flex",alignItems:"center",gap:4}}
                       , React.createElement(Badge, {label:ins, accentHex:"gold"})
-                      , (student.extraTeachers||{})[ins] && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + (student.extraTeachers||{})[ins] + ")")
+                      , !isMobile && (student.extraTeachers||{})[ins] && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + (student.extraTeachers||{})[ins] + ")")
                     )
                   )
                 /* Corso complementare */
