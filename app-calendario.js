@@ -8594,6 +8594,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           corso_id:         mergedCourseId,
           corso_nome:       mergedCourseName,
           students:         mergedStudents.length > 0 ? JSON.stringify(mergedStudents) : null,
+          contact_name:     dataNormFull.contactName || null,
+          phone:            dataNormFull.phone       || null,
+          motivo_assenza:   dataNormFull.motivoAssenza || null,
         };
         sb.from('lezioni').update(row).eq('id', data.id)
           .then(({ error }) => {

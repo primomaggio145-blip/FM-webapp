@@ -97,6 +97,8 @@
       inRecupero: r.in_recupero || false,
       recuperoScadenza: r.recupero_scadenza || null,
       motivoAssenza: r.motivo_assenza || null,
+      contactName: r.contact_name || '',
+      phone: r.phone || '',
       durata: r.durata
         ? parseInt(r.durata)
         : (r.tipo === 'collettivo' ? 60 : r.tipo === 'prova' ? 30 : 45),
@@ -278,6 +280,8 @@
         in_recupero: l.inRecupero || false,
         recupero_scadenza: l.recuperoScadenza || null,
         motivo_assenza: l.motivoAssenza || null,
+        contact_name: l.contactName || null,
+        phone: l.phone || null,
         durata: l.durata ? parseInt(l.durata) : null,
         exercises: l.exercises || null,
         repertorio_ids: l.repertorioIds && l.repertorioIds.length > 0
