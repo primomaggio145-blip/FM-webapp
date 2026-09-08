@@ -157,18 +157,31 @@
       // controllo avviene A META' caricamento, le fetch in corso possono essere interrotte.
       // Il guard "reloading" evita loop: dopo il reload la pagina riparte già con
       // l'ultimo controller attivo, quindi non scatta un altro controllerchange subito dopo.
+      //
+      // CRITICO: prima di ricaricare, attendo l'invio di qualunque modifica non ancora
+      // sincronizzata su Supabase (window.__FM_FLUSH__, esposto da fm_sync.js). Senza
+      // questo, un reload che arriva entro la finestra di debounce di una modifica
+      // (creazione lezione/allievo/brano/ecc.) la cancellava senza mai salvarla —
+      // il record sembrava sparire "da solo" al refresh successivo.
       let reloading = false;
-      navigator.serviceWorker.addEventListener('controllerchange', function() {
+      async function reloadDopoFlush() {
         if (reloading) return;
         reloading = true;
+        try {
+          if (window.__FM_FLUSH__) {
+            // Timeout di sicurezza: se la rete è lenta/assente non restiamo bloccati per sempre
+            await Promise.race([
+              window.__FM_FLUSH__(),
+              new Promise(resolve => setTimeout(resolve, 4000)),
+            ]);
+          }
+        } catch (e) { /* procedi comunque col reload */ }
         window.location.reload();
-      });
+      }
+      navigator.serviceWorker.addEventListener('controllerchange', reloadDopoFlush);
       // Segnale esplicito ridondante già inviato da service-worker.js su 'activate'
       navigator.serviceWorker.addEventListener('message', function(event) {
-        if (event.data && event.data.type === 'SW_UPDATED' && !reloading) {
-          reloading = true;
-          window.location.reload();
-        }
+        if (event.data && event.data.type === 'SW_UPDATED') reloadDopoFlush();
       });
 
       window.addEventListener('load', function() {

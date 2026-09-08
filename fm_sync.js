@@ -437,10 +437,8 @@
         if (error) fail(`UPDATE ${table} [${item.id}]:`, error.message, '| row:', row);
         else {
           log(`✎ ${table}`, item.id);
-          if (table === 'lezioni') {
-            window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
-            window.__FM_RECENTLY_WRITTEN__.set(String(item.id), Date.now());
-          }
+          window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+          window.__FM_RECENTLY_WRITTEN__.set(`${table}:${item.id}`, Date.now());
         }
       } catch(e) { fail('update error', table, e); }
     }
@@ -469,20 +467,16 @@
             if (e2) fail(`UPSERT fallback ${table}:`, e2.message);
             else {
               log(`✚ (upsert) ${table}`, row.id || '(auto)');
-              if (table === 'lezioni') {
-                window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
-                window.__FM_RECENTLY_WRITTEN__.set(String(row.id), Date.now());
-              }
+              window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+              window.__FM_RECENTLY_WRITTEN__.set(`${table}:${row.id}`, Date.now());
             }
           } else {
             fail(`INSERT ${table}:`, error.message, '| row:', row);
           }
         } else {
           log(`✚ ${table}`, row.id || '(auto)');
-          if (table === 'lezioni') {
-            window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
-            window.__FM_RECENTLY_WRITTEN__.set(String(row.id), Date.now());
-          }
+          window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+          window.__FM_RECENTLY_WRITTEN__.set(`${table}:${row.id}`, Date.now());
         }
       } catch(e) { fail('upsert error', table, e); }
     }
@@ -917,6 +911,20 @@
       { t: 'prenotazioni_sala', k: 'prenotazioni_sala', o: 'data', a: adaptPrenotazioneSala },
     ];
 
+    // Unisce alla lista appena letta da Supabase eventuali record presenti SOLO nello
+    // stato React ancora in attesa di sync (non salvati/non ancora confermati) — senza
+    // questo, un evento realtime scatenato dalla modifica di UN ALTRO utente/tab può
+    // sovrascrivere per intero lo stato locale e cancellare un record appena creato in
+    // questa scheda ma non ancora scritto su Supabase (bug globale: allievi, docenti,
+    // corsi, brani, concerti, ecc. — non solo lezioni).
+    function proteggiPendenti(k, freshList) {
+      const pending = _pendingState && _pendingState[k];
+      if (!pending || !pending.length) return freshList;
+      const freshIds = new Set(freshList.map(r => String(r.id)));
+      const daPreservare = pending.filter(p => p && p.id != null && !freshIds.has(String(p.id)));
+      return daPreservare.length ? [...freshList, ...daPreservare] : freshList;
+    }
+
     cfg.forEach(({ t, k, o, a }) => {
       try {
         sb.channel(`fm4:${t}`)
@@ -937,12 +945,12 @@
               const recentWrites = window.__FM_RECENTLY_WRITTEN__;
               const now = Date.now();
               const freshFetched = allFetched.filter(r => {
-                const t0 = recentWrites && recentWrites.get(String(r.id));
+                const t0 = recentWrites && recentWrites.get(`${t}:${r.id}`);
                 return !(t0 && (now - t0) < 4000);
               });
               const fetchedIds = new Set(freshFetched.map(r => String(r.id)));
               const existing = (_prev[k] || []).filter(l => !fetchedIds.has(String(l.id)));
-              const adapted = dedupeById([...existing, ...freshFetched.map(r => adaptLezione(r, []))]);
+              const adapted = proteggiPendenti(k, dedupeById([...existing, ...freshFetched.map(r => adaptLezione(r, []))]));
               _prev[k] = adapted;
               if (window.__FM_RELOAD__) window.__FM_RELOAD__({ [k]: adapted });
               return;
@@ -953,7 +961,21 @@
             const selectStr = t === 'corsi' ? '*, corsi_docenti(docente_id)' : '*';
             const { data, error } = await sb.from(t).select(selectStr).order(o, { ascending: asc });
             if (error) { warn('realtime', t, error.message); return; }
-            const adapted = (data || []).map(a);
+            // Stessa protezione già usata per le lezioni: esclude righe scritte da NOI
+            // negli ultimissimi secondi (possibile lettura racy) mantenendo la versione
+            // locale, poi reintegra eventuali record ancora solo in stato React pendente.
+            const recentWrites = window.__FM_RECENTLY_WRITTEN__;
+            const now = Date.now();
+            const freshFetched = (data || []).filter(r => {
+              const t0 = recentWrites && recentWrites.get(`${t}:${r.id}`);
+              return !(t0 && (now - t0) < 4000);
+            });
+            const fetchedIds = new Set(freshFetched.map(r => String(r.id)));
+            const existingRecenti = (_prev[k] || []).filter(item => {
+              const t0 = recentWrites && recentWrites.get(`${t}:${item.id}`);
+              return t0 && (now - t0) < 4000 && !fetchedIds.has(String(item.id));
+            });
+            const adapted = proteggiPendenti(k, [...freshFetched.map(a), ...existingRecenti]);
             _prev[k] = adapted;
             if (window.__FM_RELOAD__) window.__FM_RELOAD__({ [k]: adapted });
           })
@@ -967,10 +989,27 @@
   // ═══════════════════════════════════════════════════════════════════════════
   //  HOOK __FM_ON_STATE__ — chiamato da React ad ogni cambio di stato
   // ═══════════════════════════════════════════════════════════════════════════
+  let _pendingState = null;
   window.__FM_ON_STATE__ = function(state) {
     if (!_ready) return;
     clearTimeout(_timer);
-    _timer = setTimeout(() => syncState(state), DEBOUNCE);
+    _pendingState = state;
+    _timer = setTimeout(() => { _pendingState = null; syncState(state); }, DEBOUNCE);
+  };
+
+  // Invia SUBITO una scrittura debounced ancora in attesa, invece di perderla.
+  // CRITICO: senza questo, qualunque reload (manuale o automatico, es. dopo un deploy)
+  // che avvenga entro la finestra di DEBOUNCE da una modifica cancellava il timer
+  // (vedi 'beforeunload' più sotto) SENZA MAI scrivere su Supabase — il record
+  // appariva creato/modificato in UI ma non veniva mai davvero salvato: al refresh
+  // successivo semplicemente non c'era, dando l'impressione di una "cancellazione".
+  window.__FM_FLUSH__ = async function() {
+    if (!_timer || !_pendingState) return;
+    clearTimeout(_timer);
+    const state = _pendingState;
+    _pendingState = null;
+    _timer = null;
+    try { await syncState(state); } catch(e) { warn('flush', e); }
   };
 
   // Esposto ai moduli app-*.js per aggiornare _prev dopo un caricamento/reload diretto da Supabase
@@ -1141,7 +1180,13 @@
   boot();
 
   // ── Cleanup ──────────────────────────────────────────────────────────────
-  window.addEventListener('beforeunload', () => { clearTimeout(_timer); });
+  // IMPORTANTE: prima si tenta di inviare una scrittura pendente (vedi __FM_FLUSH__),
+  // solo se non c'è nulla in sospeso si cancella il timer. 'beforeunload' non garantisce
+  // che una fetch asincrona finisca, ma tentare è comunque meglio di scartare a priori;
+  // 'pagehide' copre anche i casi in cui 'beforeunload' non scatta (es. iOS Safari).
+  const _flushOnExit = () => { if (window.__FM_FLUSH__) window.__FM_FLUSH__(); };
+  window.addEventListener('beforeunload', _flushOnExit);
+  window.addEventListener('pagehide', _flushOnExit);
 
   // ── API debug da console ──────────────────────────────────────────────────
   window.__FM_SYNC__ = {
