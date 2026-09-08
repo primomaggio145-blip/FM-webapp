@@ -3,7 +3,7 @@
 //
 //  DESIGN SEMPLIFICATO:
 //  1. loadAll() carica i dati da Supabase → window.__FM_DATA__
-//  2. Carica app.js dinamicamente (React legge __FM_DATA__ nel primo useState)
+//  2. Carica i moduli app-*.js dinamicamente (React legge __FM_DATA__ nel primo useState)
 //  3. Dopo 1.5s dal mount React, attiva il sync
 //  4. __FM_ON_STATE__ riceve ogni cambio di stato e scrive su Supabase (debounced)
 //  5. Nessuna magia con re-login: App non si smonta mai, il sync resta attivo
@@ -430,6 +430,9 @@
     for (const item of changes.updated) {
       try {
         const row = cleanRow(adapter(item));
+        if (table === 'lezioni' && ('contact_name' in row || 'phone' in row)) {
+          log(`[DEBUG contatto] UPDATE lezioni [${item.id}] → contact_name="${row.contact_name}" phone="${row.phone}"`);
+        }
         const { error } = await sb.from(table).update(row).eq('id', item.id);
         if (error) fail(`UPDATE ${table} [${item.id}]:`, error.message, '| row:', row);
         else log(`✎ ${table}`, item.id);
@@ -440,6 +443,9 @@
     for (const item of changes.added) {
       try {
         const row = cleanRow(adapter(item));
+        if (table === 'lezioni' && ('contact_name' in row || 'phone' in row)) {
+          log(`[DEBUG contatto] INSERT lezioni [${item.id}] → contact_name="${row.contact_name}" phone="${row.phone}"`);
+        }
         if (table === 'studenti') {
           // studenti: ID intero auto-increment → Supabase lo genera
           delete row.id;
@@ -941,7 +947,7 @@
     _timer = setTimeout(() => syncState(state), DEBOUNCE);
   };
 
-  // Esposto a app.js per aggiornare _prev dopo un caricamento/reload diretto da Supabase
+  // Esposto ai moduli app-*.js per aggiornare _prev dopo un caricamento/reload diretto da Supabase
   // (es. window.__FM_FORCE_REFRESH__, window.__FM_LOAD_LEZIONI_ANNO__).
   // IMPORTANTE: senza questo, __FM_FORCE_REFRESH__ aggiorna lo stato React ma NON la
   // baseline _prev usata dal diff-sync — al giro successivo, ogni entità ricaricata
@@ -1010,7 +1016,7 @@
     try {
       if (window.__BOOT_ERROR) throw window.__BOOT_ERROR;
       const App = window.__AppComponent;
-      if (!App) throw new Error('__AppComponent non definito — controlla app.js');
+      if (!App) throw new Error('__AppComponent non definito — controlla app-root.js');
       window.ReactDOM.createRoot(rootEl).render(window.React.createElement(App));
       loadingEl.style.opacity = '0';
       loadingEl.style.transition = 'opacity 0.5s';
@@ -1036,7 +1042,7 @@
       return;
     }
 
-    // 1. Carica dati da Supabase PRIMA di caricare app.js
+    // 1. Carica dati da Supabase PRIMA di caricare i moduli app-*.js
     setStatus('Connessione Supabase…');
     const data = await loadAll();
 
@@ -1057,7 +1063,7 @@
       warn('Supabase non disponibile — uso dati demo (modalità offline)');
     }
 
-    // 4. Carica app.js e monta React
+    // 4. Carica i moduli app-*.js e monta React
     setStatus('Caricamento app…');
     loadAppThen(() => {
       mountReact();

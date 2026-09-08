@@ -2730,7 +2730,7 @@ serve(async (req) => {
         , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:12,marginBottom:12}}
           , React.createElement('div',{style:{width:28,height:28,borderRadius:'50%',background:C.gold,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:700,flexShrink:0}},'4')
           , React.createElement('h3',{style:{margin:0,fontSize:15,fontWeight:700}},'Aggiungi il nuovo tipo a questa scheda'))
-        , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:10}},'In app.js, aggiungi un oggetto all\'array ', React.createElement('code',{style:{background:C.bg,padding:'1px 6px',borderRadius:4}},'REMINDER_TYPES'),':')
+        , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:10}},'In app-root.js, aggiungi un oggetto all\'array ', React.createElement('code',{style:{background:C.bg,padding:'1px 6px',borderRadius:4}},'REMINDER_TYPES'),':')
         , React.createElement('pre',{style:codeStyle},
 `{ id:'nuovo_tipo',   label:'Nome visualizzato',  icon:'bell',
   dest:'Allievo',    scheduleDefault:'09:00',
@@ -2783,7 +2783,7 @@ serve(async (req) => {
 
           /* codice generato */
           , wizard.id && wizard.label && React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:12}}
-            , React.createElement('div',{style:{fontSize:11,color:C.gold,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em'}},'📋 1. Aggiungi a REMINDER_TYPES in app.js')
+            , React.createElement('div',{style:{fontSize:11,color:C.gold,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em'}},'📋 1. Aggiungi a REMINDER_TYPES in app-root.js')
             , React.createElement('pre',{style:{...codeStyle,userSelect:'all'}},
 `{ id:'${wizard.id}', label:'${wizard.label}', icon:'bell',
   dest:'${wizard.dest}', scheduleDefault:'${wizard.ora_invio}',

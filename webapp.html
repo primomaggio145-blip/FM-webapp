@@ -140,9 +140,10 @@
   </script>
 
   <!--
-    NON serve <script src="app.js"> qui.
-    fm_sync.js carica app.js dinamicamente DOPO aver caricato i dati da Supabase,
-    garantendo che React usi sempre i dati reali e mai i dati demo.
+    NON serve <script src="app.js"> qui — quel file è obsoleto e non più referenziato.
+    fm_sync.js carica dinamicamente i moduli app-core.js, app-dashboard.js, app-calendario.js,
+    app-views-a.js, app-views-b.js, app-root.js (in quest'ordine) DOPO aver caricato i dati
+    da Supabase, garantendo che React usi sempre i dati reali e mai i dati demo.
   -->
 
   <!-- ── Registrazione Service Worker per PWA ── -->

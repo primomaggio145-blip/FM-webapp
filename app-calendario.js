@@ -8598,6 +8598,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           phone:            dataNormFull.phone       || null,
           motivo_assenza:   dataNormFull.motivoAssenza || null,
         };
+        console.log(`[DEBUG contatto] handleEdit UPDATE lezioni [${data.id}] → contact_name="${row.contact_name}" phone="${row.phone}"`);
         sb.from('lezioni').update(row).eq('id', data.id)
           .then(({ error }) => {
             if (error) console.warn('[FM] handleEdit update error:', error.message);
