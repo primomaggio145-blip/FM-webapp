@@ -1243,14 +1243,20 @@
     </div>
     <div class="contatti-form-wrap">
       <h3>Scrivici un messaggio</h3>
-      <div class="form-row">
-        <div class="form-group"><label>Nome</label><input type="text" placeholder="Mario"></div>
-        <div class="form-group"><label>Cognome</label><input type="text" placeholder="Rossi"></div>
-      </div>
-      <div class="form-group"><label>Email</label><input type="email" placeholder="mario@email.it"></div>
-      <div class="form-group"><label>Corso di interesse</label><input type="text" placeholder="es. Pianoforte, Canto…"></div>
-      <div class="form-group"><label>Messaggio</label><textarea placeholder="Scrivi la tua richiesta…"></textarea></div>
-      <button class="btn-primary" style="width:100%;padding:14px;">Invia Messaggio</button>
+      <form id="contact-form" onsubmit="return false;">
+        <div class="form-row">
+          <div class="form-group"><label>Nome</label><input type="text" id="cf-nome" placeholder="Mario" required></div>
+          <div class="form-group"><label>Cognome</label><input type="text" id="cf-cognome" placeholder="Rossi"></div>
+        </div>
+        <div class="form-group"><label>Email</label><input type="email" id="cf-email" placeholder="mario@email.it" required></div>
+        <div class="form-group"><label>Corso di interesse</label><input type="text" id="cf-corso" placeholder="es. Pianoforte, Canto…"></div>
+        <div class="form-group"><label>Messaggio</label><textarea id="cf-messaggio" placeholder="Scrivi la tua richiesta…" required></textarea></div>
+        <!-- Honeypot anti-spam: campo nascosto, un utente reale non lo compila mai -->
+        <input type="text" id="cf-website" name="website" autocomplete="off" tabindex="-1"
+          style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" aria-hidden="true">
+        <div id="cf-status" style="display:none;font-size:13px;padding:10px 12px;border-radius:6px;margin-bottom:14px;"></div>
+        <button type="submit" class="btn-primary" id="cf-submit" style="width:100%;padding:14px;" onclick="sendContactForm()">Invia Messaggio</button>
+      </form>
     </div>
   </div>
 </section>
@@ -1584,6 +1590,57 @@
     document.querySelectorAll('#gallery-grid .gallery-item, #gallery-grid .gallery-item-embed')
       .forEach((el, i) => el.classList.toggle('is-featured', i === idx));
     if (window.__fmUpdateFeatured) window.__fmUpdateFeatured(idx);
+  };
+
+  // ── Modulo di contatto: invia via Edge Function (SMTP Aruba) ────────
+  window.sendContactForm = async function() {
+    const btn = document.getElementById('cf-submit');
+    const statusEl = document.getElementById('cf-status');
+    const showStatus = (msg, ok) => {
+      statusEl.textContent = msg;
+      statusEl.style.display = 'block';
+      statusEl.style.background = ok ? 'rgba(80,200,120,0.15)' : 'rgba(220,70,70,0.18)';
+      statusEl.style.color = ok ? '#8fe0ac' : '#ffb3b3';
+    };
+
+    const nome = document.getElementById('cf-nome').value.trim();
+    const cognome = document.getElementById('cf-cognome').value.trim();
+    const email = document.getElementById('cf-email').value.trim();
+    const corso = document.getElementById('cf-corso').value.trim();
+    const messaggio = document.getElementById('cf-messaggio').value.trim();
+    const website = document.getElementById('cf-website').value; // honeypot
+
+    if (!nome || !messaggio) { showStatus('Compila almeno nome e messaggio.', false); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showStatus('Inserisci un\'email valida.', false); return; }
+
+    btn.disabled = true;
+    const originalLabel = btn.textContent;
+    btn.textContent = 'Invio in corso...';
+    statusEl.style.display = 'none';
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/send-contact-email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_KEY}`,
+          'apikey': SUPABASE_KEY,
+        },
+        body: JSON.stringify({ nome, cognome, email, corso, messaggio, website }),
+      });
+      const out = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showStatus(out.error || 'Invio non riuscito, riprova più tardi.', false);
+        return;
+      }
+      showStatus('Messaggio inviato! Ti risponderemo il prima possibile.', true);
+      document.getElementById('contact-form').reset();
+    } catch (e) {
+      showStatus('Errore di rete: riprova più tardi o scrivici via email/social.', false);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
   };
 
   // ── Carosello SOCIAL: frecce, puntini, drag col mouse, swipe touch nativo ──

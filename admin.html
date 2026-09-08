@@ -850,6 +850,17 @@
           <div class="form-group"><label>URL pagina Facebook</label><input type="url" id="fb-url" placeholder="https://facebook.com/futuromusica"></div>
           <div class="form-group"><label>URL profilo Instagram</label><input type="url" id="ig-url" placeholder="https://instagram.com/futuromusica"></div>
         </div>
+        <div class="section-card">
+          <h3>✉️ Modulo di contatto del sito</h3>
+          <div class="form-group">
+            <label>Email dove ricevere le richieste</label>
+            <input type="email" id="form-destinatario" placeholder="segreteria@tuodominio.it">
+          </div>
+          <div style="font-size:11px;color:#999;line-height:1.5;">
+            Ogni messaggio inviato dal modulo "Scrivici" sul sito arriva a questo indirizzo.
+            Se lo lasci vuoto, il modulo del sito segnala l'errore invece di inviare a vuoto.
+          </div>
+        </div>
         <button class="btn-save" onclick="saveContatti()" style="padding:13px 36px;">Salva Contatti</button>
       </div>
     </div>
@@ -1368,7 +1379,8 @@ async function loadDataFromSupabase() {
     prov: (cfg.contatti_citta || '').replace(/.*\(|\)/g,'') || '',
     phone: cfg.contatti_phone || '', email: cfg.contatti_email || '',
     orari_lv: cfg.contatti_orari_lv || '', orari_sab: cfg.contatti_orari_sab || '',
-    orari_note: cfg.contatti_orari_note || '', fb_url: cfg.fb_url || '#', ig_url: cfg.ig_url || '#'
+    orari_note: cfg.contatti_orari_note || '', fb_url: cfg.fb_url || '#', ig_url: cfg.ig_url || '#',
+    form_destinatario: cfg.contatti_form_destinatario || ''
   };
   try { DATA.sezioni = JSON.parse(cfg.sezioni_visibili || '{}'); } catch(e) { DATA.sezioni = {}; }
   try { DATA.ordine  = JSON.parse(cfg.sezioni_ordine  || '[]'); } catch(e) { DATA.ordine  = []; }
@@ -1462,6 +1474,7 @@ async function saveDataToSupabase() {
     { chiave: 'contatti_orari_lv',  valore: ct.orari_lv || '' },
     { chiave: 'contatti_orari_sab', valore: ct.orari_sab || '' },
     { chiave: 'contatti_orari_note',valore: ct.orari_note || '' },
+    { chiave: 'contatti_form_destinatario', valore: ct.form_destinatario || '' },
     { chiave: 'sezioni_visibili',   valore: JSON.stringify(DATA.sezioni || {}) },
     { chiave: 'sezioni_ordine',     valore: JSON.stringify(DATA.ordine || []) },
     { chiave: 'nav_visibili',       valore: JSON.stringify(DATA.nav || {}) },
@@ -2405,6 +2418,7 @@ function loadContatti() {
   document.getElementById('orari-note').value = c.orari_note || '';
   document.getElementById('fb-url').value = c.fb_url || '';
   document.getElementById('ig-url').value = c.ig_url || '';
+  document.getElementById('form-destinatario').value = c.form_destinatario || '';
 }
 async function saveContatti() {
   DATA.contatti = {
@@ -2417,7 +2431,8 @@ async function saveContatti() {
     orari_sab: document.getElementById('orari-sab').value,
     orari_note: document.getElementById('orari-note').value,
     fb_url: document.getElementById('fb-url').value,
-    ig_url: document.getElementById('ig-url').value
+    ig_url: document.getElementById('ig-url').value,
+    form_destinatario: document.getElementById('form-destinatario').value.trim()
   };
   await saveData();
 }
