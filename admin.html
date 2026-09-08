@@ -1391,8 +1391,33 @@ async function loadDataFromSupabase() {
     titolo: r.titolo, desc: r.descrizione || '', visible: r.visible !== false, _id: r.id
   }));
 
+  // Istantanea di quanto appena caricato da Supabase: usata da saveDataToSupabase()
+  // per inviare SOLO i campi realmente modificati in QUESTA sessione, invece di
+  // riscrivere sempre l'intera riga con qualunque valore stia in memoria — che poteva
+  // essere obsoleto se, nel frattempo, un'altra app (es. la webapp gestionale) aveva
+  // modificato lo stesso record (es. 'visible' o 'foto' di un corso).
+  DATA._orig = {
+    corsi: JSON.parse(JSON.stringify(DATA.corsi)),
+    complementari: JSON.parse(JSON.stringify(DATA.complementari)),
+    concerti: JSON.parse(JSON.stringify(DATA.concerti)),
+    attivita: JSON.parse(JSON.stringify(DATA.attivita)),
+  };
+
   updateLastSave();
   console.log('✅ Dati caricati da Supabase');
+}
+
+// Restituisce SOLO i campi di 'mapping' il cui valore differisce tra 'orig' e 'curr'
+// (confronto per valore, non per riferimento). Se 'orig' non esiste (record nuovo,
+// mai salvato in questa sessione) restituisce sempre tutti i campi.
+function campiModificati(orig, curr, mapping) {
+  const out = {};
+  let any = !orig;
+  Object.entries(mapping).forEach(([col, getter]) => {
+    const cv = getter(curr);
+    if (!orig || JSON.stringify(getter(orig)) !== JSON.stringify(cv)) { out[col] = cv; any = true; }
+  });
+  return any ? out : null;
 }
 async function saveData() {
   // Salva sempre in localStorage come backup
@@ -1415,11 +1440,18 @@ async function saveData() {
 }
 
 async function saveDataToSupabase() {
+  const orig = DATA._orig || {};
+  const trovaOrig = (lista, id) => (lista || []).find(o => o._id === id);
+
   // ── Corsi principali ──
   for (let i = 0; i < DATA.corsi.length; i++) {
     const c = DATA.corsi[i];
     if (c._id) {
-      await db.from('corsi').update({ nome: c.nome, descrizione: c.desc, livelli: c.livelli, foto: c.foto, visible: c.visible }).eq('id', c._id);
+      const o = trovaOrig(orig.corsi, c._id);
+      const changed = campiModificati(o, c, {
+        nome: x=>x.nome, descrizione: x=>x.desc, livelli: x=>x.livelli, foto: x=>x.foto, visible: x=>x.visible
+      });
+      if (changed) await db.from('corsi').update(changed).eq('id', c._id);
     } else {
       // id è TEXT PRIMARY KEY senza default → lo generiamo noi
       const newId = 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
@@ -1436,7 +1468,11 @@ async function saveDataToSupabase() {
   for (let i = 0; i < DATA.complementari.length; i++) {
     const c = DATA.complementari[i];
     if (c._id) {
-      await db.from('corsi_complementari').update({ nome: c.nome, descrizione: c.desc, foto: c.foto, visible: c.visible, ordine: i }).eq('id', c._id);
+      const o = trovaOrig(orig.complementari, c._id);
+      const changed = campiModificati(o, c, {
+        nome: x=>x.nome, descrizione: x=>x.desc, foto: x=>x.foto, visible: x=>x.visible, ordine: () => i
+      });
+      if (changed) await db.from('corsi_complementari').update(changed).eq('id', c._id);
     } else {
       const { data } = await db.from('corsi_complementari').insert({ nome: c.nome, descrizione: c.desc, foto: c.foto, visible: c.visible, ordine: i }).select().single();
       if (data) DATA.complementari[i]._id = data.id;
@@ -1446,10 +1482,15 @@ async function saveDataToSupabase() {
   // ── Concerti ──
   for (let i = 0; i < DATA.concerti.length; i++) {
     const c = DATA.concerti[i];
-    const fields = { titolo: c.titolo, data: c.data, ora: c.ora, luogo: c.luogo, maps_url: c.maps_url || '', ingresso: c.ingresso, badge: c.badge, visible: c.visible };
     if (c._id) {
-      await db.from('concerti').update(fields).eq('id', c._id);
+      const o = trovaOrig(orig.concerti, c._id);
+      const changed = campiModificati(o, c, {
+        titolo: x=>x.titolo, data: x=>x.data, ora: x=>x.ora, luogo: x=>x.luogo,
+        maps_url: x=>x.maps_url || '', ingresso: x=>x.ingresso, badge: x=>x.badge, visible: x=>x.visible
+      });
+      if (changed) await db.from('concerti').update(changed).eq('id', c._id);
     } else {
+      const fields = { titolo: c.titolo, data: c.data, ora: c.ora, luogo: c.luogo, maps_url: c.maps_url || '', ingresso: c.ingresso, badge: c.badge, visible: c.visible };
       const { data } = await db.from('concerti').insert(fields).select().single();
       if (data) DATA.concerti[i]._id = data.id;
     }
@@ -1496,12 +1537,25 @@ async function saveDataToSupabase() {
   for (let i = 0; i < (DATA.attivita || []).length; i++) {
     const a = DATA.attivita[i];
     if (a._id) {
-      await db.from('sito_attivita').update({ titolo: a.titolo, descrizione: a.desc, visible: a.visible, ordine: i }).eq('id', a._id);
+      const o = trovaOrig(orig.attivita, a._id);
+      const changed = campiModificati(o, a, {
+        titolo: x=>x.titolo, descrizione: x=>x.desc, visible: x=>x.visible, ordine: () => i
+      });
+      if (changed) await db.from('sito_attivita').update(changed).eq('id', a._id);
     } else {
       const { data } = await db.from('sito_attivita').insert({ titolo: a.titolo, descrizione: a.desc, visible: a.visible, ordine: i }).select().single();
       if (data) DATA.attivita[i]._id = data.id;
     }
   }
+
+  // Aggiorna l'istantanea a quanto appena salvato: i prossimi salvataggi in questa
+  // stessa sessione confronteranno contro questo stato, non contro quello di boot.
+  DATA._orig = {
+    corsi: JSON.parse(JSON.stringify(DATA.corsi)),
+    complementari: JSON.parse(JSON.stringify(DATA.complementari)),
+    concerti: JSON.parse(JSON.stringify(DATA.concerti)),
+    attivita: JSON.parse(JSON.stringify(DATA.attivita)),
+  };
 }
 
 // ── Realtime Supabase — aggiorna UI quando qualcuno salva dal sito ──
