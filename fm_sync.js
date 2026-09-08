@@ -257,8 +257,12 @@
         nome: c.name || c.nome || '',
         tipo: c.type || c.tipo || 'individuale',  // DB usa "tipo"
         descrizione: c.description || null,
-        livelli: c.livelli || null,
-        foto: c.foto || null,
+        // NOTA: 'livelli' e 'foto' sono gestiti ESCLUSIVAMENTE da admin.html (pannello
+        // sito pubblico) — il form corsi della webapp gestionale non li mostra né li
+        // modifica mai. Scriverli qui comunque, con il valore (spesso obsoleto/vuoto)
+        // presente in memoria locale della gestionale, sovrascriveva silenziosamente
+        // foto/livelli appena salvati da admin.html ad ogni modifica fatta dalla
+        // gestionale su QUALSIASI altro campo dello stesso corso.
         visible: c.visible !== false,
         anno_creazione: c.annoCreazione != null ? c.annoCreazione : undefined,
       };
