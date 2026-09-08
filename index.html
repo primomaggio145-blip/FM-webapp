@@ -1628,14 +1628,27 @@
         },
         body: JSON.stringify({ nome, cognome, email, corso, messaggio, website }),
       });
-      const out = await res.json().catch(() => ({}));
+      const rawText = await res.text();
+      let out = {};
+      try { out = JSON.parse(rawText); } catch { /* risposta non JSON, la logghiamo sotto */ }
+
       if (!res.ok) {
-        showStatus(out.error || 'Invio non riuscito, riprova più tardi.', false);
+        // Log completo in console per il debug (richiesta, status, corpo grezzo della risposta):
+        // apri gli Strumenti sviluppatore → Console per vedere subito il motivo reale del fallimento,
+        // senza dover andare a controllare i log della Edge Function su Supabase.
+        console.error('[FM contatti] invio fallito', {
+          http_status: res.status,
+          risposta_grezza: rawText,
+          risposta_json: out,
+        });
+        const motivo = out.error || out.message || `Errore HTTP ${res.status}`;
+        showStatus(`Invio non riuscito: ${motivo}`, false);
         return;
       }
       showStatus('Messaggio inviato! Ti risponderemo il prima possibile.', true);
       document.getElementById('contact-form').reset();
     } catch (e) {
+      console.error('[FM contatti] errore di rete/fetch', e);
       showStatus('Errore di rete: riprova più tardi o scrivici via email/social.', false);
     } finally {
       btn.disabled = false;
