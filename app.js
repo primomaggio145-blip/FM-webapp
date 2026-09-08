@@ -22,6 +22,42 @@ const C = {
   sidebar:"#1a4fa0", sidebarActive:"#123a7a", sidebarText:"rgba(255,255,255,0.85)", sidebarActiveTxt:"#ffffff",
 };
 
+// ─── COLORE ACCENTO PERSONALIZZABILE ───────────────────────────────────────────
+// C è un oggetto condiviso letto "dal vivo" ad ogni render da tutti i componenti
+// (C.gold, C.sidebar, ecc. non vengono mai copiati in variabili locali stabili).
+// Per questo, MUTARE le sue proprietà quando l'admin sceglie un nuovo colore
+// accento in Impostazioni fa sì che l'intera app si aggiorni, senza dover
+// toccare ogni singolo utilizzo di C.gold sparso nel codice.
+const _shadeHex = (hex, percent) => {
+  hex = String(hex||'#1a4fa0').replace('#','');
+  if (hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const num = parseInt(hex,16) || 0x1a4fa0;
+  const amt = Math.round(255*percent/100);
+  let r = ((num>>16)&0xff) + amt, g = ((num>>8)&0xff) + amt, b = (num&0xff) + amt;
+  r = Math.max(0,Math.min(255,r)); g = Math.max(0,Math.min(255,g)); b = Math.max(0,Math.min(255,b));
+  return '#' + ((r<<16)|(g<<8)|b).toString(16).padStart(6,'0');
+};
+const _hexToRgba = (hex, alpha) => {
+  hex = String(hex||'#1a4fa0').replace('#','');
+  if (hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+  const num = parseInt(hex,16) || 0x1a4fa0;
+  const r=(num>>16)&0xff, g=(num>>8)&0xff, b=num&0xff;
+  return `rgba(${r},${g},${b},${alpha})`;
+};
+// Applica il colore accento scelto in Impostazioni → Stile grafico a tutta l'app.
+// Richiamata da un useEffect nel componente App ogni volta che cambia config.accentColor.
+const applyAccentColor = (hex) => {
+  if (!hex) return;
+  C.gold = hex;
+  C.goldDim = _shadeHex(hex, -22);
+  C.goldLight = _shadeHex(hex, 18);
+  C.goldBg = _hexToRgba(hex, 0.09);
+  C.blue = hex; // "blue" nella palette è di fatto un alias dell'accento principale
+  C.blueBg = _hexToRgba(hex, 0.07);
+  C.sidebar = hex;
+  C.sidebarActive = _shadeHex(hex, -22);
+};
+
 const G = `
   @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;1,400&family=Open+Sans:wght@300;400;500;600&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -268,6 +304,13 @@ const useIsMobile = () => {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ICONE — superset di tutti i moduli
 // ═══════════════════════════════════════════════════════════════════════════════
+// ─── LOGO SCUOLA (bucket Storage pubblico "branding") ──────────────────────────
+// URL prevedibile e costante (stesso nome file sempre sovrascritto all'upload),
+// così funziona ANCHE nelle schermate pre-login (login/registrazione) senza
+// dover interrogare il database — indipendente dalle policy RLS sulle tabelle.
+const SCHOOL_LOGO_URL = (size) =>
+  `https://ocsxrjommtrjelnbihfr.supabase.co/storage/v1/object/public/branding/icon-${size}.png`;
+
 const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
   const p = {
     users:    React.createElement(React.Fragment, null, React.createElement('path', { d: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"          , __self: this, __source: {fileName: _jsxFileName, lineNumber: 253}}), React.createElement('circle', { cx: "9", cy: "7", r: "4", __self: this, __source: {fileName: _jsxFileName, lineNumber: 253}}), React.createElement('path', { d: "M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"            , __self: this, __source: {fileName: _jsxFileName, lineNumber: 253}})),
@@ -275,6 +318,8 @@ const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
     note:     React.createElement(React.Fragment, null, React.createElement('path', { d: "M9 18V5l12-2v13" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 255}}), React.createElement('circle', { cx: "6", cy: "18", r: "3", __self: this, __source: {fileName: _jsxFileName, lineNumber: 255}}), React.createElement('circle', { cx: "18", cy: "16", r: "3", __self: this, __source: {fileName: _jsxFileName, lineNumber: 255}})),
     calendar: React.createElement(React.Fragment, null, React.createElement('rect', { x: "3", y: "4", width: "18", height: "18", rx: "2", ry: "2", __self: this, __source: {fileName: _jsxFileName, lineNumber: 256}}), React.createElement('line', { x1: "16", y1: "2", x2: "16", y2: "6", __self: this, __source: {fileName: _jsxFileName, lineNumber: 256}}), React.createElement('line', { x1: "8", y1: "2", x2: "8", y2: "6", __self: this, __source: {fileName: _jsxFileName, lineNumber: 256}}), React.createElement('line', { x1: "3", y1: "10", x2: "21", y2: "10", __self: this, __source: {fileName: _jsxFileName, lineNumber: 256}})),
     cal:      React.createElement(React.Fragment, null, React.createElement('rect', { x: "3", y: "4", width: "18", height: "17", rx: "2", __self: this, __source: {fileName: _jsxFileName, lineNumber: 257}}), React.createElement('path', { d: "M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"         , __self: this, __source: {fileName: _jsxFileName, lineNumber: 257}})),
+    day:      React.createElement(React.Fragment, null, React.createElement('rect', { x: "3", y: "4", width: "18", height: "17", rx: "2"}), React.createElement('path', { d: "M16 2v4M8 2v4M3 10h18"}), React.createElement('circle', { cx: "12", cy: "15", r: "2.4", fill: "currentColor", stroke: "none"})),
+    week:     React.createElement(React.Fragment, null, React.createElement('rect', { x: "3", y: "4", width: "18", height: "17", rx: "2"}), React.createElement('path', { d: "M16 2v4M8 2v4M3 10h18"}), React.createElement('path', { d: "M8 14v5M12 14v5M16 14v5"})),
     euro:     React.createElement(React.Fragment, null, React.createElement('path', { d: "M4 10h12M4 14h12M19 6a7 7 0 1 0 0 12"         , __self: this, __source: {fileName: _jsxFileName, lineNumber: 258}})),
     euro2:    React.createElement(React.Fragment, null, React.createElement('circle', { cx: "12", cy: "12", r: "10", __self: this, __source: {fileName: _jsxFileName, lineNumber: 259}}), React.createElement('path', { d: "M15 9.354a4 4 0 1 0 0 5.292M8.5 10H13M8.5 14H13"         , __self: this, __source: {fileName: _jsxFileName, lineNumber: 259}})),
     chart:    React.createElement(React.Fragment, null, React.createElement('path', { d: "M3 3v18h18" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 260}}), React.createElement('path', { d: "m19 9-5 5-4-4-3 3"   , __self: this, __source: {fileName: _jsxFileName, lineNumber: 260}})),
@@ -895,7 +940,7 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
       </div>
     </div>
     <table>
-      ${stile.showNominativo!==false?`<tr><td class="k">Ricevuta da</td><td class="v">${intestatario}</td></tr>`:""}
+      ${stile.showNominativo!==false?`<tr><td class="k">SOCIO</td><td class="v">${intestatario}</td></tr>`:""}
       ${student&&student.codiceFiscale?`<tr><td class="k">Codice fiscale</td><td class="v">${student.codiceFiscale}</td></tr>`:""}
       ${nascitaRow}
       ${stile.showDataPagamento!==false?`<tr><td class="k">Data pagamento</td><td class="v">${dataPag}</td></tr>`:""}
@@ -1123,6 +1168,16 @@ const PanelloSinistra = ()=>{
     {x:"40%",y:"30%",delay:1.8,size:10,anim:"floatC 7.5s 1.8s ease-in-out infinite"},
   ];
 
+  // Nome scuola: window.__FM_DATA__ viene popolato PRIMA del mount React
+  // (vedi fm_sync.js), quindi è già disponibile anche in questa schermata
+  // pre-login se la tabella sito_config è leggibile pubblicamente.
+  const _schoolCfg = (typeof window !== 'undefined' && window.__FM_DATA__ && window.__FM_DATA__.config) || {};
+  const nomeScuolaDisplay = _schoolCfg.nomeScuola || "Futuro Musica";
+
+  // Logo: prova l'immagine caricata dalla scuola, fallback al logo di default
+  // (icona nota musicale) se non è mai stata caricata nessuna immagine.
+  const [logoOk, setLogoOk] = useState(true);
+
   return(
     React.createElement('div', { style: {flex:"0 0 46%",background:`linear-gradient(160deg,#123a7a 0%,#1a4fa0 40%,#0d2d6b 100%)`,
       position:"relative",overflow:"hidden",display:"flex",flexDirection:"column",
@@ -1156,11 +1211,14 @@ const PanelloSinistra = ()=>{
       /* Contenuto */
       , React.createElement('div', { style: {position:"relative",zIndex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 766}}
         , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10,marginBottom:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 767}}
-          , React.createElement('div', { style: {width:34,height:34,borderRadius:0,background:"#8c1818",
-            display:"flex",alignItems:"center",justifyContent:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 768}}
-            , React.createElement(Ic, { n: "music", size: 17, stroke: "#fff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 770}})
-          )
-          , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:16,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:"#fff"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 772}}, "Futuro Musica"
+          , logoOk
+            ? React.createElement('img', {src:SCHOOL_LOGO_URL(192), onError:()=>setLogoOk(false),
+                style:{width:34,height:34,borderRadius:6,objectFit:'contain',background:'#fff',flexShrink:0}})
+            : React.createElement('div', { style: {width:34,height:34,borderRadius:0,background:"#8c1818",
+                display:"flex",alignItems:"center",justifyContent:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 768}}
+                , React.createElement(Ic, { n: "music", size: 17, stroke: "#fff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 770}})
+              )
+          , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:16,fontWeight:600,letterSpacing:"0.08em",textTransform:"uppercase",color:"#fff"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 772}}, nomeScuolaDisplay
 
           )
         )
@@ -1702,6 +1760,39 @@ const FormSetPassword = ({onSuccess}) => {
 
 
 const oggi   = new Date();
+
+// ── Persistenza immediata ordine/visibilità pannelli Dashboard ──────────────
+// Prima, il riordino (frecce ▲▼) e i toggle visibilità aggiornavano SOLO lo stato
+// React locale (setPanels/onPanels): la scrittura su Supabase avveniva solo come
+// effetto collaterale del salvataggio (slegato) in Impostazioni Generali. Se l'utente
+// riordinava le card senza mai aprire e salvare quella scheda, l'ordine si perdeva
+// al riavvio. Questo helper scrive subito la chiave 'dashboardPanels' in sito_config,
+// indipendentemente da dove viene richiamato il riordino (Dashboard o Impostazioni).
+window.__FM_PERSIST_PANELS__ = function(newPanels) {
+  const sb = window.supabaseClient;
+  if (!sb) { console.warn('[FM] __FM_PERSIST_PANELS__: supabaseClient non disponibile'); return; }
+  (async () => {
+    try {
+      const del = await sb.from('sito_config').delete().eq('chiave', 'dashboardPanels');
+      if (del && del.error) {
+        console.warn('[FM] errore DELETE dashboardPanels:', del.error.message);
+        alert('Impossibile salvare l\'ordine: permessi insufficienti sul database (RLS - DELETE su sito_config).\n' + del.error.message);
+        return;
+      }
+      const { error } = await sb.from('sito_config').insert({ chiave: 'dashboardPanels', valore: JSON.stringify(newPanels || {}) });
+      if (error) {
+        console.warn('[FM] errore INSERT dashboardPanels:', error.message);
+        alert('Impossibile salvare l\'ordine: permessi insufficienti sul database (RLS - INSERT su sito_config).\n' + error.message);
+        return;
+      }
+      console.log('[FM] Ordine pannelli salvato su sito_config:', newPanels);
+    } catch(e) {
+      console.warn('[FM] errore salvataggio ordine pannelli:', e && e.message);
+      alert('Errore durante il salvataggio dell\'ordine: ' + (e && e.message));
+    }
+  })();
+};
+
 const ANNO   = oggi.getFullYear();
 const MESE   = oggi.getMonth();
 const GIORNO = oggi.getDay(); // 0=dom
@@ -2352,7 +2443,9 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                         // Non permettere di muovere i pannelli "sempre" fuori dalla posizione fissa
                         if (target < 0 || target >= newOrder.length) return;
                         [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
-                        onPanels(p => ({...p, panelOrder: newOrder}));
+                        const newPanels = {...panels, panelOrder: newOrder};
+                        onPanels(() => newPanels);
+                        if (window.__FM_PERSIST_PANELS__) window.__FM_PERSIST_PANELS__(newPanels);
                       };
 
                       return ordered.map((p, idx) => {
@@ -2380,7 +2473,7 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                           )
                           , p.sempre
                             ? React.createElement('span', { style: {fontSize:10,color:C.textDim,letterSpacing:"0.06em"}}, "FISSO")
-                            : React.createElement(Toggle, { value: on, onChange: v=>onPanels(prev=>({...prev,[p.id]:v}))})
+                            : React.createElement(Toggle, { value: on, onChange: v=>{ const newPanels={...panels,[p.id]:v}; onPanels(()=>newPanels); if (window.__FM_PERSIST_PANELS__) window.__FM_PERSIST_PANELS__(newPanels); }})
                         );
                       });
                     })()
@@ -2412,7 +2505,9 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                       const target = idx + dir;
                       if (target < 0 || target >= newOrder.length) return;
                       [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
-                      onPanels(p => ({...p, kpiOrder: newOrder}));
+                      const newPanels = {...panels, kpiOrder: newOrder};
+                      onPanels(() => newPanels);
+                      if (window.__FM_PERSIST_PANELS__) window.__FM_PERSIST_PANELS__(newPanels);
                     };
 
                     return React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}}
@@ -2797,7 +2892,7 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                       )
                     )
                     , [
-                        rs.showNominativo!==false   && ["Ricevuta da","Giulia Romano"],
+                        rs.showNominativo!==false   && ["SOCIO","Giulia Romano"],
                         rs.showDataNascita!==false  && ["Data di nascita","30/09/2011"],
                         rs.showDataPagamento!==false&& ["Data pagamento","11/02/2026"],
                         rs.showDescrizione!==false  && ["Descrizione","Quota mensile Febbraio 2026"],
@@ -3503,6 +3598,17 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
                   )
                 );
               })
+          , React.createElement('div', {style:{padding:'10px 16px',borderTop:`1px solid ${C.border}`}}
+              , React.createElement('button', {
+                  onClick: () => { onNavigate('notifiche'); setOpen(false); },
+                  style:{width:'100%',padding:'9px',borderRadius:8,border:`1px solid ${C.goldDim||C.gold}`,
+                    background:C.goldBg,color:C.gold,cursor:'pointer',fontSize:12,fontWeight:700,
+                    fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',
+                    justifyContent:'center',gap:6,textTransform:'uppercase',letterSpacing:'.04em'}}
+                , React.createElement(Ic, {n:'bell', size:13, stroke:'currentColor'})
+                , 'Vai alle notifiche'
+              )
+            )
         )
     )
   );
@@ -3511,66 +3617,159 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
 
 // ─── REPORT LEZIONI CARD (Dashboard) ────────────────────────────────────────
 const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
-  const meseCurr = new Date().getMonth() + 1;
-  const annoCurr = new Date().getFullYear();
+  const now3 = new Date();
+  const meseCurr = now3.getMonth() + 1;
+  const annoCurr = now3.getFullYear();
   const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
-  const SOGLIA_IND_GLOB = (config && config.sogliaLezioniIndividuali != null) ? Number(config.sogliaLezioniIndividuali) : 4;
+  const cfg = config || {};
+  // Stessi valori di riferimento di ReportLezioniMensile (scheda ALLIEVI)
+  const PUNTI_CORSO_INDIVIDUALE = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
+  const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
 
   // Sezioni collassabili indipendenti
   const [openOltre,   setOpenOltre]   = useState(true);
   const [openInLinea, setOpenInLinea] = useState(false);
   const [openSotto,   setOpenSotto]   = useState(false);
 
-  const contInd = {};
+  // ── Da qui in poi: IDENTICA logica di calcolo di ReportLezioniMensile (AllieviView),
+  // per garantire che i due report mostrino sempre gli stessi numeri ──────────────────
+
+  // Ultimo mese che contiene effettivamente delle lezioni (esclude il futuro): serve per
+  // capire se il mese corrente è "in corso" (dati parziali) e va quindi prorata la soglia.
+  const oggiYM = annoCurr*12 + meseCurr;
+  let ultimoMeseConLezioni = null;
   (lessons||[]).forEach(l => {
-    if (isColl(l)||l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
-    if (l.attendance==='recuperata') return;
+    if (!l.date) return;
+    const [ly,lm] = l.date.split('-').map(Number);
+    if (!ly||!lm) return;
+    const ym = ly*12+lm;
+    if (ym > oggiYM) return;
+    if (!ultimoMeseConLezioni || ym > ultimoMeseConLezioni.ym) ultimoMeseConLezioni = { anno:ly, mese:lm, ym };
+  });
+  const isUltimoMeseConLezioni = !!ultimoMeseConLezioni && ultimoMeseConLezioni.anno===annoCurr && ultimoMeseConLezioni.mese===meseCurr;
+
+  const sogliaAllievo = (s) => {
+    const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
+    const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
+    const enroll = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
+    const isMeseIscrizione = enroll && enroll.getFullYear()===annoCurr && (enroll.getMonth()+1)===meseCurr;
+
+    if (!isMeseIscrizione && !isUltimoMeseConLezioni) {
+      return { individuale: nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE, collettiva: nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO };
+    }
+    const inizioMese = new Date(annoCurr, meseCurr-1, 1);
+    const fineMese    = new Date(annoCurr, meseCurr, 0);
+    let dataInizio = inizioMese;
+    if (isMeseIscrizione && enroll > inizioMese) dataInizio = enroll;
+    let dataFine = fineMese;
+    if (isUltimoMeseConLezioni) {
+      const oggiCap = now3 < fineMese ? now3 : fineMese;
+      if (oggiCap < dataFine) dataFine = oggiCap;
+    }
+    if (dataFine < dataInizio) dataFine = dataInizio;
+    const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
+    const settimane = Math.max(giorni,1)/7;
+    return {
+      individuale: Math.round(nCorsiIndividuali*(PUNTI_CORSO_INDIVIDUALE/4)*settimane),
+      collettiva:  Math.round(nCorsiCollettivi*(PUNTI_CORSO_COLLETTIVO/4)*settimane),
+    };
+  };
+
+  // Conteggio lezioni svolte nel mese corrente, individuali+collettive, con dedup per id
+  const contInd = {}, contColl = {};
+  const lezioniGiaContate = new Set();
+  (lessons||[]).forEach(l => {
     if (!l.date) return;
     const [ly,lm] = l.date.split('-').map(Number);
     if (ly!==annoCurr||lm!==meseCurr) return;
-    const k = l.student||String(l.studentId||''); if(!k) return;
-    contInd[k] = (contInd[k]||0)+1;
+    if (l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
+    const lid = l.id!=null ? String(l.id) : `${l.date}|${l.hour}|${l.student||l.courseId||''}`;
+    if (lezioniGiaContate.has(lid)) return;
+    lezioniGiaContate.add(lid);
+    if (isColl(l)) {
+      (l.students||[]).forEach(st => {
+        if (!st || !st.name) return;
+        if (studAttendance(l, st.name, st.id)==='recuperata') return;
+        contColl[st.name] = (contColl[st.name]||0)+1;
+      });
+    } else {
+      if (l.attendance==='recuperata') return;
+      const k = l.student||String(l.studentId||''); if(!k) return;
+      contInd[k] = (contInd[k]||0)+1;
+    }
   });
 
   const allieviAttivi = (students||[]).filter(s=>s.status==='attivo'||s.stato==='attivo'||!s.status);
   const report = allieviAttivi.map(s => {
     const nome = s.name||s.nome||'';
-    const soglia = s.sogliaIndividualeEcc!=null ? Number(s.sogliaIndividualeEcc) : SOGLIA_IND_GLOB;
-    const count  = contInd[nome]||0;
-    const delta  = count - soglia;
-    return { nome, count, soglia, delta };
+    const soglie = sogliaAllievo(s);
+    const isEccInd  = s.sogliaIndividualeEcc!=null;
+    const isEccColl = s.sogliaCollettivaEcc!=null;
+    const sogliaInd  = Math.round(isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale);
+    const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
+    const countInd  = contInd[nome]||0;
+    const countColl = contColl[nome]||0;
+    const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
+    const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
+    // Stato complessivo: la carenza (su uno qualsiasi dei due tipi) ha priorità, poi l'eccedenza
+    // — identico criterio di ReportLezioniMensile
+    const deltaPeggiore = Math.min(individuale.delta, collettiva.delta) < 0
+      ? Math.min(individuale.delta, collettiva.delta)
+      : Math.max(individuale.delta, collettiva.delta);
+    return { id:s.id, nome, individuale, collettiva, deltaPeggiore };
   }).filter(r=>r.nome);
+  report.sort((a,b)=>a.deltaPeggiore-b.deltaPeggiore);
 
-  const superano    = report.filter(r=>r.delta>0).sort((a,b)=>b.delta-a.delta);
-  const inLinea     = report.filter(r=>r.delta===0);
-  const sottosoglia = report.filter(r=>r.delta<0).sort((a,b)=>a.delta-b.delta);
+  const superano    = report.filter(r=>r.deltaPeggiore>0);
+  const inLinea     = report.filter(r=>r.deltaPeggiore===0);
+  const sottosoglia = report.filter(r=>r.deltaPeggiore<0);
 
-  const ColSection = ({ title, color, icon, items, open, onToggle, renderItem }) =>
+  const cella = (stat) => {
+    const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
+    const lbl = stat.delta>0?`+${stat.delta}`:stat.delta<0?`${stat.delta}`:'0';
+    return React.createElement('div',{style:{display:'flex',alignItems:'baseline',gap:4,whiteSpace:'nowrap'}}
+      , React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.text}}, stat.count)
+      , React.createElement('span',{style:{fontSize:10,color:C.textMuted}}, `/${stat.soglia}`)
+      , React.createElement('span',{style:{fontSize:10,fontWeight:700,color:clr}}, lbl)
+      , stat.isEccezione && React.createElement('span',{style:{fontSize:9,color:C.gold}},'(ecc.)')
+    );
+  };
+
+  const RigaAllievo = (r) => React.createElement('div',{key:r.id||r.nome,
+      style:{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:`1px solid ${C.border}44`,cursor:'pointer'},
+      onClick:()=>onNavigate('allievi')}
+    , React.createElement('span',{style:{fontSize:12,color:C.text,fontWeight:600,flex:'1 1 auto',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, r.nome)
+    , React.createElement('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,minWidth:52}}
+        , React.createElement('span',{style:{fontSize:8,color:C.textDim,textTransform:'uppercase',letterSpacing:'.04em'}},'Ind.')
+        , cella(r.individuale)
+      )
+    , React.createElement('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,minWidth:52}}
+        , React.createElement('span',{style:{fontSize:8,color:C.textDim,textTransform:'uppercase',letterSpacing:'.04em'}},'Coll.')
+        , cella(r.collettiva)
+      )
+  );
+
+  const ColSection = ({ title, color, icon, items, open, onToggle }) =>
     React.createElement('div', {style:{borderBottom:`1px solid ${C.border}`}}
       , React.createElement('div', {
           onClick: onToggle,
           style:{padding:'10px 16px',cursor:'pointer',display:'flex',alignItems:'center',gap:8,
-            background: open ? `${color}08` : 'transparent',
-            transition:'background .15s'}}
+            background: open ? `${color}08` : 'transparent', transition:'background .15s'}}
         , React.createElement(Ic,{n:icon,size:12,stroke:color})
         , React.createElement('span',{style:{fontSize:11,color,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em',flex:1}}, title, ` (${items.length})`)
         , React.createElement(Ic,{n:open?'chevron-up':'chevron-down',size:13,stroke:C.textMuted})
       )
-      , open && React.createElement('div', {style:{padding:'4px 16px 10px'}}
+      , open && React.createElement('div', {style:{padding:'2px 16px 8px',maxHeight:280,overflowY:'auto'}}
         , items.length === 0
-          ? React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic',padding:'4px 0'}},'Nessuno')
-          : items.map(r => React.createElement('div',{key:r.nome,
-              style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 0',borderBottom:`1px solid ${C.border}44`}}
-            , React.createElement('span',{style:{fontSize:12,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'65%'}}, r.nome)
-            , renderItem(r)
-          ))
+          ? React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic',padding:'6px 0'}},'Nessuno')
+          : items.map(RigaAllievo)
       )
     );
 
   return React.createElement('div', {style:{marginBottom:16}}
     , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:'hidden'}}
       /* Header */
-      , React.createElement('div', {style:{padding:'14px 18px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}}
+      , React.createElement('div', {style:{padding:'14px 18px',borderBottom:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}
         , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8}}
           , React.createElement(Ic,{n:'chart',size:14,stroke:C.gold})
           , React.createElement('span',{style:{fontSize:12,fontWeight:500,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted}},
@@ -3582,27 +3781,13 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
           , sottosoglia.length>0&&React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`${sottosoglia.length} sotto`)
         )
       )
-      /* Sezioni collassabili */
-      , React.createElement(ColSection, {
-          title:'Oltre soglia', color:C.orange, icon:'alert',
-          items:superano, open:openOltre, onToggle:()=>setOpenOltre(p=>!p),
-          renderItem: r => React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.orange,whiteSpace:'nowrap'}},
-            `${r.count}/${r.soglia} `, React.createElement('span',{style:{fontSize:10}},`+${r.delta}`))
-        })
-      , React.createElement(ColSection, {
-          title:'In linea', color:C.green, icon:'check',
-          items:inLinea, open:openInLinea, onToggle:()=>setOpenInLinea(p=>!p),
-          renderItem: r => React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.green}},`${r.count}/${r.soglia}`)
-        })
-      , React.createElement(ColSection, {
-          title:'Sotto soglia', color:C.blue, icon:'clock',
-          items:sottosoglia, open:openSotto, onToggle:()=>setOpenSotto(p=>!p),
-          renderItem: r => React.createElement('span',{style:{fontSize:12,fontWeight:700,color:C.blue,whiteSpace:'nowrap'}},
-            `${r.count}/${r.soglia} `, React.createElement('span',{style:{fontSize:10}},`${r.delta}`))
-        })
+      /* Sezioni collassabili — Individuali e Collettive mostrate separatamente per riga */
+      , React.createElement(ColSection, { title:'Oltre soglia', color:C.orange, icon:'alert', items:superano, open:openOltre, onToggle:()=>setOpenOltre(p=>!p) })
+      , React.createElement(ColSection, { title:'In linea', color:C.green, icon:'check', items:inLinea, open:openInLinea, onToggle:()=>setOpenInLinea(p=>!p) })
+      , React.createElement(ColSection, { title:'Sotto soglia', color:C.blue, icon:'clock', items:sottosoglia, open:openSotto, onToggle:()=>setOpenSotto(p=>!p) })
       /* Footer */
-      , React.createElement('div',{style:{padding:'10px 18px',display:'flex',justifyContent:'space-between',alignItems:'center'}}
-        , React.createElement('span',{style:{fontSize:11,color:C.textDim}},`Soglia globale: ${SOGLIA_IND_GLOB} lez/mese · ${report.length} allievi attivi`)
+      , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:6}}
+        , React.createElement('span',{style:{fontSize:11,color:C.textDim}},`Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · ${report.length} allievi attivi`)
         , React.createElement('button',{onClick:()=>onNavigate('allievi'),
             style:{background:'none',border:'none',cursor:'pointer',fontSize:12,color:C.gold,fontFamily:"'Open Sans',sans-serif",display:'flex',alignItems:'center',gap:4}}
           , React.createElement(Ic,{n:'users',size:12,stroke:C.gold}), ' Gestisci allievi →')
@@ -4563,7 +4748,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             , ruolo === "admin" && isVisible("report") && React.createElement('div',{style:{...(window.__dash_panel_order__&&window.__dash_panel_order__('report'))}}
               , React.createElement(ReportLezioniCard, {
                   lessons: _lessons,
-                  students: ALLIEVI_LIVE,
+                  students: _studentsAnno,
                   config,
                   onNavigate,
                 })
@@ -4602,6 +4787,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 // ════════════════════════════════════════════════════════════════════════════════
 // SORTING UTILITIES
 // ════════════════════════════════════════════════════════════════════════════════
+
 
 // Hook: useSortable(defaultKey, defaultDir)
 // Returns [sortKey, sortDir, handleSort, sortFn]
@@ -5007,7 +5193,7 @@ const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, o
           React.createElement('table', { style: {width:"100%",borderCollapse:"collapse"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2736}}
             , React.createElement('thead', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 2737}}
               , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2738}}
-                , ["Allievo","Insegnante","Livello","Quota mensile","Stato"].map(h=>(
+                , ["Allievo","Insegnante","Quota mensile","Stato"].map(h=>(
                   React.createElement('th', { key: h, style: {padding:"11px 20px",textAlign:"left",fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2740}}, h)
                 ))
               )
@@ -5031,7 +5217,6 @@ const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, o
                       )
                     )
                     , React.createElement('td', { style: {padding:"13px 20px",fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2762}}, s.teacher)
-                    , React.createElement('td', { style: {padding:"13px 20px",fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2763}}, s.level||"—")
                     , React.createElement('td', { style: {padding:"13px 20px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2764}}
                       , React.createElement('div', { style: {fontSize:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2765}}, "€ " , s.monthlyFee)
                       , React.createElement('div', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2766}}, s.feeType)
@@ -5424,7 +5609,19 @@ const emptyStudent = { name:"",email:"",phone:"",instrument:"",teacher:"",status
 const validate = f => {
   const e = {};
   if(!f.name.trim()) e.name="Nome obbligatorio";
-  if(f.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email="Email non valida";
+  if(!f.email || !f.email.trim()) e.email="Email obbligatoria";
+  else if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email="Email non valida";
+  if(!f.phone || !f.phone.trim()) e.phone="Telefono obbligatorio";
+  if(!f.birthdate) e.birthdate="Data di nascita obbligatoria";
+  if(!f.enrollDate) e.enrollDate="Data iscrizione obbligatoria";
+  if(!f.codiceFiscale || !f.codiceFiscale.trim()) e.codiceFiscale="Codice fiscale obbligatorio";
+  // Allievo minorenne: la ricevuta va intestata a un adulto (es. genitore) → nome obbligatorio
+  if(f.birthdate && typeof age === 'function') {
+    const eta = age(f.birthdate);
+    if(eta != null && eta < 18 && (!f.nomeRicevuta || !f.nomeRicevuta.trim())) {
+      e.nomeRicevuta = "Nome per ricevuta obbligatorio (allievo minorenne)";
+    }
+  }
   if(!f.instrument) e.instrument="Corso individuale obbligatorio";
   if(!f.teacher)    e.teacher="Insegnante obbligatorio";
   // Ogni corso individuale extra richiede un insegnante assegnato, esattamente come il corso principale:
@@ -5457,9 +5654,16 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
     return individuali.length > 0 ? individuali.sort() : INSTRUMENTS;
   }, [courses]);
 
+  const [saving, setSaving] = useState(false);
+  const savingRef = React.useRef(false); // guard sincrono: uno state da solo non basta, un secondo
+  // click arrivato prima del re-render vedrebbe ancora saving=false e passerebbe comunque (causa
+  // reale dei doppioni riscontrati: 2 insert distinti dallo stesso submit).
   const handleSubmit = () => {
+    if (savingRef.current) return; // blocco anti doppio-click: un doppio invio creerebbe un allievo duplicato a DB
     const e = validate(f);
     if(Object.keys(e).length){ setErrors(e); return; }
+    savingRef.current = true;
+    setSaving(true);
     onSave({...f, monthlyFee:Number(f.monthlyFee), lessons:f.lessons||[]});
   };
 
@@ -5469,18 +5673,18 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
 
         , React.createElement(SectionDivider, { label: "Dati anagrafici" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 2944}})
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}, React.createElement(Input, { label: roleSF==="docente"?"Nome (sola lettura)":"Nome completo *", value: f.name, onChange: roleSF==="docente"?undefined:e=>set("name",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.name, placeholder: "Es. Sofia Marchetti", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}))
-        , React.createElement(Input, { label: "Email", type: "email", value: f.email, onChange: roleSF==="docente"?undefined:e=>set("email",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.email, placeholder: "email@esempio.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2946}})
-        , React.createElement(Input, { label: "Telefono", value: f.phone, onChange: roleSF==="docente"?undefined:e=>set("phone",e.target.value), readOnly: roleSF==="docente", placeholder: "333 1234567", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2947}})
-        , React.createElement(Input, { label: "Data di nascita", type: "date", value: f.birthdate, onChange: roleSF==="docente"?undefined:e=>set("birthdate",e.target.value), readOnly: roleSF==="docente", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2948}})
-        , React.createElement(Input, { label: "Data iscrizione", type: "date", value: f.enrollDate, onChange: roleSF==="docente"?undefined:e=>set("enrollDate",e.target.value), readOnly: roleSF==="docente", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2949}})
+        , React.createElement(Input, { label: "Email *", type: "email", value: f.email, onChange: roleSF==="docente"?undefined:e=>set("email",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.email, placeholder: "email@esempio.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2946}})
+        , React.createElement(Input, { label: "Telefono *", value: f.phone, onChange: roleSF==="docente"?undefined:e=>set("phone",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.phone, placeholder: "333 1234567", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2947}})
+        , React.createElement(Input, { label: "Data di nascita *", type: "date", value: f.birthdate, onChange: roleSF==="docente"?undefined:e=>set("birthdate",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.birthdate, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2948}})
+        , React.createElement(Input, { label: "Data iscrizione *", type: "date", value: f.enrollDate, onChange: roleSF==="docente"?undefined:e=>set("enrollDate",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.enrollDate, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2949}})
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2950}}
-          , React.createElement(Input, { label: "Nome per ricevuta"  , value: f.nomeRicevuta||"", onChange: e=>set("nomeRicevuta",e.target.value),
-            placeholder: f.name||"Lascia vuoto per usare il nome dell'allievo", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2951}})
-          , React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2953}}, "Per allievi minorenni inserire il nome del genitore/tutore intestatario della ricevuta."
+          , React.createElement(Input, { label: (typeof age === 'function' && f.birthdate && age(f.birthdate) < 18) ? "Nome per ricevuta *" : "Nome per ricevuta", value: f.nomeRicevuta||"", onChange: e=>set("nomeRicevuta",e.target.value),
+            error: errors.nomeRicevuta, placeholder: f.name||"Lascia vuoto per usare il nome dell'allievo", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2951}})
+          , React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2953}}, "Per allievi minorenni è obbligatorio inserire il nome del genitore/tutore intestatario della ricevuta."
 
           )
         )
-        , React.createElement(Input, { label: "Codice fiscale", value: f.codiceFiscale||"", onChange: e=>set("codiceFiscale",(e.target.value||"").toUpperCase()), placeholder: "RSSMRA85T10A562S", maxLength: 16, style:{textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2954}})
+        , React.createElement(Input, { label: "Codice fiscale *", value: f.codiceFiscale||"", onChange: e=>set("codiceFiscale",(e.target.value||"").toUpperCase()), error: errors.codiceFiscale, placeholder: "RSSMRA85T10A562S", maxLength: 16, style:{textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2954}})
 
         , React.createElement(SectionDivider, { label: "Corsi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2958}})
 
@@ -5653,7 +5857,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
       )
       , React.createElement('div', { style: {padding:"16px 24px",borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"flex-end",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3009}}
         , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3010}}, "Annulla")
-        , React.createElement(Btn, { onClick: handleSubmit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3011}}, React.createElement(Ic, { n: "check", size: 14, color: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3011}}), _optionalChain([initial, 'optionalAccess', _30 => _30.id])?"Salva modifiche":"Aggiungi allievo")
+        , React.createElement(Btn, { onClick: handleSubmit, disabled: saving, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3011}}, React.createElement(Ic, { n: "check", size: 14, color: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3011}}), saving?"Salvataggio…":(_optionalChain([initial, 'optionalAccess', _30 => _30.id])?"Salva modifiche":"Aggiungi allievo"))
       )
     )
   );
@@ -5997,7 +6201,8 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
       , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,marginBottom:24,padding:"16px 20px",borderTop:`3px solid ${accentHex}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3206}}
         , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3207}}
           , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3208}}
-            , React.createElement('div', { style: {width:60,height:60,borderRadius:"50%",background:`${accentHex}20`,border:`2px solid ${accentHex}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,accentHex,fontFamily:"'Oswald',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3209}}
+            /* Cerchio iniziali: nascosto in PWA/mobile per snellire l'header */
+            , !isMobile && React.createElement('div', { style: {width:60,height:60,borderRadius:"50%",background:`${accentHex}20`,border:`2px solid ${accentHex}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,fontWeight:700,accentHex,fontFamily:"'Oswald',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3209}}
               , initials(student.name)
             )
             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3212}}
@@ -6006,12 +6211,13 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                 /* Corsi individuali dell'allievo — tutti allo stesso livello, ciascuno col proprio insegnante */
                 , student.instrument && React.createElement('span', {style:{display:"inline-flex",alignItems:"center",gap:4}}
                   , React.createElement(Badge, { label: student.instrument, accentHex: "gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3215}})
-                  , student.teacher && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + student.teacher + ")")
+                  /* Nome del maestro: nascosto in PWA/mobile */
+                  , !isMobile && student.teacher && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + student.teacher + ")")
                 )
                 , (student.extraInstruments||[]).map(ins =>
                     React.createElement('span', {key:ins, style:{display:"inline-flex",alignItems:"center",gap:4}}
                       , React.createElement(Badge, {label:ins, accentHex:"gold"})
-                      , (student.extraTeachers||{})[ins] && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + (student.extraTeachers||{})[ins] + ")")
+                      , !isMobile && (student.extraTeachers||{})[ins] && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "(" + (student.extraTeachers||{})[ins] + ")")
                     )
                   )
                 /* Corso complementare */
@@ -6087,20 +6293,27 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
       /* ── INFORMAZIONI ── */
       , tab==="info" && (
         React.createElement('div', { style: {display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3261}}
-          , [
-            // email e telefono: solo admin/allievo, non docente
-            ...(sdRuolo !== "docente" ? [
-              {icon:"mail",    label:"Email",       value:student.email||"—"},
-              {icon:"phone",   label:"Telefono",     value:student.phone||"—"},
-            ] : []),
-            {icon:"user",    label:"Età",          value:student.birthdate?`${age(student.birthdate)} anni`:"—"},
-            {icon:"music",   label:"Livello",      value:student.level||"—"},
-            {icon:"calendar",label:"Iscritto dal", value:fmtDate(student.enrollDate)||"—"},
-            // quota mensile: solo admin/allievo, non docente
-            ...(sdRuolo !== "docente" ? [
-              {icon:"euro",    label:"Quota mensile",value:`€ ${student.monthlyFee} (${student.feeType})`},
-            ] : []),
-          ].map(r => (
+          , (() => {
+              const etaAllievo = student.birthdate && typeof age === 'function' ? age(student.birthdate) : null;
+              const isMinorenne = etaAllievo != null && etaAllievo < 18;
+              const nomeRicevutaVal = (student.nomeRicevuta && student.nomeRicevuta.trim())
+                ? student.nomeRicevuta
+                : (isMinorenne ? "⚠ Da compilare (obbligatorio per minorenni)" : (student.name || "—"));
+              return [
+                // email e telefono: solo admin/allievo, non docente
+                ...(sdRuolo !== "docente" ? [
+                  {icon:"mail",    label:"Email",       value:student.email||"—"},
+                  {icon:"phone",   label:"Telefono",     value:student.phone||"—"},
+                ] : []),
+                {icon:"user",    label:"Età",          value:student.birthdate?`${etaAllievo} anni`:"—"},
+                {icon:"calendar",label:"Iscritto dal", value:fmtDate(student.enrollDate)||"—"},
+                // nome per ricevuta e quota mensile: solo admin/allievo, non docente
+                ...(sdRuolo !== "docente" ? [
+                  {icon:"receipt", label:isMinorenne?"Nome per ricevuta (minorenne)":"Nome per ricevuta", value:nomeRicevutaVal},
+                  {icon:"euro",    label:"Quota mensile",value:`€ ${student.monthlyFee} (${student.feeType})`},
+                ] : []),
+              ];
+            })().map(r => (
             React.createElement('div', { key: r.label, style: {display:"flex",gap:12,alignItems:"flex-start",padding:"14px 16px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3270}}
               , React.createElement(Ic, { n: r.icon, size: 16, accentHex: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3271}})
               , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3272}}
@@ -6109,16 +6322,6 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
               )
             )
           ))
-          , comp && (
-            React.createElement('div', { style: {display:"flex",gap:12,alignItems:"flex-start",padding:"14px 16px",background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3279}}
-              , React.createElement(Ic, { n: "group", size: 16, accentHex: C.purple, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3280}})
-              , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3281}}
-                , React.createElement('div', { style: {fontSize:11,color:C.purple,letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:3,opacity:0.7}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3282}}, "Corso complementare" )
-                , React.createElement('div', { style: {fontSize:14,color:C.purple,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3283}}, comp.name)
-                , comp.description && React.createElement('div', { style: {fontSize:12,color:C.textMuted,marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3284}}, comp.description)
-              )
-            )
-          )
           , myGruppi.length > 0 && (
             React.createElement('div', { style: {gridColumn:"1/-1",display:"flex",flexDirection:"column",gap:8,padding:"14px 16px",background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:10}}
               , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
@@ -7000,44 +7203,115 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
   // Valori per corso (configurabili a livello globale, con fallback ai valori richiesti)
   const PUNTI_CORSO_INDIVIDUALE = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
   const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
-  // Soglia di default per un allievo: 4 lezioni/mese per ogni corso individuale
-  // (principale + extra, tutti allo stesso livello) + 2 lezioni/mese per il corso collettivo (max 1).
-  // Se l'allievo ha un'eccezione impostata in scheda (sogliaIndividualeEcc), quella prevale sempre.
-  const sogliaDefaultAllievo = (s) => {
-    const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
-    const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
-    return nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE + nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO;
-  };
 
   const [reportOpen, setReportOpen] = useState(false);
   const [reportMese, setReportMese] = useState(meseCurr);
   const [reportAnno, setReportAnno] = useState(annoCurr);
   const [reportFiltro, setReportFiltro] = useState('tutti');
 
-  const contInd = {};
+  // Ultimo mese che contiene effettivamente delle lezioni (esclude lezioni programmate nel futuro):
+  // serve per capire se il mese selezionato è "in corso" (dati parziali) e va quindi prorata la soglia.
+  const oggiYM = annoCurr*12 + meseCurr;
+  let ultimoMeseConLezioni = null;
   (lessons||[]).forEach(l => {
-    if (isColl(l)||l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
-    if (l.attendance==='recuperata') return;
+    if (!l.date) return;
+    const [ly,lm] = l.date.split('-').map(Number);
+    if (!ly||!lm) return;
+    const ym = ly*12+lm;
+    if (ym > oggiYM) return; // ignora lezioni future
+    if (!ultimoMeseConLezioni || ym > ultimoMeseConLezioni.ym) ultimoMeseConLezioni = { anno:ly, mese:lm, ym };
+  });
+  const isUltimoMeseConLezioni = !!ultimoMeseConLezioni && ultimoMeseConLezioni.anno===reportAnno && ultimoMeseConLezioni.mese===reportMese;
+
+  // Soglia di un allievo per il mese selezionato — normalmente flat (4/mese a corso individuale,
+  // 2/mese per il corso collettivo), MA per il mese d'iscrizione e per l'ultimo mese con lezioni
+  // (entrambi mesi "parziali") viene calcolata in proporzione alle settimane effettivamente trascorse:
+  // lezioni attese = (punti/4 a settimana) × nr. corsi × nr. settimane dalla data di riferimento.
+  const sogliaAllievo = (s) => {
+    const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
+    const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
+    const enroll = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
+    const isMeseIscrizione = enroll && enroll.getFullYear()===reportAnno && (enroll.getMonth()+1)===reportMese;
+
+    if (!isMeseIscrizione && !isUltimoMeseConLezioni) {
+      // Mese "pieno" ordinario: soglia standard
+      return {
+        individuale: nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE,
+        collettiva:  nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO,
+      };
+    }
+    // Mese parziale: calcola le settimane effettive del periodo di riferimento
+    const inizioMese = new Date(reportAnno, reportMese-1, 1);
+    const fineMese    = new Date(reportAnno, reportMese, 0);
+    let dataInizio = inizioMese;
+    if (isMeseIscrizione && enroll > inizioMese) dataInizio = enroll;
+    let dataFine = fineMese;
+    if (isUltimoMeseConLezioni) {
+      const oggiCap = now3 < fineMese ? now3 : fineMese;
+      if (oggiCap < dataFine) dataFine = oggiCap;
+    }
+    if (dataFine < dataInizio) dataFine = dataInizio;
+    const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
+    const settimane = Math.max(giorni,1)/7;
+    return {
+      individuale: Math.round(nCorsiIndividuali*(PUNTI_CORSO_INDIVIDUALE/4)*settimane),
+      collettiva:  Math.round(nCorsiCollettivi*(PUNTI_CORSO_COLLETTIVO/4)*settimane),
+    };
+  };
+
+  // Conteggio lezioni svolte nel mese selezionato, separato per individuali/collettive.
+  // Deduplica per id lezione: un record duplicato (bug di sincronizzazione a monte) non deve
+  // essere contato due volte — questa è l'unica vista impattata dal problema, quindi la protezione
+  // va messa qui.
+  const contInd = {}, contColl = {};
+  const lezioniGiaContate = new Set();
+  (lessons||[]).forEach(l => {
     if (!l.date) return;
     const [ly,lm] = l.date.split('-').map(Number);
     if (ly!==reportAnno||lm!==reportMese) return;
-    const k = l.student||String(l.studentId||''); if(!k) return;
-    contInd[k] = (contInd[k]||0)+1;
+    if (l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
+    const lid = l.id!=null ? String(l.id) : `${l.date}|${l.hour}|${l.student||l.courseId||''}`;
+    if (lezioniGiaContate.has(lid)) return; // record duplicato: già conteggiato
+    lezioniGiaContate.add(lid);
+    if (isColl(l)) {
+      (l.students||[]).forEach(st => {
+        if (!st || !st.name) return;
+        if (studAttendance(l, st.name, st.id)==='recuperata') return;
+        contColl[st.name] = (contColl[st.name]||0)+1;
+      });
+    } else {
+      if (l.attendance==='recuperata') return;
+      const k = l.student||String(l.studentId||''); if(!k) return;
+      contInd[k] = (contInd[k]||0)+1;
+    }
   });
 
   const allieviAttivi = (students||[]).filter(s=>s.status==='attivo'||!s.status);
-  const report = allieviAttivi.map(s => {
+  const report = [];
+  allieviAttivi.forEach(s => {
     const nome = s.name||s.nome||'';
-    const isEccezione = s.sogliaIndividualeEcc!=null;
-    const soglia = isEccezione ? Number(s.sogliaIndividualeEcc) : sogliaDefaultAllievo(s);
-    const count  = contInd[nome]||0;
-    const delta  = count - soglia;
-    return { id:s.id, nome, count, soglia, delta, isEccezione };
-  }).filter(r=>r.nome).sort((a,b)=>b.delta-a.delta);
+    if (!nome) return;
+    const soglie = sogliaAllievo(s);
+    const isEccInd  = s.sogliaIndividualeEcc!=null;
+    const isEccColl = s.sogliaCollettivaEcc!=null;
+    const sogliaInd  = Math.round(isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale);
+    const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
+    const countInd  = contInd[nome]||0;
+    const countColl = contColl[nome]||0;
+    const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
+    const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
+    // Stato complessivo dell'allievo: la carenza (sotto soglia), su uno qualsiasi dei due tipi,
+    // ha priorità — poi l'eccedenza — altrimenti è in linea su entrambi.
+    const deltaPeggiore = Math.min(individuale.delta, collettiva.delta) < 0
+      ? Math.min(individuale.delta, collettiva.delta)
+      : Math.max(individuale.delta, collettiva.delta);
+    report.push({ id:s.id, nome, individuale, collettiva, deltaPeggiore });
+  });
+  report.sort((a,b)=>a.deltaPeggiore-b.deltaPeggiore);
 
-  const superano    = report.filter(r=>r.delta>0);
-  const inLinea     = report.filter(r=>r.delta===0);
-  const sottosoglia = report.filter(r=>r.delta<0);
+  const superano    = report.filter(r=>r.deltaPeggiore>0);
+  const inLinea     = report.filter(r=>r.deltaPeggiore===0);
+  const sottosoglia = report.filter(r=>r.deltaPeggiore<0);
 
   const filtrato = reportFiltro==='oltre' ? superano
     : reportFiltro==='sotto' ? sottosoglia
@@ -7075,33 +7349,42 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
       , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
         , React.createElement('thead',null
           , React.createElement('tr',{style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
-            , ['Allievo','Lezioni svolte','Soglia','Differenza','Stato'].map(h=>
+            , ['Allievo','Individuali','Collettive','Stato'].map(h=>
                 React.createElement('th',{key:h,style:{padding:'9px 16px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.07em',color:C.textMuted,fontWeight:600}},h))
           )
         )
         , React.createElement('tbody',null
           , filtrato.map((r,i)=>{
-              const clr = r.delta>0?C.orange : r.delta<0?C.blue : C.green;
-              const bg  = r.delta>0?C.orangeBg : r.delta<0?C.blueBg : C.greenBg;
-              const bd  = r.delta>0?C.orangeBorder : r.delta<0?C.blueBorder : C.greenBorder;
-              const lbl = r.delta>0?`+${r.delta} extra` : r.delta<0?`${r.delta} mancanti`:'✓ In linea';
+              const cella = (stat) => {
+                const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
+                const lbl = stat.delta>0?`+${stat.delta}`:stat.delta<0?`${stat.delta}`:'0';
+                return React.createElement('div',{style:{display:'flex',alignItems:'baseline',gap:6}}
+                  , React.createElement('span',{style:{fontSize:13,fontWeight:700,color:C.text}}, stat.count)
+                  , React.createElement('span',{style:{fontSize:11,color:C.textMuted}}, `/ ${stat.soglia}`)
+                  , React.createElement('span',{style:{fontSize:11,fontWeight:700,color:clr}}, lbl)
+                  , stat.isEccezione && React.createElement('span',{style:{fontSize:10,color:C.gold}},'(ecc.)')
+                );
+              };
+              const clrStato = r.deltaPeggiore>0?C.orange : r.deltaPeggiore<0?C.blue : C.green;
+              const bgStato  = r.deltaPeggiore>0?C.orangeBg : r.deltaPeggiore<0?C.blueBg : C.greenBg;
+              const bdStato  = r.deltaPeggiore>0?C.orangeBorder : r.deltaPeggiore<0?C.blueBorder : C.greenBorder;
+              const lblStato = r.deltaPeggiore>0?'Oltre soglia' : r.deltaPeggiore<0?'Sotto soglia':'✓ In linea';
               return React.createElement('tr',{key:r.id||r.nome,
                   style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg,cursor:'pointer',transition:'background .1s'},
                   onMouseEnter:e=>e.currentTarget.style.background=C.bg,
                   onMouseLeave:e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg,
                   onClick:()=>{ const s=(students||[]).find(st=>(st.name||st.nome||'')===r.nome); if(s&&onSelectAllievo) onSelectAllievo(s); }}
                 , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:600,color:C.text}}, r.nome)
-                , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,color:C.text,fontWeight:700}}, r.count)
-                , React.createElement('td',{style:{padding:'10px 16px',fontSize:12,color:C.textMuted}}, r.soglia, r.isEccezione&&React.createElement('span',{style:{fontSize:10,color:C.gold,marginLeft:6}},'(eccezione)'))
-                , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:700,color:clr}}, r.delta>0?`+${r.delta}`:r.delta<0?r.delta:'0')
-                , React.createElement('td',{style:{padding:'10px 16px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bg,color:clr,border:`1px solid ${bd}`,borderRadius:20,padding:'3px 10px'}},lbl))
+                , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.individuale))
+                , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.collettiva))
+                , React.createElement('td',{style:{padding:'10px 16px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bgStato,color:clrStato,border:`1px solid ${bdStato}`,borderRadius:20,padding:'3px 10px'}},lblStato))
               );
             })
-          , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:5,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
+          , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:4,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
         )
       )
-      , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between'}}
-        , `Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · ${report.length} allievi attivi`
+      , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:6}}
+        , `Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · mese d'iscrizione e mese in corso calcolati in proporzione alle settimane trascorse · ${allieviAttivi.length} allievi attivi`
         , React.createElement('span',null,'Clicca su un allievo per aprire il profilo')
       )
     )
@@ -7238,10 +7521,62 @@ const ImportaIscrizioniModal = ({ annoCorrente, anniDisp, allStudents, studentsN
 };
 
 
+// Esegue un salvataggio su Supabase tollerando colonne non ancora presenti nello schema
+// (es. 'nome_ricevuta'/'codice_fiscale' aggiunte lato client prima di essere create a DB).
+//
+// ATTENZIONE: un INSERT che fallisce per "colonna non trovata" può comunque aver scritto la riga
+// a livello di database prima di fallire sulla risposta — ripetere l'INSERT per "riprovare senza
+// quel campo" crea quindi allievi duplicati reali (è il bug appena riscontrato). Per questo:
+//   - l'INSERT viene tentato UNA SOLA VOLTA, mai ripetuto;
+//   - eventuali colonne mancanti vengono invece rimosse e riscritte con un UPDATE separato,
+//     che non può mai creare righe duplicate anche se va ripetuto.
+const supabaseUpsertConFallbackColonne = async (sb, table, row, { isUpdate=false, matchId=null } = {}) => {
+  if (isUpdate) {
+    // UPDATE: nessun rischio di duplicati anche ripetendo — può tranquillamente riprovare.
+    let currentRow = { ...row };
+    for (let tentativi = 0; tentativi < 6; tentativi++) {
+      const result = await sb.from(table).update(currentRow).eq('id', matchId);
+      const { error } = result;
+      if (!error) return result;
+      const m = /Could not find the '([^']+)' column/.exec(error.message||'');
+      if (m && Object.prototype.hasOwnProperty.call(currentRow, m[1])) {
+        console.warn(`[FM] Colonna '${m[1]}' non presente su ${table} — allievo aggiornato senza questo campo. Aggiungi la colonna al DB per non perderlo.`);
+        delete currentRow[m[1]];
+        continue;
+      }
+      return result;
+    }
+    return { error: { message: 'Troppe colonne mancanti nello schema — salvataggio annullato.' } };
+  }
+
+  // INSERT: un SOLO tentativo, mai ripetuto, per non creare righe duplicate.
+  const primo = await sb.from(table).insert(row).select().single();
+  if (!primo.error) return primo;
+  const m = /Could not find the '([^']+)' column/.exec(primo.error.message||'');
+  if (!m || !Object.prototype.hasOwnProperty.call(row, m[1])) return primo; // errore non recuperabile
+
+  // Colonna mancante: rifà l'insert SENZA quel campo (e senza eventuali altri campi opzionali noti
+  // problematici), poi prova ad aggiungerli con un UPDATE separato — mai un secondo INSERT.
+  console.warn(`[FM] Colonna '${m[1]}' non presente su ${table} — creo l'allievo senza questo campo, poi provo ad aggiungerlo con un update.`);
+  const rowSenzaColonnaMancante = { ...row };
+  delete rowSenzaColonnaMancante[m[1]];
+  const secondo = await sb.from(table).insert(rowSenzaColonnaMancante).select().single();
+  if (secondo.error || !secondo.data) return secondo;
+
+  // Prova a recuperare il campo scartato (e altri eventualmente mancanti) via UPDATE — sicuro anche se fallisce.
+  const extra = { [m[1]]: row[m[1]] };
+  const upd = await supabaseUpsertConFallbackColonne(sb, table, extra, { isUpdate:true, matchId: secondo.data.id });
+  if (upd.error) console.warn(`[FM] Campo '${m[1]}' non salvato (colonna assente su ${table}): aggiungila al DB con ALTER TABLE.`);
+  return secondo;
+};
+
 const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV, iscrizioniAnno:propIscrizioniAnno, setIscrizioniAnno:propSetIscrizioniAnno, anniScolastici:propAnniScolasticiAV, gruppi:propGruppiAV }) => {
   const _ruoloAV = propUserRuoloAV || "admin";
   const _nomeAV  = (_appUserAV && _appUserAV.nome) || "";
   const isMobile = useIsMobile();
+  // Guard sincrono (ref, non state) contro un secondo handleAddStudent lanciato mentre il primo
+  // è ancora in corso — vedi commento in handleAddStudent per il motivo.
+  const addStudentInFlightRef = React.useRef(false);
   const [_students, _setStudents] = useState(INIT_STUDENTS);
   const [_courses,  _setCourses]  = useState(INIT_COURSES);
   const _allStudents = _nullishCoalesce(propStudents, () => ( _students));
@@ -7325,19 +7660,52 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   },[qaAV]);
 
   const handleAddStudent = async (d) => {
+    // Guard sincrono a livello di vista: se un salvataggio è già in corso (es. l'admin ha chiuso
+    // il modale con la X prima che finisse e ne ha riaperto un altro), un secondo invio in
+    // parallelo creerebbe comunque un allievo duplicato — il guard nel form da solo non basta
+    // perché si smonta con la chiusura del modale.
+    if (addStudentInFlightRef.current) { console.warn('[FM] Salvataggio allievo già in corso: richiesta ignorata per evitare un duplicato.'); return; }
+    addStudentInFlightRef.current = true;
+    try {
     const sb = window.supabaseClient;
     if (sb) {
+      // Rete di sicurezza definitiva: prima di inserire, verifica su Supabase (non solo in
+      // locale) se un allievo con lo stesso nome+email+telefono+data di nascita è già stato
+      // creato negli ultimissimi secondi. I guard sopra proteggono dal doppio click, ma qui
+      // si continuano a vedere due INSERT reali nonostante il pulsante fosse disabilitato:
+      // questo controllo blocca il secondo inserimento indipendentemente dalla causa esatta
+      // (qualunque essa sia) che fa scattare due chiamate di salvataggio.
+      try {
+        const { data: possibiliDup } = await sb.from('studenti')
+          .select('id, created_at')
+          .eq('nome', d.name||'')
+          .eq('email', d.email||'')
+          .eq('phone', d.phone||'')
+          .eq('birthdate', d.birthdate||'')
+          .order('created_at', { ascending:false })
+          .limit(1);
+        if (possibiliDup && possibiliDup.length>0) {
+          const msFa = Date.now() - new Date(possibiliDup[0].created_at).getTime();
+          if (msFa >= 0 && msFa < 20000) {
+            console.warn(`[FM] Allievo identico creato ${Math.round(msFa/1000)}s fa: secondo inserimento bloccato per evitare un duplicato.`);
+            closeModal();
+            return;
+          }
+        }
+      } catch(eDup) { /* se il controllo anti-duplicato fallisce, si procede comunque con l'inserimento normale */ }
+
       const row = {
         nome: d.name||'', email: d.email||null, phone: d.phone||null,
         strumento: d.instrument||null, docente: d.teacher||null,
-        livello: d.level||'Principiante', status: d.status||'attivo',
+        status: d.status||'attivo',
         monthly_fee: parseFloat(d.monthlyFee)||0, fee_type: d.feeType||'fisso',
         birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
         complementary_course: d.complementaryCourse||null, notes: d.notes||null,
+        nome_ricevuta: d.nomeRicevuta||null, codice_fiscale: d.codiceFiscale||null,
         extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
         extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
       };
-      const { data: inserted, error } = await sb.from('studenti').insert(row).select().single();
+      const { data: inserted, error } = await supabaseUpsertConFallbackColonne(sb, 'studenti', row, { isUpdate:false });
       if (!error && inserted) {
         // Usa l'ID intero reale restituito da Supabase
         const FA = window.FMAdapter;
@@ -7346,25 +7714,44 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         newStudent.extraInstruments = d.extraInstruments||[];
         newStudent.extraTeachers = d.extraTeachers||{};
         newStudent.lessons = [];
-        setStudents(p => [...p, newStudent]);
-        // Crea automaticamente l'iscrizione per l'anno scolastico attualmente selezionato
-        try {
-          const corso = courses.find(c=>(c.name||c.nome)===d.instrument || String(c.id)===String(d.courseId));
-          const { data: iscrData } = await sb.from('iscrizioni_anno').upsert({
-            studente_id: inserted.id, anno_inizio: annoSel,
-            corso_id: corso?String(corso.id):null, corso_nome: corso?(corso.name||corso.nome):(d.instrument||''),
-            docente_id: null, docente_nome: d.teacher||'',
-            data_iscrizione: yyyymmdd(new Date()),
-          }, {onConflict:'studente_id,anno_inizio'}).select().single();
-          if (iscrData) {
-            setIscrizioniAnno(p => [...p, {
-              id: iscrData.id, studentId: iscrData.studente_id, annoInizio: iscrData.anno_inizio,
-              corsoId: iscrData.corso_id||'', corsoNome: iscrData.corso_nome||'',
-              docenteId: iscrData.docente_id||'', docenteNome: iscrData.docente_nome||'',
-              dataIscrizione: iscrData.data_iscrizione||'',
-            }]);
-          }
-        } catch(e) { console.warn('[FM] auto-iscrizione error:', e?.message); }
+        // FA.studente() potrebbe non conoscere ancora questi due campi (aggiunti di recente):
+        // li impostiamo qui direttamente dai dati appena inviati, altrimenti l'allievo appare
+        // subito in scheda senza nome per ricevuta / codice fiscale finché non si ricarica.
+        if (newStudent.nomeRicevuta === undefined || newStudent.nomeRicevuta === null) newStudent.nomeRicevuta = d.nomeRicevuta || '';
+        if (newStudent.codiceFiscale === undefined || newStudent.codiceFiscale === null) newStudent.codiceFiscale = d.codiceFiscale || '';
+        let listaAggiornata;
+        setStudents(p => { listaAggiornata = [...p, newStudent]; return listaAggiornata; });
+        // CAUSA REALE DEI DOPPIONI: fm_sync.js confronta lo stato locale con la propria
+        // baseline (_prev) per capire cosa sincronizzare da solo in automatico. Se non gli
+        // diciamo che questo allievo è già stato scritto qui sopra, al giro successivo lo
+        // vede come "nuovo" (non presente nella sua baseline) e lo inserisce DI NUOVO — da qui
+        // il secondo record, sempre privo dei campi che il suo adattatore non conosceva ancora.
+        if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ students: listaAggiornata });
+        // Crea automaticamente l'iscrizione per l'anno scolastico attualmente selezionato.
+        // Senza un anno valido l'iscrizione non può essere creata: l'allievo resterebbe
+        // "scollegato" — meglio avvisare subito piuttosto che fallire in silenzio.
+        if (annoSel == null) {
+          console.warn('[FM] auto-iscrizione saltata: nessun anno scolastico selezionato — allievo creato ma non collegato a un anno.');
+        } else {
+          try {
+            const corso = courses.find(c=>(c.name||c.nome)===d.instrument || String(c.id)===String(d.courseId));
+            const { data: iscrData, error: iscrErr } = await sb.from('iscrizioni_anno').upsert({
+              studente_id: inserted.id, anno_inizio: annoSel,
+              corso_id: corso?String(corso.id):null, corso_nome: corso?(corso.name||corso.nome):(d.instrument||''),
+              docente_id: null, docente_nome: d.teacher||'',
+              data_iscrizione: yyyymmdd(new Date()),
+            }, {onConflict:'studente_id,anno_inizio'}).select().single();
+            if (iscrErr) console.warn('[FM] auto-iscrizione fallita — allievo creato ma NON collegato all\'anno scolastico:', iscrErr.message);
+            if (iscrData) {
+              setIscrizioniAnno(p => [...p, {
+                id: iscrData.id, studentId: iscrData.studente_id, annoInizio: iscrData.anno_inizio,
+                corsoId: iscrData.corso_id||'', corsoNome: iscrData.corso_nome||'',
+                docenteId: iscrData.docente_id||'', docenteNome: iscrData.docente_nome||'',
+                dataIscrizione: iscrData.data_iscrizione||'',
+              }]);
+            }
+          } catch(e) { console.warn('[FM] auto-iscrizione error:', e?.message); }
+        }
       } else if (error) {
         console.warn('[FM] handleAddStudent error:', error.message);
         // Fallback offline
@@ -7374,6 +7761,9 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       setStudents(p => [...p, {...d, id: uid(), lessons:[]}]);
     }
     closeModal();
+    } finally {
+      addStudentInFlightRef.current = false;
+    }
   };
 
   const handleEditStudent = async (d) => {
@@ -7382,14 +7772,15 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       const row = {
         nome: d.name||'', email: d.email||null, phone: d.phone||null,
         strumento: d.instrument||null, docente: d.teacher||null,
-        livello: d.level||'Principiante', status: d.status||'attivo',
+        status: d.status||'attivo',
         monthly_fee: parseFloat(d.monthlyFee)||0, fee_type: d.feeType||'fisso',
         birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
         complementary_course: d.complementaryCourse||null, notes: d.notes||null,
+        nome_ricevuta: d.nomeRicevuta||null, codice_fiscale: d.codiceFiscale||null,
         extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
         extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
       };
-      const { error } = await sb.from('studenti').update(row).eq('id', d.id);
+      const { error } = await supabaseUpsertConFallbackColonne(sb, 'studenti', row, { isUpdate:true, matchId:d.id });
       if (error) console.warn('[FM] handleEditStudent error:', error.message);
       // Aggiorna anche l'iscrizione dell'anno selezionato se corso/docente sono cambiati
       try {
@@ -7409,7 +7800,11 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         }
       } catch(e) { console.warn('[FM] update iscrizione error:', e?.message); }
     }
-    setStudents(p => p.map(s => s.id===d.id ? {...s,...d} : s));
+    let listaAggiornata;
+    setStudents(p => { listaAggiornata = p.map(s => s.id===d.id ? {...s,...d} : s); return listaAggiornata; });
+    // Stesso motivo del fix in handleAddStudent: allinea la baseline di fm_sync.js dopo la
+    // scrittura diretta, così non rileva questo record come "diverso" e non lo riscrive da solo.
+    if (window.__FM_UPDATE_PREV__ && listaAggiornata) window.__FM_UPDATE_PREV__({ students: listaAggiornata });
     if (_optionalChain([selected, 'optionalAccess', _43 => _43.id])===d.id) setSelected(p=>({...p,...d}));
     closeModal();
   };
@@ -7488,6 +7883,23 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             onUpdateStudent: d=>setStudents(p=>p.map(s=>s.id===d.id?d:s)), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3893}}
           )
         )
+        /* ── Fallback diagnostico: l'allievo loggato non ha trovato un record collegato ──
+           Evita un pannello completamente vuoto (nessun messaggio) quando `selected`
+           resta null: mostra il motivo più probabile e i valori usati per il match,
+           così è possibile capire subito se manca il collegamento allievoId ↔ students. ── */
+        , view==="detail" && !selected && _ruoloAV==="allievo" && (
+          React.createElement('div', {style:{padding:"32px 24px",maxWidth:520}}
+            , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"20px 22px"}}
+              , React.createElement('div', {style:{fontSize:15,fontWeight:700,marginBottom:8,color:C.text}}, "⚠️ Nessuna scheda allievo collegata a questo account")
+              , React.createElement('div', {style:{fontSize:13,color:C.textMuted,lineHeight:1.6,marginBottom:10}}
+                , "Il tuo account utente non risulta collegato a nessuna scheda nella tabella Allievi. Contatta l'amministratore della scuola per verificare il collegamento."
+              )
+              , React.createElement('div', {style:{fontSize:11,color:C.textDim,fontFamily:"monospace",background:C.bg,borderRadius:8,padding:"8px 10px"}}
+                , `allievoId cercato: ${_avAllievoId || "(nessuno)"} · nome cercato: "${_nomeAV || "(vuoto)"}" · allievi totali caricati: ${(_allStudents||[]).length}`
+              )
+            )
+          )
+        )
       )
       , _ruoloAV==="admin" && modal==="add" && React.createElement(Modal, { title: "Nuovo allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}, React.createElement(StudentForm, { onSave: handleAddStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}))
       , _ruoloAV==="admin" && modal==="edit" && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], role: propUserRuoloAV||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
@@ -7563,7 +7975,10 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
     // L'anno di creazione è sempre l'anno ATTIVO (non quello eventualmente sfogliato nel selettore)
     const annoCreazione = propAnnoIniziCV != null ? Number(propAnnoIniziCV) : Number(annoSel);
     if (sb) {
-      const row = { id:newId, nome:d.name||d.nome||'', tipo:d.type||d.tipo||'individuale', descrizione:d.description||d.descrizione||null, visible:true, anno_creazione: annoCreazione };
+      // I corsi collettivi nascono NON visibili sul sito (l'admin li abilita manualmente
+      // dal pannello se/quando vuole mostrarli); gli individuali restano visibili di default.
+      const tipoCorso = d.type || d.tipo || 'individuale';
+      const row = { id:newId, nome:d.name||d.nome||'', tipo:tipoCorso, descrizione:d.description||d.descrizione||null, visible: tipoCorso !== 'collettivo', anno_creazione: annoCreazione };
       const { error } = await sb.from('corsi').insert(row);
       if (error) console.warn('[FM] handleAddCourse error:', error.message);
       // Persiste l'assegnazione docenti su corsi_docenti (senza questo si perde al riavvio)
@@ -9064,10 +9479,19 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                         corso: lesson.instrument||'', lezioneId: lesson.id,
                         allievoNome: lesson.student||'', createdAt: new Date().toISOString(),
                       };
-                      // Salva subito su Supabase allegati (NO id: lascia auto UUID)
+                      // Salva subito su Supabase allegati — genera l'id lato client: la colonna
+                      // "id" non ha un default DB (gen_random_uuid()), quindi va sempre passato
+                      // esplicitamente per evitare "null value in column id violates not-null constraint"
                       if (sb && fileUrl) {
                         try {
+                          const newId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                            ? crypto.randomUUID()
+                            : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                                const r = Math.random()*16|0, v = c==='x' ? r : (r&0x3|0x8);
+                                return v.toString(16);
+                              });
                           const { data: insData, error: insErr } = await sb.from('allegati').insert({
+                            id: newId,
                             lezione_id: lesson.id,
                             allievo_nome: lesson.student||'',
                             corso: lesson.instrument||'',
@@ -9077,7 +9501,8 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                             descrizione: '',
                           }).select('id').maybeSingle();
                           if (!insErr && insData?.id) attRow.id = insData.id;
-                          else if (insErr) console.warn('[FM] allegato DB error', insErr.message);
+                          else if (!insErr) attRow.id = newId;
+                          else console.warn('[FM] allegato DB error', insErr.message);
                         } catch(dbErr) { console.warn('[FM] allegato DB error', dbErr); }
                       }
                       newAllegati.push(attRow);
@@ -10829,7 +11254,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
                     )
                     , React.createElement('div', { style: {flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5626}}
                       , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:isSel?sc:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5627}}, s.name)
-                      , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5628}}, s.instrument, " · "  , s.level||"—")
+                      , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5628}}, s.instrument)
                     )
                     , fromGruppo && React.createElement('span', { style: {fontSize:9, color:C.purple, background:C.purpleBg, border:`1px solid ${C.purpleBorder}`, borderRadius:10, padding:"2px 7px", fontWeight:600} }, selGruppo?selGruppo.nome:'gruppo')
                     , isSel && React.createElement(Ic, { n: "check", size: 13, stroke: sc, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5630}})
@@ -12238,11 +12663,15 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
   const [filterCat,  setFilterCat]  = useState("");
+  const [filterCorso,setFilterCorso]= useState("");
   const [uploading,  setUploading]  = useState(false);
   const [modal,      setModal]      = useState(null); // "add"
   const [delTarget,  setDelTarget]  = useState(null);
+  const [rinominaTarget, setRinominaTarget] = useState(null);
 
   const CATEGORIE = ["Teoria","Solfeggio","Metodo","Spartito","Manuale","Altro"];
+  // Elenco corsi/strumenti per il campo e il filtro (stessa fonte usata da Repertorio)
+  const CORSI = (window.__FM_DATA__?.courses||[]).map(c => c.name||c.nome).filter(Boolean);
 
   // ── Carica da Supabase Storage bucket "biblioteca" ──────────────────────────
   const carica = React.useCallback(async () => {
@@ -12276,11 +12705,39 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
     setDelTarget(null);
   };
 
+  // Rinomina il file fisico nello storage (mantenendo l'estensione) + il titolo mostrato
+  const rinomina = async (item, nuovoTitolo) => {
+    const titolo = (nuovoTitolo||'').trim();
+    if (!titolo) return;
+    try {
+      const sb = window.supabaseClient;
+      let storagePath = item.storage_path, fileUrl = item.file_url, fileName = item.file_name;
+      if (item.storage_path) {
+        const ext = (item.file_name||'').includes('.') ? item.file_name.slice(item.file_name.lastIndexOf('.')) : '';
+        const safeName = titolo.replace(/[^a-zA-Z0-9._-]/g,'_');
+        const dir = item.storage_path.includes('/') ? item.storage_path.slice(0, item.storage_path.lastIndexOf('/')+1) : '';
+        const newPath = `${dir}${Date.now()}_${safeName}${ext}`;
+        const { error: mvErr } = await sb.storage.from("biblioteca").move(item.storage_path, newPath);
+        if (mvErr) throw mvErr;
+        storagePath = newPath;
+        fileName = safeName+ext;
+        const { data: urlData } = sb.storage.from("biblioteca").getPublicUrl(newPath);
+        fileUrl = urlData?.publicUrl || item.file_url;
+      }
+      const { error } = await sb.from("biblioteca").update({titolo, storage_path:storagePath, file_url:fileUrl, file_name:fileName}).eq("id", item.id);
+      if (error) throw error;
+      setLibri(p => p.map(x => x.id===item.id ? {...x, titolo, storage_path:storagePath, file_url:fileUrl, file_name:fileName} : x));
+    } catch(e) { alert("Errore rinomina: " + e.message); }
+    setRinominaTarget(null);
+  };
+
+
   // ── Form upload ─────────────────────────────────────────────────────────────
   const AddModal = () => {
     const [titolo,    setTitolo]    = useState("");
     const [autore,    setAutore]    = useState("");
     const [categoria, setCategoria] = useState("Manuale");
+    const [corso,     setCorso]     = useState("");
     const [desc,      setDesc]      = useState("");
     const [file,      setFile]      = useState(null);
     const [err,       setErr]       = useState("");
@@ -12298,11 +12755,20 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
         if (upErr) throw upErr;
         const { data: urlData } = sb.storage.from("biblioteca").getPublicUrl(storagePath);
         const fileUrl = urlData?.publicUrl || null;
-        // Salva record
+        // Salva record — genera l'id lato client per non dipendere da un default DB
+        // sulla colonna "id" (stesso problema riscontrato sulla tabella "allegati")
+        const newId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+              const r = Math.random()*16|0, v = c==='x' ? r : (r&0x3|0x8);
+              return v.toString(16);
+            });
         const row = {
+          id: newId,
           titolo: titolo.trim(),
           autore: autore.trim() || null,
           categoria,
+          corso: corso || null,
           descrizione: desc.trim() || null,
           file_url: fileUrl,
           file_name: file.name,
@@ -12347,6 +12813,16 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
               , CATEGORIE.map(c => React.createElement('option', {key:c, value:c}, c))
             )
           )
+          , React.createElement('div', null
+            , React.createElement('label', {style:lblS}, "Corso / Strumento")
+            , React.createElement('select', { value:corso, onChange:e=>setCorso(e.target.value),
+                style:{...inpS, appearance:"none", cursor:"pointer"} }
+              , React.createElement('option', {value:""}, "Generale (tutti i corsi)")
+              , CORSI.map(c => React.createElement('option', {key:c, value:c}, c))
+            )
+          )
+        )
+        , React.createElement('div', { className:"form-2col" }
           , React.createElement('div', null
             , React.createElement('label', {style:lblS}, "Descrizione breve")
             , React.createElement('input', { value:desc, onChange:e=>setDesc(e.target.value),
@@ -12394,7 +12870,8 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
     const q = search.toLowerCase();
     const matchQ = !q || (l.titolo||"").toLowerCase().includes(q) || (l.autore||"").toLowerCase().includes(q);
     const matchC = !filterCat || l.categoria === filterCat;
-    return matchQ && matchC;
+    const matchCorso = !filterCorso || l.corso === filterCorso;
+    return matchQ && matchC && matchCorso;
   });
 
   return (
@@ -12428,6 +12905,13 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
               fontFamily:"'Open Sans',sans-serif",cursor:"pointer"} }
           , React.createElement('option',{value:""},"Tutte le categorie")
           , CATEGORIE.map(c=>React.createElement('option',{key:c,value:c},c))
+        )
+        , React.createElement('select', { value:filterCorso, onChange:e=>setFilterCorso(e.target.value),
+            style:{padding:"8px 12px",border:`1px solid ${filterCorso?C.gold:C.border}`,borderRadius:8,
+              fontSize:12,color:filterCorso?C.gold:C.textMuted,background:filterCorso?C.goldBg:C.bg,
+              fontFamily:"'Open Sans',sans-serif",cursor:"pointer"} }
+          , React.createElement('option',{value:""},"Tutti i corsi")
+          , CORSI.map(c=>React.createElement('option',{key:c,value:c},c))
         )
       )
       /* ── LISTA ── */
@@ -12465,6 +12949,9 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
                   , React.createElement('span',{style:{fontSize:10,background:cc.bg,color:cc.tx,
                       border:`1px solid ${cc.bd}`,borderRadius:10,padding:"2px 8px",fontWeight:600}},
                       item.categoria||"Altro")
+                  , item.corso && React.createElement('span',{style:{fontSize:10,background:C.blueBg,color:C.blue,
+                      border:`1px solid ${C.blueBorder}`,borderRadius:10,padding:"2px 8px",fontWeight:600}},
+                      item.corso)
                 )
                 , item.autore && React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:2}},
                     item.autore)
@@ -12487,7 +12974,18 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
                   , React.createElement(Ic,{n:"download",size:13,stroke:C.gold}), " Scarica"
                 )
                 , canUpload && React.createElement('button', {
+                    onClick:()=>setRinominaTarget(item),
+                    title:"Rinomina",
+                    style:{display:"flex",alignItems:"center",padding:"7px 10px",
+                      background:"none",border:`1px solid ${C.border}`,borderRadius:8,
+                      color:C.textDim,cursor:"pointer"},
+                    onMouseEnter:e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;},
+                    onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textDim;}}
+                  , React.createElement(Ic,{n:"edit",size:13,stroke:"currentColor"})
+                )
+                , canUpload && React.createElement('button', {
                     onClick:()=>elimina(item),
+                    title:"Elimina",
                     style:{display:"flex",alignItems:"center",padding:"7px 10px",
                       background:"none",border:`1px solid ${C.border}`,borderRadius:8,
                       color:C.textDim,cursor:"pointer"},
@@ -12502,6 +13000,19 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
       )
       /* ── MODALS ── */
       , modal==="add" && React.createElement(AddModal)
+      , rinominaTarget && React.createElement(Modal, { title:"Rinomina "+(rinominaTarget.titolo||""), onClose:()=>setRinominaTarget(null) }
+        , React.createElement('div', { style:{padding:"16px 22px", display:"flex", flexDirection:"column", gap:12} }
+          , React.createElement('label', {style:{fontSize:11, color:C.textMuted, fontWeight:600, letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:2, display:"block"}}, "Nuovo titolo")
+          , React.createElement('input', { id:"_rinominaInput", autoFocus:true, defaultValue:rinominaTarget.titolo||"",
+              style:{width:"100%", padding:"9px 12px", border:`1px solid ${C.border}`, borderRadius:8, fontSize:13,
+                color:C.text, background:C.bg, fontFamily:"'Open Sans',sans-serif", boxSizing:"border-box"},
+              onKeyDown:e=>{ if(e.key==='Enter') rinomina(rinominaTarget, e.target.value); } })
+          , React.createElement('div', {style:{display:"flex",gap:10,justifyContent:"flex-end"}}
+            , React.createElement(Btn, {variant:"secondary", onClick:()=>setRinominaTarget(null)}, "Annulla")
+            , React.createElement(Btn, {onClick:()=>{ const v=document.getElementById('_rinominaInput')?.value; rinomina(rinominaTarget, v); }}, "Salva")
+          )
+        )
+      )
     )
   );
 };
@@ -12872,6 +13383,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           corso_id:         mergedCourseId,
           corso_nome:       mergedCourseName,
           students:         mergedStudents.length > 0 ? JSON.stringify(mergedStudents) : null,
+          contact_name:     dataNormFull.contactName || null,
+          phone:            dataNormFull.phone       || null,
+          motivo_assenza:   dataNormFull.motivoAssenza || null,
         };
         sb.from('lezioni').update(row).eq('id', data.id)
           .then(({ error }) => {
@@ -15598,6 +16112,7 @@ const AllievoBraniView = ({allievo,allievoId,brani,allStudents,lessons,onBack})=
 };
 
 // ─── CONFIRM ─────────────────────────────────────────────────────────────────
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // APP
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -15963,8 +16478,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                 , tab==="catalogo"&&(
                   React.createElement(React.Fragment, null
                     /* Filtri */
-                    , React.createElement('div', { style: {display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7814}}
-                      , React.createElement('div', { style: {position:"relative",flex:"1 1 220px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7815}}
+                    , React.createElement('div', { style: {display:"flex",gap:10,flexWrap:"nowrap",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7814}}
+                      , React.createElement('div', { style: {position:"relative",flex:"1 1 220px",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7815}}
                         , React.createElement('span', { style: {position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7816}}
                           , React.createElement(Ic, { n: "search", size: 14, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7817}})
                         )
@@ -15980,18 +16495,18 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                       ].map((f,i)=>(
                         React.createElement('select', { key: i, value: f.val, onChange: e=>f.set(e.target.value),
                           style: {background:C.surface,border:`1px solid ${f.val?C.goldDim:C.border}`,
-                            borderRadius:8,color:f.val?C.gold:C.textMuted,fontSize:13,
+                            borderRadius:8,color:f.val?C.gold:C.textMuted,fontSize:13,flexShrink:0,
                             padding:"9px 12px",fontFamily:"'Open Sans',sans-serif",appearance:"none",cursor:"pointer"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7829}}
                           , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7833}}, f.ph)
                           , f.opts.map(o=>React.createElement('option', { key: o.id, value: o.id, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7834}}, o.label))
                         )
                       ))
                       , (search||fStrumento||fTonalita||fStato)&&(
-                        React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setSearch("");setFStrumento("");setFTonalita("");setFStato("");}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7838}}
+                        React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setSearch("");setFStrumento("");setFTonalita("");setFStato("");}, style:{flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7838}}
                           , React.createElement(Ic, { n: "x", size: 12, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7839}}), "Azzera"
                         )
                       )
-                      , React.createElement('span', { style: {fontSize:12,color:C.textDim,marginLeft:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7842}}, filtrati.length, " brani" )
+                      , React.createElement('span', { style: {fontSize:12,color:C.textDim,marginLeft:"auto",flexShrink:0,whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7842}}, filtrati.length, " brani" )
                     )
 
                     /* ── GRID ── */
@@ -16059,7 +16574,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
 
                     /* ── LIST ── */
                     , layout==="list"&&(
-                      React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7956}}
+                      React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflowX:"auto",overflowY:"hidden",WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7956}}
                         , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 1fr 0.8fr 0.8fr 0.9fr auto",minWidth:560,
                           padding:"8px 20px",borderBottom:`1px solid ${C.border}`,background:C.bg}}
                           , ["Brano","Tipo","Strumento","Tonalità","Allievi","Lezioni","Stato",""].map(h=>(
@@ -18264,31 +18779,64 @@ const _Portal = ({ children }) => {
 const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani, setBrani:propSetBrani, userRuolo:_avRuolo, appUser:_avUser }) => {
   const lessons   = propLessons   || [];
   const students  = propStudents  || [];
+  const courses   = propCourses   || [];
   const brani     = propBrani     || [];
   // Merge: allegati da propAllegati (DB) + allegati embedded nelle lezioni (lesson.allegati)
-  // Filtra lezioni per docente se necessario
+  // Visibilità per ruolo: admin vede tutto; i corsi/lezioni collettivi sono SEMPRE visibili
+  // a prescindere dal ruolo; docente vede solo le proprie lezioni individuali (match sul nome
+  // docente); allievo vede solo le proprie lezioni individuali (match su ID o nome allievo).
   const _avNome = (_avUser && _avUser.nome) || '';
-  const _avLessons = _avRuolo === 'docente' && _avNome
-    ? lessons.filter(l => {
-        const t = (l.teacher||'').toLowerCase().trim();
-        const k = _avNome.toLowerCase().trim();
-        return t === k || t.includes(k) || k.includes(t);
-      })
-    : lessons;
+  const _avDocenteId = (_avUser && _avUser.docenteId) || null;
+  const _avAllievoId = (_avUser && _avUser.allievoId) || null;
+
+  const _isCollLezione = (l) => {
+    try { if (typeof isColl === 'function') return isColl(l); } catch(e) {}
+    return l && l.tipo === 'collettivo';
+  };
+  const _isMyLessonDocente = (l) => {
+    const t = (l.teacher||'').toLowerCase().trim();
+    const k = _avNome.toLowerCase().trim();
+    return !!t && !!k && (t === k || t.includes(k) || k.includes(t));
+  };
+  const _isMyLessonAllievo = (l) => {
+    try { if (typeof studentInLesson === 'function') return studentInLesson(l, _avNome, _avAllievoId); } catch(e) {}
+    if (_avAllievoId != null && l.studentId != null) return String(l.studentId) === String(_avAllievoId);
+    const ln = (l.student||'').toLowerCase().trim(), nn = _avNome.toLowerCase().trim();
+    return !!ln && !!nn && (ln === nn || ln.includes(nn) || nn.includes(ln));
+  };
+  const _avLessons = lessons.filter(l => {
+    if (_avRuolo === 'admin' || !_avRuolo) return true;
+    if (_isCollLezione(l)) return true; // corsi collettivi sempre visibili
+    if (_avRuolo === 'docente') return _isMyLessonDocente(l);
+    if (_avRuolo === 'allievo') return _isMyLessonAllievo(l);
+    return true;
+  });
   const _avLessonIds = new Set(_avLessons.map(l=>l.id));
-  // Filtra allegati DB per docente (solo lezioni visibili)
-  const fromDB = (_avRuolo === 'docente' && _avNome)
+  const _avScoped = _avRuolo === 'docente' || _avRuolo === 'allievo';
+  // Corso reale della lezione: corsi collettivi hanno courseName, corsi individuali hanno instrument
+  // (il campo "corso" salvato in passato sugli allegati conteneva solo lo strumento, per questo
+  // il filtro non intercettava i corsi collettivi — qui si ricalcola dalla lezione corrente)
+  const _getLezioneCorso = (lezioneId) => {
+    if (!lezioneId) return null;
+    const l = lessons.find(x => x.id === lezioneId);
+    if (!l) return null;
+    return l.courseName || l.instrument || null;
+  };
+  // Filtra allegati DB in base alle lezioni visibili per il ruolo loggato
+  const fromDB = (_avScoped
     ? (propAllegati||[]).filter(a => !a.lezioneId || _avLessonIds.has(a.lezioneId))
-    : (propAllegati || []);
+    : (propAllegati || [])
+  ).map(a => ({...a, corso: _getLezioneCorso(a.lezioneId) || a.corso, _source:'db'}));
   const fromLessons = [];
   _avLessons.forEach(l => {
     (l.allegati||[]).forEach(a => {
       if (!fromDB.find(x=>x.id===a.id)) {
         fromLessons.push({
           id: a.id, lezioneId: l.id, allievoId: l.studentId||null,
-          allievoNome: l.student||null, corso: l.instrument||null,
+          allievoNome: l.student||null, corso: l.courseName || l.instrument || null,
           descrizione: a.descrizione||null, fileUrl: a.fileUrl||null,
           fileName: a.fileName||null, fileType: a.fileType||null, createdAt: a.createdAt||null,
+          _source:'embed',
         });
       }
     });
@@ -18300,6 +18848,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   const [fTipo,   setFTipo]   = useState(""); // 'lezione'|'spartito'|'file_brano'
   const [editAllegato, setEditAllegato] = useState(null);
   const [editAllegatoDesc, setEditAllegatoDesc] = useState('');
+  const [editAllegatoName, setEditAllegatoName] = useState('');
   const [confirmDelAll, setConfirmDelAll] = useState(null);
 
   // Sync modali verso lo slot globale di App (fuori da main-scroll animato)
@@ -18310,6 +18859,54 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   const _closeEditAll = () => {
     setEditAllegato(null);
     if (window.__FM_HIDE_MODAL__) window.__FM_HIDE_MODAL__();
+  };
+
+  // Rinomina fisicamente il file nello storage bucket "allegati" (mantiene la cartella,
+  // cambia solo il nome) e aggiorna il record collegato (DB, lezione embedded, o brano).
+  const handleRenameAllegato = async (a, nuovoNome) => {
+    const nome = (nuovoNome||'').trim();
+    if (!nome || nome === a.fileName) return true;
+    const sb = window.supabaseClient;
+    if (!sb) { alert('Connessione a Supabase non disponibile'); return false; }
+    const bucket = 'allegati';
+    const currentPath = a.storagePath || (a.fileUrl ? a.fileUrl.split(`/object/public/${bucket}/`)[1] : null);
+    let newUrl = a.fileUrl, newPath = currentPath;
+    if (currentPath) {
+      const dir = currentPath.includes('/') ? currentPath.slice(0, currentPath.lastIndexOf('/')+1) : '';
+      const safeName = nome.replace(/[^a-zA-Z0-9._-]/g,'_');
+      newPath = dir + safeName;
+      if (newPath !== currentPath) {
+        const { error: mvErr } = await sb.storage.from(bucket).move(currentPath, newPath);
+        if (mvErr) { alert('Errore rinomina file: '+mvErr.message); return false; }
+        const { data: urlData } = sb.storage.from(bucket).getPublicUrl(newPath);
+        newUrl = urlData?.publicUrl || a.fileUrl;
+      }
+    }
+    if (a._categoria === 'lezione') {
+      if (a._source === 'embed' && a.lezioneId) {
+        const lesson = lessons.find(l => l.id === a.lezioneId);
+        const nuoviAllegati = (lesson?.allegati||[]).map(x => x.id===a.id ? {...x, fileName:nome, fileUrl:newUrl} : x);
+        const { error } = await sb.from('lezioni').update({allegati:nuoviAllegati}).eq('id', a.lezioneId);
+        if (error) { alert('Errore: '+error.message); return false; }
+      } else {
+        const { error } = await sb.from('allegati').update({file_name:nome, file_url:newUrl}).eq('id', a.id);
+        if (error) { alert('Errore: '+error.message); return false; }
+        if (propSetAllegati) propSetAllegati(p => p.map(x => x.id===a.id ? {...x, fileName:nome, fileUrl:newUrl} : x));
+      }
+    } else if ((a._categoria === 'spartito' || a._categoria === 'file_brano') && a.branoId) {
+      const brano = brani.find(b => b.id === a.branoId);
+      if (brano) {
+        const vIdx = a.versioneIdx != null ? a.versioneIdx : 0;
+        const campo = a._categoria === 'spartito' ? 'spartiti' : 'allegati';
+        const nuoveVersioni = (brano.versioni||[]).map((v,i) => i!==vIdx ? v : {...v, [campo]: (v[campo]||[]).map(f => f.id===a.id ? {...f, fileName:nome, fileUrl:newUrl, storagePath:newPath} : f)});
+        const { error } = await sb.from('brani').update({versioni:nuoveVersioni}).eq('id', a.branoId);
+        if (error) { alert('Errore rinomina file brano: '+error.message); return false; }
+        if (propSetBrani) propSetBrani(p => p.map(b => b.id===a.branoId ? {...b, versioni:nuoveVersioni} : b));
+      }
+    } else if (a._categoria === 'storage_orphan') {
+      _rescanStorage();
+    }
+    return true;
   };
 
   const handleDeleteAllegato = async (allegatoDaEliminare) => {
@@ -18390,9 +18987,29 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
 
   // Modal inline: niente __FM_SHOW_MODAL__ (può non essere definito)
   // Renderizzati direttamente nel return della AllegatiView
-  // Unisce allegati lezioni + spartiti/allegati di TUTTE le versioni dei brani
+  // Visibilità brani per ruolo: stesso criterio usato in RepertorioView — un brano senza
+  // "strumento" è un brano d'insieme/collettivo e resta sempre visibile a tutti; un brano
+  // legato a uno strumento specifico è visibile solo al docente di quel corso o all'allievo
+  // che lo studia.
+  const _myCorsiDocente = (_avRuolo === 'docente' && _avDocenteId)
+    ? courses.filter(c => (c.docenti||[]).map(String).includes(String(_avDocenteId))).map(c => c.name||c.nome).filter(Boolean)
+    : [];
+  const _myStudentRec = _avRuolo === 'allievo'
+    ? students.find(s => (_avAllievoId != null && String(s.id) === String(_avAllievoId)) || (s.name||s.nome||'').toLowerCase() === _avNome.toLowerCase())
+    : null;
+  const _myStrumenti = _myStudentRec
+    ? [_myStudentRec.instrument, _myStudentRec.complementaryCourse, ...(_myStudentRec.extraInstruments||[])].filter(Boolean)
+    : [];
+  const braniVisibili = brani.filter(b => {
+    if (_avRuolo === 'admin' || !_avRuolo) return true;
+    if (!b.strumento) return true; // brano d'insieme/collettivo: sempre visibile
+    if (_avRuolo === 'docente') return _myCorsiDocente.length === 0 || _myCorsiDocente.includes(b.strumento);
+    if (_avRuolo === 'allievo') return _myStrumenti.length === 0 || _myStrumenti.includes(b.strumento);
+    return true;
+  });
+  // Unisce allegati lezioni + spartiti/allegati di TUTTE le versioni dei brani visibili
   const allegatiBrani = [];
-  brani.forEach(b => {
+  braniVisibili.forEach(b => {
     (b.versioni||[]).forEach((v, vIdx) => {
       const tonLabel = v.tonalita ? ` (${v.tonalita})` : '';
       (v.spartiti||[]).forEach(s => {
@@ -18423,10 +19040,14 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   ];
 
   // Scansione storage bucket: trova file caricati direttamente senza record in DB
+  // (solo per admin: non essendo collegati a lezione/corso non sono attribuibili a un ruolo)
   const [storageOrphans, setStorageOrphans] = useState([]);
   const [scanningStorage, setScanningStorage] = useState(false);
+  const [_rescanTick, _setRescanTick] = useState(0);
+  const _rescanStorage = () => _setRescanTick(t => t+1);
 
   React.useEffect(function() {
+    if (_avRuolo !== 'admin') { setStorageOrphans([]); return; }
     const sb = window.supabaseClient;
     if (!sb) return;
     setScanningStorage(true);
@@ -18455,7 +19076,8 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
             });
           }
         } else {
-          // è una cartella — scendi ricorsivamente
+          // è una cartella — scendi ricorsivamente (esclusa "modulistica": riservata a Impostazioni→Modulistica)
+          if (item.name && item.name.toLowerCase() === 'modulistica') continue;
           const subPath = prefix ? `${prefix}/${item.name}` : item.name;
           const sub = await listAll(subPath);
           files.push(...sub);
@@ -18468,7 +19090,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
       setStorageOrphans(orphans);
       setScanningStorage(false);
     }).catch(function() { setScanningStorage(false); });
-  }, [allegatiLezioni.length]);
+  }, [allegatiLezioni.length, _avRuolo, _rescanTick]);
 
   const allegatiAll = [...allegati, ...storageOrphans];
 
@@ -18511,20 +19133,20 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
         )
         , React.createElement(RefreshBtn)
       )
-      , React.createElement('div', { style: {display:"flex", gap:12, marginBottom:20, flexWrap:"wrap"}}
+      , React.createElement('div', { style: {display:"flex", gap:12, marginBottom:20, flexWrap:"nowrap", overflowX:"auto", WebkitOverflowScrolling:"touch"}}
         , React.createElement('input', { value: search, onChange: e=>setSearch(e.target.value),
           placeholder: "Cerca per nome file o descrizione...",
-          style: {flex:"1 1 220px", padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`,
+          style: {flex:"1 1 220px", flexShrink:0, padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`,
             background:C.surface, color:C.text, fontSize:13, fontFamily:"'Open Sans',sans-serif",
             outline:"none"}})
         , React.createElement('select', { value: fCorso, onChange: e=>setFCorso(e.target.value),
-          style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`,
+          style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`, flexShrink:0,
             background:C.surface, color:fCorso?C.text:C.textMuted, fontSize:13, fontFamily:"'Open Sans',sans-serif", cursor:"pointer"}}
-          , React.createElement('option', {value:""}, "Tutti gli strumenti")
+          , React.createElement('option', {value:""}, "Tutti i corsi")
           , corsiList.map(c=>React.createElement('option', {key:c,value:c}, c))
         )
         , React.createElement('select', { value: fTipo, onChange: e=>setFTipo(e.target.value),
-          style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`,
+          style: {padding:"10px 14px", borderRadius:10, border:`1px solid ${C.border}`, flexShrink:0,
             background:C.surface, color:fTipo?C.text:C.textMuted, fontSize:12,
             fontFamily:"'Open Sans',sans-serif", outline:"none"}}
           , React.createElement('option', {value:""}, "Tutti i tipi")
@@ -18590,10 +19212,10 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
                             padding:"5px 9px", borderRadius:7, border:`1px solid ${C.blueBorder}`, background:C.blueBg}}
                           , React.createElement(Ic, {n:"download", size:12, stroke:C.blue}), "Apri"
                         )
-                      , a._categoria==='lezione' && React.createElement('button',{onClick:()=>{setEditAllegato(a);setEditAllegatoDesc(a.descrizione||'');},
+                      , React.createElement('button',{onClick:()=>{setEditAllegato(a);setEditAllegatoDesc(a.descrizione||'');setEditAllegatoName(a.fileName||'');},
                           style:{display:'flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 9px',borderRadius:7,
                             border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
-                          , React.createElement(Ic,{n:'edit',size:11,stroke:C.text}), 'Modifica'
+                          , React.createElement(Ic,{n:'edit',size:11,stroke:C.text}), a._categoria==='lezione' ? 'Modifica' : 'Rinomina'
                         )
                       , React.createElement('button',{onClick:()=>setConfirmDelAll(a),
                           style:{display:'flex',alignItems:'center',gap:4,fontSize:12,padding:'5px 9px',borderRadius:7,
@@ -18620,20 +19242,31 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
           )
         )
 
-      /* ── Modal modifica descrizione allegato (inline) ── */
+      /* ── Modal modifica/rinomina allegato (inline) ── */
       , editAllegato && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9000,background:'rgba(0,0,0,0.78)',backdropFilter:'blur(4px)',display:'flex',alignItems:'center',justifyContent:'center'}}
           , React.createElement('div',{style:{background:C.surface,borderRadius:14,padding:'24px 28px',maxWidth:440,width:'90%',border:`1px solid ${C.border}`,boxShadow:'0 24px 80px rgba(0,0,0,0.6)'}}
-            , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}},'Modifica allegato')
-            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
-            , React.createElement('input',{type:'text',autoFocus:true,value:editAllegatoDesc,
-                onChange:e=>setEditAllegatoDesc(e.target.value),
+            , React.createElement('h3',{style:{fontFamily:"'Oswald',sans-serif",fontSize:20,marginBottom:16}}, editAllegato._categoria==='lezione' ? 'Modifica allegato' : 'Rinomina file')
+            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Nome file')
+            , React.createElement('input',{type:'text',autoFocus:true,value:editAllegatoName,
+                onChange:e=>setEditAllegatoName(e.target.value),
                 style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none',boxSizing:'border-box',marginBottom:18}})
+            , editAllegato._categoria==='lezione' && React.createElement(React.Fragment, null
+              , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',display:'block',marginBottom:6}},'Descrizione')
+              , React.createElement('input',{type:'text',value:editAllegatoDesc,
+                  onChange:e=>setEditAllegatoDesc(e.target.value),
+                  style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none',boxSizing:'border-box',marginBottom:18}})
+            )
             , React.createElement('div',{style:{display:'flex',gap:10,justifyContent:'flex-end'}}
               , React.createElement('button',{onClick:()=>setEditAllegato(null),style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',color:C.text,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Annulla')
               , React.createElement('button',{onClick:async()=>{
-                    if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===editAllegato.id?{...x,descrizione:editAllegatoDesc}:x));
-                    const sb2=window.supabaseClient;
-                    if(sb2){ const {error}=await sb2.from('allegati').update({descrizione:editAllegatoDesc}).eq('id',editAllegato.id); if(error) console.warn('[FM] edit allegato:',error.message); }
+                    const target = editAllegato;
+                    const ok = await handleRenameAllegato(target, editAllegatoName);
+                    if (!ok) return;
+                    if (target._categoria === 'lezione' && editAllegatoDesc !== (target.descrizione||'')) {
+                      if(propSetAllegati) propSetAllegati(p=>p.map(x=>x.id===target.id?{...x,descrizione:editAllegatoDesc}:x));
+                      const sb2=window.supabaseClient;
+                      if(sb2){ const {error}=await sb2.from('allegati').update({descrizione:editAllegatoDesc}).eq('id',target.id); if(error) console.warn('[FM] edit allegato:',error.message); }
+                    }
                     setEditAllegato(null);
                   },style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.gold,color:'#0d1f4a',fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",fontWeight:700}},'Salva')
             )
@@ -19123,6 +19756,7 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
       )
     );
 };
+
 
 
 
@@ -20713,8 +21347,6 @@ const PWA_PERMS = {
 
 // Etichette abbreviate SOLO per la modalità PWA/mobile (bottom-nav e menu "Altro").
 // Il desktop continua a usare le etichette complete di NAV_ITEMS / _labelOverridesSB.
-// Etichette abbreviate SOLO per la modalità PWA/mobile (bottom-nav e menu "Altro").
-// Il desktop continua a usare le etichette complete di NAV_ITEMS / _labelOverridesSB.
 // Valgono per qualunque ruolo:
 const PWA_LABEL_OVERRIDES = {
   dashboard:  "Home",
@@ -20760,7 +21392,9 @@ const NAV_ITEMS = [
   { id:"googleCalendar", label:"Google Calendar", icon:"calendar" },
 ];
 
-const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction }) => {
+const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction, config }) => {
+  const [sidebarLogoOk, setSidebarLogoOk] = useState(true);
+  const sidebarNomeScuola = (config && config.nomeScuola) || "Futuro Musica";
   const ruoloHex = {admin:C.gold, docente:C.teal, allievo:C.blue}[_optionalChain([user, 'optionalAccess', _89 => _89.ruolo])] || C.gold;
   const ini = _optionalChain([user, 'optionalAccess', _90 => _90.nome]) ? user.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase() : "??";
   const _userRoleSB  = (user && user.ruolo) || "admin";
@@ -20830,12 +21464,15 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
         /* Logo */
         , React.createElement('div', { style: {padding:"18px 16px",borderBottom:"1px solid rgba(255,255,255,0.15)",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10585}}
           , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10586}}
-            , React.createElement('div', { style: {width:32,height:32,borderRadius:0,background:"#8c1818",
-              display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10587}}
-              , React.createElement(Ic, { n: "music", size: 15, stroke: "#fff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10589}})
-            )
+            , sidebarLogoOk
+              ? React.createElement('img', {src:SCHOOL_LOGO_URL(192), onError:()=>setSidebarLogoOk(false),
+                  style:{width:32,height:32,borderRadius:6,objectFit:'contain',background:'#fff',flexShrink:0}})
+              : React.createElement('div', { style: {width:32,height:32,borderRadius:0,background:"#8c1818",
+                  display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10587}}
+                  , React.createElement(Ic, { n: "music", size: 15, stroke: "#fff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10589}})
+                )
             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10591}}
-              , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:15,fontWeight:600,lineHeight:1.2,color:"#fff",letterSpacing:"0.05em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10592}}, "Futuro Musica"
+              , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:15,fontWeight:600,lineHeight:1.2,color:"#fff",letterSpacing:"0.05em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10592}}, sidebarNomeScuola
 
               )
               , React.createElement('div', { style: {fontSize:9,color:"rgba(255,255,255,0.55)",letterSpacing:"0.15em",textTransform:"uppercase",marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10595}}, "gestionale"
@@ -22009,6 +22646,7 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) =>
   );
 };
 
+
 // Deduplica un array di lezioni per id, mantenendo l'ultima occorrenza.
 // Rete di sicurezza contro doppioni visivi causati da race tra sync debounced e realtime.
 function dedupeLessonsById(arr) {
@@ -22023,6 +22661,7 @@ function App() {
   const [view,           setView]           = useState("dashboard");
   const [panKey,         setPanKey]         = useState(0);
   const [schermata,      setSchermata]      = useState("login");
+  const [showEsciMsg,    setShowEsciMsg]    = useState(false);
   const _d = window.__FM_DATA__ || {};
   const [sharedStudents,       setSharedStudents]       = useState(_d.students   || INIT_STUDENTS);
   const [sharedCourses,        setSharedCourses]        = useState(_d.courses    || []);
@@ -22034,6 +22673,17 @@ function App() {
   const [sharedRichieste,      setSharedRichieste]      = useState([]);
   const [sharedNotifiche,      setSharedNotifiche]      = useState([]);
   const [sharedConfig,         setSharedConfig]         = useState(_d.config ? {...CONFIG_DEFAULT, ..._d.config} : CONFIG_DEFAULT);
+
+  // Applica subito il colore accento salvato (anche al primo caricamento,
+  // non solo quando l'admin lo cambia in Impostazioni). Forza un re-render
+  // immediato: mutare le proprietà di C da solo non fa ripartire React.
+  const [, _forceAccentRerender] = useState(0);
+  useEffect(() => {
+    if (sharedConfig.accentColor) {
+      applyAccentColor(sharedConfig.accentColor);
+      _forceAccentRerender(n => n+1);
+    }
+  }, [sharedConfig.accentColor]);
   // Esponi config globalmente per componenti che non ricevono la prop (es. WeekCalSala)
   React.useEffect(() => { window.__FM_CONFIG__ = sharedConfig; }, [sharedConfig]);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
@@ -22046,7 +22696,7 @@ function App() {
   }, [sharedIscrizioniAnno, sharedAnniScolastici]);
   const [sharedEntrate,         setSharedEntrate]         = useState(_d.entrate  || INIT_ENTRATE_QUOTE);
   // ── Stato globale per pannelli dashboard e ruolo simulazione ──
-  const [sharedPanels,  setSharedPanels]  = useState({});
+  const [sharedPanels,  setSharedPanels]  = useState(_d.dashboardPanels || {});
   const [sharedRuolo,   setSharedRuolo]   = useState("admin");
   const [settingsDrawerOpen, setSettingsDrawerOpen] = useState(false);
 
@@ -22290,6 +22940,11 @@ function App() {
               base.repertorio = pj(r.repertorio, []);
               base.extraInstruments = pj(r.extra_instruments, []);
               base.extraTeachers = pj(r.extra_teachers, {});
+              // FA.studente() potrebbe non conoscere ancora questi due campi (aggiunti di
+              // recente allo schema): senza questo recupero si perdono al reload completo
+              // della pagina anche se scritti correttamente su database.
+              if (base.nomeRicevuta === undefined) base.nomeRicevuta = r.nome_ricevuta || '';
+              if (base.codiceFiscale === undefined) base.codiceFiscale = r.codice_fiscale || '';
               return base;
             }),
             docenti:  (sD||[]).map(r => { const b = FA ? FA.docente(r) : r; b.annoCreazione = (r.anno_creazione != null) ? r.anno_creazione : null; return b; }),
@@ -22619,8 +23274,13 @@ function App() {
     };
 
     // ── beforeunload: avvisa sempre quando l'utente prova a uscire ──────────
+    // ECCEZIONE: quando l'uscita è volontaria (pulsante ESCI), window.__FM_ALLOW_EXIT__
+    // viene impostato a true PRIMA della navigazione, per non mostrare il popup
+    // nativo del browser ("Le modifiche potrebbero non essere salvate") che
+    // altrimenti scatterebbe comunque, dato che è generico e non sa distinguere
+    // un'uscita voluta da una accidentale.
     const handleBeforeUnload = (e) => {
-      // Mostra sempre il dialog nativo del browser quando si è loggati
+      if (window.__FM_ALLOW_EXIT__) return;
       e.preventDefault();
       e.returnValue = ''; // stringa vuota = il browser usa il suo testo standard
       return '';
@@ -22758,24 +23418,26 @@ function App() {
 
   // Esci senza fare signOut — la sessione rimane attiva per le notifiche PWA
   // La prossima apertura dell'app riprende automaticamente la sessione
+  //
+  // NOTA: su Android e iOS non esiste nessuna API web che permetta a una PWA
+  // di chiudersi da sola (stessa restrizione delle app native — è il sistema
+  // operativo a gestire la chiusura, non l'app stessa). Invece di fingere di
+  // riuscirci, mostriamo le istruzioni corrette per la piattaforma e dopo
+  // qualche secondo reindirizziamo comunque al sito.
+  const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
   const handleEsciSenzaLogout = () => {
-    if (IS_PWA) {
-      // In PWA: minimizza tornando alla home dello smartphone
-      window.history.back();
-    } else {
-      // Su browser desktop: chiude il tab se possibile, altrimenti avvisa
-      const closed = window.close();
-      if (closed === false || closed === undefined) {
-        window.alert('Puoi chiudere questo tab manualmente (Ctrl+W / Cmd+W).\nLa sessione rimarrà attiva — al prossimo accesso entrerai direttamente.');
-      }
-    }
+    window.__FM_ALLOW_EXIT__ = true; // sopprime il popup nativo "vuoi uscire dal sito?"
+    setShowEsciMsg(true);
+    setTimeout(() => {
+      window.location.href = 'https://primomaggio145-blip.github.io/FM-webapp/';
+    }, IS_PWA ? 3500 : 1600);
   };
 
   return (
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
       , React.createElement('div', { style: {display:"flex",height:"100dvh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), config: sharedConfig, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , React.createElement('div', { key: view, className: "main-scroll", style: {flex:1,overflow:"auto",background:C.bg,animation:"fadeIn 0.25s ease",
           paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 4px)",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10788}}
           , renderCurrentView()
@@ -22787,6 +23449,26 @@ function App() {
          i position:fixed dentro vengono trappola da esso. Qui siamo nel Fragment
          root, quindi position:fixed si aggancia al viewport come previsto.  */
       , globalModal
+
+      /* Messaggio di saluto all'uscita — in PWA mostra anche le istruzioni per
+         chiudere l'app (Android/iOS non lo permettono via script), in browser
+         desktop/mobile è solo un saluto. Poi reindirizza comunque al sito. */
+      , showEsciMsg && React.createElement('div', {style:{position:'fixed',inset:0,background:'rgba(0,0,0,.6)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:99999}}
+          , React.createElement('div', {style:{background:C.surface,borderRadius:14,padding:28,maxWidth:360,width:'88%',textAlign:'center',boxShadow:'0 10px 40px rgba(0,0,0,.35)'}}
+            , React.createElement('div',{style:{fontSize:32,marginBottom:12}}, '👋')
+            , React.createElement('div',{style:{fontSize:15,fontWeight:700,color:C.text,fontFamily:"'Oswald',sans-serif",marginBottom:10}},
+                IS_PWA ? 'Per chiudere l\'app' : 'A presto!')
+            , IS_PWA && React.createElement('div',{style:{fontSize:13,color:C.textMuted,lineHeight:1.6,marginBottom:6}},
+                isIOSDevice
+                  ? 'Scorri verso l\'alto dal basso dello schermo (o premi due volte il tasto Home) e trascina Futuro Musica fuori dallo schermo.'
+                  : 'Apri le app recenti (tasto quadrato o gesto di scorrimento) e scorri via Futuro Musica.'
+              )
+            , !IS_PWA && React.createElement('div',{style:{fontSize:13,color:C.textMuted,lineHeight:1.6,marginBottom:6}},
+                'Grazie per aver usato Futuro Musica.'
+              )
+            , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:14}}, 'Nel frattempo ti reindirizziamo al sito...')
+          )
+        )
       /* Modal recupero scaduto — solo admin, position:fixed fuori da main-scroll */
       , recuperoScadutoModal && React.createElement(RecuperoScadutoModal, {
           lesson: recuperoScadutoModal.lesson,
@@ -23268,7 +23950,9 @@ const RecuperoScadutoModal = ({ lesson, onExtend, onDismiss, setLessons }) => {
 // ─── REMINDERS VIEW ───────────────────────────────────────────────────────────
 const SUPABASE_URL_WA  = 'https://ocsxrjommtrjelnbihfr.supabase.co';
 // NOTA SICUREZZA: la service_role/secret key NON deve mai comparire nel codice
-// client-side. Lo snippet SQL sottostante usa un placeholder da sostituire a mano.
+// client-side. Lo snippet SQL sottostante usa un placeholder: l'amministratore
+// deve incollare la propria secret key (Settings > API Keys, tab "API Keys")
+// direttamente nell'SQL Editor di Supabase al momento dell'esecuzione.
 
 const REMINDER_DEFAULTS = [
   { id:'individuale', label:'Lezioni individuali', icon:'user',     dest:'allievo',  oraDefault:'09:00', giornoDefault:'daily',   desc:'Reminder lezione individuale del giorno seguente' },
@@ -23457,7 +24141,7 @@ const ReminderWizard = ({ onClose, onSave }) => {
                 if(form.giorno==='daily')   cron = `${mm} ${hh} * * *`;
                 if(form.giorno==='weekly')  cron = `${mm} ${hh} * * ${form.giornoSett||1}`;
                 if(form.giorno==='monthly') cron = `${mm} ${hh} ${form.giornoMese||1} * *`;
-                return `SELECT cron.schedule(\n  '${form.id||'nuovo_tipo'}-reminder',\n  '${cron}',\n  $$\n  SELECT net.http_post(\n    url := 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/whatsapp-reminder?tipo=${form.id||'nuovo_tipo'}',\n    headers := '{"Authorization":"Bearer REDACTED_SECRET_KEY_2","Content-Type":"application/json"}'::jsonb,\n    body := '{}'::jsonb\n  );\n  $$\n);\n-- Sostituisci <LA_TUA_SECRET_KEY_QUI> con la tua secret key (Settings > API Keys).`;
+                return `SELECT cron.schedule(\n  '${form.id||'nuovo_tipo'}-reminder',\n  '${cron}',\n  $$\n  SELECT net.http_post(\n    url := 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/whatsapp-reminder?tipo=${form.id||'nuovo_tipo'}',\n    headers := '{"Authorization":"Bearer REDACTED_SECRET_KEY_1","Content-Type":"application/json"}'::jsonb,\n    body := '{}'::jsonb\n  );\n  $$\n);\n-- ⚠️ Sostituisci <LA_TUA_SECRET_KEY_QUI> con la tua secret key\n-- (Supabase > Settings > API Keys). Non incollarla mai nel codice sorgente.`;
               })()
             )
           )
@@ -23896,10 +24580,11 @@ const NotificheSettingsView = ({ ruolo }) => {
                   // Ricarica la lista
                   const sb = window.supabaseClient;
                   if (sb) {
-                    const { data } = await sb.from('push_subscriptions')
+                    const { data, error } = await sb.from('push_subscriptions')
                       .select('id, nome, ruolo, created_at, updated_at, endpoint')
                       .order('updated_at', { ascending: false });
-                    setPushSubs(data || []);
+                    if (error) { console.warn('[FM] errore lettura push_subscriptions:', error.message); setPushSubs([]); }
+                    else setPushSubs(data || []);
                   }
                 } else {
                   showToast(false, 'Registrazione fallita — controlla che il Service Worker sia attivo');
@@ -23914,9 +24599,15 @@ const NotificheSettingsView = ({ ruolo }) => {
           , React.createElement('button', {
               onClick: async () => {
                 const sb = window.supabaseClient; if (!sb) return;
-                const { data } = await sb.from('push_subscriptions')
+                const { data, error } = await sb.from('push_subscriptions')
                   .select('id, nome, ruolo, created_at, updated_at, endpoint')
                   .order('updated_at', { ascending: false });
+                if (error) {
+                  console.warn('[FM] errore lettura push_subscriptions:', error.message);
+                  showToast(false, 'Errore permessi (RLS) su push_subscriptions: ' + error.message);
+                  setPushSubs([]);
+                  return;
+                }
                 setPushSubs(data || []);
               },
               style: { padding: '6px 14px', borderRadius: 8, border: `1px solid ${C.border}`,
@@ -24168,6 +24859,7 @@ const REMINDER_TYPES = [
   { id:'docente',     label:'Calendario docenti',  icon:'calendar', dest:'Docente', scheduleDefault:'08:00', cronDefault:'0 8 * * *', desc:'Riepilogo lezioni del giorno per il docente'      },
   { id:'pagamento',   label:'Pagamento mensile',   icon:'euro',     dest:'Allievo', scheduleDefault:'09:00', cronDefault:'0 9 1 * *', desc:'Promemoria quota mensile non ancora pagata'       },
   { id:'recupero',    label:'Recuperi in scadenza',icon:'clock',    dest:'Allievo', scheduleDefault:'09:00', cronDefault:'0 9 * * *', desc:'Avviso recupero che scade entro 3 giorni'         },
+  { id:'compleanno',  label:'Compleanno allievo',  icon:'star2',    dest:'Allievo', scheduleDefault:'08:00', cronDefault:'0 8 * * *', desc:'Auguri di compleanno (testo diverso per minorenni)' },
 ];
 
 const GIORNI_SETTIMANA = [
@@ -24176,7 +24868,10 @@ const GIORNI_SETTIMANA = [
 ];
 
 const WA_SUPABASE_URL = 'https://ocsxrjommtrjelnbihfr.supabase.co';
-// Service_role key rimossa dal client — nessun fallback a privilegi elevati.
+// NOTA SICUREZZA: qui c'era una service_role key hardcoded usata come fallback
+// quando mancava la sessione utente — bypassava tutte le RLS ed era leggibile
+// da chiunque nel codice sorgente pubblico. Rimossa: ora, senza sessione valida,
+// l'azione fallisce con un errore invece di usare privilegi elevati dal client.
 
 const RemindersView = ({ ruolo }) => {
   const [log,          setLog]          = useState([]);
@@ -24289,7 +24984,8 @@ const RemindersView = ({ ruolo }) => {
     try {
       const sb = window.supabaseClient;
       if (!sb) { toast(false, 'Supabase non disponibile'); setSending(p=>({...p,[tipoId]:false})); return; }
-      // Recupera il token di sessione per l'Authorization header. Nessun fallback a chiavi privilegiate.
+      // Recupera il token di sessione per l'Authorization header.
+      // Nessun fallback a chiavi privilegiate: senza sessione valida l'azione fallisce.
       const { data: { session } } = await sb.auth.getSession();
       const token = session?.access_token;
       if (!token) { toast(false, 'Sessione scaduta: effettua di nuovo il login'); setSending(p=>({...p,[tipoId]:false})); return; }
@@ -24390,7 +25086,7 @@ const RemindersView = ({ ruolo }) => {
           const isEdit= editingId === tipo.id;
           const isOn  = cfg.attivo !== false;
           // tipo potrebbe non esistere come colonna — cerca nel lezione_id e dettaglio come fallback
-          const VALID_TIPI = new Set(['individuale','collettivo','docente','pagamento','recupero']);
+          const VALID_TIPI = new Set(['individuale','collettivo','docente','pagamento','recupero','compleanno']);
           const matchTipo = (r) => {
             // Usa r.tipo SOLO se è un tipo reminder valido (non un wamid o stringa casuale)
             if (r.tipo && VALID_TIPI.has(r.tipo)) return r.tipo === tipo.id;
@@ -24542,12 +25238,13 @@ const RemindersView = ({ ruolo }) => {
                     , React.createElement('td',{style:{padding:'9px 14px',fontSize:12,color:C.textMuted,whiteSpace:'nowrap'}}, r.created_at ? new Date(r.created_at).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—')
                     , React.createElement('td',{style:{padding:'9px 14px',fontSize:12,fontFamily:'monospace',color:C.text}}, r.telefono||'—')
                     , React.createElement('td',{style:{padding:'9px 14px'}}, (() => {
-                        const VALID_T = new Set(['individuale','collettivo','docente','pagamento','recupero']);
+                        const VALID_T = new Set(['individuale','collettivo','docente','pagamento','recupero','compleanno']);
                         const lid = String(r.lezione_id||'');
                         // Ricava il tipo: preferisci r.tipo solo se è un tipo valido
                         let label = VALID_T.has(r.tipo) ? r.tipo
                           : lid.startsWith('docente_') ? 'docente'
                           : lid.startsWith('pagamento_') ? 'pagamento'
+                          : lid.startsWith('compleanno_') ? 'compleanno'
                           : lid.match(/^[0-9a-f-]{36}$/i) ? 'lezione'
                           : '—';
                         return React.createElement('span',{style:{fontSize:11,background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,padding:'2px 8px',color:C.textMuted}}, label);
@@ -24770,6 +25467,7 @@ serve(async (req) => {
 };
 
 const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser, lessons, students, richieste }) => {
+  const isMobile = useIsMobile();
   const [filter, setFilter] = useState('non_lette');
   const [marking, setMarking] = useState(false);
   const [allNotifiche, setAllNotifiche] = useState(null);
@@ -25014,19 +25712,24 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
     return '🔔';
   };
 
-  return React.createElement('div', {style:{maxWidth:700, margin:'0 auto', padding:'28px 24px'}}
+  return React.createElement('div', {style:{maxWidth:700, margin:'0 auto', padding: isMobile ? '16px 12px' : '28px 24px'}}
     // Header
-    , React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}
+    , React.createElement('div', {style: isMobile
+        ? {display:'flex', flexDirection:'column', gap:12, marginBottom:20}
+        : {display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:24}}
       , React.createElement('div', null
-        , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,margin:0}}, '🔔 Notifiche')
+        , React.createElement('h2', {style:{fontFamily:"'Oswald',sans-serif",fontSize: isMobile ? 22 : 28,fontWeight:600,margin:0}}, '🔔 Notifiche')
         , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:4}},
             nonLette.length > 0 ? `${nonLette.length} non lette su ${mieNotifiche.length} totali` : `${mieNotifiche.length} notifiche · tutte lette`)
       )
-      , React.createElement('div', {style:{display:'flex',gap:8,flexShrink:0}}
+      , React.createElement('div', {style: isMobile
+          ? {display:'flex', flexDirection:'column', gap:8, width:'100%'}
+          : {display:'flex',gap:8,flexShrink:0}}
           , nonLette.length > 0 && React.createElement('button', {
               onClick: markAllRead, disabled: marking,
-              style:{padding:'9px 18px',borderRadius:8,border:'none',background:C.green,color:'#fff',
-                fontSize:13,fontWeight:600,cursor:marking?'wait':'pointer',fontFamily:"'Open Sans',sans-serif",opacity:marking?0.7:1}}
+              style:{padding: isMobile ? '10px 14px' : '9px 18px', borderRadius:8,border:'none',background:C.green,color:'#fff',
+                fontSize:13,fontWeight:600,cursor:marking?'wait':'pointer',fontFamily:"'Open Sans',sans-serif",opacity:marking?0.7:1,
+                width: isMobile ? '100%' : undefined, boxSizing:'border-box'}}
             , marking ? '...' : `✓ Segna tutte come lette (${nonLette.length})`
           )
           , mieNotifiche.some(n => n.letto && !n._isLive) && React.createElement('button', {
@@ -25050,8 +25753,9 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
                   }
                 }
               },
-              style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.textMuted,
-                fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
+              style:{padding: isMobile ? '10px 14px' : '9px 18px', borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.textMuted,
+                fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Open Sans',sans-serif",
+                width: isMobile ? '100%' : undefined, boxSizing:'border-box'}}
             , '🗑️ Elimina lette'
           )
         )
@@ -25257,6 +25961,200 @@ const CATEGORIE_RESET = [
   {id:'sala_prove',  label:'🥁 Sala prove',            desc:'Prenotazioni sala prove'},
   {id:'anniScolastici', label:'🗓️ Archivio anni scolastici', desc:'Anni scolastici configurati e relativo stato attivo'},
 ];
+
+// ─── LOGO SCUOLA (upload icone 192/512 su bucket Storage pubblico "branding") ──
+const LogoScuolaSection = ({ showToast }) => {
+  const [uploading, setUploading] = React.useState({192:false, 512:false});
+  const [cacheBust, setCacheBust] = React.useState(Date.now());
+  const [previewOk, setPreviewOk] = React.useState({192:true, 512:true});
+
+  const validaEUpload = (size, file) => {
+    if (!file) return;
+    if (!/image\/(png|jpeg|webp)/.test(file.type)) {
+      showToast && showToast(false, 'Formato non valido — usa PNG, JPG o WEBP');
+      return;
+    }
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = async () => {
+      URL.revokeObjectURL(url);
+      if (img.width !== size || img.height !== size) {
+        showToast && showToast(false, `L'immagine deve essere esattamente ${size}×${size} px (questa è ${img.width}×${img.height} px)`);
+        return;
+      }
+      setUploading(prev => ({...prev, [size]: true}));
+      try {
+        const sb = window.supabaseClient;
+        const { error } = await sb.storage.from('branding').upload(`icon-${size}.png`, file, {
+          upsert: true, contentType: file.type || 'image/png',
+        });
+        if (error) {
+          showToast && showToast(false, `Errore caricamento: ${error.message}`);
+        } else {
+          showToast && showToast(true, `✅ Icona ${size}×${size} aggiornata in tutta l'app`);
+          setCacheBust(Date.now());
+          setPreviewOk(prev => ({...prev, [size]: true}));
+        }
+      } catch(e) {
+        showToast && showToast(false, e?.message || 'Errore di rete');
+      }
+      setUploading(prev => ({...prev, [size]: false}));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); showToast && showToast(false, 'File immagine non valido'); };
+    img.src = url;
+  };
+
+  return React.createElement(ImpSection, {title:"Logo scuola", icon:"upload"}
+    , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:16,lineHeight:1.5}},
+        "Il logo caricato qui viene usato in tutta l'app: schermata di login, registrazione, menu laterale e icona dell'app installata (PWA). Servono due dimensioni esatte: 192×192 e 512×512 pixel, PNG con sfondo pieno o trasparente."
+      )
+    , React.createElement('div', {style:{display:'flex',gap:24,flexWrap:'wrap'}}
+      , [192,512].map(size => React.createElement('div', {key:size, style:{textAlign:'center'}}
+          , React.createElement('div', {style:{width:size===192?90:110,height:size===192?90:110,borderRadius:10,border:`1px dashed ${C.border}`,
+                display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 10px',overflow:'hidden',background:'#fff'}}
+              , previewOk[size]
+                ? React.createElement('img', {src:`${SCHOOL_LOGO_URL(size)}?v=${cacheBust}`, onError:()=>setPreviewOk(prev=>({...prev,[size]:false})),
+                    style:{width:'100%',height:'100%',objectFit:'contain'}})
+                : React.createElement('div', {style:{fontSize:10,color:C.textDim}}, 'Nessuna icona')
+            )
+          , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:8}}, `${size}×${size} px`)
+          , React.createElement('label', {style:{display:'inline-block',padding:'7px 14px',borderRadius:8,border:`1px solid ${C.border}`,
+                background:C.bg,color:C.text,cursor:uploading[size]?'not-allowed':'pointer',fontSize:12,fontWeight:600}}
+              , uploading[size] ? '⏳ Carico...' : '📤 Carica'
+              , React.createElement('input', {type:'file', accept:'image/png,image/jpeg,image/webp', style:{display:'none'}, disabled:uploading[size],
+                  onChange: e => { validaEUpload(size, e.target.files[0]); e.target.value=''; }})
+            )
+        ))
+      )
+  );
+};
+
+// ─── ESPORTA RICEVUTE (CSV filtrabile) ─────────────────────────────────────────
+const csvEscape = (v) => {
+  const s = v===null || v===undefined ? '' : String(v);
+  return /[",\n;]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+};
+
+const EsportaRicevuteSection = ({ anniScolastici: propAnniExp, showToast }) => {
+  const [dataDa, setDataDa] = React.useState('');
+  const [dataA, setDataA] = React.useState('');
+  const [annoSel, setAnnoSel] = React.useState('');
+  const [metodoSel, setMetodoSel] = React.useState('');
+  const [statoSel, setStatoSel] = React.useState('pagato');
+  const [soloEmesse, setSoloEmesse] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [localMsg, setLocalMsg] = React.useState(null); // messaggio visibile qui, non solo nel toast in alto
+
+  const handleExport = async () => {
+    setLoading(true);
+    setLocalMsg(null);
+    try {
+      const sb = window.supabaseClient;
+      if (!sb) {
+        const err = 'Connessione a Supabase non disponibile — ricarica la pagina';
+        setLocalMsg({ok:false, testo:err}); showToast && showToast(false, err); setLoading(false); return;
+      }
+      let q = sb.from('quote').select('num_ricevuta, data_pagamento, studente_nome, importo, metodo, stato, mese, anno, anno_scolastico, note, no_ricevuta');
+      if (dataDa) q = q.gte('data_pagamento', dataDa);
+      if (dataA) q = q.lte('data_pagamento', dataA);
+      if (annoSel) q = q.eq('anno_scolastico', parseInt(annoSel));
+      if (metodoSel) q = q.eq('metodo', metodoSel);
+      if (statoSel) q = q.eq('stato', statoSel);
+      if (soloEmesse) q = q.eq('no_ricevuta', false).not('num_ricevuta', 'is', null).neq('num_ricevuta', '');
+      q = q.order('data_pagamento', {ascending: true});
+
+      const { data, error } = await q;
+      if (error) {
+        console.error('[EsportaRicevute] errore query:', error);
+        const msg = `Errore: ${error.message}`;
+        setLocalMsg({ok:false, testo:msg}); showToast && showToast(false, msg); setLoading(false); return;
+      }
+      if (!data || data.length === 0) {
+        const msg = 'Nessuna ricevuta trovata con questi filtri — prova ad allargare il periodo o togliere qualche filtro';
+        setLocalMsg({ok:false, testo:msg}); showToast && showToast(false, msg); setLoading(false); return;
+      }
+
+      const header = ['N. Ricevuta','Data pagamento','Socio','Importo €','Metodo','Stato','Mese','Anno','Anno scolastico','Note'];
+      const righe = data.map(r => [
+        r.num_ricevuta, r.data_pagamento, r.studente_nome, r.importo, r.metodo, r.stato, r.mese, r.anno, r.anno_scolastico, r.note
+      ].map(csvEscape).join(';'));
+      const csv = '\uFEFF' + header.join(';') + '\n' + righe.join('\n'); // BOM per Excel
+
+      const stamp = new Date().toISOString().slice(0,10);
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `ricevute-${stamp}.csv`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      const msg = `✅ ${data.length} ricevute esportate`;
+      setLocalMsg({ok:true, testo:msg});
+      showToast && showToast(true, msg);
+    } catch(e) {
+      console.error('[EsportaRicevute] errore imprevisto:', e);
+      const msg = e?.message || 'Errore imprevisto — controlla la console del browser (F12)';
+      setLocalMsg({ok:false, testo:msg});
+      showToast && showToast(false, msg);
+    }
+    setLoading(false);
+  };
+
+  const anniOrdinati = (propAnniExp||[]).slice().sort((a,b)=>(b.annoInizio||0)-(a.annoInizio||0));
+
+  return React.createElement(ImpSection, {title:"Esporta ricevute", icon:"download"}
+    , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:14,lineHeight:1.5}},
+        "Scarica l'elenco delle ricevute in formato CSV (apribile con Excel), filtrando per data, anno scolastico, metodo o stato."
+      )
+    , React.createElement('div', {style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14},className:'form-2col'}
+      , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'block',marginBottom:4}}, 'Data da')
+          , React.createElement('input',{type:'date', value:dataDa, onChange:e=>setDataDa(e.target.value),
+              style:{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,boxSizing:'border-box'}})
+        )
+      , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'block',marginBottom:4}}, 'Data a')
+          , React.createElement('input',{type:'date', value:dataA, onChange:e=>setDataA(e.target.value),
+              style:{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,boxSizing:'border-box'}})
+        )
+      , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'block',marginBottom:4}}, 'Anno scolastico')
+          , React.createElement('select',{value:annoSel, onChange:e=>setAnnoSel(e.target.value),
+              style:{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,boxSizing:'border-box'}}
+            , React.createElement('option',{value:''}, 'Tutti')
+            , anniOrdinati.map(a => React.createElement('option',{key:a.annoInizio, value:a.annoInizio}, a.label||`${a.annoInizio}/${a.annoFine||a.annoInizio+1}`))
+            )
+        )
+      , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'block',marginBottom:4}}, 'Metodo')
+          , React.createElement('select',{value:metodoSel, onChange:e=>setMetodoSel(e.target.value),
+              style:{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,boxSizing:'border-box'}}
+            , React.createElement('option',{value:''}, 'Tutti')
+            , ['Contanti','Bonifico bancario','Carta','Assegno','PayPal'].map(m => React.createElement('option',{key:m, value:m}, m))
+            )
+        )
+      , React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'block',marginBottom:4}}, 'Stato')
+          , React.createElement('select',{value:statoSel, onChange:e=>setStatoSel(e.target.value),
+              style:{width:'100%',padding:'8px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,boxSizing:'border-box'}}
+            , React.createElement('option',{value:''}, 'Tutti')
+            , [['pagato','Pagato'],['da pagare','Da pagare'],['in ritardo','In ritardo'],['esonerato','Esonerato']].map(([v,l]) => React.createElement('option',{key:v, value:v}, l))
+            )
+        )
+      , React.createElement('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.textMuted,marginTop:6}}
+          , React.createElement('input',{type:'checkbox', checked:soloEmesse, onChange:e=>setSoloEmesse(e.target.checked), style:{width:15,height:15}})
+          , 'Solo ricevute con numero effettivamente emesso (deseleziona se non trovi risultati)'
+        )
+      )
+    , React.createElement('button', {onClick:handleExport, disabled:loading,
+        style:{padding:'10px 20px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:loading?'not-allowed':'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:8}}
+      , React.createElement(Ic,{n:'download',size:15,stroke:'#fff'})
+      , loading ? '⏳ Esporto...' : '📥 Scarica CSV'
+      )
+    , localMsg && React.createElement('div',{style:{marginTop:12,padding:'10px 14px',borderRadius:8,fontSize:12,fontWeight:600,
+        background:localMsg.ok?C.greenBg:C.redBg,border:`1px solid ${localMsg.ok?C.greenBorder:C.redBorder}`,color:localMsg.ok?C.green:C.red}}, localMsg.testo)
+  );
+};
 
 const ResetDatiSection = ({ anniScolastici: propAnniReset, setAnniScolastici: propSetAnniReset } = {}) => {
   const [selected, setSelected] = React.useState({});
@@ -25890,25 +26788,18 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
       rows.push({
         chiave,
         valore: valore == null ? '' : typeof valore === 'object' ? JSON.stringify(valore) : String(valore),
+        updated_at: new Date().toISOString(),
       });
     });
 
     try {
-      // 1. DELETE tutto tranne una chiave impossibile
-      const delRes = await fetch(`${SUPABASE_URL}/rest/v1/sito_config?chiave=neq.___x___`, {
-        method: 'DELETE', headers
-      });
-      if (!delRes.ok && delRes.status !== 404) {
-        const body = await delRes.text();
-        restore();
-        showPopup(false, `Delete fallita (${delRes.status}): ${body.slice(0,80)}`);
-        return;
-      }
-
-      // 2. INSERT tutte le righe
-      const insRes = await fetch(`${SUPABASE_URL}/rest/v1/sito_config`, {
+      // UPSERT riga per riga (onConflict su chiave) invece di DELETE+INSERT globale:
+      // il DELETE indiscriminato su tutta la tabella cancellava anche le chiavi
+      // gestite da admin.html (testi sito, social_posts, nav_visibili, sezioni_visibili,
+      // ecc.) ogni volta che si salvava da qui, anche se non toccate in questa vista.
+      const insRes = await fetch(`${SUPABASE_URL}/rest/v1/sito_config?on_conflict=chiave`, {
         method: 'POST',
-        headers: { ...headers, 'Prefer': 'return=minimal' },
+        headers: { ...headers, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(rows),
       });
 
@@ -25960,8 +26851,10 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         )
     )
 
-    /* ── Toast di conferma/errore (es. handleSetAttivo, handleAddAnno, ecc.) ── */
-    , toast && React.createElement('div',{style:{padding:'10px 14px',borderRadius:8,marginBottom:16,fontSize:13,background:toast.ok?C.greenBg:C.redBg,border:`1px solid ${toast.ok?C.greenBorder:C.redBorder}`,color:toast.ok?C.green:C.red}}, toast.msg)
+    /* ── Toast di conferma/errore (es. handleSetAttivo, handleAddAnno, export ricevute, ecc.) ── */
+    , toast && React.createElement('div',{style:{position:'fixed',top:20,left:'50%',transform:'translateX(-50%)',zIndex:99999,
+        padding:'12px 20px',borderRadius:10,fontSize:13,fontWeight:600,maxWidth:'90%',boxShadow:'0 6px 24px rgba(0,0,0,.2)',
+        background:toast.ok?C.greenBg:C.redBg,border:`1px solid ${toast.ok?C.greenBorder:C.redBorder}`,color:toast.ok?C.green:C.red}}, toast.msg)
 
     , activeTab==="scuola" && React.createElement(ImpSection, {title:"Identità scuola", icon:"flag"}
       , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"0 20px"}}
@@ -25978,6 +26871,9 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         , React.createElement(Input,{label:"Anno scolastico", value:draft.annoScolastico||"", onChange:e=>setD("annoScolastico",e.target.value), placeholder:"2024/2025"})
       )
     )
+
+    /* ── Logo scuola ──────────────────────────────────────────────────────── */
+    , activeTab==="scuola" && React.createElement(LogoScuolaSection, {showToast})
 
     /* ── Sale lezioni ──────────────────────────────────────────────────────── */
     , activeTab==="scuola" && React.createElement(ImpSection, {title:"Sale e aule", icon:"home"}
@@ -26061,7 +26957,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
             )
           )
           , [
-              rs.showNominativo!==false   && ["Ricevuta da","Giulia Romano"],
+              rs.showNominativo!==false   && ["SOCIO","Giulia Romano"],
               rs.showDataNascita!==false  && ["Data di nascita","30/09/2011"],
               rs.showDataPagamento!==false&& ["Data pagamento","01/03/2026"],
               rs.showDescrizione!==false  && ["Descrizione","Quota mensile Marzo 2026"],
@@ -26158,6 +27054,9 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
           );
         })()
     )
+
+    /* ── Esporta ricevute ─────────────────────────────────────────────────── */
+    , activeTab==="anno" && React.createElement(EsportaRicevuteSection, {anniScolastici: propAnni, showToast})
 
     /* ── Anni scolastici ────────────────────────────────────────────────────── */
     , activeTab==="anno" && React.createElement(ImpSection, {title:"Archivio anni scolastici", icon:"cal"}
@@ -26478,27 +27377,115 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
 
     /* ── Pannelli Dashboard ── */
     , activeTab==="generale" && React.createElement(ImpSection, {title:"Pannelli Dashboard", icon:"grid"}
-      , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Scegli quali sezioni mostrare nella dashboard. Le KPI card sono sempre visibili.")
+      , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Attiva/disattiva e riordina i pannelli della dashboard con le frecce ▲▼. Le KPI card sono sempre visibili.")
       , React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:6}}
-        , PANNELLI_DEF.map(function(p){
-          const on = panels[p.id]!==false;
-          return React.createElement('div', {key:p.id,
-            style:{display:"flex",alignItems:"center",gap:12,padding:"11px 14px",
-              borderRadius:10,border:`1px solid ${on&&!p.sempre?C.goldDim:C.border}`,
-              background:on&&!p.sempre?C.goldBg:C.bg,transition:"all .15s",opacity:p.sempre?0.6:1}},
-            React.createElement('div', {style:{width:32,height:32,borderRadius:8,
-              background:on?`${C.gold}18`:C.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},
-              React.createElement(Ic,{n:p.icon,size:15,stroke:on?C.gold:C.textDim})
-            ),
-            React.createElement('div', {style:{flex:1}},
-              React.createElement('div',{style:{fontSize:13,fontWeight:500,color:on?C.text:C.textMuted}}, p.label),
-              React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, p.desc)
-            ),
-            p.sempre
-              ? React.createElement('span',{style:{fontSize:10,color:C.textDim,letterSpacing:".06em"}}, "FISSO")
-              : React.createElement(Toggle, {value:on, onChange:function(v){ setPanels(function(prev){ return Object.assign({},prev,{[p.id]:v}); }); }})
+        , (() => {
+            const order = (panels.panelOrder && panels.panelOrder.length > 0)
+              ? panels.panelOrder
+              : PANNELLI_DEF.map(p=>p.id);
+            const ordered = order
+              .map(id => PANNELLI_DEF.find(p=>p.id===id))
+              .filter(Boolean)
+              .concat(PANNELLI_DEF.filter(p=>!order.includes(p.id)));
+
+            const movePanel = (idx, dir) => {
+              const newOrder = ordered.map(p=>p.id);
+              const target = idx + dir;
+              if (target < 0 || target >= newOrder.length) return;
+              [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
+              const newPanels = {...panels, panelOrder: newOrder};
+              setPanels(() => newPanels);
+              if (window.__FM_PERSIST_PANELS__) window.__FM_PERSIST_PANELS__(newPanels);
+            };
+
+            return ordered.map((p, idx) => {
+              const on = panels[p.id]!==false;
+              return React.createElement('div', {key:p.id,
+                style:{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",
+                  borderRadius:10,border:`1px solid ${on&&!p.sempre?C.goldDim:C.border}`,
+                  background:on&&!p.sempre?C.goldBg:C.bg,transition:"all .15s",opacity:p.sempre?0.6:1}}
+                , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:2,flexShrink:0}}
+                  , React.createElement('button',{onClick:()=>movePanel(idx,-1),disabled:idx===0,
+                      style:{padding:'1px 5px',borderRadius:4,border:`1px solid ${C.border}`,background:'none',cursor:idx===0?'not-allowed':'pointer',color:idx===0?C.textDim:C.textMuted,fontSize:10,lineHeight:1,opacity:idx===0?0.3:1}},'▲')
+                  , React.createElement('button',{onClick:()=>movePanel(idx,+1),disabled:idx===ordered.length-1,
+                      style:{padding:'1px 5px',borderRadius:4,border:`1px solid ${C.border}`,background:'none',cursor:idx===ordered.length-1?'not-allowed':'pointer',color:idx===ordered.length-1?C.textDim:C.textMuted,fontSize:10,lineHeight:1,opacity:idx===ordered.length-1?0.3:1}},'▼')
+                  )
+                , React.createElement('div', {style:{width:32,height:32,borderRadius:8,
+                    background:on?`${C.gold}18`:C.surface,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
+                  , React.createElement(Ic,{n:p.icon,size:15,stroke:on?C.gold:C.textDim})
+                  )
+                , React.createElement('div', {style:{flex:1}}
+                  , React.createElement('div',{style:{fontSize:13,fontWeight:500,color:on?C.text:C.textMuted}}, p.label)
+                  , React.createElement('div',{style:{fontSize:11,color:C.textDim,marginTop:1}}, p.desc)
+                  )
+                , p.sempre
+                  ? React.createElement('span',{style:{fontSize:10,color:C.textDim,letterSpacing:".06em"}}, "FISSO")
+                  : React.createElement(Toggle, {value:on, onChange:function(v){ const newPanels=Object.assign({},panels,{[p.id]:v}); setPanels(()=>newPanels); if (window.__FM_PERSIST_PANELS__) window.__FM_PERSIST_PANELS__(newPanels); }})
+              );
+            });
+          })()
+      )
+    )
+
+    /* ── Ordine KPI cards ────────────────────────────────────────────────── */
+    , activeTab==="generale" && React.createElement(ImpSection, {title:"Ordine KPI cards", icon:"chart"}
+      , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:14}}, "Cambia l'ordine delle card riassuntive in cima alla dashboard.")
+      , (() => {
+          const ALL_KPI_DEF = [
+            {id:'allievi', icon:'users',    label:'Allievi attivi'},
+            {id:'lezioni', icon:'calendar', label:'Lezioni oggi'},
+            {id:'entrate', icon:'up',       label:'Entrate mese'},
+            {id:'uscite',  icon:'down',     label:'Uscite mese'},
+            {id:'saldo',   icon:'chart',    label:'Saldo anno'},
+          ];
+          const kpiOrder = (panels.kpiOrder && panels.kpiOrder.length > 0)
+            ? panels.kpiOrder
+            : ALL_KPI_DEF.map(k=>k.id);
+          const ordered = kpiOrder
+            .map(id => ALL_KPI_DEF.find(k=>k.id===id))
+            .filter(Boolean)
+            .concat(ALL_KPI_DEF.filter(k=>!kpiOrder.includes(k.id)));
+
+          const moveKpi = (idx, dir) => {
+            const newOrder = ordered.map(k=>k.id);
+            const target = idx + dir;
+            if (target < 0 || target >= newOrder.length) return;
+            [newOrder[idx], newOrder[target]] = [newOrder[target], newOrder[idx]];
+            const newPanels = {...panels, kpiOrder: newOrder};
+            setPanels(() => newPanels);
+            if (window.__FM_PERSIST_PANELS__) window.__FM_PERSIST_PANELS__(newPanels);
+          };
+
+          return React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}}
+            , ordered.map((k, idx) => React.createElement('div', {key:k.id,
+                  style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',
+                    borderRadius:10,border:`1px solid ${C.border}`,background:C.bg}}
+                , React.createElement('div',{style:{width:24,height:24,borderRadius:6,background:`${C.gold}18`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+                  , React.createElement(Ic,{n:k.icon,size:13,stroke:C.gold}))
+                , React.createElement('span',{style:{flex:1,fontSize:13,color:C.text,fontWeight:500}}, k.label)
+                , React.createElement('span',{style:{fontSize:11,color:C.textDim,marginRight:4}}, `#${idx+1}`)
+                , React.createElement('button',{onClick:()=>moveKpi(idx,-1),disabled:idx===0,
+                    style:{padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'none',cursor:idx===0?'not-allowed':'pointer',color:idx===0?C.textDim:C.text,fontFamily:"'Open Sans',sans-serif",fontSize:13,opacity:idx===0?0.4:1}},'▲')
+                , React.createElement('button',{onClick:()=>moveKpi(idx,+1),disabled:idx===ordered.length-1,
+                    style:{padding:'3px 7px',borderRadius:6,border:`1px solid ${C.border}`,background:'none',cursor:idx===ordered.length-1?'not-allowed':'pointer',color:idx===ordered.length-1?C.textDim:C.text,fontFamily:"'Open Sans',sans-serif",fontSize:13,opacity:idx===ordered.length-1?0.4:1}},'▼')
+              ))
           );
-        })
+        })()
+    )
+
+    /* ── Soglie lezioni mensili ──────────────────────────────────────────── */
+    , activeTab==="generale" && React.createElement(ImpSection, {title:"Soglie lezioni mensili", icon:"alert"}
+      , React.createElement('p', {style:{fontSize:12,color:C.textMuted,marginBottom:12,lineHeight:1.5}}
+        , 'Definisci quante lezioni standard prevede il mese. Vengono generate notifiche per gli allievi che superano queste soglie (salvo eccezioni individuali), e sono usate anche dal report "Lezioni mese" in dashboard.')
+      , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10},className:"form-2col"}
+        , React.createElement(Input,{label:"Lezioni individuali / mese", type:"number",
+            value: draft.sogliaLezioniIndividuali != null ? draft.sogliaLezioniIndividuali : 4,
+            onChange: e => setD("sogliaLezioniIndividuali", Math.max(1, parseInt(e.target.value)||4)),
+            placeholder:"4"})
+        , React.createElement(Input,{label:"Lezioni collettive / mese", type:"number",
+            value: draft.sogliaLezioniCollettive != null ? draft.sogliaLezioniCollettive : 4,
+            onChange: e => setD("sogliaLezioniCollettive", Math.max(1, parseInt(e.target.value)||4)),
+            placeholder:"4"})
       )
     )
 
@@ -26740,6 +27727,25 @@ const ModulisticaView = () => {
     setDocs(prev=>prev.filter(d=>d.id!==id));
   };
 
+  const renameDoc = async (doc) => {
+    const nuovoNome = prompt('Nuovo nome file (con estensione):', doc.name);
+    if (nuovoNome == null) return;
+    const nome = nuovoNome.trim();
+    if (!nome || nome === doc.name) return;
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    const safeName = nome.replace(/[^a-zA-Z0-9._-]/g,'_');
+    const fromPath = MOD_PREFIX + doc.id;
+    const toPath   = MOD_PREFIX + safeName;
+    const { error } = await sb.storage.from(BUCKET).move(fromPath, toPath);
+    if (error) { alert('Errore rinomina: '+error.message); return; }
+    // La chiave dei metadati (categoria) è il nome file: la riassocia al nuovo nome
+    const meta = {};
+    docs.forEach(d => { meta[d.id === doc.id ? safeName : d.id] = d.categoria; });
+    await saveMeta(meta);
+    await loadDocs();
+  };
+
   const updateCat = async (id, cat) => {
     setDocs(prev=>prev.map(d=>d.id===id?{...d,categoria:cat}:d));
     const meta = {};
@@ -26826,7 +27832,14 @@ const ModulisticaView = () => {
                   borderRadius:7,background:C.goldBg,border:`1px solid ${C.goldDim}`,color:C.gold,fontSize:11,textDecoration:"none",fontFamily:"'Open Sans',sans-serif"}}
               , React.createElement(Ic,{n:"download",size:12,stroke:C.gold}), " Scarica"
             )
-            , React.createElement('button', {onClick:()=>removeDoc(doc.id),
+            , React.createElement('button', {onClick:()=>renameDoc(doc), title:"Rinomina file",
+                style:{padding:"7px 10px",borderRadius:7,border:`1px solid ${C.border}`,background:"none",
+                  color:C.textDim,cursor:"pointer"},
+                onMouseEnter:e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;},
+                onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textDim;}}
+              , React.createElement(Ic,{n:"edit",size:12,stroke:"currentColor"})
+            )
+            , React.createElement('button', {onClick:()=>removeDoc(doc.id), title:"Elimina",
                 style:{padding:"7px 10px",borderRadius:7,border:`1px solid ${C.border}`,background:"none",
                   color:C.textDim,cursor:"pointer"},
                 onMouseEnter:e=>{e.currentTarget.style.borderColor=C.red;e.currentTarget.style.color=C.red;},
@@ -26842,831 +27855,6 @@ const ModulisticaView = () => {
 
 // Espone App al bootstrap in index.html
 window.__AppComponent = App;
+
   } catch(err) { window.__BOOT_ERROR = window.__BOOT_ERROR || err; console.error('[FM]', err.message||err); }
-})();
-
-// ══════════════════════════════════════════════════════════════
-// Futuro Musica — app-gcal.js
-// Modulo Google Calendar: sync automatico lezioni ↔ Google Calendar
-//
-// ISTRUZIONI DEPLOY:
-// 1. Carica questo file su GitHub nella stessa cartella degli altri app-*.js
-// 2. fm_sync.js è già aggiornato per caricarlo
-// 3. In app-root.js cerca "ImpSection.*Simulazione Ruolo" e dopo la sua
-//    chiusura ) aggiungi:
-//      , React.createElement(ImpSection, {title:'Google Calendar', icon:'calendar'}
-//          , React.createElement(GoogleCalendarSection, {appUser: window.__appUser__||null})
-//        )
-// 4. Crea la tabella Supabase `app_settings` (vedi migrazione SQL allegata) —
-//    serve per salvare il Client ID configurato da UI (non serve più modificare
-//    il codice: usa il pulsante "🔑 Client ID" in Impostazioni → Google Calendar)
-// 5. Su Supabase → Edge Functions → Secrets aggiungi:
-//      GOOGLE_CLIENT_ID     = <Client ID>
-//      GOOGLE_CLIENT_SECRET = <Client Secret>
-//      APP_URL              = https://primomaggio145-blip.github.io/FM-webapp/webapp.html
-// ══════════════════════════════════════════════════════════════
-
-(function() {
-  try {
-
-// ── Configurazione ────────────────────────────────────────────────────────────
-const GCAL_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/gcal-sync';
-
-// ← Google OAuth 2.0 Client ID
-// Ora configurabile da UI (pulsante "🔑 Configura Client ID" in Impostazioni →
-// Google Calendar, visibile per ADMIN) invece che modificando il codice.
-// Il valore è salvato sulla tabella Supabase `app_settings` (chiave
-// 'google_client_id_frontend') ed è quindi condiviso da tutti i ruoli
-// (docenti/allievi lo ricevono automaticamente una volta configurato).
-// Il valore letterale qui sotto resta solo come fallback iniziale.
-let GOOGLE_CLIENT_ID_FRONTEND = '';
-
-// ── Client ID dinamico: lettura/scrittura da Supabase (tabella app_settings) ──
-const GCAL_SETTINGS_TABLE = 'app_settings';
-const GCAL_SETTINGS_KEY   = 'google_client_id_frontend';
-
-async function fetchGcalClientId() {
-  try {
-    const sb = window.supabaseClient;
-    if (!sb) return GOOGLE_CLIENT_ID_FRONTEND;
-    const { data, error } = await sb.from(GCAL_SETTINGS_TABLE)
-      .select('value').eq('key', GCAL_SETTINGS_KEY).maybeSingle();
-    if (!error && data && data.value) {
-      GOOGLE_CLIENT_ID_FRONTEND = data.value;
-      window.__GCAL_CLIENT_ID__ = data.value;
-    }
-  } catch(e) { /* silenzioso */ }
-  return GOOGLE_CLIENT_ID_FRONTEND;
-}
-
-async function saveGcalClientId(id) {
-  const sb = window.supabaseClient;
-  if (!sb) throw new Error('Supabase non disponibile');
-  const { data: { session } } = await sb.auth.getSession();
-  const { error } = await sb.from(GCAL_SETTINGS_TABLE).upsert({
-    key: GCAL_SETTINGS_KEY,
-    value: id,
-    updated_at: new Date().toISOString(),
-    updated_by: session && session.user ? session.user.id : null
-  }, { onConflict: 'key' });
-  if (error) throw error;
-  GOOGLE_CLIENT_ID_FRONTEND = id;
-  window.__GCAL_CLIENT_ID__ = id;
-}
-
-// ── Componente condiviso: mappatura corso → calendario Google (per utente) ────
-// Ogni utente (admin, docente, allievo) sceglie autonomamente, per ciascun
-// corso/strumento, se sincronizzarlo e su quale dei propri calendari Google.
-function GcalCourseMapping(props) {
-  const userId = props.userId;
-  const [calendars, setCalendars] = React.useState([]);
-  const [mapping, setMapping]     = React.useState({});
-  const [loading, setLoading]     = React.useState(true);
-  const [error, setError]         = React.useState(null);
-  const [savingKey, setSavingKey] = React.useState(null);
-
-  const corsi = React.useMemo(function() {
-    const base = ((window.__FM_DATA__ && window.__FM_DATA__.courses) || [])
-      .map(function(c) { return c.name || c.nome || ''; })
-      .filter(Boolean);
-    const unique = Array.from(new Set(base)).sort(function(a,b){ return a.localeCompare(b); });
-    return unique.concat(['_collettivo', '_sala_prove']);
-  }, []);
-
-  const labelFor = function(corso) {
-    if (corso === '_collettivo') return '🎵 Lezioni collettive';
-    if (corso === '_sala_prove') return '🥁 Sala prove';
-    return corso;
-  };
-
-  const load = React.useCallback(async function() {
-    if (!userId) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const sb = window.supabaseClient;
-      const { data: { session } } = await sb.auth.getSession();
-      if (!session) { setLoading(false); return; }
-      const res = await fetch(GCAL_EDGE, {
-        method: 'POST',
-        headers: { 'Authorization': 'Bearer ' + session.access_token, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'list_calendars', user_id: userId })
-      });
-      const json = await res.json();
-      if (json.ok) setCalendars(json.calendars || []);
-      else setError(json.error || 'Errore caricamento calendari');
-
-      const { data: rows, error: mapErr } = await sb.from('gcal_calendar_map')
-        .select('corso, calendar_id, enabled').eq('user_id', userId);
-      if (mapErr) throw mapErr;
-      const m = {};
-      (rows || []).forEach(function(r) { m[r.corso] = { calendar_id: r.calendar_id, enabled: r.enabled !== false }; });
-      setMapping(m);
-    } catch(e) {
-      setError((e && e.message) || 'Errore caricamento');
-    }
-    setLoading(false);
-  }, [userId]);
-
-  React.useEffect(function() { load(); }, [load]);
-
-  const updateRow = async function(corso, patch) {
-    setSavingKey(corso);
-    const current = mapping[corso] || { calendar_id: null, enabled: true };
-    const next = Object.assign({}, current, patch);
-    setMapping(function(m) { const copy = Object.assign({}, m); copy[corso] = next; return copy; });
-    try {
-      const sb = window.supabaseClient;
-      await sb.from('gcal_calendar_map').upsert({
-        user_id: userId,
-        corso: corso,
-        calendar_id: next.calendar_id || null,
-        enabled: next.enabled,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,corso' });
-    } catch(e) {
-      setError((e && e.message) || 'Errore salvataggio');
-    }
-    setSavingKey(null);
-  };
-
-  if (loading) {
-    return React.createElement('div', { style: { fontSize: 12, color: C.textMuted, fontFamily: "'Open Sans',sans-serif" } }, '⏳ Caricamento calendari...');
-  }
-
-  return React.createElement('div', null
-    , error && React.createElement('div', { style: { fontSize: 12, color: C.red, marginBottom: 8, fontFamily: "'Open Sans',sans-serif" } }, error)
-    , calendars.length === 0 && !error && React.createElement('div', { style: { fontSize: 12, color: C.textDim, marginBottom: 8, fontFamily: "'Open Sans',sans-serif" } }, 'Nessun calendario trovato sul tuo account Google.')
-    , corsi.length === 0 && React.createElement('div', { style: { fontSize: 12, color: C.textDim, fontFamily: "'Open Sans',sans-serif" } }, '(nessun corso trovato)')
-    , corsi.map(function(corso) {
-        const row = mapping[corso] || { calendar_id: null, enabled: true };
-        const busy = savingKey === corso;
-        return React.createElement('div', {
-            key: corso,
-            style: { display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid '+C.border, opacity: busy ? 0.6 : 1 }
-          }
-          , React.createElement('input', {
-              type: 'checkbox',
-              checked: row.enabled !== false,
-              disabled: busy,
-              onChange: function(e) { updateRow(corso, { enabled: e.target.checked }); },
-              title: 'Sincronizza questo corso'
-            })
-          , React.createElement('span', { style: { fontSize: 13, color: C.text, flex: '1 1 auto', fontFamily: "'Open Sans',sans-serif" } }, labelFor(corso))
-          , React.createElement('select', {
-              value: row.calendar_id || '',
-              disabled: busy || row.enabled === false,
-              onChange: function(e) { updateRow(corso, { calendar_id: e.target.value || null }); },
-              style: { padding: '5px 8px', borderRadius: 6, border: '1px solid '+C.border, background: C.surface, color: C.text, fontSize: 12, fontFamily: "'Open Sans',sans-serif", maxWidth: 190 }
-            }
-            , React.createElement('option', { value: '' }, '📅 Calendario predefinito')
-            , calendars.map(function(cal) {
-                return React.createElement('option', { key: cal.id, value: cal.id }, cal.name + (cal.primary ? ' (principale)' : ''));
-              })
-            )
-        );
-      })
-    , React.createElement('div', { style: { fontSize: 11, color: C.textDim, marginTop: 8, fontFamily: "'Open Sans',sans-serif", lineHeight: 1.5 } }, '💡 Deseleziona un corso per escluderlo dalla sincronizzazione. Ogni corso può avere un calendario diverso — le modifiche si salvano subito, non serve premere "Salva".')
-  );
-}
-
-// ── Utility: sync singola lezione in background ───────────────────────────────
-// Chiamata automaticamente da app-calendario.js e app-views-b.js
-// quando una lezione viene creata/modificata/eliminata
-window.gcalSyncLesson = async function(action, lesson) {
-  try {
-    const sb = window.supabaseClient;
-    if (!sb) { console.warn('[FM][gcal] sync saltata: supabaseClient non disponibile'); return; }
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session?.user?.id) { console.warn('[FM][gcal] sync saltata: nessuna sessione utente'); return; }
-    // Controlla se l'utente ha GCal connesso e abilitato
-    const { data: tokenRow, error: tokenErr } = await sb.from('google_calendar_tokens')
-      .select('sync_enabled').eq('user_id', session.user.id).maybeSingle();
-    if (tokenErr) { console.warn('[FM][gcal] sync saltata: errore lettura token', tokenErr); return; }
-    if (!tokenRow) { console.info('[FM][gcal] sync saltata: Google Calendar non connesso per questo utente'); return; }
-    if (!tokenRow.sync_enabled) { console.info('[FM][gcal] sync saltata: sync_enabled=false per questo utente'); return; }
-    // Fire & forget — non blocca l'UI, ma logga eventuali errori HTTP
-    fetch(GCAL_EDGE, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + session.access_token,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        action,
-        user_id: session.user.id,
-        lesson,
-        lezione_id: lesson && lesson.id ? lesson.id : undefined,
-      }),
-    }).then(async function(res) {
-      let json = null;
-      try { json = await res.json(); } catch(e) {}
-      if (!res.ok || (json && json.ok === false)) {
-        console.warn('[FM][gcal] sync fallita:', (json && json.error) || res.status);
-      } else {
-        console.info('[FM][gcal] sync ok:', action, json);
-      }
-    }).catch(function(e) { console.warn('[FM][gcal] sync errore di rete:', e && e.message); });
-  } catch(e) { console.warn('[FM][gcal] sync errore imprevisto:', e && e.message); }
-};
-
-// ── Componente: sezione Google Calendar in Impostazioni ───────────────────────
-window.GoogleCalendarSection = function(props) {
-  const appUser = props && props.appUser;
-  const _useState = React.useState;
-  const _useEffect = React.useEffect;
-  const _useCallback = React.useCallback;
-
-  const [status,  setStatus]  = _useState(null);
-  const [loading, setLoading] = _useState(true);
-  const [syncing, setSyncing] = _useState(false);
-  const [toast,   setToast]   = _useState(null);
-  const [clientId, setClientId] = _useState(GOOGLE_CLIENT_ID_FRONTEND);
-  const [showClientIdModal, setShowClientIdModal] = _useState(false);
-  const [clientIdInput, setClientIdInput] = _useState('');
-  const [savingClientId, setSavingClientId] = _useState(false);
-  const [userId, setUserId] = _useState(null);
-
-  const showToast = function(ok, msg) {
-    setToast({ok: ok, msg: msg});
-    setTimeout(function() { setToast(null); }, 4000);
-  };
-
-  const checkStatus = _useCallback(async function() {
-    try {
-      const sb = window.supabaseClient;
-      if (!sb) { setLoading(false); return; }
-      const { data: { session } } = await sb.auth.getSession();
-      if (!session) { setLoading(false); return; }
-      setUserId(session.user.id);
-      const res = await fetch(
-        GCAL_EDGE + '?action=status&user_id=' + session.user.id,
-        { headers: { 'Authorization': 'Bearer ' + session.access_token } }
-      );
-      const json = await res.json();
-      setStatus(json);
-    } catch(e) {
-      console.warn('[FM] gcal status:', e && e.message);
-    }
-    setLoading(false);
-  }, []);
-
-  _useEffect(function() { checkStatus(); }, [checkStatus]);
-
-  // Carica il Client ID Google salvato su Supabase (condiviso con tutti i ruoli)
-  _useEffect(function() {
-    fetchGcalClientId().then(function(id) { if (id) setClientId(id); });
-  }, []);
-
-  // Gestisce ritorno da OAuth Google (gcal_code nel query string)
-  _useEffect(function() {
-    const params = new URLSearchParams(window.location.search);
-    // Google redirect usa ?code=, la webapp lo rinomina ?gcal_code= per distinguerlo
-    const code = params.get('gcal_code') || (params.get('code') && params.get('scope') ? params.get('code') : null);
-    if (!code) return;
-    // Rimuovi i parametri OAuth dall'URL
-    const cleanUrl = window.location.href
-      .replace(/[?&]gcal_code=[^&]+/, '')
-      .replace(/[?&]code=[^&]+/, '')
-      .replace(/[?&]scope=[^&]+/, '')
-      .replace(/[?&]authuser=[^&]+/, '')
-      .replace(/[?&]prompt=[^&]+/, '')
-      .replace(/\?$/, '');
-    window.history.replaceState({}, '', cleanUrl);
-    // Scambia il code con i token
-    (async function() {
-      setLoading(true);
-      try {
-        const sb = window.supabaseClient;
-        const { data: { session } } = await sb.auth.getSession();
-        // Invia il code all'Edge Function con il token Supabase dell'utente
-        // redirect_uri deve corrispondere a quello usato nell'autorizzazione
-        const res = await fetch(GCAL_EDGE, {
-          method: 'POST',
-          headers: {
-            'Authorization': 'Bearer ' + session.access_token,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            action: 'oauth_callback',
-            code: code,
-            user_id: session.user.id,
-            redirect_uri: 'https://primomaggio145-blip.github.io/FM-webapp/webapp.html'
-          })
-        });
-        const json = await res.json();
-        if (json.ok) {
-          showToast(true, '✅ Google Calendar connesso!');
-          checkStatus();
-        } else {
-          showToast(false, 'Errore: ' + (json.error || 'OAuth fallito'));
-        }
-      } catch(e) {
-        showToast(false, e && e.message || 'Errore');
-      }
-      setLoading(false);
-    })();
-  }, []);
-
-  // URL della webapp — Google reindirizza qui con ?gcal_code=...
-  const WEBAPP_URL = 'https://primomaggio145-blip.github.io/FM-webapp/webapp.html';
-
-  const handleConnect = function() {
-    if (!clientId) {
-      setClientIdInput('');
-      setShowClientIdModal(true);
-      return;
-    }
-    // Redirect URI = la webapp stessa (riceve il code e lo manda all'Edge Function)
-    const redirectUri = encodeURIComponent(WEBAPP_URL);
-    const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly');
-    const authUrl =
-      'https://accounts.google.com/o/oauth2/v2/auth' +
-      '?client_id=' + clientId +
-      '&redirect_uri=' + redirectUri +
-      '&response_type=code' +
-      '&scope=' + scope +
-      '&access_type=offline&prompt=consent';
-    window.location.href = authUrl;
-  };
-
-  const handleSaveClientId = async function() {
-    const val = (clientIdInput || '').trim();
-    if (!val) { showToast(false, 'Inserisci un Client ID valido'); return; }
-    setSavingClientId(true);
-    try {
-      await saveGcalClientId(val);
-      setClientId(val);
-      setShowClientIdModal(false);
-      setClientIdInput('');
-      showToast(true, '✅ Client ID salvato e attivo per tutti i ruoli');
-    } catch(e) {
-      showToast(false, 'Errore salvataggio: ' + (e && e.message || 'sconosciuto'));
-    }
-    setSavingClientId(false);
-  };
-
-  const handleDisconnect = async function() {
-    if (!confirm('Disconnettere Google Calendar?\nGli eventi già creati su Google Calendar NON verranno eliminati.')) return;
-    try {
-      const sb = window.supabaseClient;
-      const { data: { session } } = await sb.auth.getSession();
-      await fetch(GCAL_EDGE, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + session.access_token,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ action: 'disconnect', user_id: session.user.id })
-      });
-      setStatus(null);
-      showToast(true, 'Google Calendar disconnesso');
-    } catch(e) {
-      showToast(false, e && e.message || 'Errore');
-    }
-  };
-
-  const handleSyncAll = async function() {
-    setSyncing(true);
-    try {
-      const sb = window.supabaseClient;
-      const { data: { session } } = await sb.auth.getSession();
-      const today = new Date().toISOString().split('T')[0];
-      const allLessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
-      const futureLessons = allLessons.filter(function(l) {
-        return (l.date || l.data) >= today;
-      });
-      const res = await fetch(GCAL_EDGE, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + session.access_token,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          action: 'sync_all',
-          user_id: session.user.id,
-          lessons: futureLessons
-        })
-      });
-      const json = await res.json();
-      if (json.ok) {
-        showToast(true, '✅ Sincronizzate ' + json.synced + ' lezioni su Google Calendar' +
-          (json.errors > 0 ? ' (' + json.errors + ' errori)' : ''));
-      } else {
-        showToast(false, json.error || 'Errore durante sync');
-      }
-    } catch(e) {
-      showToast(false, e && e.message || 'Errore');
-    }
-    setSyncing(false);
-  };
-
-  // ── Configurazione caption evento ──────────────────────────────────────
-  // (i filtri docente/corso sono stati sostituiti dalla mappatura per corso
-  // qui sotto — "🗓️ Calendario di destinazione per corso" — che è più
-  // completa e viene applicata in modo coerente sia dalla sync automatica
-  // sia da "Sincronizza tutte le lezioni future")
-  const [showConfig, setShowConfig] = React.useState(false);
-  const [captionTpl, setCaptionTpl] = React.useState(
-    (window.__gcalConfig__ && window.__gcalConfig__.captionTemplate) || '{studente} - {strumento}'
-  );
-
-  const saveConfig = function() {
-    const cfg = { captionTemplate: captionTpl };
-    window.__gcalConfig__ = cfg;
-    // Salva in localStorage per persistenza
-    try { localStorage.setItem('fm_gcal_config', JSON.stringify(cfg)); } catch(e) {}
-    showToast(true, '✅ Configurazione GCal salvata');
-    setShowConfig(false);
-  };
-
-  // Carica config salvata (rimuove eventuali filtroDocente/filtroCorso residui
-  // da versioni precedenti, ora sostituiti dalla mappatura per corso)
-  React.useEffect(function() {
-    try {
-      const saved = localStorage.getItem('fm_gcal_config');
-      if (saved) {
-        const cfg = JSON.parse(saved);
-        if (cfg.captionTemplate) setCaptionTpl(cfg.captionTemplate);
-        const cleanCfg = { captionTemplate: cfg.captionTemplate || captionTpl };
-        window.__gcalConfig__ = cleanCfg;
-        localStorage.setItem('fm_gcal_config', JSON.stringify(cleanCfg));
-      }
-    } catch(e) {}
-  }, []);
-
-  // Stili riutilizzabili (usa i colori C già definiti in app-core.js)
-  const cardStyle = {
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '12px 14px', borderRadius: 10, marginBottom: 12
-  };
-
-  return React.createElement('div', null
-    // Toast notifica
-    , toast && React.createElement('div', {
-        style: {
-          padding: '8px 12px', borderRadius: 8, marginBottom: 10,
-          fontSize: 13, fontFamily: "'Open Sans',sans-serif",
-          background: toast.ok ? C.greenBg  : C.redBg,
-          border: '1px solid ' + (toast.ok ? C.greenBorder : C.redBorder),
-          color:  toast.ok ? C.green : C.red
-        }
-      }, toast.msg)
-
-    // Loading
-    , loading && React.createElement('div', {
-        style: { color: C.textMuted, fontSize: 13, fontFamily: "'Open Sans',sans-serif" }
-      }, '⏳ Controllo connessione Google Calendar...')
-
-    // Connesso
-    , !loading && status && status.connected && React.createElement('div', null
-        , React.createElement('div', {
-            style: Object.assign({}, cardStyle, {
-              background: C.greenBg,
-              border: '1px solid ' + C.greenBorder
-            })
-          }
-          , React.createElement('span', { style: { fontSize: 22 } }, '📅')
-          , React.createElement('div', { style: { flex: 1 } }
-            , React.createElement('div', {
-                style: { fontSize: 13, fontWeight: 700, color: C.green,
-                  fontFamily: "'Open Sans',sans-serif" }
-              }, '✅ Google Calendar connesso')
-            , React.createElement('div', {
-                style: { fontSize: 11, color: C.textMuted,
-                  fontFamily: "'Open Sans',sans-serif", marginTop: 2 }
-              }, 'Ultimo aggiornamento: ' + (
-                status.updated_at
-                  ? new Date(status.updated_at).toLocaleString('it-IT')
-                  : 'mai'
-              ))
-          )
-          , React.createElement('button', {
-              onClick: handleDisconnect,
-              style: {
-                padding: '5px 12px', borderRadius: 6, cursor: 'pointer',
-                border: '1px solid ' + C.redBorder,
-                background: C.redBg, color: C.red,
-                fontSize: 12, fontFamily: "'Open Sans',sans-serif"
-              }
-            }, 'Disconnetti')
-        )
-        , React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } }
-          , React.createElement('button', {
-              onClick: function() { setShowConfig(!showConfig); },
-              style: { padding: '9px 14px', borderRadius: 8, border: '1px solid '+(showConfig?C.tealBorder:C.border), background: showConfig?C.tealBg:C.bg, color: showConfig?C.teal:C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 5 }
-            }, '⚙️ Impostazioni')
-          , React.createElement('button', {
-              onClick: function() { setClientIdInput(clientId || ''); setShowClientIdModal(true); },
-              style: { padding: '9px 14px', borderRadius: 8, border: '1px solid '+C.border, background: C.bg, color: C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 5 }
-            }, '🔑 Client ID')
-          , React.createElement('button', {
-              onClick: handleSyncAll,
-              disabled: syncing,
-              style: {
-                padding: '9px 18px', borderRadius: 8, border: 'none',
-                background: syncing ? C.surface : C.teal,
-                color: syncing ? C.textMuted : '#fff',
-                cursor: syncing ? 'wait' : 'pointer',
-                fontSize: 13, fontWeight: 600,
-                fontFamily: "'Open Sans',sans-serif",
-                display: 'flex', alignItems: 'center', gap: 6
-              }
-            }
-            , syncing ? '⏳ Sincronizzazione in corso...' : '🔄 Sincronizza tutte le lezioni future'
-          )
-        )
-        , React.createElement('div', {
-            style: {
-              fontSize: 11, color: C.textMuted, marginTop: 10,
-              fontFamily: "'Open Sans',sans-serif", lineHeight: 1.6
-            }
-          }
-          , '💡 Le lezioni vengono sincronizzate automaticamente quando le crei o modifichi. '
-          , 'Usa "Sincronizza tutte" per il primo avvio o dopo un\'importazione massiva.'
-        )
-        , showConfig && React.createElement('div', { style: { marginTop: 14, padding: 16, background: C.bg, border: '1px solid '+C.border, borderRadius: 10 } }
-          , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: "'Open Sans',sans-serif" } }, '⚙️ Impostazioni sincronizzazione')
-          , React.createElement('div', { style: { marginBottom: 10 } }
-            , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 4, fontFamily: "'Open Sans',sans-serif" } }, '📝 Titolo evento GCal')
-            , React.createElement('input', { type: 'text', value: captionTpl, onChange: function(e){setCaptionTpl(e.target.value);}, placeholder: '{studente} - {strumento}', style: { width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: 7, border: '1px solid '+C.border, background: C.surface, color: C.text, fontSize: 13, fontFamily: "'Open Sans',sans-serif" } })
-            , React.createElement('div', { style: { fontSize: 11, color: C.textDim, marginTop: 3, fontFamily: "'Open Sans',sans-serif" } }, 'Variabili: {studente} {strumento} {docente} {aula} {argomento} {tipo} {ora}')
-          )
-          , React.createElement('div', { style: { marginBottom: 14, paddingTop: 12, borderTop: '1px solid '+C.border } }
-            , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 8, fontFamily: "'Open Sans',sans-serif" } }, '🗓️ Calendario di destinazione per corso')
-            , userId
-              ? React.createElement(GcalCourseMapping, { userId: userId })
-              : React.createElement('div', { style: { fontSize: 12, color: C.textDim, fontFamily: "'Open Sans',sans-serif" } }, '⏳ In attesa della connessione...')
-          )
-          , React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end' } }
-            , React.createElement('button', { onClick: function(){setShowConfig(false);}, style: { padding: '8px 14px', borderRadius: 7, border: '1px solid '+C.border, background: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif" } }, 'Annulla')
-            , React.createElement('button', { onClick: saveConfig, style: { padding: '8px 16px', borderRadius: 7, border: 'none', background: C.teal, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: "'Open Sans',sans-serif" } }, '💾 Salva')
-          )
-        )
-      )
-
-    // Non connesso
-    , !loading && (!status || !status.connected) && React.createElement('div', null
-        , React.createElement('p', {
-            style: {
-              fontSize: 13, color: C.textMuted, marginBottom: 14,
-              fontFamily: "'Open Sans',sans-serif", lineHeight: 1.6
-            }
-          }
-          , 'Connetti il tuo Google Calendar per sincronizzare automaticamente le lezioni. '
-          , 'Ogni lezione creata, modificata o eliminata verrà aggiornata in tempo reale.'
-        )
-        , clientId
-          ? React.createElement('button', {
-              onClick: handleConnect,
-              style: {
-                padding: '10px 22px', borderRadius: 8, border: 'none',
-                background: '#4285f4', color: '#fff', cursor: 'pointer',
-                fontSize: 13, fontWeight: 600,
-                fontFamily: "'Open Sans',sans-serif",
-                display: 'inline-flex', alignItems: 'center', gap: 8
-              }
-            }
-            , React.createElement('span', { style: { fontSize: 16 } }, '📅')
-            , 'Connetti Google Calendar'
-            )
-          : React.createElement('div', null
-            , React.createElement('div', {
-                style: {
-                  padding: '12px 16px',
-                  background: '#fef9c3', border: '1px solid #fde68a',
-                  borderRadius: 8, fontSize: 12, color: '#92400e',
-                  lineHeight: 1.8, fontFamily: "'Open Sans',sans-serif",
-                  marginBottom: 10
-                }
-              }
-              , React.createElement('strong', null, '⚙️ Configurazione richiesta')
-              , React.createElement('br', null)
-              , '1. Vai su '
-              , React.createElement('a', {
-                  href: 'https://console.cloud.google.com/apis/credentials',
-                  target: '_blank',
-                  style: { color: '#1d4ed8' }
-                }, 'Google Cloud Console → Credenziali')
-              , React.createElement('br', null)
-              , '2. Crea un OAuth 2.0 Client ID (tipo: Web Application)'
-              , React.createElement('br', null)
-              , '3. Aggiungi come Authorized Redirect URI:'
-              , React.createElement('br', null)
-              , React.createElement('code', { style: { fontSize: 11, background: '#fef3c7', padding: '1px 4px' } },
-                  WEBAPP_URL)
-              , React.createElement('br', null)
-              , '4. Copia il Client ID e inseriscilo col pulsante qui sotto — non serve modificare il codice'
-              )
-            , React.createElement('button', {
-                onClick: function() { setClientIdInput(''); setShowClientIdModal(true); },
-                style: {
-                  padding: '10px 20px', borderRadius: 8, border: 'none',
-                  background: C.teal, color: '#fff', cursor: 'pointer',
-                  fontSize: 13, fontWeight: 600, fontFamily: "'Open Sans',sans-serif",
-                  display: 'inline-flex', alignItems: 'center', gap: 8
-                }
-              }
-              , React.createElement('span', { style: { fontSize: 16 } }, '🔑')
-              , 'Configura Client ID'
-              )
-          )
-      )
-    // Modal configurazione Client ID
-    , showClientIdModal && React.createElement('div', {
-        style: {
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex',
-          alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16
-        },
-        onClick: function(e) { if (e.target === e.currentTarget) setShowClientIdModal(false); }
-      }
-      , React.createElement('div', {
-          style: { background: C.surface || '#fff', borderRadius: 12, padding: 22, width: '100%', maxWidth: 440, boxShadow: '0 10px 40px rgba(0,0,0,.25)' }
-        }
-        , React.createElement('div', { style: { fontSize: 15, fontWeight: 700, color: C.text, marginBottom: 6, fontFamily: "'Open Sans',sans-serif" } }, '🔑 Configura Google Client ID')
-        , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, marginBottom: 14, fontFamily: "'Open Sans',sans-serif", lineHeight: 1.6 } },
-            'Incolla qui il Client ID OAuth 2.0 ottenuto da Google Cloud Console. Viene salvato centralmente su Supabase ed è reso disponibile automaticamente a tutti i ruoli (docenti e allievi inclusi), senza dover toccare il codice.')
-        , React.createElement('input', {
-            type: 'text',
-            value: clientIdInput,
-            onChange: function(e) { setClientIdInput(e.target.value); },
-            placeholder: 'xxxxxxxxxx-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com',
-            autoFocus: true,
-            style: { width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: 7, border: '1px solid '+C.border, background: C.bg, color: C.text, fontSize: 13, fontFamily: 'monospace', marginBottom: 16 }
-          })
-        , React.createElement('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end' } }
-          , React.createElement('button', {
-              onClick: function() { setShowClientIdModal(false); },
-              style: { padding: '8px 14px', borderRadius: 7, border: '1px solid '+C.border, background: 'none', color: C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif" }
-            }, 'Annulla')
-          , React.createElement('button', {
-              onClick: handleSaveClientId,
-              disabled: savingClientId,
-              style: { padding: '8px 16px', borderRadius: 7, border: 'none', background: C.teal, color: '#fff', cursor: savingClientId ? 'wait' : 'pointer', fontSize: 13, fontWeight: 600, fontFamily: "'Open Sans',sans-serif" }
-            }, savingClientId ? '⏳ Salvataggio...' : '💾 Salva')
-        )
-      )
-    )
-  );
-};
-
-// ── GoogleCalendarSectionSimple: per docente e allievo ──────────────────────
-// Sincronizza SOLO le proprie lezioni, senza filtri
-window.GoogleCalendarSectionSimple = function(props) {
-  const appUser = props && props.appUser;
-  const userRuolo = props && props.userRuolo || 'docente';
-  const [status,  setStatus]  = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
-  const [syncing, setSyncing] = React.useState(false);
-  const [toast,   setToast]   = React.useState(null);
-  const [clientId, setClientId] = React.useState(GOOGLE_CLIENT_ID_FRONTEND);
-  const [userId, setUserId] = React.useState(null);
-  const [showConfig, setShowConfig] = React.useState(false);
-
-  const showToast = function(ok, msg) {
-    setToast({ok:ok, msg:msg});
-    setTimeout(function(){ setToast(null); }, 4000);
-  };
-
-  const checkStatus = React.useCallback(async function() {
-    try {
-      const sb = window.supabaseClient; if (!sb) { setLoading(false); return; }
-      const { data:{session} } = await sb.auth.getSession();
-      if (!session) { setLoading(false); return; }
-      setUserId(session.user.id);
-      const res = await fetch(GCAL_EDGE+'?action=status&user_id='+session.user.id,
-        { headers: {'Authorization':'Bearer '+session.access_token} });
-      setStatus(await res.json());
-    } catch(e) {}
-    setLoading(false);
-  }, []);
-
-  React.useEffect(function(){ checkStatus(); }, [checkStatus]);
-
-  // Carica il Client ID Google configurato dall'amministratore (tabella app_settings)
-  React.useEffect(function() {
-    fetchGcalClientId().then(function(id) { if (id) setClientId(id); });
-  }, []);
-
-  // Gestisce ritorno da OAuth Google
-  React.useEffect(function() {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('gcal_code') || (params.get('code') && params.get('scope') ? params.get('code') : null);
-    if (!code) return;
-    const cleanUrl = window.location.href
-      .replace(/[?&]gcal_code=[^&]+/,'').replace(/[?&]code=[^&]+/,'')
-      .replace(/[?&]scope=[^&]+/,'').replace(/[?&]authuser=[^&]+/,'')
-      .replace(/[?&]prompt=[^&]+/,'').replace(/\?$/,'');
-    window.history.replaceState({}, '', cleanUrl);
-    (async function() {
-      setLoading(true);
-      try {
-        const sb = window.supabaseClient;
-        const { data:{session} } = await sb.auth.getSession();
-        const res = await fetch(GCAL_EDGE, {
-          method:'POST',
-          headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
-          body: JSON.stringify({ action:'oauth_callback', code:code, user_id:session.user.id, redirect_uri:'https://primomaggio145-blip.github.io/FM-webapp/webapp.html' })
-        });
-        const json = await res.json();
-        if (json.ok) { showToast(true,'✅ Google Calendar connesso!'); checkStatus(); }
-        else showToast(false,'Errore: '+(json.error||'OAuth fallito'));
-      } catch(e) { showToast(false, e&&e.message||'Errore'); }
-      setLoading(false);
-    })();
-  }, []);
-
-  const WEBAPP_URL = 'https://primomaggio145-blip.github.io/FM-webapp/webapp.html';
-
-  const handleConnect = function() {
-    if (!clientId) {
-      showToast(false, 'Google Calendar non è ancora configurato. Contatta l\'amministratore.');
-      return;
-    }
-    const redirectUri = encodeURIComponent(WEBAPP_URL);
-    const scope = encodeURIComponent('https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly');
-    window.location.href = 'https://accounts.google.com/o/oauth2/v2/auth?client_id='+clientId+'&redirect_uri='+redirectUri+'&response_type=code&scope='+scope+'&access_type=offline&prompt=consent';
-  };
-
-  const handleDisconnect = async function() {
-    if (!confirm('Disconnettere Google Calendar?')) return;
-    const sb = window.supabaseClient;
-    const { data:{session} } = await sb.auth.getSession();
-    await fetch(GCAL_EDGE, { method:'POST', headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'}, body:JSON.stringify({action:'disconnect',user_id:session.user.id}) });
-    setStatus(null); showToast(true,'Google Calendar disconnesso');
-  };
-
-  const handleSyncAll = async function() {
-    setSyncing(true);
-    try {
-      const sb = window.supabaseClient;
-      const { data:{session} } = await sb.auth.getSession();
-      const allLessons = (window.__FM_DATA__&&window.__FM_DATA__.lessons)||[];
-      const myName = appUser && (appUser.nome||appUser.name||'');
-      // Filtra solo le proprie lezioni
-      const myLessons = allLessons.filter(function(l) {
-        if (userRuolo==='docente') {
-          return (l.teacher||l.docente||'').toLowerCase()===myName.toLowerCase();
-        }
-        if (userRuolo==='allievo') {
-          return (l.student||l.studente||'').toLowerCase()===myName.toLowerCase();
-        }
-        return false;
-      });
-      const res = await fetch(GCAL_EDGE, {
-        method:'POST',
-        headers:{'Authorization':'Bearer '+session.access_token,'Content-Type':'application/json'},
-        body: JSON.stringify({ action:'sync_all', user_id:session.user.id, lessons:myLessons })
-      });
-      const json = await res.json();
-      if (json.ok) showToast(true,'✅ Sincronizzate '+json.synced+' lezioni');
-      else showToast(false,json.error||'Errore sync');
-    } catch(e) { showToast(false, e&&e.message||'Errore'); }
-    setSyncing(false);
-  };
-
-  return React.createElement('div', null
-    , toast && React.createElement('div', { style: { padding:'8px 12px', borderRadius:8, marginBottom:10, fontSize:13, fontFamily:"'Open Sans',sans-serif", background:toast.ok?C.greenBg:C.redBg, border:'1px solid '+(toast.ok?C.greenBorder:C.redBorder), color:toast.ok?C.green:C.red } }, toast.msg)
-    , loading && React.createElement('div', { style:{color:C.textMuted,fontSize:13,fontFamily:"'Open Sans',sans-serif"} }, '⏳ Controllo connessione...')
-    , !loading && status && status.connected && React.createElement('div', null
-        , React.createElement('div', { style:{display:'flex',alignItems:'center',gap:10,padding:'12px 14px',background:C.greenBg,border:'1px solid '+C.greenBorder,borderRadius:10,marginBottom:12} }
-          , React.createElement('span',{style:{fontSize:20}},'📅')
-          , React.createElement('div',{style:{flex:1}}
-            , React.createElement('div',{style:{fontSize:13,fontWeight:700,color:C.green,fontFamily:"'Open Sans',sans-serif"}},'✅ Google Calendar connesso')
-            , React.createElement('div',{style:{fontSize:11,color:C.textMuted,fontFamily:"'Open Sans',sans-serif",marginTop:2}},'Sincronizza automaticamente le tue lezioni')
-          )
-          , React.createElement('button',{onClick:handleDisconnect,style:{padding:'5px 12px',borderRadius:6,cursor:'pointer',border:'1px solid '+C.redBorder,background:C.redBg,color:C.red,fontSize:12,fontFamily:"'Open Sans',sans-serif"}},'Disconnetti')
-        )
-        , React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } }
-          , React.createElement('button', {
-              onClick: function() { setShowConfig(!showConfig); },
-              style: { padding: '9px 14px', borderRadius: 8, border: '1px solid '+(showConfig?C.tealBorder:C.border), background: showConfig?C.tealBg:C.bg, color: showConfig?C.teal:C.textMuted, cursor: 'pointer', fontSize: 13, fontFamily: "'Open Sans',sans-serif", display: 'flex', alignItems: 'center', gap: 5 }
-            }, '⚙️ Impostazioni')
-          , React.createElement('button',{onClick:handleSyncAll,disabled:syncing,style:{padding:'9px 18px',borderRadius:8,border:'none',background:syncing?C.surface:C.teal,color:syncing?C.textMuted:'#fff',cursor:syncing?'wait':'pointer',fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif"}},syncing?'⏳ Sincronizzazione...':'🔄 Sincronizza le mie lezioni')
-        )
-        , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:8,fontFamily:"'Open Sans',sans-serif",lineHeight:1.6}},'💡 Solo le tue lezioni vengono sincronizzate su Google Calendar.')
-        , showConfig && React.createElement('div', { style: { marginTop: 14, padding: 16, background: C.bg, border: '1px solid '+C.border, borderRadius: 10 } }
-          , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12, fontFamily: "'Open Sans',sans-serif" } }, '🗓️ Calendario di destinazione per corso')
-          , userId
-            ? React.createElement(GcalCourseMapping, { userId: userId })
-            : React.createElement('div', { style: { fontSize: 12, color: C.textDim, fontFamily: "'Open Sans',sans-serif" } }, '⏳ In attesa della connessione...')
-        )
-      )
-    , !loading && (!status||!status.connected) && React.createElement('div', null
-        , React.createElement('p',{style:{fontSize:13,color:C.textMuted,marginBottom:14,fontFamily:"'Open Sans',sans-serif",lineHeight:1.6}},'Connetti Google Calendar per sincronizzare automaticamente le tue lezioni.')
-        , clientId
-          ? React.createElement('button',{onClick:handleConnect,style:{padding:'10px 20px',borderRadius:8,border:'none',background:'#4285f4',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif",display:'inline-flex',alignItems:'center',gap:8}}
-              ,React.createElement('span',{style:{fontSize:16}},'📅'),'Connetti Google Calendar')
-          : React.createElement('div',{style:{padding:'10px 14px',background:'#fef9c3',border:'1px solid #fde68a',borderRadius:8,fontSize:12,color:'#92400e',fontFamily:"'Open Sans',sans-serif",lineHeight:1.6}},'⚙️ Google Calendar non è ancora configurato. Contatta l\'amministratore per attivarlo dalle Impostazioni.')
-      )
-  );
-};
-
-console.log('[FM] app-gcal.js caricato ✓');
-
-  } catch(err) {
-    window.__BOOT_ERROR = window.__BOOT_ERROR || err;
-    console.error('[FM] app-gcal.js errore:', err.message || err);
-  }
 })();
