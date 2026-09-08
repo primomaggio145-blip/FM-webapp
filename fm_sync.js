@@ -1022,23 +1022,19 @@
   // baseline _prev usata dal diff-sync — al giro successivo, ogni entità ricaricata
   // (es. corsi) verrebbe vista come "nuova" rispetto alla vecchia _prev, causando un
   // INSERT duplicato su un record già esistente → 409 Conflict su Supabase.
+  //
+  // ATTENZIONE — _prev deve restare SEMPRE nello stesso formato "React" (camelCase)
+  // di state[key]: diff() confronta le due cose con un JSON.stringify diretto, senza
+  // normalizzare i nomi dei campi. Se qui si converte in formato database (snake_case,
+  // come faceva la versione precedente tramite toDB.*), OGNI record risulta per sempre
+  // "diverso" — anche se identico — e viene riscritto per intero al giro di sync
+  // successivo, usando il valore (a volte incompleto) presente in quel momento nello
+  // stato React. È la causa esatta di cancellazioni di massa apparentemente casuali
+  // (es. contact_name/phone delle lezioni azzerati dopo aver eliminato un allegato).
   window.__FM_UPDATE_PREV__ = function(data) {
-    const ADAPTERS = {
-      students: toDB.studenti,
-      docenti:  toDB.docenti,
-      courses:  toDB.corsi,
-      lessons:  toDB.lezioni,
-      entrate:  toDB.quote,
-      spese:    toDB.spese,
-      concerti: toDB.concerti,
-      allegati: toDB.allegati,
-      prenotazioni_sala: toDB.prenotazioni_sala,
-    };
-    Object.keys(ADAPTERS).forEach(key => {
+    ['students','docenti','courses','lessons','entrate','spese','concerti','allegati','prenotazioni_sala'].forEach(key => {
       if (data[key] !== undefined && data[key] !== null) {
-        _prev[key] = data[key].map(item => {
-          try { return ADAPTERS[key](item); } catch(e) { return item; }
-        });
+        _prev[key] = [...data[key]];
       }
     });
   };
