@@ -8602,6 +8602,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         sb.from('lezioni').update(row).eq('id', data.id)
           .then(({ error }) => {
             if (error) console.warn('[FM] handleEdit update error:', error.message);
+            else {
+              window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+              window.__FM_RECENTLY_WRITTEN__.set(String(data.id), Date.now());
+            }
           });
       }
 

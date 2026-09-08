@@ -435,7 +435,13 @@
         }
         const { error } = await sb.from(table).update(row).eq('id', item.id);
         if (error) fail(`UPDATE ${table} [${item.id}]:`, error.message, '| row:', row);
-        else log(`✎ ${table}`, item.id);
+        else {
+          log(`✎ ${table}`, item.id);
+          if (table === 'lezioni') {
+            window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+            window.__FM_RECENTLY_WRITTEN__.set(String(item.id), Date.now());
+          }
+        }
       } catch(e) { fail('update error', table, e); }
     }
 
@@ -461,12 +467,22 @@
           if (error.code === '23505') {
             const { error: e2 } = await sb.from(table).upsert(row);
             if (e2) fail(`UPSERT fallback ${table}:`, e2.message);
-            else log(`✚ (upsert) ${table}`, row.id || '(auto)');
+            else {
+              log(`✚ (upsert) ${table}`, row.id || '(auto)');
+              if (table === 'lezioni') {
+                window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+                window.__FM_RECENTLY_WRITTEN__.set(String(row.id), Date.now());
+              }
+            }
           } else {
             fail(`INSERT ${table}:`, error.message, '| row:', row);
           }
         } else {
           log(`✚ ${table}`, row.id || '(auto)');
+          if (table === 'lezioni') {
+            window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+            window.__FM_RECENTLY_WRITTEN__.set(String(row.id), Date.now());
+          }
         }
       } catch(e) { fail('upsert error', table, e); }
     }
@@ -914,9 +930,19 @@
                 sb.from('lezioni').select('*').gt('updated_at', recentThreshold).neq('data', todayISO),
               ]);
               const allFetched = [...(dToday||[]), ...(dRecent||[])];
-              const fetchedIds = new Set(allFetched.map(r => String(r.id)));
+              // Guard: se una lezione è stata scritta LOCALMENTE negli ultimi secondi, non fidarsi
+              // di questo re-fetch per quella riga — potrebbe essere una lettura leggermente in
+              // anticipo rispetto alla scrittura appena avvenuta (causa nota di dati "svuotati"
+              // subito dopo il salvataggio, es. contact_name/phone delle lezioni di prova).
+              const recentWrites = window.__FM_RECENTLY_WRITTEN__;
+              const now = Date.now();
+              const freshFetched = allFetched.filter(r => {
+                const t0 = recentWrites && recentWrites.get(String(r.id));
+                return !(t0 && (now - t0) < 4000);
+              });
+              const fetchedIds = new Set(freshFetched.map(r => String(r.id)));
               const existing = (_prev[k] || []).filter(l => !fetchedIds.has(String(l.id)));
-              const adapted = dedupeById([...existing, ...allFetched.map(r => adaptLezione(r, []))]);
+              const adapted = dedupeById([...existing, ...freshFetched.map(r => adaptLezione(r, []))]);
               _prev[k] = adapted;
               if (window.__FM_RELOAD__) window.__FM_RELOAD__({ [k]: adapted });
               return;
