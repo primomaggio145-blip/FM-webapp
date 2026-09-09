@@ -1939,8 +1939,17 @@
       if (apple) apple.href = url192;
       document.querySelectorAll('.nav-logo img, .footer-brand img, [data-branding-logo]').forEach(img => {
         img.dataset.fallbackSrc = img.dataset.fallbackSrc || img.src;
+        img.dataset.fallbackFilter = img.dataset.fallbackFilter || img.style.filter || '';
         img.src = url512;
-        img.onerror = () => { img.src = img.dataset.fallbackSrc; };
+        // Il filtro brightness(0)+invert(1) del footer serve a rendere bianco il vecchio
+        // logo (pensato con trasparenza); applicato all'icona del bucket branding — che
+        // di solito è un'icona piena, senza trasparenza — la trasforma in un blocco
+        // bianco senza dettagli. La disattiviamo solo per l'icona caricata dinamicamente.
+        img.style.filter = 'none';
+        img.onerror = () => {
+          img.src = img.dataset.fallbackSrc;
+          img.style.filter = img.dataset.fallbackFilter;
+        };
       });
     };
     testImg.onerror = () => console.log('Bucket branding: nessuna icona custom, uso quelle statiche.');

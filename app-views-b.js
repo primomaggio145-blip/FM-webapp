@@ -2479,7 +2479,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
         const rangeEnd   = new Date(Date.now() + 90*86400_000).toISOString().slice(0,10);
         const res = await fetch(GCAL_EDGE, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'apikey': GCAL_APIKEY, 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'list_sala_busy', range_start: rangeStart, range_end: rangeEnd }),
         });
         const json = await res.json();

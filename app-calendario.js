@@ -3540,7 +3540,7 @@ const gcalSyncLesson = async (action, lesson) => {
     const lessonOut = lesson ? { ...lesson, _gcalCaption: window.gcalBuildCaption(lesson) } : lesson;
     fetch(GCAL_EDGE, {
       method: 'POST',
-      headers: { 'Authorization': 'Bearer '+session.access_token, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': 'Bearer '+session.access_token, 'apikey': GCAL_APIKEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ action, user_id: session.user.id, lesson: lessonOut, lezione_id: lesson&&lesson.id }),
     }).then(async function(res) {
       let json = null;
@@ -3554,6 +3554,10 @@ const gcalSyncLesson = async (action, lesson) => {
   } catch(e) { console.warn('[FM][gcal] sync errore imprevisto:', e && e.message); }
 };
 const GCAL_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/gcal-sync';
+// Publishable key del progetto (non segreta, già presente in supabase_integration.js) —
+// il gateway Supabase la richiede per instradare le richieste alle Edge Functions,
+// anche quando la funzione stessa è deployata con --no-verify-jwt.
+const GCAL_APIKEY = 'sb_publishable_hoDexm3CUGWCnH6OrjbQ7Q_zMutnDcO';
 
 // ── GCal: adatta una prenotazione Sala Prove (oggetto in forma camelCase,
 // come restituito da adaptPrenotazioneSala) in un evento sincronizzabile.
@@ -8525,7 +8529,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         const rangeEnd   = yyyymmdd(new Date(Date.now() + 90 * 86400_000));
         const res = await fetch(GCAL_EDGE, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'apikey': GCAL_APIKEY, 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'list_sala_busy', range_start: rangeStart, range_end: rangeEnd }),
         });
         const json = await res.json();
