@@ -1930,6 +1930,12 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                   /* Separatore */
                   , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
 
+                  /* Separatore */
+                  , React.createElement('div',{style:{height:1,background:"rgba(255,255,255,0.1)",margin:"6px 4px"}})
+
+                  /* ── Cestino (diretto, solo admin) ── */
+                  , NavBtn({id:"cestino", label:"Cestino", icon:"trash"})
+
                   /* ── Impostazioni (ora vista unica con tab interne per Scuola, Anno, Utenti) ── */
                   , NavBtn({id:"impostazioni", label:"Impostazioni", icon:"settings"})
 
