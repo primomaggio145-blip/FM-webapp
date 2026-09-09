@@ -2517,21 +2517,6 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
       if (studAttendance(l, nome, s.id)==='recuperata') return;
       if (isColl(l)) countCollReale++; else countIndReale++;
     });
-    // DIAGNOSTICA TEMPORANEA: se il conteggio è 0 ma esistono lezioni nel mese che citano questo
-    // allievo (per nome o id) senza che studentInLesson le abbia riconosciute, stampa il dettaglio
-    // grezzo per capire dove si rompe il match. Rimuovere una volta risolto.
-    if (countIndReale===0 && countCollReale===0) {
-      const possibiliMatchGrezzi = lezioniMese.filter(l =>
-        (l.student && nome && l.student.toLowerCase().trim()===nome.toLowerCase().trim()) ||
-        (l.studentId!=null && s.id!=null && String(l.studentId)===String(s.id)) ||
-        (Array.isArray(l.students) && l.students.some(st => st && ((st.name||'').toLowerCase().trim()===nome.toLowerCase().trim() || (st.id!=null && s.id!=null && String(st.id)===String(s.id)))))
-      );
-      if (possibiliMatchGrezzi.length > 0) {
-        console.warn(`[FM][DEBUG conteggio] "${nome}" (id=${s.id}): trovate ${possibiliMatchGrezzi.length} lezioni nel mese che sembrano sue ma NON riconosciute da studentInLesson:`, possibiliMatchGrezzi.map(l=>({id:l.id,date:l.date,tipo:l.tipo,student:l.student,studentId:l.studentId,students:l.students})));
-      } else {
-        console.warn(`[FM][DEBUG conteggio] "${nome}" (id=${s.id}): nessuna lezione trovata nel mese ${reportMese}/${reportAnno} (né riconosciuta né sospetta) — controlla che la lezione sia registrata in questo mese.`);
-      }
-    }
     const countInd  = countIndReale;
     const countColl = countCollReale;
     const soglie = sogliaAllievo(s);
@@ -2543,14 +2528,6 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     const isEccColl = s.sogliaCollettivaEcc!=null  && s.sogliaCollettivaEcc!==''  && !isNaN(Number(s.sogliaCollettivaEcc));
     const sogliaInd  = Math.round(isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale);
     const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
-    // DIAGNOSTICA TEMPORANEA: se la soglia risulta <= 0 (zero o, anomalamente, negativa) su
-    // uno dei due tipi, stampa in console i campi grezzi che il report sta effettivamente
-    // leggendo per questo allievo — permette di capire subito se il dato non arriva (bug di
-    // lettura) o se è genuinamente vuoto (dato mancante), senza dover indovinare.
-    // Rimuovere una volta risolto.
-    if (sogliaInd<=0 || sogliaColl<=0) {
-      console.warn(`[FM][DEBUG soglie] "${nome}" (id=${s.id}) → instrument=${JSON.stringify(s.instrument)} extraInstruments=${JSON.stringify(s.extraInstruments)} complementaryCourse=${JSON.stringify(s.complementaryCourse)} enrollDate=${JSON.stringify(s.enrollDate)} sogliaIndividualeEcc=${JSON.stringify(s.sogliaIndividualeEcc)} sogliaCollettivaEcc=${JSON.stringify(s.sogliaCollettivaEcc)} soglieCalcolate(prima di eccezioni/round)=${JSON.stringify(soglie)} sogliaInd=${sogliaInd} sogliaColl=${sogliaColl} reportMese=${reportMese} reportAnno=${reportAnno} isMeseFineAnno=${isMeseFineAnno} dataFineAnno=${dataFineAnno?dataFineAnno.toISOString():null} isUltimoMeseConLezioni=${isUltimoMeseConLezioni} oggi=${now3.toISOString()}`);
-    }
     const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
     const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
     // Stato complessivo dell'allievo: la carenza (sotto soglia), su uno qualsiasi dei due tipi,
@@ -2614,7 +2591,7 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
                 return React.createElement('div',{style:{display:'flex',alignItems:'baseline',gap:6}}
                   , React.createElement('span',{style:{fontSize:13,fontWeight:700,color:C.text}}, stat.count)
                   , React.createElement('span',{style:{fontSize:11,color:C.textMuted}}, `/ ${stat.soglia}`)
-                  , React.createElement('span',{style:{fontSize:11,fontWeight:700,color:clr}}, lbl)
+                  , React.createElement('span',{style:{fontSize:11,fontWeight:700,color:clr}}, `(${lbl})`)
                   , stat.isEccezione && React.createElement('span',{style:{fontSize:10,color:C.gold}},'(ecc.)')
                 );
               };
