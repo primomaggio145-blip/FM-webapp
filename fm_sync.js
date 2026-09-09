@@ -930,6 +930,7 @@
         annoInizio: r.anno_inizio,
         annoFine:   r.anno_fine || (r.anno_inizio+1),
         mesiAttivi: Array.isArray(r.mesi_attivi) ? r.mesi_attivi : [0,1,2,3,4,8,9,10,11],
+        dataFineAnno: r.data_fine_anno || null,
         attivo:     r.attivo || false,
         stato:      r.stato,
         note:       r.note || '',

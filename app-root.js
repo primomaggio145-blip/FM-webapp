@@ -270,6 +270,7 @@ function App() {
           id: r.id, label: r.label||`${r.anno_inizio}/${(r.anno_fine||(r.anno_inizio+1))}`,
           annoInizio: r.anno_inizio, annoFine: r.anno_fine||(r.anno_inizio+1),
           mesiAttivi: Array.isArray(r.mesi_attivi) ? r.mesi_attivi : [0,1,2,3,4,8,9,10,11],
+          dataFineAnno: r.data_fine_anno || null,
           attivo: r.attivo||false, stato: r.stato, note: r.note||'',
         }));
         // annoInizioAttivo: usa l'anno con attivo=true come fonte di verità
@@ -4464,6 +4465,16 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
             await sb.from('anni_scolastici').update({mesi_attivi: nuovi}).eq('anno_inizio', annoInizio);
           };
 
+          // Salva la data di fine anno scolastico (inserita manualmente) — usata dal Report
+          // lezioni individuali per calcolare la soglia prorata dell'ultimo mese di lezioni,
+          // quando l'anno si conclude prima della fine naturale del mese.
+          const handleSetFineAnno = async (annoInizio, dataFineAnno) => {
+            if (propSetAnni) propSetAnni(prev => prev.map(a => a.annoInizio===annoInizio ? {...a, dataFineAnno} : a));
+            const sb = window.supabaseClient; if (!sb) return;
+            const { error } = await sb.from('anni_scolastici').update({data_fine_anno: dataFineAnno||null}).eq('anno_inizio', annoInizio);
+            if (error) showToast && showToast(false, `Impossibile salvare la fine anno scolastico: ${error.message}`);
+          };
+
           const handleAddAnno = async () => {
             const ultimoAnno = anni.reduce((max, a) => Math.max(max, a.annoInizio||0), new Date().getFullYear()-1);
             const nuovoInizio = ultimoAnno + 1;
@@ -4523,6 +4534,15 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
                           , MESI_LABEL[m].slice(0,3)+' '+String(annoRif).slice(2)
                         );
                       })
+                  )
+                  /* Fine anno scolastico — data manuale, non necessariamente coincidente col
+                     concerto finale: usata per calcolare la soglia prorata dell'ultimo mese. */
+                  , React.createElement('div', {style:{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}
+                    , React.createElement('span',{style:{fontSize:11,color:C.textMuted,fontWeight:600,letterSpacing:'.05em',textTransform:'uppercase'}},'Fine anno scolastico')
+                    , React.createElement('input',{type:'date', value:anno.dataFineAnno||'',
+                        onChange:e=>handleSetFineAnno(inizio, e.target.value),
+                        style:{padding:'5px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}})
+                    , React.createElement('span',{style:{fontSize:11,color:C.textDim}},'(non necessariamente il concerto finale)')
                   )
                 );
               })

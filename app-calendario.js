@@ -2404,7 +2404,7 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 // ════════════════════════════════════════════════════════════════════════════════
 
 // ─── REPORT LEZIONI MENSILE ───────────────────────────────────────────────────
-const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) => {
+const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSelectAllievo }) => {
   const now3 = new Date();
   const meseCurr = now3.getMonth() + 1;
   const annoCurr = now3.getFullYear();
@@ -2414,6 +2414,7 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
   // Valori per corso (configurabili a livello globale, con fallback ai valori richiesti)
   const PUNTI_CORSO_INDIVIDUALE = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
   const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
+  const SETTIMANE_MESE_MEDIO = 4.345; // settimane medie reali in un mese
 
   const [reportOpen, setReportOpen] = useState(false);
   const [reportMese, setReportMese] = useState(meseCurr);
@@ -2434,49 +2435,50 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
   });
   const isUltimoMeseConLezioni = !!ultimoMeseConLezioni && ultimoMeseConLezioni.anno===reportAnno && ultimoMeseConLezioni.mese===reportMese;
 
-  // Soglia di un allievo: SEMPRE lo standard fisso (4/mese a corso individuale, 2/mese per il
-  // corso collettivo) — non viene più ridotta per i mesi parziali (l'approccio precedente,
-  // riducendo la soglia in proporzione alle settimane trascorse, collassava a 0 per finestre
-  // temporali molto brevi — es. un allievo iscritto da 1-2 giorni — anche con corsi assegnati).
+  // Data di fine anno scolastico (inserita manualmente nelle Impostazioni → Archivio anni
+  // scolastici) — l'anno di riferimento è quello la cui finestra Set(inizio)→Ago(fine) contiene
+  // il mese selezionato nel report.
+  const annoScolasticoDelMese = (anniScolastici||[]).find(a => {
+    const annoRif = reportMese >= 9 ? reportAnno : reportAnno - 1;
+    return Number(a.annoInizio) === annoRif;
+  });
+  const dataFineAnno = annoScolasticoDelMese && annoScolasticoDelMese.dataFineAnno
+    ? new Date(annoScolasticoDelMese.dataFineAnno+"T00:00:00") : null;
+  const isMeseFineAnno = !!dataFineAnno && dataFineAnno.getFullYear()===reportAnno && (dataFineAnno.getMonth()+1)===reportMese;
+
+  // Soglia di un allievo per il mese selezionato. Normalmente è lo standard fisso (4/mese a
+  // corso individuale, 2/mese per il corso collettivo). Per il mese d'iscrizione, per l'ultimo
+  // mese con lezioni (mese in corso) e per il mese di fine anno scolastico — tutti mesi
+  // "parziali" — viene invece PRORATA in base alle settimane realmente disponibili in quel
+  // mese per quell'allievo:
+  //   soglia_mese = floor(soglia_standard × settimane_disponibili ÷ settimane medie di un mese)
+  // Le tre condizioni si combinano restringendo la finestra [inizio, fine] del mese:
+  //   inizio = data d'iscrizione, se successiva all'inizio mese (mese d'iscrizione)
+  //   fine   = il più vicino tra: oggi (mese in corso) e fine anno scolastico (se in questo mese)
   const sogliaAllievo = (s) => {
     const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
     const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
-    return {
-      individuale: nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE,
-      collettiva:  nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO,
-    };
-  };
+    const standard = { individuale: nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE, collettiva: nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO };
 
-  // Per il mese d'iscrizione e per l'ultimo mese con lezioni (mesi "parziali"), invece di
-  // ridurre la soglia si NORMALIZZA IL CONTEGGIO al ritmo mensile equivalente:
-  //   lezioni fatte / settimane trascorse dalla data di riferimento × settimane medie di un mese
-  // così un allievo appena iscritto (o nel mese ancora in corso) viene confrontato in modo equo
-  // con la soglia standard, invece di risultare ingiustamente indietro solo perché non ha ancora
-  // avuto il tempo di fare tutte le lezioni del mese intero. Settimane minime = 1, per evitare
-  // estrapolazioni assurde da un singolo giorno di dati (es. il giorno stesso dell'iscrizione).
-  const SETTIMANE_MESE_MEDIO = 4.345;
-  const settimaneTrascorse = (s) => {
     const enroll = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
     const isMeseIscrizione = enroll && enroll.getFullYear()===reportAnno && (enroll.getMonth()+1)===reportMese;
-    if (!isMeseIscrizione && !isUltimoMeseConLezioni) return null; // mese pieno: nessuna normalizzazione
+    if (!isMeseIscrizione && !isUltimoMeseConLezioni && !isMeseFineAnno) return standard; // mese pieno ordinario
+
     const inizioMese = new Date(reportAnno, reportMese-1, 1);
     const fineMese    = new Date(reportAnno, reportMese, 0);
     let dataInizio = inizioMese;
     if (isMeseIscrizione && enroll > inizioMese) dataInizio = enroll;
     let dataFine = fineMese;
-    if (isUltimoMeseConLezioni) {
-      const oggiCap = now3 < fineMese ? now3 : fineMese;
-      if (oggiCap < dataFine) dataFine = oggiCap;
-    }
-    if (dataFine < dataInizio) return 0; // iscrizione futura: nessuna settimana ancora trascorsa
+    if (isUltimoMeseConLezioni && now3 < dataFine) dataFine = now3;
+    if (isMeseFineAnno && dataFineAnno < dataFine) dataFine = dataFineAnno;
+    if (dataFine < dataInizio) return { individuale:0, collettiva:0 }; // finestra vuota/invertita (es. iscrizione futura)
+
     const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
-    return Math.max(giorni,1)/7;
-  };
-  const normalizzaConteggio = (countReale, settimane) => {
-    if (settimane === null) return countReale; // mese pieno: conteggio reale, nessuna normalizzazione
-    if (settimane <= 0) return 0; // iscrizione futura: non ancora iniziato
-    const settimaneUsate = Math.max(settimane, 1);
-    return Math.round((countReale / settimaneUsate) * SETTIMANE_MESE_MEDIO);
+    const settimane = Math.max(giorni,1)/7;
+    return {
+      individuale: Math.floor(standard.individuale*settimane/SETTIMANE_MESE_MEDIO),
+      collettiva:  Math.floor(standard.collettiva*settimane/SETTIMANE_MESE_MEDIO),
+    };
   };
 
   // Lezioni del mese selezionato, deduplicate per id (record duplicato = bug di sincronizzazione
@@ -2525,9 +2527,8 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
         console.warn(`[FM][DEBUG conteggio] "${nome}" (id=${s.id}): nessuna lezione trovata nel mese ${reportMese}/${reportAnno} (né riconosciuta né sospetta) — controlla che la lezione sia registrata in questo mese.`);
       }
     }
-    const settimane = settimaneTrascorse(s);
-    const countInd  = normalizzaConteggio(countIndReale, settimane);
-    const countColl = normalizzaConteggio(countCollReale, settimane);
+    const countInd  = countIndReale;
+    const countColl = countCollReale;
     const soglie = sogliaAllievo(s);
     const isEccInd  = s.sogliaIndividualeEcc!=null;
     const isEccColl = s.sogliaCollettivaEcc!=null;
@@ -3083,7 +3084,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
 
         /* ── Report Lezioni Mensile (solo admin, solo in vista lista) ── */
         , view==="list" && _ruoloAV==="admin" && React.createElement(ReportLezioniMensile, {
-            lessons, students, config: propConfig,
+            lessons, students, config: propConfig, anniScolastici: propAnniScolasticiAV,
             onSelectAllievo: (s) => { setSelected(s); setView('detail'); },
           })
 
