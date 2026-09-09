@@ -2530,8 +2530,12 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     const countInd  = countIndReale;
     const countColl = countCollReale;
     const soglie = sogliaAllievo(s);
-    const isEccInd  = s.sogliaIndividualeEcc!=null;
-    const isEccColl = s.sogliaCollettivaEcc!=null;
+    // Un'eccezione è "impostata" solo se contiene un numero valido — non basta "!= null":
+    // se l'adattatore letto da Supabase mappa una colonna NULL come stringa vuota '' invece che
+    // null/undefined, "'' != null" risulta comunque true e Number('') vale 0, forzando la soglia
+    // a 0 anche quando l'allievo non ha alcuna eccezione impostata.
+    const isEccInd  = s.sogliaIndividualeEcc!=null && s.sogliaIndividualeEcc!=='' && !isNaN(Number(s.sogliaIndividualeEcc));
+    const isEccColl = s.sogliaCollettivaEcc!=null  && s.sogliaCollettivaEcc!==''  && !isNaN(Number(s.sogliaCollettivaEcc));
     const sogliaInd  = Math.round(isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale);
     const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
     // DIAGNOSTICA TEMPORANEA: se la soglia risulta 0 su entrambi i tipi, stampa in console i
@@ -2539,7 +2543,7 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     // capire subito se il dato non arriva (bug di lettura) o se è genuinamente vuoto (dato mancante),
     // senza dover indovinare. Rimuovere una volta risolto.
     if (sogliaInd===0 && sogliaColl===0) {
-      console.warn(`[FM][DEBUG soglie] "${nome}" → instrument=${JSON.stringify(s.instrument)} extraInstruments=${JSON.stringify(s.extraInstruments)} complementaryCourse=${JSON.stringify(s.complementaryCourse)} enrollDate=${JSON.stringify(s.enrollDate)}`);
+      console.warn(`[FM][DEBUG soglie] "${nome}" → instrument=${JSON.stringify(s.instrument)} extraInstruments=${JSON.stringify(s.extraInstruments)} complementaryCourse=${JSON.stringify(s.complementaryCourse)} enrollDate=${JSON.stringify(s.enrollDate)} sogliaIndividualeEcc=${JSON.stringify(s.sogliaIndividualeEcc)} sogliaCollettivaEcc=${JSON.stringify(s.sogliaCollettivaEcc)} soglieCalcolate=${JSON.stringify(soglie)} reportMese=${reportMese} reportAnno=${reportAnno}`);
     }
     const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
     const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
