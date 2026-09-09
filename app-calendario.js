@@ -2543,12 +2543,13 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     const isEccColl = s.sogliaCollettivaEcc!=null  && s.sogliaCollettivaEcc!==''  && !isNaN(Number(s.sogliaCollettivaEcc));
     const sogliaInd  = Math.round(isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale);
     const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
-    // DIAGNOSTICA TEMPORANEA: se la soglia risulta 0 su entrambi i tipi, stampa in console i
-    // campi grezzi che il report sta effettivamente leggendo per questo allievo — permette di
-    // capire subito se il dato non arriva (bug di lettura) o se è genuinamente vuoto (dato mancante),
-    // senza dover indovinare. Rimuovere una volta risolto.
-    if (sogliaInd===0 && sogliaColl===0) {
-      console.warn(`[FM][DEBUG soglie] "${nome}" → instrument=${JSON.stringify(s.instrument)} extraInstruments=${JSON.stringify(s.extraInstruments)} complementaryCourse=${JSON.stringify(s.complementaryCourse)} enrollDate=${JSON.stringify(s.enrollDate)} sogliaIndividualeEcc=${JSON.stringify(s.sogliaIndividualeEcc)} sogliaCollettivaEcc=${JSON.stringify(s.sogliaCollettivaEcc)} soglieCalcolate=${JSON.stringify(soglie)} reportMese=${reportMese} reportAnno=${reportAnno}`);
+    // DIAGNOSTICA TEMPORANEA: se la soglia risulta <= 0 (zero o, anomalamente, negativa) su
+    // uno dei due tipi, stampa in console i campi grezzi che il report sta effettivamente
+    // leggendo per questo allievo — permette di capire subito se il dato non arriva (bug di
+    // lettura) o se è genuinamente vuoto (dato mancante), senza dover indovinare.
+    // Rimuovere una volta risolto.
+    if (sogliaInd<=0 || sogliaColl<=0) {
+      console.warn(`[FM][DEBUG soglie] "${nome}" (id=${s.id}) → instrument=${JSON.stringify(s.instrument)} extraInstruments=${JSON.stringify(s.extraInstruments)} complementaryCourse=${JSON.stringify(s.complementaryCourse)} enrollDate=${JSON.stringify(s.enrollDate)} sogliaIndividualeEcc=${JSON.stringify(s.sogliaIndividualeEcc)} sogliaCollettivaEcc=${JSON.stringify(s.sogliaCollettivaEcc)} soglieCalcolate(prima di eccezioni/round)=${JSON.stringify(soglie)} sogliaInd=${sogliaInd} sogliaColl=${sogliaColl} reportMese=${reportMese} reportAnno=${reportAnno} isMeseFineAnno=${isMeseFineAnno} dataFineAnno=${dataFineAnno?dataFineAnno.toISOString():null} isUltimoMeseConLezioni=${isUltimoMeseConLezioni} oggi=${now3.toISOString()}`);
     }
     const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
     const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
