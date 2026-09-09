@@ -3505,7 +3505,7 @@ const safeInsertRecurringLesson = async (lesson, setLessons) => {
     return false;
   }
 };
-const lessonHex   = l => isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaProve(l) ? C.orange2 : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
+const lessonHex   = l => l && l._isGcalExternal ? "#94a3b8" : isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaProve(l) ? C.orange2 : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
 
 // ── Google Calendar auto-sync ─────────────────────────────────────────────────
 // Chiama la Edge Function gcal-sync per create/update/delete in background
@@ -7429,6 +7429,18 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
     if (!spData || !spOraInizio || !spOraFine) { setSpErr("Compila tutti i campi obbligatori."); return; }
     if (!spRichiedente.trim()) { setSpErr("Inserisci il nome del richiedente."); return; }
     if (spOraFine <= spOraInizio) { setSpErr("L'ora di fine deve essere successiva all'ora di inizio."); return; }
+    // Avviso (non bloccante) se lo slot risulta occupato su Google Calendar
+    // (prenotazione fatta direttamente fuori dall'app)
+    const busyCache = window.__gcalSalaBusyCache__ && window.__gcalSalaBusyCache__.data;
+    if (Array.isArray(busyCache)) {
+      const overlap = busyCache.some(ev =>
+        ev.date === spData && !ev.allDay && ev.start && ev.end &&
+        spOraInizio < ev.end && spOraFine > ev.start
+      );
+      if (overlap && !confirm(
+        "⚠️ Attenzione: questo orario risulta già occupato su Google Calendar (prenotazione fatta direttamente, fuori dall'app).\n\nVuoi procedere comunque?"
+      )) return;
+    }
     setSpSaving(true); setSpErr("");
     try {
       const sb = window.supabaseClient;
@@ -8501,6 +8513,29 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     }, []);
     React.useEffect(() => { loadPrenotazioniSala(); }, []);
 
+    // Slot Sala Prove occupati direttamente su Google Calendar (bypass app) — sola lettura.
+    // Cache di 3 minuti condivisa (window.__gcalSalaBusyCache__) per non richiamare l'Edge
+    // Function ad ogni apertura di vista/componente.
+    const [gcalSalaBusy, setGcalSalaBusy] = useState((window.__gcalSalaBusyCache__ && window.__gcalSalaBusyCache__.data) || []);
+    const loadGcalSalaBusy = React.useCallback(async (force) => {
+      const cache = window.__gcalSalaBusyCache__;
+      if (!force && cache && (Date.now() - cache.ts) < 3 * 60_000) { setGcalSalaBusy(cache.data); return; }
+      try {
+        const rangeStart = yyyymmdd(new Date(Date.now() - 7 * 86400_000));
+        const rangeEnd   = yyyymmdd(new Date(Date.now() + 90 * 86400_000));
+        const res = await fetch(GCAL_EDGE, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'list_sala_busy', range_start: rangeStart, range_end: rangeEnd }),
+        });
+        const json = await res.json();
+        const data = (json && json.ok && json.events) || [];
+        window.__gcalSalaBusyCache__ = { ts: Date.now(), data };
+        setGcalSalaBusy(data);
+      } catch(e) { console.warn('[FM][gcal] lettura occupazione sala fallita:', e && e.message); }
+    }, []);
+    React.useEffect(() => { loadGcalSalaBusy(false); }, [loadGcalSalaBusy]);
+
     const handleAdd = (data) => {
       const lessonId = uid();
       setLessons(p => [...p, { ...data, id: lessonId }]);
@@ -9049,8 +9084,29 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           notes: p.noteAdmin || "",
           stato: p.stato,
         }));
-      return [...ls, ...spEvents];
-    }, [lessons, role, filterCorso, filterDocente, filterTipo, _cvAllievoId, currentStudent, _cvDocenteId, _cvNome, prenotazioniSala]);
+      // Blocchi di sola lettura per prenotazioni fatte direttamente su Google Calendar
+      // (bypass app) — niente titolo/dettaglio per privacy, solo l'orario occupato.
+      const gcalBusyEvents = (gcalSalaBusy || []).map(ev => ({
+        id: "gcalbusy_" + ev.id,
+        _isSalaProve: true,
+        _isGcalExternal: true,
+        _original: ev,
+        tipo: "sala_prove",
+        date: ev.date,
+        hour: ev.allDay ? "" : (ev.start || ""),
+        oraFine: ev.allDay ? "" : (ev.end || ""),
+        student: "",
+        richiedente: "",
+        teacher: "",
+        instrument: "",
+        room: "Sala Prove",
+        topic: "🔒 Occupato (Google Calendar)",
+        attendance: "presente",
+        notes: "",
+        stato: "approvata",
+      }));
+      return [...ls, ...spEvents, ...gcalBusyEvents];
+    }, [lessons, role, filterCorso, filterDocente, filterTipo, _cvAllievoId, currentStudent, _cvDocenteId, _cvNome, prenotazioniSala, gcalSalaBusy]);
   
     const todayStr     = yyyymmdd(today);
     const todayLessons = visibleLessons.filter(l => l.date === todayStr);
@@ -9165,7 +9221,14 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               lessons: visibleLessons,
               role: role,
               appUser: _appUserCV,
-              onOpenLesson: (l) => { setSelLesson(l); setModal(isSalaProve(l) ? 'detailsala' : ('detail')); },
+              onOpenLesson: (l) => {
+                if (l._isGcalExternal) {
+                  alert('🔒 Slot occupato su Google Calendar (prenotato direttamente, fuori dall\'app).\n\n' +
+                        fmtDate(l.date) + (l.hour ? ('  ·  ' + l.hour + (l.oraFine ? ('–' + l.oraFine) : '')) : '  ·  giornata intera'));
+                  return;
+                }
+                setSelLesson(l); setModal(isSalaProve(l) ? 'detailsala' : ('detail'));
+              },
             })
 
           /* ── ELENCO LEZIONI ADMIN ───────────────────────── */

@@ -2289,7 +2289,7 @@ const MobileMoreMenu = ({ current, setView, extraItems, onLogout, onEsciSenzaLog
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── BAND WEEK CALENDAR — stessa time-grid dell'admin ─────────────────────────
-const BandWeekCalendar = ({ lessons, prenotazioni }) => {
+const BandWeekCalendar = ({ lessons, prenotazioni, gcalBusy }) => {
   const [weekOffset, setWeekOffset] = useState(0);
 
   const getMonday = (offset) => {
@@ -2341,6 +2341,16 @@ const BandWeekCalendar = ({ lessons, prenotazioni }) => {
       evts.push({ id:'b'+l.id, top:(sm%60/60)*HOUR_H, height:Math.max((dur/60)*HOUR_H-2,18),
         bg:'#fef3c7', bd:'#fcd34d', accent:'#d97706',
         label:ora.slice(0,5)+'–'+String(Math.floor(em/60)).padStart(2,'0')+':'+String(em%60).padStart(2,'0'),
+        tag:'🔒' });
+    });
+    // Slot occupati direttamente su Google Calendar (prenotazioni fuori dall'app)
+    (gcalBusy||[]).filter(ev => {
+      if (ev.allDay || ev.date!==ds || !ev.start) return false;
+      return parseInt((ev.start||'00').split(':')[0])===h;
+    }).forEach(ev => {
+      evts.push({ id:'g'+ev.id, top:(toMin(ev.start)%60/60)*HOUR_H, height:Math.max(((toMin(ev.end)-toMin(ev.start))/60)*HOUR_H-2,18),
+        bg:'#e2e8f0', bd:'#94a3b8', accent:'#475569',
+        label:(ev.start||'').slice(0,5)+'–'+(ev.end||'').slice(0,5),
         tag:'🔒' });
     });
     return evts;
@@ -2456,6 +2466,29 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
   }, []);
 
   React.useEffect(() => { loadPrenotazioni(); }, []);
+
+  // Slot occupati direttamente su Google Calendar (bypass app) — stessa cache
+  // condivisa di 3 minuti usata dal calendario principale (window.__gcalSalaBusyCache__)
+  const [gcalBusy, setGcalBusy] = React.useState((window.__gcalSalaBusyCache__ && window.__gcalSalaBusyCache__.data) || []);
+  React.useEffect(() => {
+    const cache = window.__gcalSalaBusyCache__;
+    if (cache && (Date.now() - cache.ts) < 3 * 60_000) { setGcalBusy(cache.data); return; }
+    (async () => {
+      try {
+        const rangeStart = new Date(Date.now() - 7*86400_000).toISOString().slice(0,10);
+        const rangeEnd   = new Date(Date.now() + 90*86400_000).toISOString().slice(0,10);
+        const res = await fetch(GCAL_EDGE, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'list_sala_busy', range_start: rangeStart, range_end: rangeEnd }),
+        });
+        const json = await res.json();
+        const data = (json && json.ok && json.events) || [];
+        window.__gcalSalaBusyCache__ = { ts: Date.now(), data };
+        setGcalBusy(data);
+      } catch(e) { console.warn('[FM][gcal] lettura occupazione sala fallita:', e?.message); }
+    })();
+  }, []);
 
   const handleSendContatto = async () => {
     if (!msgContatto.trim()) return;
@@ -2604,7 +2637,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
         , '🎸 Compila la richiesta e attendi la conferma dell\'admin. Per domande usa il pulsante "Contatta admin".'
       )
 
-      , isBand && React.createElement(BandWeekCalendar, { lessons, prenotazioni })
+      , isBand && React.createElement(BandWeekCalendar, { lessons, prenotazioni, gcalBusy })
 
       /* Lista mie prenotazioni (band) */
       , isBand && React.createElement('div', { style: { marginTop: 20 } }
@@ -2636,7 +2669,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
 
       /* Lista admin: tutte le prenotazioni future */
       , isAdmin && React.createElement('div', null
-        , React.createElement(BandWeekCalendar, { lessons, prenotazioni })
+        , React.createElement(BandWeekCalendar, { lessons, prenotazioni, gcalBusy })
         , React.createElement('div', { style: { fontSize:12, color:C.textMuted, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:10, fontWeight:600 } }
           , 'Prenotazioni future · ', prenotazioni.filter(p => p.data >= oggi).length, ' totali'
         )
