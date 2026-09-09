@@ -4411,8 +4411,9 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
               )
             ) : (
               React.createElement(React.Fragment, null
-                , React.createElement('div', { style: {fontSize:17, fontWeight:600, fontFamily:"'Oswald',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4537}}, lesson.student)
+                , React.createElement('div', { style: {fontSize:17, fontWeight:600, fontFamily:"'Oswald',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4537}}, lesson.student || (lesson.nuovoIscritto ? (lesson.contactName || "🆕 Nuovo iscritto") : ""))
                 , React.createElement('div', { style: {fontSize:13, color:hex, marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4538}}, lesson.instrument)
+                , lesson.nuovoIscritto && lesson.phone && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:2} }, "📞 ", lesson.phone)
               )
             )
           )
@@ -5155,7 +5156,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config }) => {
                         )
                       )
                       , React.createElement('div',{style:{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}
-                        , React.createElement('span',{style:{fontSize:14,fontWeight:600,color:C.text}},l.student)
+                        , React.createElement('span',{style:{fontSize:14,fontWeight:600,color:C.text}},l.student || (l.nuovoIscritto ? (l.contactName || "🆕 Nuovo iscritto") : ""))
                         , React.createElement('span',{style:{fontSize:12,color:hex}},l.instrument)
                         , l.recurrence !== "Nessuna" && React.createElement(Ic,{n:"repeat",size:11,stroke:C.textDim})
                         , dotHex && React.createElement('div',{style:{width:6,height:6,borderRadius:"50%",background:dotHex,flexShrink:0}})
@@ -5231,7 +5232,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config }) => {
                         )
                       )
                       , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap"}}
-                        , React.createElement('span', { style: {fontSize:15, fontWeight:600}}, l.student)
+                        , React.createElement('span', { style: {fontSize:15, fontWeight:600}}, l.student || (l.nuovoIscritto ? (l.contactName || "🆕 Nuovo iscritto") : ""))
                         , React.createElement('span', { style: {fontSize:12, color:hex}}, l.instrument)
                         , l.recurrence !== "Nessuna" && React.createElement(Ic, { n: "repeat", size: 12, stroke: C.textDim})
                         , dotHex && React.createElement('div', { style: {width:7, height:7, borderRadius:"50%", background:dotHex}})
@@ -5239,6 +5240,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config }) => {
                       , React.createElement('div', { style: {display:"flex", gap:12, fontSize:12, color:C.textMuted, flexWrap:"wrap"}}
                         , l.teacher && React.createElement('span', null, l.teacher)
                         , l.room    && React.createElement('span', null, "· " , l.room)
+                        , l.nuovoIscritto && l.phone && React.createElement('span', null, "· 📞 ", l.phone)
                       )
                       , l.topic && !l.topic.startsWith('🔄') && !l.topic.startsWith('Recupero') && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}}, "\"", l.topic, "\"")
                     )
@@ -5470,7 +5472,9 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
                   const nome = isSala ? `🤘 ${normHour}`
                     : isColl(l)  ? (l.courseName||"Coll.")
                     : isProva(l) ? (l.contactName||"Prova")
-                    : (l.student||"").split(" ")[0];
+                    : l.student ? l.student.split(" ")[0]
+                    : l.nuovoIscritto ? (l.contactName ? l.contactName.split(" ")[0] : "🆕 Nuovo")
+                    : "";
                   const corso = isSala ? normFine
                     : isColl(l)  ? `${(l.students||[]).length} all.`
                     : (l.instrument||"");
@@ -5532,7 +5536,9 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
                         : `${normHour} · ${
                             isColl(l)  ? (l.courseName||"Coll.")
                           : isProva(l) ? (l.contactName||"Prova")
-                          : (l.student||"").split(" ")[0]
+                          : l.student ? l.student.split(" ")[0]
+                          : l.nuovoIscritto ? (l.contactName ? l.contactName.split(" ")[0] : "🆕 Nuovo")
+                          : ""
                           }`
                     )
                     , !isSala && (l.attendance || l.inRecupero) && (
