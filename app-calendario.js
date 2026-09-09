@@ -2465,12 +2465,13 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     let dataInizio = inizioMese;
     if (isMeseIscrizione && enroll > inizioMese) dataInizio = enroll;
     let dataFine = fineMese;
-    // Il "cap a oggi" (mese in corso) ha senso solo se l'iscrizione è GIÀ iniziata (oggi >=
-    // dataInizio). Se la data d'iscrizione è ancora futura rispetto a oggi (es. iscritto oggi
-    // ma con decorrenza tra qualche giorno), applicare comunque il cap capovolgerebbe la finestra
-    // (fine prima dell'inizio) collassando la soglia a 0 nonostante il corso sia assegnato — si
-    // proietta invece l'intera finestra restante (da iscrizione a fine mese/fine anno).
-    if (isUltimoMeseConLezioni && now3 >= dataInizio && now3 < dataFine) dataFine = now3;
+    // Il "cap a oggi" (mese in corso) si applica SOLO se questo NON è anche il mese d'iscrizione:
+    // per il mese d'iscrizione la finestra arriva sempre a fine mese (come da esempi confermati:
+    // iscritto il 07.09 → finestra 07.09→30.09, non 07.09→oggi). Il cap a oggi serve per un
+    // allievo iscritto in un mese precedente di cui si guarda il progresso nel mese in corso.
+    // Va inoltre applicato solo se l'iscrizione è GIÀ iniziata (oggi >= dataInizio): se la data
+    // d'iscrizione è futura, il cap capovolgerebbe la finestra collassando la soglia a 0.
+    if (isUltimoMeseConLezioni && !isMeseIscrizione && now3 >= dataInizio && now3 < dataFine) dataFine = now3;
     if (isMeseFineAnno && dataFineAnno < dataFine) dataFine = dataFineAnno;
     if (dataFine < dataInizio) return { individuale:0, collettiva:0 }; // finestra vuota (es. iscrizione futura, non ancora iniziata)
 
