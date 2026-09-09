@@ -2470,31 +2470,20 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
     };
   };
 
-  // Conteggio lezioni svolte nel mese selezionato, separato per individuali/collettive.
-  // Deduplica per id lezione: un record duplicato (bug di sincronizzazione a monte) non deve
-  // essere contato due volte — questa è l'unica vista impattata dal problema, quindi la protezione
-  // va messa qui.
-  const contInd = {}, contColl = {};
+  // Lezioni del mese selezionato, deduplicate per id (record duplicato = bug di sincronizzazione
+  // a monte, non va contato due volte — questa è l'unica vista impattata, quindi la protezione
+  // va messa qui).
+  const lezioniMese = [];
   const lezioniGiaContate = new Set();
   (lessons||[]).forEach(l => {
     if (!l.date) return;
     const [ly,lm] = l.date.split('-').map(Number);
     if (ly!==reportAnno||lm!==reportMese) return;
     if (l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
-    const lid = l.id!=null ? String(l.id) : `${l.date}|${l.hour}|${l.student||l.courseId||''}`;
+    const lid = l.id!=null ? String(l.id) : `${l.date}|${l.hour}|${l.student||l.studentId||l.courseId||''}`;
     if (lezioniGiaContate.has(lid)) return; // record duplicato: già conteggiato
     lezioniGiaContate.add(lid);
-    if (isColl(l)) {
-      (l.students||[]).forEach(st => {
-        if (!st || !st.name) return;
-        if (studAttendance(l, st.name, st.id)==='recuperata') return;
-        contColl[st.name] = (contColl[st.name]||0)+1;
-      });
-    } else {
-      if (l.attendance==='recuperata') return;
-      const k = l.student||String(l.studentId||''); if(!k) return;
-      contInd[k] = (contInd[k]||0)+1;
-    }
+    lezioniMese.push(l);
   });
 
   const allieviAttivi = (students||[]).filter(s=>s.status==='attivo'||!s.status);
@@ -2502,13 +2491,21 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
   allieviAttivi.forEach(s => {
     const nome = s.name||s.nome||'';
     if (!nome) return;
+    // Conteggio per allievo: usa studentInLesson/studAttendance (stesso match ID+nome usato
+    // ovunque nell'app) invece di un dizionario indicizzato solo per nome — una lezione salvata
+    // con solo studentId (senza il campo nome "student") altrimenti non veniva mai contata,
+    // risultando sempre a 0.
+    let countInd = 0, countColl = 0;
+    lezioniMese.forEach(l => {
+      if (!studentInLesson(l, nome, s.id)) return;
+      if (studAttendance(l, nome, s.id)==='recuperata') return;
+      if (isColl(l)) countColl++; else countInd++;
+    });
     const soglie = sogliaAllievo(s);
     const isEccInd  = s.sogliaIndividualeEcc!=null;
     const isEccColl = s.sogliaCollettivaEcc!=null;
     const sogliaInd  = Math.round(isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale);
     const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
-    const countInd  = contInd[nome]||0;
-    const countColl = contColl[nome]||0;
     const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
     const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
     // Stato complessivo dell'allievo: la carenza (sotto soglia), su uno qualsiasi dei due tipi,
