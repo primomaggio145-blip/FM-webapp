@@ -185,8 +185,8 @@
       });
 
       window.addEventListener('load', function() {
-        navigator.serviceWorker.register('/FM-webapp/service-worker.js', {
-          scope: '/FM-webapp/'
+        navigator.serviceWorker.register('/service-worker.js', {
+          scope: '/'
         }).then(function(reg) {
           console.log('[FM PWA] Service Worker registrato:', reg.scope);
         }).catch(function(err) {

@@ -3,12 +3,12 @@
 //   - app.js, fm_sync.js, supabase_integration.js → NETWORK-FIRST (sempre freschi)
 //   - webapp.html, manifest.json, icone          → NETWORK-FIRST con fallback cache
 //   - API Supabase, font Google (googleapis/gstatic) → solo network, mai cache
-const CACHE_VERSION = 'fm-v8';
+const CACHE_VERSION = 'fm-v9'; // v9: percorsi corretti per dominio personalizzato (era /FM-webapp/...)
 
 // File pre-cachati all'install (solo per fallback offline)
 const CACHE_STATIC = [
-  '/FM-webapp/webapp.html',
-  '/FM-webapp/manifest.json',
+  '/webapp.html',
+  '/manifest.json',
 ];
 
 // ── Install ──────────────────────────────────────────────────────────────────
@@ -91,7 +91,7 @@ self.addEventListener('fetch', event => {
         return caches.match(event.request).then(cached => {
           if (cached) return cached;
           if (event.request.destination === 'document') {
-            return caches.match('/FM-webapp/webapp.html');
+            return caches.match('/webapp.html');
           }
         });
       })
@@ -107,10 +107,10 @@ self.addEventListener('push', event => {
   const title   = data.title || 'Futuro Musica';
   const options = {
     body:               data.body || 'Hai una nuova notifica',
-    icon:               '/FM-webapp/icons/icon-192.png',
-    badge:              '/FM-webapp/icons/icon-192.png',
+    icon:               '/icons/icon-192.png',
+    badge:              '/icons/icon-192.png',
     tag:                data.tag  || 'fm-notification',
-    data:               { url: data.url || '/FM-webapp/webapp.html' },
+    data:               { url: data.url || '/webapp.html' },
     vibrate:            [200, 100, 200],
     requireInteraction: false,
     actions:            [{ action: 'open', title: '📅 Apri app' }],
@@ -121,7 +121,7 @@ self.addEventListener('push', event => {
 // ── Click sulla notifica → apre/porta in primo piano l'app ───────────────────
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/FM-webapp/webapp.html';
+  const targetUrl = event.notification.data?.url || '/webapp.html';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       for (const client of list) {
