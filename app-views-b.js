@@ -2505,6 +2505,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
     const sb = window.supabaseClient; if (!sb) return;
     await sb.from('prenotazioni_sala').delete().eq('id', p.id);
     setPrenotazioni(prev => prev.filter(x => x.id !== p.id));
+    if (window.gcalSyncSalaProveWith) window.gcalSyncSalaProveWith('delete', p);
     showToast(true, 'Prenotazione eliminata');
   };
 
@@ -2512,6 +2513,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
     const sb = window.supabaseClient; if (!sb) return;
     await sb.from('prenotazioni_sala').update({ stato: nuovoStato, updated_at: new Date().toISOString() }).eq('id', p.id);
     setPrenotazioni(prev => prev.map(x => x.id === p.id ? { ...x, stato: nuovoStato } : x));
+    if (window.gcalSyncSalaProveWith) window.gcalSyncSalaProveWith('update', { ...p, stato: nuovoStato });
     if (p.userId) {
       try {
         await sb.from('notifiche').insert({

@@ -3554,6 +3554,47 @@ const gcalSyncLesson = async (action, lesson) => {
   } catch(e) { console.warn('[FM][gcal] sync errore imprevisto:', e && e.message); }
 };
 const GCAL_EDGE = 'https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/gcal-sync';
+
+// ── GCal: adatta una prenotazione Sala Prove (oggetto in forma camelCase,
+// come restituito da adaptPrenotazioneSala) in un evento sincronizzabile.
+// Sincronizziamo solo le prenotazioni APPROVATE — quelle in attesa/rifiutate
+// non devono comparire sul calendario.
+const gcalSalaLesson = (p) => {
+  const oraInizio = (p.oraInizio || p.ora_inizio || '09:00').slice(0,5);
+  const oraFine   = (p.oraFine   || p.ora_fine   || '10:00').slice(0,5);
+  const [h1,m1] = oraInizio.split(':').map(Number);
+  const [h2,m2] = oraFine.split(':').map(Number);
+  const durata = Math.max(15, (h2*60+m2) - (h1*60+m1)) || 60;
+  return {
+    id: 'sala_' + p.id,
+    tipo: 'sala_prove',
+    date: p.data,
+    hour: oraInizio,
+    durata,
+    room: 'Sala Prove',
+    topic: p.motivo || '',
+    student: p.richiedente || '',
+    teacher: '',
+  };
+};
+window.gcalSalaLesson = gcalSalaLesson;
+
+// Sincronizza (o rimuove) l'evento GCal di una prenotazione Sala Prove in base al suo stato
+const gcalSyncSalaProve = (p) => {
+  if (!p || !p.id) return;
+  if (p.stato === 'approvata') {
+    gcalSyncLesson('sync_one', gcalSalaLesson(p));
+  } else {
+    gcalSyncLesson('delete_one', { id: 'sala_' + p.id });
+  }
+};
+window.gcalSyncSalaProveWith = (action, p) => {
+  // Variante per moduli esterni (es. app-views-b.js) che non hanno la gcalSyncLesson locale
+  if (!p || !p.id) return;
+  if (action === 'delete') { window.gcalSyncLesson('delete_one', { id: 'sala_' + p.id }); return; }
+  if (p.stato === 'approvata') window.gcalSyncLesson('sync_one', gcalSalaLesson(p));
+  else window.gcalSyncLesson('delete_one', { id: 'sala_' + p.id });
+};
 const studentInLesson = (l, name, studentId) => {
   if (isColl(l)) {
     const arr = l.students || [];
@@ -7403,7 +7444,9 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
       if (initial && initial.id) {
         const { error } = await sb.from("prenotazioni_sala").update({...row, updated_at: new Date().toISOString()}).eq("id", initial.id);
         if (error) throw error;
-        onSave(adaptPrenotazioneSala({ ...row, id: initial.id, created_at: initial.createdAt, updated_at: new Date().toISOString() }));
+        const updated = adaptPrenotazioneSala({ ...row, id: initial.id, created_at: initial.createdAt, updated_at: new Date().toISOString() });
+        onSave(updated);
+        gcalSyncSalaProve(updated);
       } else {
         const { data: ins, error } = await sb.from("prenotazioni_sala").insert(row).select().single();
         if (error) throw error;
@@ -7450,7 +7493,9 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
             }
           } catch(ne) { console.warn("[FM] notifica sala prove:", ne?.message); }
         }
-        onSave(adaptPrenotazioneSala(ins));
+        const inserted = adaptPrenotazioneSala(ins);
+        onSave(inserted);
+        gcalSyncSalaProve(inserted);
       }
     } catch(e) { setSpErr(e.message || "Errore salvataggio."); }
     finally { setSpSaving(false); }
@@ -7766,7 +7811,9 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser, lesson
         .update({ stato: nuovoStato, note_admin: note, updated_at: new Date().toISOString() })
         .eq("id", p.id);
       if (error) throw error;
-      onUpdate({ ...p, stato: nuovoStato, noteAdmin: note });
+      const updated = { ...p, stato: nuovoStato, noteAdmin: note };
+      onUpdate(updated);
+      gcalSyncSalaProve(updated);
     } catch(e) { alert("Errore: " + e.message); }
     finally { setSvLoading(l=>({...l,[p.id]:false})); }
   };
@@ -7779,6 +7826,7 @@ const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser, lesson
       if (!sb) throw new Error("Supabase non disponibile");
       const { error } = await sb.from("prenotazioni_sala").delete().eq("id", p.id);
       if (error) throw error;
+      gcalSyncLesson('delete_one', { id: 'sala_' + p.id });
       if (onDelete) onDelete(p.id);
     } catch(e) {
       alert("Errore eliminazione: " + (e.message || String(e)));
@@ -9471,6 +9519,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                       const sb=window.supabaseClient;
                       await sb.from("prenotazioni_sala").update({stato:"rifiutata",updated_at:new Date().toISOString()}).eq("id",orig.id);
                       setPrenotazioniSala(p=>p.map(x=>x.id===orig.id?{...x,stato:"rifiutata"}:x));
+                      gcalSyncLesson('delete_one', { id: 'sala_' + orig.id });
                       closeModal();
                     }, style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${C.redBorder}`,
                       background:C.redBg,color:C.red,fontSize:12,cursor:"pointer",fontFamily:"'Open Sans',sans-serif"} }
@@ -9480,6 +9529,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                       const sb=window.supabaseClient;
                       await sb.from("prenotazioni_sala").update({stato:"approvata",updated_at:new Date().toISOString()}).eq("id",orig.id);
                       setPrenotazioniSala(p=>p.map(x=>x.id===orig.id?{...x,stato:"approvata"}:x));
+                      gcalSyncSalaProve({ ...orig, stato: "approvata" });
                       closeModal();
                     }, style:{padding:"8px 16px",borderRadius:8,border:`1px solid ${C.greenBorder}`,
                       background:C.greenBg,color:C.green,fontSize:12,cursor:"pointer",fontWeight:600,fontFamily:"'Open Sans',sans-serif"} }
