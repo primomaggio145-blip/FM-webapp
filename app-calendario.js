@@ -2414,7 +2414,6 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
   // Valori per corso (configurabili a livello globale, con fallback ai valori richiesti)
   const PUNTI_CORSO_INDIVIDUALE = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
   const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
-  const SETTIMANE_MESE_MEDIO = 4.345; // settimane medie reali in un mese
 
   const [reportOpen, setReportOpen] = useState(false);
   const [reportMese, setReportMese] = useState(meseCurr);
@@ -2446,23 +2445,20 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     ? new Date(annoScolasticoDelMese.dataFineAnno+"T00:00:00") : null;
   const isMeseFineAnno = !!dataFineAnno && dataFineAnno.getFullYear()===reportAnno && (dataFineAnno.getMonth()+1)===reportMese;
 
-  // Soglia di un allievo per il mese selezionato. Normalmente è lo standard fisso (4/mese a
-  // corso individuale, 2/mese per il corso collettivo). Per il mese d'iscrizione, per l'ultimo
-  // mese con lezioni (mese in corso) e per il mese di fine anno scolastico — tutti mesi
-  // "parziali" — viene invece PRORATA in base alle settimane realmente disponibili in quel
-  // mese per quell'allievo:
-  //   soglia_mese = floor(soglia_standard × settimane_disponibili ÷ settimane medie di un mese)
-  // Le tre condizioni si combinano restringendo la finestra [inizio, fine] del mese:
-  //   inizio = data d'iscrizione, se successiva all'inizio mese (mese d'iscrizione)
-  //   fine   = il più vicino tra: oggi (mese in corso) e fine anno scolastico (se in questo mese)
+  // Soglia di un allievo per il mese selezionato — sempre calcolata sulle settimane realmente
+  // disponibili in quel mese per quell'allievo (la finestra [inizio, fine] si restringe per il
+  // mese d'iscrizione, per il mese in corso e per il mese di fine anno scolastico; per un mese
+  // pieno ordinario coincide semplicemente con l'intero mese):
+  //   corso individuale (cadenza 1/settimana):  floor(settimane_disponibili)      × nr. corsi
+  //   corso collettivo  (cadenza 1/2 settimane): floor(settimane_disponibili ÷ 2) × nr. corsi
+  // Questa unica formula riproduce automaticamente anche lo standard pieno (4 individuali,
+  // 2 collettive) per qualunque mese intero di 28-31 giorni, senza bisogno di un caso a parte.
   const sogliaAllievo = (s) => {
     const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
     const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
-    const standard = { individuale: nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE, collettiva: nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO };
 
     const enroll = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
     const isMeseIscrizione = enroll && enroll.getFullYear()===reportAnno && (enroll.getMonth()+1)===reportMese;
-    if (!isMeseIscrizione && !isUltimoMeseConLezioni && !isMeseFineAnno) return standard; // mese pieno ordinario
 
     const inizioMese = new Date(reportAnno, reportMese-1, 1);
     const fineMese    = new Date(reportAnno, reportMese, 0);
@@ -2476,13 +2472,13 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     // proietta invece l'intera finestra restante (da iscrizione a fine mese/fine anno).
     if (isUltimoMeseConLezioni && now3 >= dataInizio && now3 < dataFine) dataFine = now3;
     if (isMeseFineAnno && dataFineAnno < dataFine) dataFine = dataFineAnno;
-    if (dataFine < dataInizio) return { individuale:0, collettiva:0 }; // finestra ancora vuota (rimane come ultima rete di sicurezza)
+    if (dataFine < dataInizio) return { individuale:0, collettiva:0 }; // finestra vuota (es. iscrizione futura, non ancora iniziata)
 
     const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
     const settimane = Math.max(giorni,1)/7;
     return {
-      individuale: Math.floor(standard.individuale*settimane/SETTIMANE_MESE_MEDIO),
-      collettiva:  Math.floor(standard.collettiva*settimane/SETTIMANE_MESE_MEDIO),
+      individuale: Math.floor(settimane)   * nCorsiIndividuali,
+      collettiva:  Math.floor(settimane/2) * nCorsiCollettivi,
     };
   };
 
