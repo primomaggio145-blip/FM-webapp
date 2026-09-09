@@ -221,7 +221,7 @@ function App() {
         const existingLessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
         const untouched = existingLessons.filter(l => !fetchedIds.has(l.id));
 
-        const adaptL = (r) => {
+        const adaptLFallback = (r) => {
           const allegatiAll = sAL || [];
           const allegati = allegatiAll.filter(a => a.lezione_id === r.id).map(a => ({
             id: a.id, fileName: a.file_name||'', fileUrl: a.file_url||null,
@@ -240,6 +240,8 @@ function App() {
             exercises: r.exercises||'', type: r.tipo||'individuale',
             linkUrl: r.link_url||'', inRecupero: r.in_recupero||false,
             recuperoScadenza: r.recupero_scadenza||null,
+            contactName: r.contact_name||'', phone: r.phone||'',
+            nuovoIscritto: r.nuovo_iscritto||false, motivoAssenza: r.motivo_assenza||null,
             durata: r.durata ? parseInt(r.durata) : (r.tipo==='collettivo'?60:r.tipo==='prova'?30:45),
             repertorioIds: (() => { try { return r.repertorio_ids ? JSON.parse(r.repertorio_ids) : []; } catch(e) { return []; } })(),
             allegati,
@@ -247,6 +249,9 @@ function App() {
             students: (() => { try { return r.students ? JSON.parse(r.students) : []; } catch(e) { return []; } })(),
           };
         };
+        // Preferisce l'adapter condiviso di fm_sync.js (fonte unica di verità, sempre
+        // aggiornato) — usa la copia locale sopra solo come fallback di emergenza.
+        const adaptL = (r) => window.__FM_ADAPT_LEZIONE__ ? window.__FM_ADAPT_LEZIONE__(r, sAL||[]) : adaptLFallback(r);
         const sL = [...untouched, ...allFetchedL.map(adaptL)];
 
         const adaptA = r => ({

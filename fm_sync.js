@@ -120,6 +120,11 @@
       allegati,
     };
   }
+  // Esposta globalmente: un'unica fonte di verità per il mapping DB→React delle
+  // lezioni, usata anche da __FM_FORCE_REFRESH__ (app-root.js) invece di mantenere
+  // una copia duplicata — che in passato si è disallineata (mancavano contactName,
+  // phone, nuovoIscritto) causando dati corretti su Supabase ma non mostrati in UI.
+  window.__FM_ADAPT_LEZIONE__ = adaptLezione;
   function adaptQuota(r) {
     const sm = { 'da pagare': 'attesa', 'in ritardo': 'ritardo' };
     return {
