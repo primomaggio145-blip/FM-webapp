@@ -1641,7 +1641,32 @@ const CESTINO_LABEL_TABELLA = {
 };
 function cestinoEtichettaRecord(tabella, dati) {
   if (!dati) return '(dati non disponibili)';
-  return dati.nome || dati.titolo || dati.file_name || dati.descrizione || dati.id || '(senza nome)';
+  const dataFmt = (iso) => { try { return new Date(iso+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric'}); } catch(e) { return iso||''; } };
+  switch (tabella) {
+    case 'studenti':
+      return dati.nome || '(allievo senza nome)';
+    case 'docenti':
+      return dati.nome || '(docente senza nome)';
+    case 'corsi':
+      return dati.nome || '(corso senza nome)';
+    case 'lezioni': {
+      const chi = dati.student || dati.contact_name || (dati.nuovo_iscritto ? 'Nuovo iscritto' : 'Lezione');
+      const quando = [dati.data ? dataFmt(dati.data) : null, dati.ora ? dati.ora.slice(0,5) : null].filter(Boolean).join(' ');
+      return chi + (quando ? ' — ' + quando : '');
+    }
+    case 'quote':
+      return (dati.studente_nome || 'Quota') + (dati.mese && dati.anno ? ` — ${dati.mese}/${dati.anno}` : '') + (dati.importo ? ` (€${dati.importo})` : '');
+    case 'spese':
+      return (dati.descrizione || dati.categoria || 'Spesa') + (dati.importo ? ` — €${dati.importo}` : '');
+    case 'concerti':
+      return (dati.titolo || 'Evento') + (dati.data ? ' — ' + dataFmt(dati.data) : '');
+    case 'allegati':
+      return dati.file_name || dati.descrizione || (dati.allievo_nome ? 'Allegato di ' + dati.allievo_nome : 'Allegato');
+    case 'prenotazioni_sala':
+      return (dati.richiedente || 'Prenotazione') + (dati.data ? ' — ' + dataFmt(dati.data) + (dati.ora_inizio ? ' ' + dati.ora_inizio.slice(0,5) : '') : '');
+    default:
+      return dati.nome || dati.titolo || dati.file_name || dati.descrizione || dati.id || '(senza nome)';
+  }
 }
 const CestinoView = ({ userRuolo:_ruoloCestino }) => {
   const [voci, setVoci] = useState([]);
