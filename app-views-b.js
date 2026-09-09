@@ -1512,11 +1512,11 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
 // ═══════════════════════════════════════════════════════════════════════════════
 // Permessi navigazione per ruolo (sidebar): false = voce nascosta
 const ROLE_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true,  notifiche_settings:true,  sala_prove:true,  messaggi:true, googleCalendar:false },
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, messaggi:true, googleCalendar:true  },
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, messaggi:true, googleCalendar:true  },
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:true,  impostazioni:true,  schedaScuola:true,  modulistica:true,  notifiche:true, reminders:true,  notifiche_settings:true,  sala_prove:true,  messaggi:true, googleCalendar:false, cestino:true  },
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:false, calendario:true, concerti:true,  contabilita:true, repertorio:true, allegati:true, biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, messaggi:true, googleCalendar:true,  cestino:false },
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false,biblioteca:true, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, messaggi:true, googleCalendar:true,  cestino:false },
   // Ruolo band: accede solo alla sala prove
-  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false,biblioteca:false,utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true,  messaggi:false, googleCalendar:false },
+  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false,biblioteca:false,utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true,  messaggi:false, googleCalendar:false, cestino:false },
 };
 
 // Rileva se l'app è aperta come PWA (standalone) — usato per menu più snello
@@ -1576,10 +1576,10 @@ if ('serviceWorker' in navigator) {
 // Modifica qui per personalizzare cosa appare nella versione PWA per ogni ruolo.
 // Desktop usa sempre ROLE_PERMS completo — questa lista vale SOLO per PWA.
 const PWA_PERMS = {
-  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:true, googleCalendar:false },
-  docente: {dashboard:true, allievi:true, docenti:true, corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, googleCalendar:true  },
-  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false, biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, googleCalendar:true  },
-  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true, googleCalendar:false },
+  admin:   {dashboard:true, allievi:true, docenti:true, corsi:true, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:true, googleCalendar:false, cestino:false },
+  docente: {dashboard:true, allievi:true, docenti:true, corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:true,  biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, googleCalendar:true,  cestino:false },
+  allievo: {dashboard:true, allievi:true, docenti:false,corsi:false, calendario:true, concerti:false, contabilita:true, repertorio:true, allegati:false, biblioteca:true,  utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true, reminders:false, notifiche_settings:false, sala_prove:false, googleCalendar:true,  cestino:false },
+  band:    {dashboard:false,allievi:false,docenti:false,corsi:false, calendario:false,concerti:false, contabilita:false,repertorio:false,allegati:false, biblioteca:false, utenti:false, impostazioni:false, schedaScuola:false, modulistica:false, notifiche:true,  reminders:false, notifiche_settings:false, sala_prove:true, googleCalendar:false, cestino:false },
 };
 
 // Etichette abbreviate SOLO per la modalità PWA/mobile (bottom-nav e menu "Altro").
@@ -1627,7 +1627,115 @@ const NAV_ITEMS = [
   { id:"notifiche_settings", label:"Config. Notifiche",  icon:"bell"    },
   { id:"sala_prove",  label:"Sala Prove",   icon:"drum"     },
   { id:"googleCalendar", label:"Google Calendar", icon:"calendar" },
+  { id:"cestino",     label:"Cestino",      icon:"trash"    },
 ];
+
+// ─── CESTINO GLOBALE — solo admin ──────────────────────────────────────────
+// Mostra i record eliminati da QUALUNQUE tabella (studenti, docenti, corsi,
+// lezioni, ecc.), con possibilità di ripristino entro 30gg. Passati i 30gg,
+// window.__FM_CESTINO_PURGA_SCADUTI__() (chiamato al mount) li elimina da solo.
+const CESTINO_LABEL_TABELLA = {
+  studenti: 'Allievo', docenti: 'Docente', corsi: 'Corso', lezioni: 'Lezione',
+  quote: 'Quota/Pagamento', spese: 'Spesa/Rimborso', concerti: 'Concerto/Evento',
+  allegati: 'Allegato', prenotazioni_sala: 'Prenotazione sala',
+};
+function cestinoEtichettaRecord(tabella, dati) {
+  if (!dati) return '(dati non disponibili)';
+  return dati.nome || dati.titolo || dati.file_name || dati.descrizione || dati.id || '(senza nome)';
+}
+const CestinoView = ({ userRuolo:_ruoloCestino }) => {
+  const [voci, setVoci] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filtro, setFiltro] = useState('tutti');
+  const [busy, setBusy] = useState(null);
+
+  const carica = () => {
+    const sb = window.supabaseClient;
+    if (!sb) { setLoading(false); return; }
+    setLoading(true);
+    sb.from('cestino').select('*').order('eliminato_il', {ascending:false}).then(({data, error}) => {
+      setVoci(error ? [] : (data||[]));
+      setLoading(false);
+    });
+  };
+
+  React.useEffect(() => {
+    if (window.__FM_CESTINO_PURGA_SCADUTI__) window.__FM_CESTINO_PURGA_SCADUTI__().then(carica);
+    else carica();
+  }, []);
+
+  if (_ruoloCestino !== 'admin') {
+    return React.createElement('div', {style:{padding:40,textAlign:'center',color:C.textMuted}}, 'Sezione riservata all\'amministratore.');
+  }
+
+  const tabelle = ['tutti', ...Object.keys(CESTINO_LABEL_TABELLA)];
+  const vociFiltrate = filtro === 'tutti' ? voci : voci.filter(v => v.tabella === filtro);
+
+  const giorniRimasti = (eliminatoIl) => {
+    const scadenza = new Date(eliminatoIl).getTime() + 30*24*60*60*1000;
+    return Math.max(0, Math.ceil((scadenza - Date.now()) / (24*60*60*1000)));
+  };
+
+  const ripristina = async (id) => {
+    setBusy(id);
+    const r = await window.__FM_CESTINO_RIPRISTINA__(id);
+    setBusy(null);
+    if (r.error) alert('Errore ripristino: ' + r.error);
+    else carica();
+  };
+  const eliminaDef = async (id) => {
+    if (!confirm('Eliminare definitivamente questa voce dal cestino? Non sarà più recuperabile.')) return;
+    setBusy(id);
+    const r = await window.__FM_CESTINO_ELIMINA_DEF__(id);
+    setBusy(null);
+    if (r.error) alert('Errore: ' + r.error);
+    else carica();
+  };
+  const svuota = async () => {
+    if (!confirm(`Svuotare TUTTO il cestino? Verranno eliminate definitivamente ${voci.length} voci, in modo irreversibile.`)) return;
+    setBusy('__all__');
+    const r = await window.__FM_CESTINO_SVUOTA__();
+    setBusy(null);
+    if (r.error) alert('Errore: ' + r.error);
+    else carica();
+  };
+
+  return (
+    React.createElement('div', {style:{padding:'24px 28px', maxWidth:900}}
+      , React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}
+        , React.createElement('h2', {style:{fontSize:20,fontWeight:700,margin:0}}, '🗑️ Cestino')
+        , voci.length > 0 && React.createElement(Btn, {danger:true, small:true, onClick:svuota, disabled:busy==='__all__'}
+            , React.createElement(Ic,{n:'trash',size:13,stroke:'#fff'}), 'Svuota cestino (' + voci.length + ')')
+      )
+      , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:18}}
+        , 'I record eliminati restano qui 30 giorni prima di essere rimossi automaticamente. Solo l\'amministratore può vederli e ripristinarli.')
+      , React.createElement('div', {style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:18}}
+        , tabelle.map(t => React.createElement('button', {key:t, onClick:()=>setFiltro(t),
+            style:{padding:'6px 14px',borderRadius:8,border:`1px solid ${filtro===t?C.gold:C.border}`,
+              background:filtro===t?C.goldBg:'none',color:filtro===t?C.gold:C.textMuted,cursor:'pointer',
+              fontSize:12,fontFamily:"'Open Sans',sans-serif",fontWeight:filtro===t?600:400}}
+          , t==='tutti' ? `Tutti (${voci.length})` : `${CESTINO_LABEL_TABELLA[t]} (${voci.filter(v=>v.tabella===t).length})`))
+      )
+      , loading ? React.createElement('div',{style:{textAlign:'center',padding:40,color:C.textDim}}, '⏳ Caricamento…')
+      : vociFiltrate.length === 0 ? React.createElement('div',{style:{textAlign:'center',padding:40,color:C.textDim}}, 'Il cestino è vuoto.')
+      : React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8}}
+          , vociFiltrate.map(v => React.createElement('div', {key:v.id,
+              style:{display:'flex',alignItems:'center',gap:12,padding:'12px 16px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:10}}
+            , React.createElement('div', {style:{flex:1,minWidth:0}}
+              , React.createElement('div', {style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.04em'}}, CESTINO_LABEL_TABELLA[v.tabella] || v.tabella)
+              , React.createElement('div', {style:{fontSize:14,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, cestinoEtichettaRecord(v.tabella, v.dati))
+              , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:2}}
+                , 'Eliminato il ' + new Date(v.eliminato_il).toLocaleDateString('it-IT') + ' — scade tra ' + giorniRimasti(v.eliminato_il) + ' giorni')
+            )
+            , React.createElement(Btn, {small:true, variant:'secondary', onClick:()=>ripristina(v.id), disabled:busy===v.id}
+              , React.createElement(Ic,{n:'refresh',size:13,stroke:C.textMuted}), 'Ripristina')
+            , React.createElement(Btn, {small:true, danger:true, onClick:()=>eliminaDef(v.id), disabled:busy===v.id}
+              , React.createElement(Ic,{n:'trash',size:13,stroke:'#fff'}))
+          ))
+        )
+    )
+  );
+};
 
 const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction, config }) => {
   const [sidebarLogoOk, setSidebarLogoOk] = useState(true);

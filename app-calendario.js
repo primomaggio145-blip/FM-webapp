@@ -3243,8 +3243,25 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
   const handleDelCourse = async (id) => {
     const sb = window.supabaseClient;
     if (sb && id) {
-      const { error } = await sb.from('corsi').delete().eq('id', id);
-      if (error) console.warn('[FM] handleDelCourse error:', error.message);
+      // Legge la riga COMPLETA da Supabase (include foto/livelli/anno_creazione, non
+      // presenti nello stato React locale) così il ripristino dal cestino sia fedele.
+      let rowDb = null;
+      try {
+        const { data } = await sb.from('corsi').select('*').eq('id', id).maybeSingle();
+        rowDb = data || null;
+      } catch(e) { /* fallback sotto */ }
+      if (!rowDb) {
+        const corsoDaEliminare = courses.find(c => c.id === id);
+        rowDb = corsoDaEliminare ? {
+          id: corsoDaEliminare.id, nome: corsoDaEliminare.name||corsoDaEliminare.nome||'',
+          tipo: corsoDaEliminare.type||corsoDaEliminare.tipo||'individuale',
+          descrizione: corsoDaEliminare.description||null, visible: corsoDaEliminare.visible !== false,
+        } : null;
+      }
+      const { error } = window.__FM_CESTINA_E_ELIMINA__
+        ? await window.__FM_CESTINA_E_ELIMINA__('corsi', id, rowDb)
+        : await sb.from('corsi').delete().eq('id', id);
+      if (error) console.warn('[FM] handleDelCourse error:', error.message || error);
     }
     setCourses(p => {
       const next = p.filter(c => c.id !== id);
@@ -3727,7 +3744,7 @@ const PRESENZE_SVOLTE = ['presente','assente','recupero'];
 const isLezionePagabile = (l) => PRESENZE_PAGATE.includes((l.attendance||'').toLowerCase());
 const isLezioneSvolta   = (l) => PRESENZE_SVOLTE.includes((l.attendance||'').toLowerCase());
 
-const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"", notes:"", exercises:"", repertorioIds:[], linkUrl:"", allegati:[], inRecupero:false, recuperoScadenza:null, durata:45 };
+const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"", notes:"", exercises:"", repertorioIds:[], linkUrl:"", allegati:[], inRecupero:false, recuperoScadenza:null, durata:45, nuovoIscritto:false, contactName:"", phone:"" };
 
 // ─── ATT_STYLES globale (usato da LessonForm, LessonDetailModal, LezioniAdminView, RecuperoView)
 const ATT_STYLES = {
@@ -3856,7 +3873,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     const e = {};
     if(!f.date)       e.date       = "Data obbligatoria";
     if(!f.hour)       e.hour       = "Orario obbligatorio";
-    if(!f.student)    e.student    = "Allievo obbligatorio";
+    if(!f.nuovoIscritto && !f.student) e.student = "Allievo obbligatorio";
     if(!f.instrument) e.instrument = "Strumento obbligatorio";
     if(!f.teacher)    e.teacher    = "Insegnante obbligatorio";
     if(!f.recurrence) e.recurrence = "Seleziona la ricorrenza";
@@ -3905,8 +3922,19 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
         , roleLF !== "docente" && React.createElement(Sel, { label: "Durata" , value: String(f.durata||45), onChange: e => set("durata", parseInt(e.target.value)), options: [{value:"30",label:"30 min"},{value:"45",label:"45 min"},{value:"60",label:"60 min"},{value:"90",label:"1h 30min"},{value:"120",label:"2 ore"}] })
 
         , React.createElement(SDiv, { label: "Chi", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4229}})
+        , roleLF !== "docente" && React.createElement('label', {
+            style:{gridColumn:"1/-1",display:"flex",alignItems:"center",gap:8,cursor:"pointer",
+              padding:"8px 12px",borderRadius:8,background:f.nuovoIscritto?(C.goldBg||'#fff7e6'):'transparent',
+              border:`1px dashed ${f.nuovoIscritto?C.gold:C.border}`}}
+          , React.createElement('input', {type:"checkbox", checked:!!f.nuovoIscritto,
+              onChange: e => set("nuovoIscritto", e.target.checked)})
+          , React.createElement('span', {style:{fontSize:13,fontWeight:600,color:f.nuovoIscritto?C.gold:C.textMuted}}
+            , '🆕 NUOVO ISCRITTO — l\'allievo verrà inserito in un secondo momento')
+          )
+        , f.nuovoIscritto && React.createElement(Input, { label: "Nome e cognome (provvisorio)", value: f.contactName||"", onChange: e => set("contactName", e.target.value), placeholder:"Nome di chi verrà a lezione" })
+        , f.nuovoIscritto && React.createElement(Input, { label: "Telefono", value: f.phone||"", onChange: e => set("phone", e.target.value), placeholder:"Recapito per contattarlo" })
         , roleLF !== "docente"
-          ? React.createElement(Sel, { label: "Allievo *", value: f.student, onChange: e => set("student", e.target.value), options: dynamicStudents.length > 0 ? dynamicStudents : STUDENTS_LIST, error: err.student })
+          ? React.createElement(Sel, { label: f.nuovoIscritto ? "Allievo" : "Allievo *", value: f.student, onChange: e => set("student", e.target.value), options: dynamicStudents.length > 0 ? dynamicStudents : STUDENTS_LIST, error: err.student })
           : React.createElement(Input, { label: "Allievo", value: f.student || "—", readOnly: true })
         , roleLF !== "docente"
           ? React.createElement(Sel, { label: "Corso individuale *", value: f.instrument, onChange: e => set("instrument", e.target.value), options: instrumentOptionsForm, error: err.instrument })

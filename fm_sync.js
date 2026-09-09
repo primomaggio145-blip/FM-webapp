@@ -99,6 +99,9 @@
       motivoAssenza: r.motivo_assenza || null,
       contactName: r.contact_name || '',
       phone: r.phone || '',
+      // Flag "NUOVO ISCRITTO": lezione calendarizzata prima di aver inserito l'allievo
+      // (o i suoi dati completi) in anagrafica — vedi checkNuoviIscrittiScaduti()
+      nuovoIscritto: r.nuovo_iscritto || false,
       durata: r.durata
         ? parseInt(r.durata)
         : (r.tipo === 'collettivo' ? 60 : r.tipo === 'prova' ? 30 : 45),
@@ -286,6 +289,7 @@
         motivo_assenza: l.motivoAssenza || null,
         contact_name: l.contactName || null,
         phone: l.phone || null,
+        nuovo_iscritto: l.nuovoIscritto || false,
         durata: l.durata ? parseInt(l.durata) : null,
         exercises: l.exercises || null,
         repertorio_ids: l.repertorioIds && l.repertorioIds.length > 0
@@ -390,16 +394,86 @@
   // ═══════════════════════════════════════════════════════════════════════════
   function diff(prev, next) {
     if (!Array.isArray(prev) || !Array.isArray(next)) return { added:[], updated:[], deleted:[] };
-    const pm = new Map(prev.map(r => [String(r.id), JSON.stringify(r)]));
+    const pm = new Map(prev.map(r => [String(r.id), r]));
     const nm = new Map(next.map(r => [String(r.id), r]));
     const added = [], updated = [], deleted = [];
     nm.forEach((item, id) => {
       if (!pm.has(id)) added.push(item);
-      else if (pm.get(id) !== JSON.stringify(item)) updated.push(item);
+      else if (JSON.stringify(pm.get(id)) !== JSON.stringify(item)) updated.push(item);
     });
-    pm.forEach((_, id) => { if (!nm.has(id)) deleted.push(id); });
+    pm.forEach((item, id) => { if (!nm.has(id)) deleted.push(item); });
     return { added, updated, deleted };
   }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  CESTINO GLOBALE — ogni cancellazione (qualunque tabella) passa prima da qui.
+  //  Il record eliminato viene salvato in 'cestino' (snapshot JSON) prima della
+  //  DELETE vera, così può essere ripristinato entro 30gg. Se la tabella 'cestino'
+  //  non esiste ancora su Supabase, procede comunque con l'eliminazione normale
+  //  (nessun blocco), segnalando solo un avviso in console.
+  // ═══════════════════════════════════════════════════════════════════════════
+  async function cestinaEDelete(sb, table, id, record) {
+    try {
+      if (record) {
+        const { error: eCestino } = await sb.from('cestino').insert({
+          tabella: table, record_id: String(id), dati: record,
+        });
+        if (eCestino) warn('cestino insert fallito (procedo comunque con la delete):', eCestino.message);
+      }
+    } catch(e) { warn('cestino insert error (procedo comunque con la delete):', e); }
+    return sb.from(table).delete().eq('id', id);
+  }
+
+  // Esposta a window per le cancellazioni dirette da app-*.js che bypassano il motore
+  // di sync generico (es. handleDelCourse, handleDeleteAllegato): 'record' deve già
+  // essere in formato database (stesso shape scritto su Supabase), non formato React.
+  window.__FM_CESTINA_E_ELIMINA__ = async function(table, id, recordDbShape) {
+    const sb = window.supabaseClient;
+    if (!sb) return { error: 'Supabase non disponibile' };
+    const { error } = await cestinaEDelete(sb, table, id, recordDbShape);
+    return { error: error ? error.message : null };
+  };
+
+  // Svuota subito tutto il cestino — esposto alla UI (solo admin)
+  window.__FM_CESTINO_SVUOTA__ = async function() {
+    const sb = window.supabaseClient;
+    if (!sb) return { error: 'Supabase non disponibile' };
+    const { error } = await sb.from('cestino').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    return { error: error ? error.message : null };
+  };
+
+  // Ripristina un record dal cestino nella sua tabella originale — esposto alla UI
+  window.__FM_CESTINO_RIPRISTINA__ = async function(cestinoId) {
+    const sb = window.supabaseClient;
+    if (!sb) return { error: 'Supabase non disponibile' };
+    const { data: riga, error: e1 } = await sb.from('cestino').select('*').eq('id', cestinoId).single();
+    if (e1 || !riga) return { error: e1 ? e1.message : 'Voce non trovata nel cestino' };
+    const { error: e2 } = await sb.from(riga.tabella).upsert(riga.dati);
+    if (e2) return { error: e2.message };
+    await sb.from('cestino').delete().eq('id', cestinoId);
+    if (window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true);
+    return { error: null };
+  };
+
+  // Elimina definitivamente (dal cestino, non dalla tabella originale) una singola voce
+  window.__FM_CESTINO_ELIMINA_DEF__ = async function(cestinoId) {
+    const sb = window.supabaseClient;
+    if (!sb) return { error: 'Supabase non disponibile' };
+    const { error } = await sb.from('cestino').delete().eq('id', cestinoId);
+    return { error: error ? error.message : null };
+  };
+
+  // Elimina automaticamente le voci più vecchie di 30 giorni — chiamata all'apertura
+  // del pannello Cestino e una volta per sessione admin (non c'è un cron server-side
+  // in un'app statica GitHub Pages, quindi la pulizia avviene "alla prima occasione utile")
+  window.__FM_CESTINO_PURGA_SCADUTI__ = async function() {
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    try {
+      const soglia = new Date(Date.now() - 30*24*60*60*1000).toISOString();
+      await sb.from('cestino').delete().lt('eliminato_il', soglia);
+    } catch(e) { warn('purga cestino', e); }
+  };
 
   // Genera un UUID v4 valido per Supabase (colonne di tipo uuid)
   function newId() {
@@ -485,9 +559,12 @@
       } catch(e) { fail('upsert error', table, e); }
     }
 
-    for (const id of changes.deleted) {
+    for (const item of changes.deleted) {
+      const id = item && item.id != null ? item.id : item;
       try {
-        const { error } = await sb.from(table).delete().eq('id', id);
+        let dbRow = null;
+        try { dbRow = cleanRow(adapter(item)); } catch(e) { dbRow = item; }
+        const { error } = await cestinaEDelete(sb, table, id, dbRow);
         if (error) fail(`DELETE ${table} [${id}]:`, error.message);
         else log(`✕ ${table}`, id);
       } catch(e) { fail('delete error', table, e); }
@@ -507,6 +584,41 @@
   // Esposto su window così può essere richiamato anche dagli altri file dell'app
   // (es. RepertorioView, modal Modifica Lezione) per gli eventi che non passano
   // dal diff automatico di questo file.
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  NUOVO ISCRITTO — controllo lezioni scadute senza allievo collegato
+  //  Una lezione marcata "nuovo iscritto" viene calendarizzata PRIMA di inserire
+  //  l'allievo in anagrafica. Se la data della lezione passa e nel frattempo
+  //  nessuno ha ancora collegato/creato l'allievo (studente_id resta vuoto),
+  //  avvisa l'amministratore una sola volta per lezione.
+  // ═══════════════════════════════════════════════════════════════════════════
+  async function checkNuoviIscrittiScaduti() {
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    try {
+      const oggi = new Date().toISOString().split('T')[0];
+      const { data, error } = await sb.from('lezioni').select('*')
+        .eq('nuovo_iscritto', true)
+        .is('studente_id', null)
+        .lt('data', oggi)
+        .or('notificato_nuovo_iscritto.is.null,notificato_nuovo_iscritto.eq.false');
+      if (error || !data || !data.length) return;
+      for (const l of data) {
+        const nomeProv = l.contact_name || l.student || 'un nuovo allievo';
+        let dataFmt = l.data;
+        try { dataFmt = new Date(l.data + 'T00:00:00').toLocaleDateString('it-IT', {day:'2-digit',month:'2-digit',year:'numeric'}); } catch(e) {}
+        await window.FM_NOTIFY({
+          tipo:      'nuovo_iscritto_scaduto',
+          titolo:    '⚠️ Dati allievo mancanti',
+          messaggio: `La prima lezione di ${nomeProv} (${dataFmt}${l.ora ? ' alle ' + l.ora.slice(0,5) : ''}) è passata ma l'allievo non è ancora stato inserito in anagrafica.` + (l.phone ? ` Recapito: ${l.phone}.` : ''),
+          push: true,
+          includeAdmin: true,
+          meta: { lezioneId: l.id },
+        });
+        await sb.from('lezioni').update({ notificato_nuovo_iscritto: true }).eq('id', l.id);
+      }
+    } catch(e) { warn('checkNuoviIscrittiScaduti', e); }
+  }
+
   window.FM_NOTIFY = async function(opts) {
     const sb = window.supabaseClient;
     if (!sb || !opts || !opts.tipo) return;
@@ -620,8 +732,9 @@
       });
     }
 
-    for (const id of d.deleted) {
-      const l = prevMap.get(String(id));
+    for (const item of d.deleted) {
+      const id = item && item.id != null ? item.id : item;
+      const l = (prevMap && prevMap.get(String(id))) || item;
       if (!l || LEZIONI_TIPI_ESCLUSI.has(l.tipo)) continue;
       const { teacherIds, teacherNames, studentIds, studentNames } = _lezioneDestinatari(l, studentsList, docentiList);
       if (!teacherIds.length && !teacherNames.length && !studentIds.length && !studentNames.length) continue;
@@ -1140,6 +1253,12 @@
           _ready = true;
           log('✅ Sync attivo — pronto a scrivere su Supabase');
           subscribeRealtime();
+          // Auto-refresh silenzioso ad ogni caricamento pagina: corregge il caso in cui
+          // il caricamento iniziale (loadAll) mostri dati incompleti o non aggiornati
+          // (es. per un hiccup di rete) senza che l'utente debba premere manualmente
+          // il pulsante "Aggiorna dati".
+          if (window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true);
+          checkNuoviIscrittiScaduti();
         }, 2000);
       }
     });

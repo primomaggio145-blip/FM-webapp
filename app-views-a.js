@@ -2835,8 +2835,15 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
       } else {
         // Allegato in tabella allegati separata
         if (sb) {
-          const { error } = await sb.from('allegati').delete().eq('id', a.id);
-          if (error) { alert('Errore: '+error.message); return; }
+          const rowDb = {
+            id: a.id, lezione_id: a.lezioneId||null, allievo_id: a.allievoId||null,
+            allievo_nome: a.allievoNome||null, corso: a.corso||null, descrizione: a.descrizione||null,
+            file_url: a.fileUrl||null, file_name: a.fileName||null, file_type: a.fileType||null,
+          };
+          const { error } = window.__FM_CESTINA_E_ELIMINA__
+            ? await window.__FM_CESTINA_E_ELIMINA__('allegati', a.id, rowDb)
+            : await sb.from('allegati').delete().eq('id', a.id);
+          if (error) { alert('Errore: '+(error.message||error)); return; }
           if (a.fileUrl) {
             try {
               const urlPath = a.fileUrl.split('/object/public/allegati/')[1];
