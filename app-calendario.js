@@ -2457,7 +2457,13 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
     let dataInizio = inizioMese;
     if (isMeseIscrizione && enroll > inizioMese) dataInizio = enroll;
     let dataFine = fineMese;
-    if (isUltimoMeseConLezioni) {
+    // Il "cap a oggi" (mese in corso, dati parziali) ha senso solo se l'iscrizione è già
+    // effettivamente iniziata (oggi >= dataInizio). Se l'allievo è iscritto con una data futura
+    // (es. iscritto oggi ma corso che parte tra qualche giorno), capovolgere la finestra su "oggi"
+    // la faceva collassare a una manciata di ore → arrotondata sempre a 0 nonostante il corso
+    // fosse correttamente assegnato. In questo caso si proietta invece l'intera finestra restante
+    // (da inizio iscrizione a fine mese), coerente con quanto l'allievo maturerà entro fine mese.
+    if (isUltimoMeseConLezioni && now3 >= dataInizio) {
       const oggiCap = now3 < fineMese ? now3 : fineMese;
       if (oggiCap < dataFine) dataFine = oggiCap;
     }
