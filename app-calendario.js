@@ -2434,46 +2434,49 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
   });
   const isUltimoMeseConLezioni = !!ultimoMeseConLezioni && ultimoMeseConLezioni.anno===reportAnno && ultimoMeseConLezioni.mese===reportMese;
 
-  // Soglia di un allievo per il mese selezionato — normalmente flat (4/mese a corso individuale,
-  // 2/mese per il corso collettivo), MA per il mese d'iscrizione e per l'ultimo mese con lezioni
-  // (entrambi mesi "parziali") viene calcolata in proporzione alle settimane effettivamente trascorse:
-  // lezioni attese = (punti/4 a settimana) × nr. corsi × nr. settimane dalla data di riferimento.
+  // Soglia di un allievo: SEMPRE lo standard fisso (4/mese a corso individuale, 2/mese per il
+  // corso collettivo) — non viene più ridotta per i mesi parziali (l'approccio precedente,
+  // riducendo la soglia in proporzione alle settimane trascorse, collassava a 0 per finestre
+  // temporali molto brevi — es. un allievo iscritto da 1-2 giorni — anche con corsi assegnati).
   const sogliaAllievo = (s) => {
     const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
     const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
+    return {
+      individuale: nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE,
+      collettiva:  nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO,
+    };
+  };
+
+  // Per il mese d'iscrizione e per l'ultimo mese con lezioni (mesi "parziali"), invece di
+  // ridurre la soglia si NORMALIZZA IL CONTEGGIO al ritmo mensile equivalente:
+  //   lezioni fatte / settimane trascorse dalla data di riferimento × settimane medie di un mese
+  // così un allievo appena iscritto (o nel mese ancora in corso) viene confrontato in modo equo
+  // con la soglia standard, invece di risultare ingiustamente indietro solo perché non ha ancora
+  // avuto il tempo di fare tutte le lezioni del mese intero. Settimane minime = 1, per evitare
+  // estrapolazioni assurde da un singolo giorno di dati (es. il giorno stesso dell'iscrizione).
+  const SETTIMANE_MESE_MEDIO = 4.345;
+  const settimaneTrascorse = (s) => {
     const enroll = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
     const isMeseIscrizione = enroll && enroll.getFullYear()===reportAnno && (enroll.getMonth()+1)===reportMese;
-
-    if (!isMeseIscrizione && !isUltimoMeseConLezioni) {
-      // Mese "pieno" ordinario: soglia standard
-      return {
-        individuale: nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE,
-        collettiva:  nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO,
-      };
-    }
-    // Mese parziale: calcola le settimane effettive del periodo di riferimento
+    if (!isMeseIscrizione && !isUltimoMeseConLezioni) return null; // mese pieno: nessuna normalizzazione
     const inizioMese = new Date(reportAnno, reportMese-1, 1);
     const fineMese    = new Date(reportAnno, reportMese, 0);
     let dataInizio = inizioMese;
     if (isMeseIscrizione && enroll > inizioMese) dataInizio = enroll;
     let dataFine = fineMese;
-    // Il "cap a oggi" (mese in corso, dati parziali) ha senso solo se l'iscrizione è già
-    // effettivamente iniziata (oggi >= dataInizio). Se l'allievo è iscritto con una data futura
-    // (es. iscritto oggi ma corso che parte tra qualche giorno), capovolgere la finestra su "oggi"
-    // la faceva collassare a una manciata di ore → arrotondata sempre a 0 nonostante il corso
-    // fosse correttamente assegnato. In questo caso si proietta invece l'intera finestra restante
-    // (da inizio iscrizione a fine mese), coerente con quanto l'allievo maturerà entro fine mese.
-    if (isUltimoMeseConLezioni && now3 >= dataInizio) {
+    if (isUltimoMeseConLezioni) {
       const oggiCap = now3 < fineMese ? now3 : fineMese;
       if (oggiCap < dataFine) dataFine = oggiCap;
     }
-    if (dataFine < dataInizio) dataFine = dataInizio;
+    if (dataFine < dataInizio) return 0; // iscrizione futura: nessuna settimana ancora trascorsa
     const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
-    const settimane = Math.max(giorni,1)/7;
-    return {
-      individuale: Math.round(nCorsiIndividuali*(PUNTI_CORSO_INDIVIDUALE/4)*settimane),
-      collettiva:  Math.round(nCorsiCollettivi*(PUNTI_CORSO_COLLETTIVO/4)*settimane),
-    };
+    return Math.max(giorni,1)/7;
+  };
+  const normalizzaConteggio = (countReale, settimane) => {
+    if (settimane === null) return countReale; // mese pieno: conteggio reale, nessuna normalizzazione
+    if (settimane <= 0) return 0; // iscrizione futura: non ancora iniziato
+    const settimaneUsate = Math.max(settimane, 1);
+    return Math.round((countReale / settimaneUsate) * SETTIMANE_MESE_MEDIO);
   };
 
   // Lezioni del mese selezionato, deduplicate per id (record duplicato = bug di sincronizzazione
@@ -2501,16 +2504,16 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
     // ovunque nell'app) invece di un dizionario indicizzato solo per nome — una lezione salvata
     // con solo studentId (senza il campo nome "student") altrimenti non veniva mai contata,
     // risultando sempre a 0.
-    let countInd = 0, countColl = 0;
+    let countIndReale = 0, countCollReale = 0;
     lezioniMese.forEach(l => {
       if (!studentInLesson(l, nome, s.id)) return;
       if (studAttendance(l, nome, s.id)==='recuperata') return;
-      if (isColl(l)) countColl++; else countInd++;
+      if (isColl(l)) countCollReale++; else countIndReale++;
     });
     // DIAGNOSTICA TEMPORANEA: se il conteggio è 0 ma esistono lezioni nel mese che citano questo
     // allievo (per nome o id) senza che studentInLesson le abbia riconosciute, stampa il dettaglio
     // grezzo per capire dove si rompe il match. Rimuovere una volta risolto.
-    if (countInd===0 && countColl===0) {
+    if (countIndReale===0 && countCollReale===0) {
       const possibiliMatchGrezzi = lezioniMese.filter(l =>
         (l.student && nome && l.student.toLowerCase().trim()===nome.toLowerCase().trim()) ||
         (l.studentId!=null && s.id!=null && String(l.studentId)===String(s.id)) ||
@@ -2518,8 +2521,13 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
       );
       if (possibiliMatchGrezzi.length > 0) {
         console.warn(`[FM][DEBUG conteggio] "${nome}" (id=${s.id}): trovate ${possibiliMatchGrezzi.length} lezioni nel mese che sembrano sue ma NON riconosciute da studentInLesson:`, possibiliMatchGrezzi.map(l=>({id:l.id,date:l.date,tipo:l.tipo,student:l.student,studentId:l.studentId,students:l.students})));
+      } else {
+        console.warn(`[FM][DEBUG conteggio] "${nome}" (id=${s.id}): nessuna lezione trovata nel mese ${reportMese}/${reportAnno} (né riconosciuta né sospetta) — controlla che la lezione sia registrata in questo mese.`);
       }
     }
+    const settimane = settimaneTrascorse(s);
+    const countInd  = normalizzaConteggio(countIndReale, settimane);
+    const countColl = normalizzaConteggio(countCollReale, settimane);
     const soglie = sogliaAllievo(s);
     const isEccInd  = s.sogliaIndividualeEcc!=null;
     const isEccColl = s.sogliaCollettivaEcc!=null;
