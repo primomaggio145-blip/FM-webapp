@@ -2469,9 +2469,14 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     let dataInizio = inizioMese;
     if (isMeseIscrizione && enroll > inizioMese) dataInizio = enroll;
     let dataFine = fineMese;
-    if (isUltimoMeseConLezioni && now3 < dataFine) dataFine = now3;
+    // Il "cap a oggi" (mese in corso) ha senso solo se l'iscrizione è GIÀ iniziata (oggi >=
+    // dataInizio). Se la data d'iscrizione è ancora futura rispetto a oggi (es. iscritto oggi
+    // ma con decorrenza tra qualche giorno), applicare comunque il cap capovolgerebbe la finestra
+    // (fine prima dell'inizio) collassando la soglia a 0 nonostante il corso sia assegnato — si
+    // proietta invece l'intera finestra restante (da iscrizione a fine mese/fine anno).
+    if (isUltimoMeseConLezioni && now3 >= dataInizio && now3 < dataFine) dataFine = now3;
     if (isMeseFineAnno && dataFineAnno < dataFine) dataFine = dataFineAnno;
-    if (dataFine < dataInizio) return { individuale:0, collettiva:0 }; // finestra vuota/invertita (es. iscrizione futura)
+    if (dataFine < dataInizio) return { individuale:0, collettiva:0 }; // finestra ancora vuota (rimane come ultima rete di sicurezza)
 
     const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
     const settimane = Math.max(giorni,1)/7;
