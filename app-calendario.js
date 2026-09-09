@@ -2905,6 +2905,11 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         }
       } catch(eDup) { /* se il controllo anti-duplicato fallisce, si procede comunque con l'inserimento normale */ }
 
+      // 'anno_scolastico_id' è una foreign key verso anni_scolastici.id (chiave interna),
+      // DIVERSA dal numero di anno (annoSel, es. 2026): va risolta cercando la riga corrispondente.
+      // Senza questo campo l'allievo risultava "scollegato dall'anno scolastico" anche quando
+      // l'iscrizione in iscrizioni_anno veniva creata correttamente.
+      const annoScolasticoRow = anniDisp.find(a => String(a.annoInizio)===String(annoSel));
       const row = {
         nome: d.name||'', email: d.email||null, phone: d.phone||null,
         strumento: d.instrument||null, docente: d.teacher||null,
@@ -2913,9 +2918,11 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
         complementary_course: d.complementaryCourse||null, notes: d.notes||null,
         nome_ricevuta: d.nomeRicevuta||null, codice_fiscale: d.codiceFiscale||null,
+        anno_scolastico_id: annoScolasticoRow ? annoScolasticoRow.id : null,
         extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
         extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
       };
+      if (!annoScolasticoRow) console.warn('[FM] Nessuna riga anni_scolastici trovata per annoSel='+annoSel+': anno_scolastico_id resterà null.');
       const { data: inserted, error } = await supabaseUpsertConFallbackColonne(sb, 'studenti', row, { isUpdate:false });
       if (!error && inserted) {
         // Usa l'ID intero reale restituito da Supabase
@@ -2980,6 +2987,9 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const handleEditStudent = async (d) => {
     const sb = window.supabaseClient;
     if (sb && d.id) {
+      // Vedi commento in handleAddStudent: anno_scolastico_id è una FK verso anni_scolastici.id,
+      // non va confusa con annoSel (il numero di anno_inizio).
+      const annoScolasticoRowEdit = anniDisp.find(a => String(a.annoInizio)===String(annoSel));
       const row = {
         nome: d.name||'', email: d.email||null, phone: d.phone||null,
         strumento: d.instrument||null, docente: d.teacher||null,
@@ -2988,6 +2998,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
         complementary_course: d.complementaryCourse||null, notes: d.notes||null,
         nome_ricevuta: d.nomeRicevuta||null, codice_fiscale: d.codiceFiscale||null,
+        anno_scolastico_id: annoScolasticoRowEdit ? annoScolasticoRowEdit.id : null,
         extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
         extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
       };
