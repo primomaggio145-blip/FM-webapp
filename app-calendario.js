@@ -2501,11 +2501,31 @@ const ReportLezioniMensile = ({ lessons, students, config, onSelectAllievo }) =>
       if (studAttendance(l, nome, s.id)==='recuperata') return;
       if (isColl(l)) countColl++; else countInd++;
     });
+    // DIAGNOSTICA TEMPORANEA: se il conteggio è 0 ma esistono lezioni nel mese che citano questo
+    // allievo (per nome o id) senza che studentInLesson le abbia riconosciute, stampa il dettaglio
+    // grezzo per capire dove si rompe il match. Rimuovere una volta risolto.
+    if (countInd===0 && countColl===0) {
+      const possibiliMatchGrezzi = lezioniMese.filter(l =>
+        (l.student && nome && l.student.toLowerCase().trim()===nome.toLowerCase().trim()) ||
+        (l.studentId!=null && s.id!=null && String(l.studentId)===String(s.id)) ||
+        (Array.isArray(l.students) && l.students.some(st => st && ((st.name||'').toLowerCase().trim()===nome.toLowerCase().trim() || (st.id!=null && s.id!=null && String(st.id)===String(s.id)))))
+      );
+      if (possibiliMatchGrezzi.length > 0) {
+        console.warn(`[FM][DEBUG conteggio] "${nome}" (id=${s.id}): trovate ${possibiliMatchGrezzi.length} lezioni nel mese che sembrano sue ma NON riconosciute da studentInLesson:`, possibiliMatchGrezzi.map(l=>({id:l.id,date:l.date,tipo:l.tipo,student:l.student,studentId:l.studentId,students:l.students})));
+      }
+    }
     const soglie = sogliaAllievo(s);
     const isEccInd  = s.sogliaIndividualeEcc!=null;
     const isEccColl = s.sogliaCollettivaEcc!=null;
     const sogliaInd  = Math.round(isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale);
     const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
+    // DIAGNOSTICA TEMPORANEA: se la soglia risulta 0 su entrambi i tipi, stampa in console i
+    // campi grezzi che il report sta effettivamente leggendo per questo allievo — permette di
+    // capire subito se il dato non arriva (bug di lettura) o se è genuinamente vuoto (dato mancante),
+    // senza dover indovinare. Rimuovere una volta risolto.
+    if (sogliaInd===0 && sogliaColl===0) {
+      console.warn(`[FM][DEBUG soglie] "${nome}" → instrument=${JSON.stringify(s.instrument)} extraInstruments=${JSON.stringify(s.extraInstruments)} complementaryCourse=${JSON.stringify(s.complementaryCourse)} enrollDate=${JSON.stringify(s.enrollDate)}`);
+    }
     const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
     const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
     // Stato complessivo dell'allievo: la carenza (sotto soglia), su uno qualsiasi dei due tipi,
