@@ -474,8 +474,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     {id:"allievi",  label:"Allievi",  icon:"users"},
     {id:"lezioni",  label:"Lezioni",  icon:"calendar"},
     {id:"compenso", label:"Compenso", icon:"euro"},
-    // Tab Impostazioni: solo per il docente loggato, e solo in modalità desktop
-    ...(ruoloDocView==="docente" && !IS_PWA ? [{id:"impostazioni", label:"Impostazioni", icon:"settings"}] : []),
+    // Tab Impostazioni: solo per il docente loggato (visibile anche in PWA/mobile)
+    ...(ruoloDocView==="docente" ? [{id:"impostazioni", label:"Impostazioni", icon:"settings"}] : []),
   ];
   const stip = stipendioMese(selected);
 
