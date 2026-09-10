@@ -876,14 +876,17 @@ const CambioOraModal = ({ lesson, onSave, onDismiss }) => {
   const handleSalva = async () => {
     if (!nuovaData || !nuoraOra) return;
     setSaving(true);
+    const noteCambioOra = `CAMBIO ORA, LEZIONE DEL ${dataOrig}`;
+    const nuoveNote = lesson.notes ? `${noteCambioOra}\n${lesson.notes}` : noteCambioOra;
     const sb = window.supabaseClient;
     if (sb) {
       await sb.from('lezioni').update({
         data: nuovaData,
         ora:  nuoraOra + ':00',
+        notes: nuoveNote,
       }).eq('id', lesson.id);
     }
-    onSave({ ...lesson, date: nuovaData, hour: nuoraOra });
+    onSave({ ...lesson, date: nuovaData, hour: nuoraOra, notes: nuoveNote });
     setSaving(false);
     onDismiss();
   };
