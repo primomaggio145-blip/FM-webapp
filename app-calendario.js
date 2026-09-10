@@ -8492,6 +8492,15 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       );
       return stu ? (stu.name || stu.nome || _cvNome) : _cvNome;
     }, [role, _cvAllievoId, _cvNome, propStudents]);
+    // Record del docente loggato (per leggere le sue impostazioni personali, es. visibilità sala prove)
+    const _cvMyDocRecord = React.useMemo(() => {
+      if (role !== "docente") return null;
+      if (_cvDocenteId) return propDocenti.find(x => String(x.id) === String(_cvDocenteId)) || null;
+      if (!_cvNome) return null;
+      return propDocenti.find(d => (d.teacherKey||d.nome||'').toLowerCase().includes(_cvNome.toLowerCase())) || null;
+    }, [role, propDocenti, _cvDocenteId, _cvNome]);
+    // Default disattivata: il docente deve attivarla esplicitamente dalle Impostazioni
+    const _cvShowSalaProve = role !== "docente" || (_cvMyDocRecord && _cvMyDocRecord.mostraPrenotazioniSala === true);
     const [appView,     setAppView]    = useState("calendario"); // calendario | repertorio | recupero | lezioni_admin
 
   
@@ -9120,8 +9129,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         else if (filterTipo === "collettivo") ls = ls.filter(l => isColl(l));
         else if (filterTipo === "normale")    ls = ls.filter(l => !isProva(l) && !isColl(l));
       }
-      // Aggiungi eventi sala prove al calendario
-      const spEvents = prenotazioniSala
+      // Aggiungi eventi sala prove al calendario (solo se il docente ha attivato la visualizzazione
+      // dalle sue Impostazioni — di default è disattivata; admin e allievi non sono soggetti al flag)
+      const spEvents = !_cvShowSalaProve ? [] : prenotazioniSala
         .filter(p => p.stato === "approvata" || p.stato === "in_attesa")
         .filter(p => {
           const myUserId = _appUserCV && _appUserCV.userId;
@@ -9153,7 +9163,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         }));
       // Blocchi di sola lettura per prenotazioni fatte direttamente su Google Calendar
       // (bypass app) — niente titolo/dettaglio per privacy, solo l'orario occupato.
-      const gcalBusyEvents = (gcalSalaBusy || []).map(ev => ({
+      const gcalBusyEvents = !_cvShowSalaProve ? [] : (gcalSalaBusy || []).map(ev => ({
         id: "gcalbusy_" + ev.id,
         _isSalaProve: true,
         _isGcalExternal: true,
@@ -9173,7 +9183,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         stato: "approvata",
       }));
       return [...ls, ...spEvents, ...gcalBusyEvents];
-    }, [lessons, role, filterCorso, filterDocente, filterTipo, _cvAllievoId, currentStudent, _cvDocenteId, _cvNome, prenotazioniSala, gcalSalaBusy]);
+    }, [lessons, role, filterCorso, filterDocente, filterTipo, _cvAllievoId, currentStudent, _cvDocenteId, _cvNome, prenotazioniSala, gcalSalaBusy, _cvShowSalaProve]);
   
     const todayStr     = yyyymmdd(today);
     const todayLessons = visibleLessons.filter(l => l.date === todayStr);

@@ -63,6 +63,9 @@
         contratto:   r.contratto      || '',
         dataInizio:  r.data_inizio    || '',
         corsi:       r.corsi          || [],
+        // Visibilità prenotazioni sala prove nel calendario personale del docente —
+        // di default disattivata (il docente deve attivarla dalle sue Impostazioni)
+        mostraPrenotazioniSala: r.mostra_prenotazioni_sala === true,
         disponibilitaRecuperi: (() => {
           const v = r.disponibilita_recuperi;
           if (!v) return [];

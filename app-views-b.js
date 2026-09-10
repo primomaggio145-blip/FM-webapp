@@ -1138,6 +1138,48 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
             )
           )
 
+          /* ── Prenotazioni sala prove ── */
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
+              , React.createElement(Ic, {n:"drum",size:14,stroke:C.gold})
+              , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Sala prove")
+            )
+            , React.createElement('div', {style:{padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:16}}
+              , React.createElement('div', null
+                , React.createElement('div', {style:{fontSize:13,fontWeight:500,marginBottom:3}}, "Mostra prenotazioni sala prove")
+                , React.createElement('div', {style:{fontSize:12,color:C.textDim}}, "Visualizza nel tuo calendario le prenotazioni della sala prove (disattivata di default)")
+              )
+              , React.createElement('button', {
+                  onClick: ()=>{
+                    const nuovoValore = !selected.mostraPrenotazioniSala;
+                    const updatedDoc = { ...selected, mostraPrenotazioniSala: nuovoValore };
+                    setSelected(updatedDoc);
+                    setDocenti(prev => prev.map(d => d.id === selected.id ? updatedDoc : d));
+                    const sb = window.supabaseClient;
+                    if (sb && selected) {
+                      sb.from('docenti').update({mostra_prenotazioni_sala: nuovoValore})
+                        .eq('id', selected.id)
+                        .then(({error})=>{ if(error) console.warn('[FM] mostra_prenotazioni_sala update error:', error.message); });
+                    }
+                  },
+                  style:{
+                    width:48, height:26, borderRadius:13,
+                    background: selected.mostraPrenotazioniSala ? selected.colore : C.border,
+                    border:"none", cursor:"pointer", position:"relative",
+                    transition:"background 0.2s", flexShrink:0,
+                  }
+                }
+                , React.createElement('div', {style:{
+                    position:"absolute", top:3,
+                    left: selected.mostraPrenotazioniSala ? 24 : 4,
+                    width:20, height:20, borderRadius:"50%",
+                    background:"#fff", transition:"left 0.2s",
+                    boxShadow:"0 1px 3px rgba(0,0,0,0.2)"
+                  }})
+              )
+            )
+          )
+
           /* ── Sezioni dashboard visibili ── */
           , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
             , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
