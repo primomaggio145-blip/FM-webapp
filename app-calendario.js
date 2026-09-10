@@ -5177,6 +5177,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses }) => {
       , HolidayBanner
       , dayLessons.map(l => {
         const hex = lessonHex(l, courses);
+        const dotHex = l.inRecupero && !l.attendance ? '#f59e0b' : attHex(l.attendance);
 
         // ── SALA PROVE card dedicata ──────────────────────────────
         if (isSalaProve(l)) {
