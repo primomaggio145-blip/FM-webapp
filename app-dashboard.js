@@ -1343,7 +1343,24 @@ const CONFIG_DEFAULT = {
 const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB, notifiche:_notificheNB, setNotifiche:_setNotificheNB, onQuickAction:_onQANB, config:_configNB }) => {
   const ruoloNB = _ruoloNB || "admin";
   const [open, setOpen] = useState(false);
-  const [dismissedIds, setDismissedIds] = useState(function(){ return new Set(); });
+  const [dismissedIds, setDismissedIds] = useState(function(){
+    try {
+      const raw = window.localStorage && window.localStorage.getItem('fm_dismissed_notifs_' + ruoloNB);
+      return raw ? new Set(JSON.parse(raw)) : new Set();
+    } catch(e) { return new Set(); }
+  });
+  // Wrapper: ogni volta che si aggiorna dismissedIds, salva anche in localStorage (per
+  // ruolo) così le notifiche "live" (senza riga DB da eliminare davvero) eliminate
+  // restano nascoste anche dopo un refresh della pagina, non solo per la sessione corrente.
+  // La chiave include il contenuto reale (vedi mkKey sopra), quindi se la situazione
+  // sottostante cambia, la vecchia chiave non corrisponde più e la notifica ricompare.
+  const setDismissedIdsPersist = function(updater) {
+    setDismissedIds(function(prev) {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try { window.localStorage && window.localStorage.setItem('fm_dismissed_notifs_' + ruoloNB, JSON.stringify(Array.from(next))); } catch(e) {}
+      return next;
+    });
+  };
   const ref = React.useRef(null);
 
   // Elimina una notifica (disponibile per tutti i ruoli). Le notifiche "vive"
@@ -1374,7 +1391,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
         _setNotificheNB(function(p){ return (p||[]).filter(function(x){ return String(x.id) !== String(realId); }); });
       }
     } else {
-      setDismissedIds(function(prev){ var next = new Set(prev); next.add(notifId); return next; });
+      setDismissedIdsPersist(function(prev){ var next = new Set(prev); next.add(notifId); return next; });
     }
   };
 
@@ -1425,13 +1442,18 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     : (lessons||[]); // admin vede tutto
 
   const notifs = [];
+  // Chiave di dismiss basata sul CONTENUTO reale (non un id fisso per categoria): se la
+  // notifica viene eliminata ma la situazione sottostante cambia (nuovo elemento coinvolto,
+  // o uno risolto), la chiave cambia e la notifica ricompare riflettendo lo stato aggiornato.
+  // Se invece la situazione resta identica, la chiave resta la stessa e la notifica resta nascosta.
+  const mkKey = (prefix, items) => prefix + ':' + items.map(String).sort().join(',');
 
   // 1. Nuove richieste accesso (solo ADMIN)
   if (ruoloNB === "admin") {
     const richiesteAttesa = (richieste||[]).filter(r=>r.stato==='in_attesa'||!r.stato);
     if (richiesteAttesa.length > 0) {
       notifs.push({
-        id:'richieste', tipo:'info',
+        id: mkKey('richieste', richiesteAttesa.map(r=>r.id||r.nome)), tipo:'info',
         icon:'users', color: C.blue,
         titolo: `${richiesteAttesa.length} ${richiesteAttesa.length===1?'richiesta':'richieste'} di accesso in attesa`,
         desc: richiesteAttesa.map(r=>r.nome).join(', '),
@@ -1446,7 +1468,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     const morosi = (students||[]).filter(s=>s.status==='scaduto'||s.stato==='scaduto');
     if (morosi.length > 0) {
       notifs.push({
-        id:'morosi', tipo:'warning',
+        id: mkKey('morosi', morosi.map(s=>s.id||s.name||s.nome)), tipo:'warning',
         icon:'euro', color: C.orange,
         titolo: `${morosi.length} ${morosi.length===1?'allievo ha':'allievi hanno'} rate scadute`,
         desc: morosi.slice(0,3).map(s=>s.name||s.nome||'').join(', ') + (morosi.length>3?' e altri...':''),
@@ -1464,10 +1486,16 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     });
     if (lezioniOggiSenzaPresenza.length > 0) {
       notifs.push({
-        id:'presenze', tipo:'warning',
+        id: mkKey('presenze', lezioniOggiSenzaPresenza.map(l=>l.id)), tipo:'warning',
         icon:'check', color: C.gold,
         titolo: `${lezioniOggiSenzaPresenza.length} ${lezioniOggiSenzaPresenza.length===1?'lezione oggi senza':'lezioni oggi senza'} presenza`,
-        desc: lezioniOggiSenzaPresenza.slice(0,3).map(l=>l.student||l.allievo||'Lezione collettiva').join(', '),
+        desc: lezioniOggiSenzaPresenza.slice(0,3).map(l => {
+          if (isColl(l)) {
+            const nomi = (l.students||[]).map(s=>s && s.name).filter(Boolean);
+            return nomi.length ? nomi.join('/') : (l.courseName || 'Lezione collettiva');
+          }
+          return l.student || l.allievo || l.courseName || l.instrument || 'Lezione individuale';
+        }).join(', '),
         action: () => { onNavigate('calendario'); setOpen(false); },
         actionLabel: 'Apri calendario',
       });
@@ -1484,7 +1512,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
       const assenze = presenzeIeri.filter(l=>l.attendance==='assente'||l.attendance==='giustificato');
       if (assenze.length > 0) {
         notifs.push({
-          id:'assenze_ieri', tipo:'info',
+          id: mkKey('assenze_ieri', assenze.map(l=>l.id)), tipo:'info',
           icon:'alert', color: C.red,
           titolo: `${assenze.length} ${assenze.length===1?'assenza':'assenze'} registrate ieri`,
           desc: assenze.slice(0,3).map(l=>l.student||l.allievo||'—').join(', '),
@@ -1507,7 +1535,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
   });
   if (recuperiScaduti.length > 0) {
     notifs.push({
-      id:'recuperi_scaduti', tipo:'warning',
+      id: mkKey('recuperi_scaduti', recuperiScaduti.map(l=>l.id)), tipo:'warning',
       icon:'alert', color: C.red,
       titolo: `${recuperiScaduti.length} ${recuperiScaduti.length===1?'lezione in recupero scaduta':'lezioni in recupero scadute'}`,
       desc: ruoloNB === "allievo" ? 'Contatta il tuo docente' : 'Verranno segnate come ASSENTE e pagate al docente',
@@ -1516,7 +1544,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     });
   } else if (recuperiInScadenza.length > 0) {
     notifs.push({
-      id:'recuperi_in_scadenza', tipo:'warning',
+      id: mkKey('recuperi_in_scadenza', recuperiInScadenza.map(l=>l.id)), tipo:'warning',
       icon:'clock', color: C.orange,
       titolo: `${recuperiInScadenza.length} ${recuperiInScadenza.length===1?'lezione in recupero':'lezioni in recupero'} in scadenza`,
       desc: recuperiInScadenza.slice(0,3).map(l=>l.student||'—').join(', '),
@@ -1530,7 +1558,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     const sospesi = (students||[]).filter(s=>s.status==='sospeso'||s.stato==='sospeso');
     if (sospesi.length > 0) {
       notifs.push({
-        id:'sospesi', tipo:'info',
+        id: mkKey('sospesi', sospesi.map(s=>s.id||s.name||s.nome)), tipo:'info',
         icon:'user', color: C.textMuted,
         titolo: `${sospesi.length} ${sospesi.length===1?'abbonamento sospeso':'abbonamenti sospesi'}`,
         desc: sospesi.slice(0,3).map(s=>s.name||s.nome||'').join(', '),
@@ -1576,7 +1604,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
 
     if (superanoSoglia.length > 0) {
       notifs.push({
-        id: 'lezioni_extra_mese',
+        id: mkKey('lezioni_extra_mese', superanoSoglia.map(a=>a.nome+':'+a.count)),
         tipo: 'warning',
         icon: 'alert',
         color: C.orange,
