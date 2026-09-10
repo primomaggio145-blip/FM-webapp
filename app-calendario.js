@@ -4972,7 +4972,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                   )
                 )
                 , React.createElement('div', { className: "att-row", style: {display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4638}}
-                  , ["presente","assente","recupero","in_recupero","cambio_ora"].map(a => {
+                  , (lesson.tipo === "prova" ? ["presente","assente"] : ["presente","assente","recupero","in_recupero","cambio_ora"]).map(a => {
                     const s = ATT_STYLES[a] || ATT_STYLES.presente;
                     const active = a === 'in_recupero' ? lesson.inRecupero : lesson.attendance === a;
                     return (
@@ -5093,21 +5093,21 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                   )
                 )
               )
-              , !lesson.iscritto && (
+              , !lesson.iscritto && role === 'admin' && (
                 React.createElement('button', { onClick: ()=>setShowIscrizionePanel(v=>!v),
                   style: {background:C.teal,color:"#ffffff",border:"none",borderRadius:7,padding:"6px 13px",
                     cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif",fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4706}}
                   , showIscrizionePanel ? "Annulla" : "Segna iscritto"
                 )
               )
-              , lesson.iscritto && onIscrizione && (
+              , lesson.iscritto && onIscrizione && role === 'admin' && (
                 React.createElement('button', { onClick: ()=>onIscrizione(lesson.id, "", false),
                   style: {background:"none",color:C.textDim,border:`1px solid ${C.border}`,borderRadius:7,
                     padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"'Open Sans',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4713}}, "Rimuovi iscrizione"
                 )
               )
             )
-            , showIscrizionePanel && !lesson.iscritto && (
+            , showIscrizionePanel && !lesson.iscritto && role === 'admin' && (
               React.createElement('div', { style: {display:"flex", gap:8, alignItems:"center", marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4721}}
                 , React.createElement('select', { value: iscrizioneStudent, onChange: e=>setIscrizioneStudent(e.target.value),
                   style: {flex:1, background:C.surface, border:`1px solid ${C.tealBorder}`, borderRadius:8,
