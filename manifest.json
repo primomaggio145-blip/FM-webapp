@@ -1,6 +1,6 @@
 {
-  "name": "Futuro Musica Gestionale",
-  "short_name": "Futuro Musica",
+  "name": "FM App",
+  "short_name": "FM App",
   "description": "Sistema gestionale per la scuola di musica",
   "start_url": "/webapp.html",
   "scope": "/",
