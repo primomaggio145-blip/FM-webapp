@@ -308,7 +308,7 @@ function App() {
               return base;
             }),
             docenti:  (sD||[]).map(r => { const b = FA ? FA.docente(r) : r; b.annoCreazione = (r.anno_creazione != null) ? r.anno_creazione : null; return b; }),
-            courses:  (sC||[]).map(r => { const b = FA ? FA.corso(r) : r; b.annoCreazione = (r.anno_creazione != null) ? r.anno_creazione : null; return b; }),
+            courses:  (sC||[]).map(r => { const b = FA ? FA.corso(r) : r; b.annoCreazione = (r.anno_creazione != null) ? r.anno_creazione : null; if (b.colore === undefined) b.colore = r.colore || null; return b; }),
             lessons:  sL,
             brani:    (sB||[]).map(r => {
               const pj = (v,f=[]) => { if(!v) return f; if(Array.isArray(v)) return v; if(typeof v==='object') return v; try { return JSON.parse(v); } catch(e) { return f; } };

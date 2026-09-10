@@ -198,6 +198,9 @@ const INIT_STUDENTS = [
 // ════════════════════════════════════════════════════════════════════════════════
 // GESTIONE CORSI
 // ════════════════════════════════════════════════════════════════════════════════
+// Palette di colori proposti per i corsi (l'admin può comunque scegliere un colore
+// libero tramite il selettore "colore personalizzato" nel form).
+const CORSO_COLOR_PALETTE = ["#f59e0b","#4ade80","#60a5fa","#c084fc","#fb923c","#f472b6","#34d399","#a78bfa","#fbbf24","#2dd4bf","#ef4444","#6d28d9","#0891b2","#059669","#d97706"];
 const CourseForm = ({ initial, onSave, onClose, docenti:_docentiRaw }) => {
   const docenti = _docentiRaw || [];
   const [f, setF] = useState(initial || { name:"", type:"collettivo", description:"", docenti:[] });
@@ -237,6 +240,33 @@ const CourseForm = ({ initial, onSave, onClose, docenti:_docentiRaw }) => {
           )
         )
         , React.createElement(Textarea, { label: "Descrizione (opzionale)" , value: f.description, onChange: e=>set("description",e.target.value), placeholder: "Breve descrizione del corso..."   , __self: this, __source: {fileName: _jsxFileName, lineNumber: 2586}})
+
+        /* ── Colore del corso ── usato per riconoscere subito le lezioni di questo corso
+             nel calendario. Se non impostato, si usa il colore automatico di default
+             (per strumento o generato dal nome del corso, come in precedenza). */
+        , React.createElement('div', {__self: this}
+          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:8} }, "Colore nel calendario" )
+          , React.createElement('div', { style: {display:"flex",flexWrap:"wrap",gap:8,alignItems:"center"} }
+            , CORSO_COLOR_PALETTE.map(col => (
+                React.createElement('button', { key: col, onClick: ()=>set("colore", col),
+                  title: col,
+                  style: {width:28,height:28,borderRadius:"50%",background:col,cursor:"pointer",
+                    border: f.colore===col ? `3px solid ${C.text}` : `2px solid ${C.border}`,
+                    display:"flex",alignItems:"center",justifyContent:"center",padding:0}
+                  }
+                  , f.colore===col && React.createElement(Ic, { n: "check", size: 12, color: "#ffffff" })
+                )
+              ))
+            , React.createElement('input', { type: "color", value: f.colore||"#888888",
+                onChange: e=>set("colore", e.target.value),
+                title: "Colore personalizzato",
+                style: {width:28,height:28,borderRadius:"50%",border:`2px solid ${C.border}`,padding:0,cursor:"pointer",background:"none"} })
+            , f.colore && React.createElement('button', { onClick: ()=>set("colore", null),
+                style: {fontSize:11,color:C.textMuted,background:"none",border:"none",cursor:"pointer",textDecoration:"underline",marginLeft:4} }
+                , "Usa colore automatico"
+              )
+          )
+        )
 
         /* ── Docenti assegnati ── */
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 2589}}
@@ -3216,8 +3246,18 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
       // I corsi collettivi nascono NON visibili sul sito (l'admin li abilita manualmente
       // dal pannello se/quando vuole mostrarli); gli individuali restano visibili di default.
       const tipoCorso = d.type || d.tipo || 'individuale';
-      const row = { id:newId, nome:d.name||d.nome||'', tipo:tipoCorso, descrizione:d.description||d.descrizione||null, visible: tipoCorso !== 'collettivo', anno_creazione: annoCreazione };
-      const { error } = await sb.from('corsi').insert(row);
+      const row = { id:newId, nome:d.name||d.nome||'', tipo:tipoCorso, descrizione:d.description||d.descrizione||null, visible: tipoCorso !== 'collettivo', anno_creazione: annoCreazione, colore: d.colore||null };
+      // Insert singolo, mai ripetuto (evita di creare corsi duplicati come successo in passato
+      // con gli allievi): se la colonna 'colore' non esiste ancora, un SOLO retry senza quel campo.
+      let { error } = await sb.from('corsi').insert(row);
+      if (error) {
+        const m = /Could not find the '([^']+)' column/.exec(error.message||'');
+        if (m && Object.prototype.hasOwnProperty.call(row, m[1])) {
+          console.warn(`[FM] Colonna '${m[1]}' non presente su corsi — corso creato senza questo campo. Aggiungila al DB con ALTER TABLE per non perderlo.`);
+          const rowSenzaColonna = {...row}; delete rowSenzaColonna[m[1]];
+          ({ error } = await sb.from('corsi').insert(rowSenzaColonna));
+        }
+      }
       if (error) console.warn('[FM] handleAddCourse error:', error.message);
       // Persiste l'assegnazione docenti su corsi_docenti (senza questo si perde al riavvio)
       const docentiIds = (d.docenti||[]);
@@ -3236,8 +3276,16 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
   const handleEditCourse = async (d) => {
     const sb = window.supabaseClient;
     if (sb && d.id) {
-      const row = { nome:d.name||d.nome||'', tipo:d.type||d.tipo||'individuale', descrizione:d.description||d.descrizione||null };
-      const { error } = await sb.from('corsi').update(row).eq('id', d.id);
+      const row = { nome:d.name||d.nome||'', tipo:d.type||d.tipo||'individuale', descrizione:d.description||d.descrizione||null, colore: d.colore||null };
+      let { error } = await sb.from('corsi').update(row).eq('id', d.id);
+      if (error) {
+        const m = /Could not find the '([^']+)' column/.exec(error.message||'');
+        if (m && Object.prototype.hasOwnProperty.call(row, m[1])) {
+          console.warn(`[FM] Colonna '${m[1]}' non presente su corsi — modifica salvata senza questo campo. Aggiungila al DB con ALTER TABLE per non perderlo.`);
+          const rowSenzaColonna = {...row}; delete rowSenzaColonna[m[1]];
+          ({ error } = await sb.from('corsi').update(rowSenzaColonna).eq('id', d.id));
+        }
+      }
       if (error) console.warn('[FM] handleEditCourse error:', error.message);
       // Persiste l'assegnazione docenti su corsi_docenti (senza questo si perde al riavvio):
       // sostituisce tutte le associazioni esistenti per questo corso con quelle attuali
@@ -3505,7 +3553,22 @@ const safeInsertRecurringLesson = async (lesson, setLessons) => {
     return false;
   }
 };
-const lessonHex   = l => l && l._isGcalExternal ? "#94a3b8" : isColl(l) ? collHex(l) : isProva(l) ? C.teal : isSalaProve(l) ? C.orange2 : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
+// lessonHex accetta un secondo parametro opzionale `courses`: se il corso della lezione ha un
+// colore assegnato manualmente (GESTIONE CORSI → corso → "Colore nel calendario"), quello ha
+// SEMPRE la priorità sul colore automatico (per strumento o generato dal nome/id del corso).
+const corsoDellaLezione = (l, courses) => {
+  if (!courses || !courses.length) return null;
+  if (isColl(l)) return l.courseId ? courses.find(c => String(c.id)===String(l.courseId)) : null;
+  return l && l.instrument ? courses.find(c => (c.name||c.nome)===l.instrument && (c.type||c.tipo)!=='collettivo') : null;
+};
+const lessonHex = (l, courses) => {
+  if (l && l._isGcalExternal) return "#94a3b8";
+  if (isProva(l)) return C.teal;
+  if (isSalaProve(l)) return C.orange2;
+  const corso = corsoDellaLezione(l, courses);
+  if (corso && corso.colore) return corso.colore;
+  return isColl(l) ? collHex(l) : insHex(_optionalChain([l, 'optionalAccess', _48 => _48.instrument])||"");
+};
 
 // ── Google Calendar auto-sync ─────────────────────────────────────────────────
 // Chiama la Edge Function gcal-sync per create/update/delete in background
@@ -4271,8 +4334,8 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
 };
 
 // ─── PILL LEZIONE ─────────────────────────────────────────────────────────────
-const LessonPill = ({ lesson, onClick, compact=false }) => {
-  const hex    = lessonHex(lesson);        // viola per collettive, colore strumento per individuali
+const LessonPill = ({ lesson, onClick, compact=false, courses }) => {
+  const hex    = lessonHex(lesson, courses);        // colore assegnato al corso se presente, altrimenti colore automatico
   const dotHex = attHex(lesson.attendance);
 
   const bgNormal  = `${hex}15`;
@@ -4360,7 +4423,7 @@ const LessonPill = ({ lesson, onClick, compact=false }) => {
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser }) => {
+const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses }) => {
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
   // Per l'allievo: risolve il proprio id/nome per filtrare la presenza individuale
@@ -4371,7 +4434,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
     || (appUser && appUser.nome)
     || ''
   ).toLowerCase().trim();
-  const hex = lessonHex(lesson);
+  const hex = lessonHex(lesson, courses);
 
   // Recupero scaduto: per admin mostra banner con possibilità di proroga
   const isRecuperoScaduto = lesson.inRecupero && lesson.recuperoScadenza &&
@@ -5078,7 +5141,7 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
 };
 
 // ─── VISTA GIORNALIERA ────────────────────────────────────────────────────────
-const DayView = ({ date, lessons, onSelect, isMobile, config }) => {
+const DayView = ({ date, lessons, onSelect, isMobile, config, courses }) => {
   const dayLessons = lessons
     .filter(l => l.date === yyyymmdd(date))
     .sort((a, b) => a.hour.localeCompare(b.hour));
@@ -5113,8 +5176,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config }) => {
     React.createElement('div', { style: {display:"flex", flexDirection:"column", gap: isMobile ? 6 : 10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4782}}
       , HolidayBanner
       , dayLessons.map(l => {
-        const hex = lessonHex(l);
-        const dotHex = l.attendance ? attHex(l.attendance) : null;
+        const hex = lessonHex(l, courses);
 
         // ── SALA PROVE card dedicata ──────────────────────────────
         if (isSalaProve(l)) {
@@ -5318,7 +5380,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config }) => {
 };
 
 // ─── VISTA SETTIMANALE ────────────────────────────────────────────────────────
-const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
+const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses }) => {
   // Solo Lun–Sab (6 giorni, no domenica)
   const days      = Array.from({length:6}, (_, i) => addDays(weekStart, i));
   const HOUR_H    = isMobile ? 42 : 64;   // px per 1 ora — su mobile ridotta: alle celle bastano 2-3 righe di testo
@@ -5517,7 +5579,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
                 const wPct    = 100 / info.numCols;
                 const lPct    = info.colIdx * wPct;
                 const isSala  = isSalaProve(l);
-                const hex     = lessonHex(l);
+                const hex     = lessonHex(l, courses);
                 const pending = isSala && l.stato === "in_attesa";
                 const bg      = isSala ? (pending?"#fffbeb":C.orange2Bg) : `${hex}18`;
                 const bord    = isSala ? (pending?"#fde68a":C.orange2Border) : `${hex}40`;
@@ -5637,7 +5699,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile }) => {
 };
 
 // ─── VISTA MENSILE ────────────────────────────────────────────────────────────
-const MonthView = ({ year, month, lessons, onSelect, onDayClick, config }) => {
+const MonthView = ({ year, month, lessons, onSelect, onDayClick, config, courses }) => {
   const firstDay  = new Date(year, month, 1);
   // getDay() 0=Dom,1=Lun...6=Sab → in una settimana Lun–Sab (6 giorni)
   // startDow: quanti slot vuoti prima del primo giorno (0=Lun, 5=Sab, Dom non esiste)
@@ -5704,7 +5766,7 @@ const MonthView = ({ year, month, lessons, onSelect, onDayClick, config }) => {
               , !chiuso && holiday && React.createElement('div',{style:{fontSize:9,color:'#b91c1c',fontWeight:600,marginBottom:2,lineHeight:1.2}}, holiday.emoji,' ',holiday.label)
               , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4976}}
                 , dayLessons.slice(0,3).map(l => (
-                  React.createElement(LessonPill, { key: l.id, lesson: l, onClick: e => { e.stopPropagation(); onSelect(l); }, compact: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4978}})
+                  React.createElement(LessonPill, { key: l.id, lesson: l, onClick: e => { e.stopPropagation(); onSelect(l); }, compact: true, courses: courses, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4978}})
                 ))
                 , dayLessons.length > 3 && (
                   React.createElement('div', { style: {fontSize:10, color:C.textDim, paddingLeft:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4981}}, "+", dayLessons.length-3, " altre" )
@@ -9407,9 +9469,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           /* Contenuto */
           , React.createElement('div', { style: {flex:1, padding: isMobile ? "0 8px 8px" : "0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
             , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"visible"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
-              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, isMobile: isMobile, config: calConfig, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
-              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, config: calConfig, isMobile: isMobile, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
-              , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, config: calConfig, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
+              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, isMobile: isMobile, config: calConfig, courses: propCourses, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
+              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, config: calConfig, isMobile: isMobile, courses: propCourses, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
+              , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, config: calConfig, courses: propCourses, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
             )
           )
           )
@@ -9454,6 +9516,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         , modal === "detail" && selLesson && (
           React.createElement(LessonDetailModal, {
             lesson: lessons.find(l => l.id === selLesson.id) || selLesson,
+            courses: propCourses,
             onEdit: () => setModal("edit"),
             onDelete: () => setModal("delete"),
             onAttendance: handleAttendance,

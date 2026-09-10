@@ -55,6 +55,9 @@
     const FA = window.FMAdapter;
     const base = FA ? FA.corso(r) : r;
     base.annoCreazione = (r.anno_creazione != null) ? r.anno_creazione : null;
+    // FA.corso() potrebbe non conoscere ancora questo campo (aggiunto di recente allo schema):
+    // senza questo recupero il colore assegnato al corso si perderebbe in lettura.
+    if (base.colore === undefined) base.colore = r.colore || null;
     return base;
   }
   // Deduplica un array di record per id, mantenendo l'ultima occorrenza
