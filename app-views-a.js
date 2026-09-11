@@ -2255,6 +2255,53 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
   const setD=(k,v)=>setDraft(p=>({...p,[k]:v}));
   const setPerm=(k,v)=>setDraft(p=>({...p,permessi:{...p.permessi,[k]:v}}));
 
+  // ── Test notifica singola (push / WhatsApp) ──────────────────────────────
+  // Riusa la Edge Function `send-message` (già usata da "Nuovo messaggio" in
+  // Messaggi): accetta destinatari specifici + canali, quindi NON serve
+  // toccare send-push/whatsapp-reminder che invece trasmettono a tutti.
+  const recordCollegato = draft.ruolo==='allievo'
+    ? (students||[]).find(s=>String(s.id)===String(draft.allievoId))
+    : draft.ruolo==='docente'
+      ? (docenti||[]).find(d=>String(d.id)===String(draft.docenteId))
+      : null;
+  const telefonoTest = recordCollegato ? (recordCollegato.telefono||recordCollegato.phone||'') : '';
+
+  const [testMsg,setTestMsg]=useState(`🧪 Messaggio di prova per ${utente.nome}. Se lo ricevi, le notifiche funzionano correttamente.`);
+  const [testState,setTestState]=useState({}); // {push:{loading,ok,msg}, whatsapp:{...}}
+
+  const inviaTest = async (canale) => {
+    setTestState(p=>({...p,[canale]:{loading:true}}));
+    try {
+      const sb = window.supabaseClient;
+      if(!sb) throw new Error('Supabase non inizializzato');
+      const { data:{ session } } = await sb.auth.getSession();
+      const token = session?.access_token;
+      if(!token) throw new Error('Sessione scaduta — riloggati');
+      const mittente_id = session.user.id;
+      let mittente_nome = 'Amministrazione';
+      try {
+        const { data: mp } = await sb.from('profili').select('nome').eq('id',mittente_id).maybeSingle();
+        if(mp&&mp.nome) mittente_nome = mp.nome;
+      } catch(e){}
+      const destinatario = { id: utente.id, nome: utente.nome, ruolo: draft.ruolo, email: utente.email, telefono: telefonoTest };
+      const canali = { app:false, push: canale==='push', whatsapp: canale==='whatsapp', email:false };
+      const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-message', {
+        method:'POST',
+        headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+        body: JSON.stringify({
+          mittente_id, mittente_nome, mittente_ruolo:'admin',
+          oggetto: '🧪 Test notifica', testo: testMsg,
+          destinatari: [destinatario], canali,
+        }),
+      });
+      const json = await res.json().catch(()=>({}));
+      if(!res.ok || json.ok===false) throw new Error(json.error||`Errore HTTP ${res.status}`);
+      setTestState(p=>({...p,[canale]:{loading:false, ok:true, msg: canale==='push'?'Push inviato ✓':'WhatsApp inviato ✓'}}));
+    } catch(e) {
+      setTestState(p=>({...p,[canale]:{loading:false, ok:false, msg: e.message}}));
+    }
+  };
+
   const handleRuolo=(rid)=>{
     setDraft(p=>({...p,ruolo:rid,permessi:{...PERM_DEFAULT[rid]}}));
   };
@@ -2287,7 +2334,7 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
 
         /* Tabs */
         , React.createElement('div', { style: {display:"flex",borderBottom:`1px solid ${C.border}`,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9182}}
-          , [["profilo","user","Profilo"],["permessi","shield","Permessi"],["attivita","clock","Attività"]].map(([v,ic,lb])=>(
+          , [["profilo","user","Profilo"],["permessi","shield","Permessi"],["test","bell","Test"],["attivita","clock","Attività"]].map(([v,ic,lb])=>(
             React.createElement('button', { key: v, onClick: ()=>setTab(v),
               style: {flex:1,padding:"11px 0",display:"flex",alignItems:"center",justifyContent:"center",
                 gap:6,background:"none",border:"none",cursor:"pointer",fontSize:12,
@@ -2452,6 +2499,69 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
                   fontSize:12,padding:"8px 14px",cursor:"pointer",fontFamily:"'Open Sans',sans-serif",
                   display:"flex",alignItems:"center",gap:6,alignSelf:"flex-start"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9306}}
                 , React.createElement(Ic, { n: "check", size: 13, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9310}}), "Ripristina default ruolo"
+              )
+            )
+          )
+
+          /* ── TEST NOTIFICHE (push / WhatsApp) ── */
+          , tab==="test"&&(
+            React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:16} }
+              , React.createElement('div', null
+                , React.createElement('div', { style: {fontSize:13,fontWeight:500,marginBottom:4} }, "Test notifica singola")
+                , React.createElement('div', { style: {fontSize:12,color:C.textDim,lineHeight:1.5} },
+                    "Invia una notifica di prova solo a questo utente, senza coinvolgere gli altri iscritti.")
+              )
+
+              /* Contatti risolti */
+              , React.createElement('div', { style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 16px",display:"flex",flexDirection:"column",gap:6} }
+                , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",fontSize:12} }
+                  , React.createElement('span', { style: {color:C.textDim} }, "📧 Email")
+                  , React.createElement('span', { style: {color:C.text} }, utente.email||'—')
+                )
+                , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",fontSize:12} }
+                  , React.createElement('span', { style: {color:C.textDim} }, "📞 Telefono (da record collegato)")
+                  , React.createElement('span', { style: {color:telefonoTest?C.text:C.orange} }, telefonoTest||'Nessun record collegato con telefono')
+                )
+                , !telefonoTest&&React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:2} },
+                    "Per testare WhatsApp, collega prima l'utente a un allievo/docente con telefono nel tab Profilo.")
+              )
+
+              /* Messaggio di test */
+              , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:5} }
+                , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase"} }, "Testo del messaggio")
+                , React.createElement('textarea', { value: testMsg, onChange: e=>setTestMsg(e.target.value), rows: 3,
+                    style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,
+                      padding:"9px 13px",width:"100%",fontFamily:"'Open Sans',sans-serif",resize:"vertical"} })
+              )
+
+              /* Pulsanti invio */
+              , React.createElement('div', { style: {display:"flex",gap:10,flexWrap:"wrap"} }
+                , React.createElement('button', {
+                    onClick: ()=>inviaTest('push'),
+                    disabled: testState.push&&testState.push.loading,
+                    style: {padding:"9px 16px",borderRadius:9,border:`1px solid #7c3aed`,background:"#f5f3ff",
+                      color:"#7c3aed",cursor:(testState.push&&testState.push.loading)?"wait":"pointer",fontSize:12,fontWeight:600,
+                      fontFamily:"'Open Sans',sans-serif",opacity:(testState.push&&testState.push.loading)?0.6:1}
+                  }, (testState.push&&testState.push.loading)?"⏳ Invio...":"📱 Test push a questo utente")
+                , React.createElement('button', {
+                    onClick: ()=>inviaTest('whatsapp'),
+                    disabled: !telefonoTest||(testState.whatsapp&&testState.whatsapp.loading),
+                    style: {padding:"9px 16px",borderRadius:9,border:`1px solid #25d366`,background:"#e9fbf0",
+                      color:"#128c4a",cursor:(!telefonoTest||(testState.whatsapp&&testState.whatsapp.loading))?"not-allowed":"pointer",fontSize:12,fontWeight:600,
+                      fontFamily:"'Open Sans',sans-serif",opacity:(!telefonoTest||(testState.whatsapp&&testState.whatsapp.loading))?0.5:1}
+                  }, (testState.whatsapp&&testState.whatsapp.loading)?"⏳ Invio...":"💬 Test WhatsApp a questo utente")
+              )
+
+              /* Esiti */
+              , (testState.push||testState.whatsapp) && React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:6} }
+                , testState.push&&!testState.push.loading&&React.createElement('div', {
+                    style: {fontSize:12,padding:"8px 12px",borderRadius:8,background:testState.push.ok?C.tealBg:C.redBg,
+                      color:testState.push.ok?C.teal:C.red,border:`1px solid ${testState.push.ok?C.tealBorder:C.redBorder}`}
+                  }, (testState.push.ok?"✅ ":"❌ ")+testState.push.msg)
+                , testState.whatsapp&&!testState.whatsapp.loading&&React.createElement('div', {
+                    style: {fontSize:12,padding:"8px 12px",borderRadius:8,background:testState.whatsapp.ok?C.tealBg:C.redBg,
+                      color:testState.whatsapp.ok?C.teal:C.red,border:`1px solid ${testState.whatsapp.ok?C.tealBorder:C.redBorder}`}
+                  }, (testState.whatsapp.ok?"✅ ":"❌ ")+testState.whatsapp.msg)
               )
             )
           )

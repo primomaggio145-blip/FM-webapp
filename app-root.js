@@ -757,8 +757,8 @@ function App() {
       case 'modulistica': return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno, students: sharedStudents, docenti: sharedDocenti, initialTab:'scuola'});
       case 'messaggi':            return React.createElement(MessaggiView, { appUser: user, ruolo: user?.ruolo||'admin', students: sharedStudents, docenti: sharedDocenti });
       case 'notifiche':          return React.createElement(NotificheView, { notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, ruolo: user?.ruolo||"admin", appUser: user, lessons: sharedLessons, students: sharedStudents, richieste: sharedRichieste});
-      case 'notifiche_settings': return React.createElement(NotificheSettingsView, { ruolo: user?.ruolo||"admin" });
-      case 'reminders':   return React.createElement(RemindersView, { ruolo: user?.ruolo||"admin" });
+      case 'notifiche_settings': return React.createElement(NotificheSettingsView, { ruolo: user?.ruolo||"admin", onNavigate: setView });
+      case 'reminders':   return React.createElement(RemindersView, { ruolo: user?.ruolo||"admin", onNavigate: setView });
       case 'sala_prove':  return React.createElement(SalaProveStandaloneView, { appUser: user, userRuolo: user?.ruolo||"band", lessons: sharedLessons });
       case 'googleCalendar': return React.createElement(GoogleCalendarPageView, { userRuolo: user?.ruolo||"allievo", appUser: user });
       default: return null;
@@ -1699,7 +1699,7 @@ const NOTIFICHE_CONFIG_TYPES = [
   },
 ];
 
-const NotificheSettingsView = ({ ruolo }) => {
+const NotificheSettingsView = ({ ruolo, onNavigate }) => {
   if (ruolo !== 'admin') return null;
 
   const [configs,  setConfigs]  = useState(() =>
@@ -1775,6 +1775,20 @@ const NotificheSettingsView = ({ ruolo }) => {
         , 'Configura quali notifiche vengono mostrate in-app e inviate come push (PWA). '
         , 'Le notifiche disattivate non verranno mostrate ad alcun utente.'
       )
+    )
+
+    /* ── Link a test singolo utente ─────────────────────────────────── */
+    , React.createElement('div', { style: { background: C.tealBg, border: `1px solid ${C.tealBorder}`, borderRadius: 12,
+        padding: '14px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' } }
+      , React.createElement('div', { style: { fontSize: 13, color: C.text, lineHeight: 1.5 } }
+        , '🎯 ', React.createElement('strong', null, 'Vuoi testare su un singolo utente'), ' invece di inviare a tutti i dispositivi? '
+        , 'Apri la scheda dell\'utente in Impostazioni → Utenti e usa il tab "Test".'
+      )
+      , onNavigate && React.createElement('button', {
+          onClick: () => onNavigate('utenti'),
+          style: { padding: '8px 16px', borderRadius: 8, border: 'none', background: C.teal, color: '#fff',
+            cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'Open Sans',sans-serif", flexShrink: 0, whiteSpace: 'nowrap' }
+        }, '👥 Vai a Utenti')
     )
 
     /* Toast */
@@ -2241,7 +2255,7 @@ const WA_SUPABASE_URL = 'https://ocsxrjommtrjelnbihfr.supabase.co';
 // da chiunque nel codice sorgente pubblico. Rimossa: ora, senza sessione valida,
 // l'azione fallisce con un errore invece di usare privilegi elevati dal client.
 
-const RemindersView = ({ ruolo }) => {
+const RemindersView = ({ ruolo, onNavigate }) => {
   const [log,          setLog]          = useState([]);
   const [logLoading,   setLogLoading]   = useState(false);
   const [sending,      setSending]      = useState({});
@@ -2421,6 +2435,20 @@ const RemindersView = ({ ruolo }) => {
         }
         , React.createElement(Ic, { n:'refresh', size:13, stroke:C.textMuted }), ' Aggiorna log'
       )
+    )
+
+    /* ── Link a test singolo utente ─────────────────────────────────── */
+    , React.createElement('div', { style: { background: C.tealBg, border: `1px solid ${C.tealBorder}`, borderRadius: 12,
+        padding: '14px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' } }
+      , React.createElement('div', { style: { fontSize: 13, color: C.text, lineHeight: 1.5 } }
+        , '🎯 ', React.createElement('strong', null, 'Vuoi testare su un singolo utente'), ' invece di inviare a tutti i numeri? '
+        , 'Apri la scheda dell\'utente in Impostazioni → Utenti e usa il tab "Test".'
+      )
+      , onNavigate && React.createElement('button', {
+          onClick: () => onNavigate('utenti'),
+          style: { padding: '8px 16px', borderRadius: 8, border: 'none', background: C.teal, color: '#fff',
+            cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'Open Sans',sans-serif", flexShrink: 0, whiteSpace: 'nowrap' }
+        }, '👥 Vai a Utenti')
     )
 
     /* ── KPI strip ── */
