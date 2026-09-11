@@ -104,13 +104,29 @@ self.addEventListener('push', event => {
   try { data = event.data ? event.data.json() : {}; }
   catch (e) { data = { title: 'Futuro Musica', body: event.data?.text() || '' }; }
 
-  const title   = data.title || 'Futuro Musica';
+  // Base reale dell'app (es. https://<utente>.github.io/FM-webapp/): GitHub Pages ospita
+  // il progetto in un sottopercorso, non alla radice del dominio. Usare la scope del SW
+  // invece di percorsi assoluti "/xxx" evita che il link finisca alla radice del dominio
+  // (che non esiste → 404) invece che dentro la cartella dell'app.
+  const base = self.registration.scope;
+
+  const title = data.title || 'Futuro Musica';
+
+  // Normalizza l'URL di destinazione: un path che il server manda come "/webapp.html"
+  // va interpretato come relativo alla cartella dell'app, non alla radice del dominio.
+  let rawUrl = data.url || 'webapp.html';
+  if (rawUrl.startsWith('/')) rawUrl = rawUrl.slice(1);
+  let targetUrl;
+  try { targetUrl = new URL(rawUrl, base).href; } catch (e) { targetUrl = base + 'webapp.html'; }
+
+  const iconUrl  = new URL('icons/icon-192.png', base).href;
+
   const options = {
     body:               data.body || 'Hai una nuova notifica',
-    icon:               '/icons/icon-192.png',
-    badge:              '/icons/icon-192.png',
+    icon:               iconUrl,
+    badge:              iconUrl,
     tag:                data.tag  || 'fm-notification',
-    data:               { url: data.url || '/webapp.html' },
+    data:               { url: targetUrl },
     vibrate:            [200, 100, 200],
     requireInteraction: false,
     actions:            [{ action: 'open', title: '📅 Apri app' }],
@@ -119,13 +135,27 @@ self.addEventListener('push', event => {
 });
 
 // ── Click sulla notifica → apre/porta in primo piano l'app ───────────────────
+// Se la PWA è installata e la url richiesta rientra nel suo scope, il sistema operativo/
+// browser la instrada automaticamente all'app installata (comportamento nativo PWA);
+// altrimenti clients.openWindow() apre l'URL nel browser mobile di default. Qui ci limitiamo
+// a garantire che l'URL sia sempre corretto (con il prefisso /FM-webapp/) e a riusare una
+// finestra dell'app già aperta, se presente, invece di aprirne una nuova.
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || '/webapp.html';
+  const base = self.registration.scope;
+  let targetUrl = event.notification.data && event.notification.data.url;
+  if (!targetUrl) targetUrl = base + 'webapp.html';
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       for (const client of list) {
-        if (client.url.includes('FM-webapp') && 'focus' in client) return client.focus();
+        if (client.url.startsWith(base) && 'focus' in client) {
+          // Se il client già aperto punta a una pagina diversa (es. deep-link diverso),
+          // naviga verso l'URL corretto prima di dare il focus.
+          if (client.url !== targetUrl && 'navigate' in client) {
+            return client.navigate(targetUrl).then(c => c ? c.focus() : client.focus());
+          }
+          return client.focus();
+        }
       }
       return clients.openWindow(targetUrl);
     })
