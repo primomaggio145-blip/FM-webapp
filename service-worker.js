@@ -3,7 +3,7 @@
 //   - app.js, fm_sync.js, supabase_integration.js → NETWORK-FIRST (sempre freschi)
 //   - webapp.html, manifest.json, icone          → NETWORK-FIRST con fallback cache
 //   - API Supabase, font Google (googleapis/gstatic) → solo network, mai cache
-const CACHE_VERSION = 'fm-v9'; // v9: percorsi corretti per dominio personalizzato (era /FM-webapp/...)
+const CACHE_VERSION = 'fm-v10'; // v10: gestisce anche URL push con dominio diverso da quello corrente
 
 // File pre-cachati all'install (solo per fallback offline)
 const CACHE_STATIC = [
@@ -112,14 +112,27 @@ self.addEventListener('push', event => {
 
   const title = data.title || 'Futuro Musica';
 
-  // Normalizza l'URL di destinazione: un path che il server manda come "/webapp.html"
-  // va interpretato come relativo alla cartella dell'app, non alla radice del dominio.
+  // Normalizza l'URL di destinazione:
+  // - un path che il server manda come "/webapp.html" va interpretato come relativo
+  //   alla cartella dell'app, non alla radice del dominio;
+  // - se il server manda un URL con un dominio DIVERSO da quello corrente (es. residuo
+  //   di una migrazione di dominio, o vecchio link GitHub Pages), ne teniamo solo il
+  //   percorso e lo ricostruiamo sulla base corretta di QUESTO service worker, invece
+  //   di aprire un dominio che potrebbe non esistere più / non reindirizzare bene.
   let rawUrl = data.url || 'webapp.html';
-  if (rawUrl.startsWith('/')) rawUrl = rawUrl.slice(1);
   let targetUrl;
-  try { targetUrl = new URL(rawUrl, base).href; } catch (e) { targetUrl = base + 'webapp.html'; }
+  try {
+    const parsed = new URL(rawUrl, base);
+    if (parsed.origin !== self.location.origin) {
+      const p = parsed.pathname.replace(/^\//, '');
+      targetUrl = new URL(p || 'webapp.html', base).href + parsed.search + parsed.hash;
+    } else {
+      targetUrl = parsed.href;
+    }
+  } catch (e) { targetUrl = base + 'webapp.html'; }
 
   const iconUrl  = new URL('icons/icon-192.png', base).href;
+  console.log('[FM SW] push ricevuto — base:', base, '| data.url:', data.url, '| targetUrl risolto:', targetUrl);
 
   const options = {
     body:               data.body || 'Hai una nuova notifica',
