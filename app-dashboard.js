@@ -2500,7 +2500,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     if (!mesiScolastici.includes(meseC)) return null;
                     // Cerca quota del mese corrente per questo allievo
                     const quotaMese = _entrate.find(e =>
-                      (myStudentId ? e.studentId === myStudentId : (e.studentName||"").toLowerCase().includes(myNome.toLowerCase()))
+                      (myStudentId ? String(e.studentId) === String(myStudentId) : (e.studentName||"").toLowerCase().includes(myNome.toLowerCase()))
                       && e.mese === meseC
                       && e.anno === annoC
                     );
@@ -2923,7 +2923,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                         : ruolo==="allievo"
                         ? React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:8}},
                             (()=>{
-                              const miei=_entrate.filter(e=>myStudentId?e.studentId===myStudentId:(e.studentName||"").toLowerCase().includes(myNome.toLowerCase())).sort((a,b)=>(b.data||'').localeCompare(a.data||'')).slice(0,5);
+                              const miei=_entrate.filter(e=>myStudentId?String(e.studentId)===String(myStudentId):(e.studentName||"").toLowerCase().includes(myNome.toLowerCase())).sort((a,b)=>(b.data||'').localeCompare(a.data||'')).slice(0,5);
                               if(!miei.length) return React.createElement('p',{style:{fontSize:13,color:C.textDim,textAlign:"center",padding:"12px 0"}},"Nessun pagamento registrato");
                               return miei.map((e,i)=>React.createElement('div',{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.border}`}},
                                 React.createElement('div',null,
