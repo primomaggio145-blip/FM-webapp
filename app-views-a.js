@@ -2307,29 +2307,16 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
   };
 
   return(
-    React.createElement(React.Fragment, null
-      , React.createElement('div', { onClick: onClose, style: {position:"fixed",inset:0,zIndex:300,
-        background:"rgba(0,0,0,.7)",backdropFilter:"blur(3px)",animation:"fadeIn .2s ease"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9157}})
-      , React.createElement('div', { style: {position:"fixed",top:0,right:0,bottom:0,zIndex:301,width:500,
-        background:C.surface,borderLeft:`1px solid ${C.border}`,
-        display:"flex",flexDirection:"column",animation:"slideDrawer .26s cubic-bezier(.4,0,.2,1)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9159}}
+    React.createElement(Modal, { title: utente.nome, onClose: onClose, wide: true }
+      , React.createElement(React.Fragment, null
 
-        /* Header */
-        , React.createElement('div', { style: {padding:"18px 22px",borderBottom:`1px solid ${C.border}`,
-          display:"flex",alignItems:"center",gap:14,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9164}}
-          , React.createElement(Avatar, { initials: utente.avatar, hex: r.hex, size: 46, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9166}})
-          , React.createElement('div', { style: {flex:1,minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9167}}
-            , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,
-              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9168}}, utente.nome)
-            , React.createElement('div', { style: {fontSize:12,color:C.textMuted,marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9170}}, utente.email)
-          )
-          , React.createElement('div', { style: {display:"flex",gap:8,alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9172}}
-            , React.createElement(Badge, { stato: utente.stato, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9173}})
-            , React.createElement('button', { onClick: onClose, style: {background:"none",border:"none",cursor:"pointer",
-              color:C.textMuted,display:"flex",padding:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9174}}
-              , React.createElement(Ic, { n: "x", size: 17, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9176}})
-            )
-          )
+        /* Sub-header: avatar + email + stato */
+        , React.createElement('div', { style: {padding:"14px 22px",borderBottom:`1px solid ${C.border}`,
+          display:"flex",alignItems:"center",gap:14,flexShrink:0} }
+          , React.createElement(Avatar, { initials: utente.avatar, hex: r.hex, size: 40 })
+          , React.createElement('div', { style: {flex:1,minWidth:0,fontSize:12,color:C.textMuted,
+              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"} }, utente.email)
+          , React.createElement(Badge, { stato: utente.stato })
         )
 
         /* Tabs */
@@ -2346,7 +2333,7 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
         )
 
         /* Body */
-        , React.createElement('div', { style: {flex:1,overflow:"auto",padding:"18px 22px",display:"flex",flexDirection:"column",gap:18}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9195}}
+        , React.createElement('div', { style: {padding:"18px 22px",display:"flex",flexDirection:"column",gap:18}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9195}}
 
           /* ── PROFILO ── */
           , tab==="profilo"&&(
@@ -2594,14 +2581,14 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
             )
           )
         )
+      )
 
-        /* Footer */
-        , React.createElement('div', { style: {padding:"14px 22px",borderTop:`1px solid ${C.border}`,
+      /* Footer */
+      , React.createElement('div', { style: {padding:"14px 22px",borderTop:`1px solid ${C.border}`,
           position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9345}}
-          , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9347}}, "Annulla")
-          , React.createElement(Btn, { onClick: ()=>onSave(draft), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9348}}
-            , React.createElement(Ic, { n: "check", size: 13, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 9349}}), "Salva modifiche"
-          )
+        , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9347}}, "Annulla")
+        , React.createElement(Btn, { onClick: ()=>onSave(draft), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9348}}
+          , React.createElement(Ic, { n: "check", size: 13, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 9349}}), "Salva modifiche"
         )
       )
     )
