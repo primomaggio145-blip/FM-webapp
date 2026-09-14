@@ -175,6 +175,14 @@ function App() {
     window.__FM_FORCE_REFRESH__ = async function(silent) {
       if (_refreshing) return;
       _refreshing = true;
+      // CRITICO: se c'è una scrittura debounced ancora in sospeso (es. l'utente ha
+      // appena salvato una modifica e clicca "Aggiorna" prima che scatti il timer di
+      // 1.2s), va completata PRIMA di rileggere da Supabase — altrimenti questo
+      // refresh scarica ancora i dati vecchi e sovrascrive la modifica in corso,
+      // dando l'impressione che quanto appena salvato sia stato "cancellato".
+      if (window.__FM_FLUSH__) {
+        try { await window.__FM_FLUSH__(); } catch(e) { console.warn('[FM] flush pre-refresh:', e); }
+      }
       if (!silent) {
         const t = document.getElementById('sync-toast');
         if (t) { t.textContent = '⟳ Aggiornamento…'; t.style.opacity = '1'; }
