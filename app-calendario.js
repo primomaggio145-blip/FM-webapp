@@ -1068,7 +1068,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
         , React.createElement(SectionDivider, { label: "Eccezione soglia lezioni" })
         , React.createElement('div', { style: {gridColumn:"1/-1"} }
           , React.createElement('div', {style:{background:`${C.gold}08`,border:`1px solid ${C.goldDim}`,borderRadius:10,padding:'12px 14px',marginBottom:10,fontSize:12,color:C.textMuted,lineHeight:1.5}}
-            , '⚙️ Lascia vuoto per usare le soglie globali delle Impostazioni. Compila solo se questo allievo ha un accordo diverso (es. 5 lezioni/mese).'
+            , '⚙️ Lascia vuoto per usare le soglie globali delle Impostazioni. Compila solo se questo allievo ha un accordo diverso (es. 5 lezioni/mese, oppure 8 se fa 2 lezioni a settimana).'
           )
         )
         , React.createElement('div', null
@@ -3396,7 +3396,7 @@ const HOURS       = Array.from({length:15},(_,i)=>`${(i+8).toString().padStart(2
 const STUDENTS_LIST = ["Sofia Marchetti","Luca Ferrara","Emma Conti","Marco Ricci","Giulia Romano","Alessandro Gallo"];
 // ROOMS è ora dinamico: usa le sale configurate nelle Impostazioni, con fallback
 const ROOMS       = () => (window.__FM_CONFIG__&&window.__FM_CONFIG__.sale&&window.__FM_CONFIG__.sale.length>0) ? window.__FM_CONFIG__.sale : ["Sala A","Sala B","Sala C","Sala Grande","Studio 1"];
-const RECURRENCE_OPTS = ["Nessuna","Ogni settimana","Ogni 2 settimane","Ogni mese"];
+const RECURRENCE_OPTS = ["Nessuna","Ogni settimana","2 volte a settimana","Ogni 2 settimane","Ogni mese"];
 const DIFFICULTY_OPTS = ["Principiante","Elementare","Intermedio","Avanzato","Professionale"];
 const TONALITY_OPTS   = [
   "Do maggiore","Sol maggiore","Re maggiore","La maggiore","Mi maggiore","Si maggiore","Fa# maggiore","Do# maggiore",
@@ -3465,20 +3465,46 @@ const isColl      = l => _optionalChain([l, 'optionalAccess', _46 => _46.tipo]) 
 
 // ═══ Lezione extra (5a/3a/2a occorrenza mensile) ═══════════════════════════
 // Numero di lezioni incluse nel pacchetto mensile, e passo in giorni, per tipo di ricorrenza.
-const PACCHETTO_PER_RICORRENZA = { "Ogni settimana": 4, "Ogni 2 settimane": 2, "Ogni mese": 1 };
+// "2 volte a settimana" ha un passo ALTERNATO (3/4 giorni, vedi lesson.gapGiorni) per restare
+// sempre sugli stessi due giorni fissi della settimana (es. lunedì e giovedì) — non un passo fisso.
+const PACCHETTO_PER_RICORRENZA = { "Ogni settimana": 4, "2 volte a settimana": 8, "Ogni 2 settimane": 2, "Ogni mese": 1 };
 const GAP_PER_RICORRENZA       = { "Ogni settimana": 7, "Ogni 2 settimane": 14, "Ogni mese": 30 };
 
 // Determina se `lesson` è la lezione-soglia del mese per il suo pacchetto di ricorrenza
 // (es. la 4a di 4 per "Ogni settimana") e se esiste un'occorrenza extra più avanti nello stesso mese.
 // IMPORTANTE: cammina avanti/indietro dalla data REALE della lezione usando il passo della
-// ricorrenza (7/14/30 giorni) — NON conta i giorni della settimana nel mese, perché per una
-// ricorrenza bisettimanale non ogni martedì del mese è una lezione, solo uno sì e uno no.
+// ricorrenza (7/14/30 giorni, o alternato 3/4 per "2 volte a settimana") — NON conta i giorni
+// della settimana nel mese, perché per una ricorrenza non settimanale non ogni occorrenza di
+// quel giorno è davvero una lezione.
 function calcolaInfoExtra(lesson) {
-  const gap = GAP_PER_RICORRENZA[_optionalChain([lesson, 'optionalAccess', _47 => _47.recurrence])];
-  const N   = PACCHETTO_PER_RICORRENZA[_optionalChain([lesson, 'optionalAccess', _47 => _47.recurrence])];
-  if (!gap || !N || !lesson.date) return { isSoglia: false, haExtraPotenziale: false, N: null };
+  const recurrence = _optionalChain([lesson, 'optionalAccess', _47 => _47.recurrence]);
+  const N = PACCHETTO_PER_RICORRENZA[recurrence];
+  if (!N || !lesson.date) return { isSoglia: false, haExtraPotenziale: false, N: null };
   const d = new Date(lesson.date + "T00:00:00");
   const month = d.getMonth(), year = d.getFullYear();
+
+  if (recurrence === "2 volte a settimana") {
+    const gapAvanti = lesson.gapGiorni === 4 ? 4 : 3; // default 3 se non impostato
+    let ordinale = 1;
+    let cursor = new Date(d);
+    let cursorForwardGap = gapAvanti;
+    while (true) {
+      const gapIndietro = 7 - cursorForwardGap;
+      const prev = new Date(cursor); prev.setDate(prev.getDate() - gapIndietro);
+      if (prev.getMonth() !== month || prev.getFullYear() !== year) break;
+      ordinale++;
+      cursor = prev;
+      cursorForwardGap = gapIndietro;
+    }
+    const next = new Date(d); next.setDate(next.getDate() + gapAvanti);
+    const haOccorrenzaSuccessivaStessoMese = next.getMonth() === month && next.getFullYear() === year;
+    const isSoglia = ordinale === N;
+    const haExtraPotenziale = isSoglia && haOccorrenzaSuccessivaStessoMese;
+    return { isSoglia, haExtraPotenziale, N };
+  }
+
+  const gap = GAP_PER_RICORRENZA[recurrence];
+  if (!gap) return { isSoglia: false, haExtraPotenziale: false, N: null };
   let ordinale = 1;
   let cursor = new Date(d);
   while (true) {
@@ -3492,6 +3518,22 @@ function calcolaInfoExtra(lesson) {
   const isSoglia = ordinale === N;
   const haExtraPotenziale = isSoglia && haOccorrenzaSuccessivaStessoMese;
   return { isSoglia, haExtraPotenziale, N };
+}
+// Gap (in giorni) fino alla prossima lezione della stessa serie, gestendo l'alternanza 3/4
+// per "2 volte a settimana".
+function gapProssimaLezione(lesson) {
+  if (lesson && lesson.recurrence === "2 volte a settimana") {
+    return lesson.gapGiorni === 4 ? 4 : 3;
+  }
+  return GAP_PER_RICORRENZA[_optionalChain([lesson, 'optionalAccess', _47b => _47b.recurrence])] || 7;
+}
+// Valore di gapGiorni da assegnare alla lezione APPENA CREATA (per continuare l'alternanza).
+function prossimoGapGiorni(lesson) {
+  if (lesson && lesson.recurrence === "2 volte a settimana") {
+    const attuale = lesson.gapGiorni === 4 ? 4 : 3;
+    return 7 - attuale;
+  }
+  return null;
 }
 const isProva     = l => _optionalChain([l, 'optionalAccess', _47 => _47.tipo]) === "prova";
 const isSalaProve = l => _optionalChain([l, 'optionalAccess', _47b => _47b.tipo]) === "sala_prove";
@@ -8966,6 +9008,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           contact_name:     dataNormFull.contactName || null,
           phone:            dataNormFull.phone       || null,
           motivo_assenza:   dataNormFull.motivoAssenza || null,
+          gap_giorni:       dataNormFull.gapGiorni != null ? dataNormFull.gapGiorni : null,
         };
         console.log(`[DEBUG contatto] handleEdit UPDATE lezioni [${data.id}] → contact_name="${row.contact_name}" phone="${row.phone}"`);
         sb.from('lezioni').update(row).eq('id', data.id)
@@ -9090,8 +9133,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       if (attendanceNow && dataNormFull.recurrence && dataNormFull.recurrence !== "Nessuna") {
         const isLezioneRecupero = dataNormFull.tipo === 'recupero' || dataNormFull.inRecupero === true;
         if (!isLezioneRecupero) {
-          const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
-          const gap      = daysMap[dataNormFull.recurrence] || 7;
+          const gap      = gapProssimaLezione(dataNormFull);
           const nextDate = yyyymmdd(addDays(new Date((dataNormFull.date||"")+"T00:00:00"), gap));
 
           // Lezione extra: non creare automaticamente, metti in pausa per decisione admin.
@@ -9128,6 +9170,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               inRecupero:       false,
               recuperoScadenza: null,
               tipo:             dataNormFull.tipo === 'recupero' ? 'individuale' : (dataNormFull.tipo || 'individuale'),
+              gapGiorni:        prossimoGapGiorni(dataNormFull),
             };
             // Aggiorna React state
             setLessons(prev => {
@@ -9242,8 +9285,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         }
         let shouldOpenCambioOra = false;
         if (lesson && valCreaLezione && lesson.recurrence && lesson.recurrence !== "Nessuna" && !isLezioneRecupero) {
-          const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
-          const gap     = daysMap[lesson.recurrence] || 7;
+          const gap     = gapProssimaLezione(lesson);
           const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap));
 
           // Lezione extra (5a/3a/2a occorrenza mensile): non creare automaticamente,
@@ -9283,6 +9325,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               inRecupero:       false,
               recuperoScadenza: null,
               tipo:             lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
+              gapGiorni:        prossimoGapGiorni(lesson),
             };
             safeInsertRecurringLesson(nextLesson, setLessons);
             gcalSyncLesson('sync_one', nextLesson);
@@ -9338,6 +9381,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         extraContabilizzata: false,
         extraLessonId: null,
         tipo: lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
+        gapGiorni: prossimoGapGiorni(lesson),
       };
       setLessons(prev => [
         ...prev.map(l => l.id === lesson.id
@@ -9358,10 +9402,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     };
 
     const handleNonGeneraExtra = (lesson) => {
-      const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
-      const gap = daysMap[lesson.recurrence] || 7;
+      const gap1 = gapProssimaLezione(lesson);
+      const gap2 = lesson.recurrence === "2 volte a settimana" ? (7 - gap1) : gap1;
       // Salta l'occorrenza extra: la prossima lezione riparte 2 cicli dopo (nuovo conteggio dal mese successivo)
-      const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap*2));
+      const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap1 + gap2));
       const nextLesson = {
         ...lesson,
         id: uid(),
@@ -9379,6 +9423,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         extraContabilizzata: false,
         extraLessonId: null,
         tipo: lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
+        gapGiorni: lesson.recurrence === "2 volte a settimana" ? (lesson.gapGiorni === 4 ? 4 : 3) : null,
       };
       setLessons(prev => [
         ...prev.map(l => l.id === lesson.id

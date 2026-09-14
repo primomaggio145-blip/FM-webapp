@@ -106,6 +106,7 @@
       isLezioneExtra: r.is_lezione_extra || false,
       extraContabilizzata: r.extra_contabilizzata || false,
       extraLessonId: r.extra_lesson_id || null,
+      gapGiorni: r.gap_giorni != null ? Number(r.gap_giorni) : null,
       contactName: r.contact_name || '',
       phone: r.phone || '',
       // Flag "NUOVO ISCRITTO": lezione calendarizzata prima di aver inserito l'allievo
@@ -307,6 +308,7 @@
         is_lezione_extra: l.isLezioneExtra || false,
         extra_contabilizzata: l.extraContabilizzata || false,
         extra_lesson_id: l.extraLessonId || null,
+        gap_giorni: l.gapGiorni != null ? l.gapGiorni : null,
         contact_name: l.contactName || null,
         phone: l.phone || null,
         nuovo_iscritto: l.nuovoIscritto || false,
