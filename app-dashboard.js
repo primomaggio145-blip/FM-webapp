@@ -2142,6 +2142,11 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
       if (myStudentName && sn && sn === myStudentName.toLowerCase().trim()) return true;
       if (myNome && sn && sn === myNome.toLowerCase().trim()) return true;
       if (myStudentName && sn && sn.includes(myStudentName.toLowerCase().split(" ")[0])) return true;
+      // Fallback: lezioni "nuovo iscritto" registrate prima che l'allievo avesse un
+      // record/collegamento — hanno contactName invece di student/studentId.
+      const cn = (l.contactName || "").toLowerCase().trim();
+      if (myStudentName && cn && (cn === myStudentName.toLowerCase().trim() || cn.includes(myStudentName.toLowerCase().split(" ")[0]))) return true;
+      if (myNome && cn && cn === myNome.toLowerCase().trim()) return true;
       return false;
     };
     // teacherKey = il valore salvato nel campo "teacher" delle lezioni

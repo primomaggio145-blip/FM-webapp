@@ -3716,8 +3716,12 @@ const studentInLesson = (l, name, studentId) => {
   if (studentId != null && l.studentId != null && String(l.studentId) === String(studentId)) return true;
   const ln = (l.student||'').toLowerCase().trim();
   const nn = (name||'').toLowerCase().trim();
-  if (!ln || !nn) return false;
-  return ln === nn || ln.includes(nn) || nn.includes(ln);
+  if (ln && nn && (ln === nn || ln.includes(nn) || nn.includes(ln))) return true;
+  // Fallback: lezioni "nuovo iscritto" registrate prima che l'allievo avesse un
+  // record/collegamento — hanno contactName invece di student/studentId.
+  const cn = (l.contactName||'').toLowerCase().trim();
+  if (cn && nn && (cn === nn || cn.includes(nn) || nn.includes(cn))) return true;
+  return false;
 };
 const lessonLabel = l => isColl(l)
   ? (l.courseName||"Collettiva")
@@ -5175,14 +5179,24 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                     fontFamily:"'Open Sans',sans-serif", appearance:"none"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4722}}
                   , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4726}}, "— seleziona allievo —"   )
                   , studentsList.filter(s=>s.status==="attivo").map(s=>(
-                    React.createElement('option', { key: s.id, value: s.name, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4728}}, s.name, " · "  , s.instrument)
+                    React.createElement('option', { key: s.id, value: String(s.id), __self: this, __source: {fileName: _jsxFileName, lineNumber: 4728}}, s.name, " · "  , s.instrument)
                   ))
                   , React.createElement('option', { value: "__nuovo__", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4730}}, "+ Nuovo allievo (da creare)"    )
                 )
                 , React.createElement('button', {
                   disabled: !iscrizioneStudent,
                   onClick: ()=>{
-                    if(onIscrizione) onIscrizione(lesson.id, iscrizioneStudent, true);
+                    if(onIscrizione){
+                      if(iscrizioneStudent === "__nuovo__") {
+                        // Allievo ancora da creare: nessun ID reale disponibile — usa il nome
+                        // provvisorio della lezione, verrà collegato per nome finché non
+                        // esisterà un record studenti da associare esplicitamente.
+                        onIscrizione(lesson.id, lesson.contactName||"", true, null);
+                      } else {
+                        const selStud = studentsList.find(s=>String(s.id)===String(iscrizioneStudent));
+                        onIscrizione(lesson.id, selStud?selStud.name:"", true, selStud?selStud.id:null);
+                      }
+                    }
                     setShowIscrizionePanel(false);
                   },
                   style: {background:iscrizioneStudent?C.green:"#1a2a1a",color:iscrizioneStudent?C.bg:C.textDim,
@@ -8806,9 +8820,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       gcalSyncLesson('sync_one', { ...data, id: lessonId });
     };
     const handleAddProva   = (data)      => { setLessons(p => [...p, data]); closeModal(); };
-    const handleIscrizioneProva = (id, studentName, iscritto) => {
+    const handleIscrizioneProva = (id, studentName, iscritto, studentId) => {
       setLessons(p => p.map(l => l.id === id
-        ? {...l, iscritto, student: iscritto ? studentName : ""}
+        ? {...l, iscritto, student: iscritto ? studentName : "", studentId: iscritto ? (studentId ?? l.studentId ?? null) : null}
         : l
       ));
     };
