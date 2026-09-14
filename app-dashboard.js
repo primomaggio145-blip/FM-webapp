@@ -1924,10 +1924,12 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
       (l.students||[]).forEach(st => {
         if (!st || !st.name) return;
         if (studAttendance(l, st.name, st.id)==='recuperata') return;
+        if (l.isLezioneExtra) return; // lezione extra concordata: non conta ai fini della soglia
         contColl[st.name] = (contColl[st.name]||0)+1;
       });
     } else {
       if (l.attendance==='recuperata') return;
+      if (l.isLezioneExtra) return; // lezione extra concordata: non conta ai fini della soglia
       const k = l.student||String(l.studentId||''); if(!k) return;
       contInd[k] = (contInd[k]||0)+1;
     }
@@ -2409,6 +2411,27 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 
           /* ── BODY ── */
           , React.createElement('div', { style: {flex:1,padding:"16px 20px",display:"flex",flexDirection:"column",gap:16,overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2185}}
+
+            /* Banner lezioni extra da decidere */
+            , ruolo === 'admin' && (() => {
+                const nDaDecidere = (propLessonsDash||[]).filter(l => l.extraDaDecidere && !l.extraDecisione).length;
+                const nDaPagare   = (propLessonsDash||[]).filter(l => l.isLezioneExtra && !l.extraContabilizzata).length;
+                const tot = nDaDecidere + nDaPagare;
+                if (tot === 0) return null;
+                return React.createElement('div', { style:{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderRadius:12,border:'1.5px solid rgba(245,158,11,0.4)',background:'rgba(245,158,11,0.10)',cursor:'pointer'},
+                    onClick: () => onNavigate('calendario') }
+                  , React.createElement(Ic, { n:'alert', size:18, stroke:'#f59e0b' })
+                  , React.createElement('div', {style:{flex:1}}
+                    , React.createElement('div', {style:{fontSize:13,fontWeight:700,color:'#f59e0b'}}, 'Lezioni extra da gestire')
+                    , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}
+                      , nDaDecidere>0 ? `${nDaDecidere} da decidere (genera/non generare)` : ''
+                      , nDaDecidere>0 && nDaPagare>0 ? ' · ' : ''
+                      , nDaPagare>0 ? `${nDaPagare} generate da contabilizzare` : ''
+                    )
+                  )
+                  , React.createElement('span', {style:{fontSize:12,fontWeight:700,color:'#f59e0b'}}, 'Vai al Calendario →')
+                );
+              })()
 
             /* Helper ordine pannelli: legge panels.panelOrder e restituisce {order:N} */
             , (() => {

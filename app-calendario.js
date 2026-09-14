@@ -1681,7 +1681,8 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                   const rec  = lm.filter(l=>l.inRecupero).length;
                   const att  = lm.filter(l=>studAttendance(l,student.name,student.id)).length;
                   const tasso= att>0 ? Math.round((pres/att)*100) : null;
-                  return { x, i, lm, pres, ass, rec, att, tasso, mese: x.y*100+x.m, tot: lm.length };
+                  const haExtra = lm.some(l=>l.isLezioneExtra && studentInLesson(l,student.name,student.id));
+                  return { x, i, lm, pres, ass, rec, att, tasso, haExtra, mese: x.y*100+x.m, tot: lm.length };
                 }), (r,k) => {
                   if(k==="mese")  return r.mese;
                   if(k==="tot")   return r.tot;
@@ -1690,7 +1691,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                   if(k==="rec")   return r.rec;
                   if(k==="tasso") return r.tasso ?? -1;
                   return 0;
-                }).map(({x,i,lm,pres,ass,rec,att,tasso}) => {
+                }).map(({x,i,lm,pres,ass,rec,att,tasso,haExtra}) => {
                   const isF  = isFuture(x);
                   const isS  = x.m===selMese.m && x.y===selMese.y;
                   return (
@@ -1705,6 +1706,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:isF?C.textDim:lm.length>0?accentHex:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3391}}
                         , isF?"—":lm.length
+                        , !isF && haExtra && React.createElement('span', { title:'Include una lezione extra concordata', style:{fontSize:12, marginLeft:5}}, '🔶')
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}}, isF?"—":pres||"—")
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:ass>0?C.red:C.textDim}}, isF?"—":ass||"—")
@@ -2542,6 +2544,7 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     lezioniMese.forEach(l => {
       if (!studentInLesson(l, nome, s.id)) return;
       if (studAttendance(l, nome, s.id)==='recuperata') return;
+      if (l.isLezioneExtra) return; // lezione extra concordata: non conta ai fini della soglia
       if (isColl(l)) countCollReale++; else countIndReale++;
     });
     const countInd  = countIndReale;
@@ -3459,6 +3462,37 @@ const today    = new Date();
 const addDays  = (d, n) => { const dt = new Date(d); dt.setDate(dt.getDate()+n); return dt; };
 // Helpers lezioni collettive
 const isColl      = l => _optionalChain([l, 'optionalAccess', _46 => _46.tipo]) === "collettivo";
+
+// ═══ Lezione extra (5a/3a/2a occorrenza mensile) ═══════════════════════════
+// Numero di lezioni incluse nel pacchetto mensile, e passo in giorni, per tipo di ricorrenza.
+const PACCHETTO_PER_RICORRENZA = { "Ogni settimana": 4, "Ogni 2 settimane": 2, "Ogni mese": 1 };
+const GAP_PER_RICORRENZA       = { "Ogni settimana": 7, "Ogni 2 settimane": 14, "Ogni mese": 30 };
+
+// Determina se `lesson` è la lezione-soglia del mese per il suo pacchetto di ricorrenza
+// (es. la 4a di 4 per "Ogni settimana") e se esiste un'occorrenza extra più avanti nello stesso mese.
+// IMPORTANTE: cammina avanti/indietro dalla data REALE della lezione usando il passo della
+// ricorrenza (7/14/30 giorni) — NON conta i giorni della settimana nel mese, perché per una
+// ricorrenza bisettimanale non ogni martedì del mese è una lezione, solo uno sì e uno no.
+function calcolaInfoExtra(lesson) {
+  const gap = GAP_PER_RICORRENZA[_optionalChain([lesson, 'optionalAccess', _47 => _47.recurrence])];
+  const N   = PACCHETTO_PER_RICORRENZA[_optionalChain([lesson, 'optionalAccess', _47 => _47.recurrence])];
+  if (!gap || !N || !lesson.date) return { isSoglia: false, haExtraPotenziale: false, N: null };
+  const d = new Date(lesson.date + "T00:00:00");
+  const month = d.getMonth(), year = d.getFullYear();
+  let ordinale = 1;
+  let cursor = new Date(d);
+  while (true) {
+    const prev = new Date(cursor); prev.setDate(prev.getDate() - gap);
+    if (prev.getMonth() !== month || prev.getFullYear() !== year) break;
+    ordinale++;
+    cursor = prev;
+  }
+  const next = new Date(d); next.setDate(next.getDate() + gap);
+  const haOccorrenzaSuccessivaStessoMese = next.getMonth() === month && next.getFullYear() === year;
+  const isSoglia = ordinale === N;
+  const haExtraPotenziale = isSoglia && haOccorrenzaSuccessivaStessoMese;
+  return { isSoglia, haExtraPotenziale, N };
+}
 const isProva     = l => _optionalChain([l, 'optionalAccess', _47 => _47.tipo]) === "prova";
 const isSalaProve = l => _optionalChain([l, 'optionalAccess', _47b => _47b.tipo]) === "sala_prove";
 
@@ -4895,6 +4929,32 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
                     e.target.value='';
                   }})
             )
+          )
+        )
+
+        /* Banner lezione extra (5a/3a/2a occorrenza mensile) — pulsante Paga lezione */
+        , lesson.isLezioneExtra && (
+          React.createElement('div', {style:{marginBottom:14, padding:'12px 14px', borderRadius:10, border:'1.5px solid rgba(245,158,11,0.4)', background:'rgba(245,158,11,0.08)', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}
+            , React.createElement(Ic,{n:'alert',size:16,stroke:'#f59e0b'})
+            , React.createElement('div',{style:{flex:1}}
+              , React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#f59e0b'}}, 'Lezione extra')
+              , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2}}, lesson.extraContabilizzata ? 'Già contabilizzata' : 'Oltre il pacchetto mensile — da pagare a parte se concordato con l\'allievo')
+            )
+            , role === 'admin' && !lesson.extraContabilizzata && React.createElement('button', {
+                onClick: () => {
+                  const N = PACCHETTO_PER_RICORRENZA[lesson.recurrence] || 4;
+                  const studentObj = isColl(lesson) ? null : (students||[]).find(s => s.name === lesson.student);
+                  const importoSuggerito = studentObj && studentObj.monthlyFee ? Math.round((Number(studentObj.monthlyFee)/N)*100)/100 : null;
+                  if (onNavigate) onNavigate('contabilita');
+                  if (onQuickAction) setTimeout(() => onQuickAction({
+                    type: 'apriEntrataExtra', lessonId: lesson.id,
+                    studentId: studentObj ? studentObj.id : null,
+                    studentName: lesson.student||'', courseId: lesson.courseId||null,
+                    courseName: lesson.courseName||'', importo: importoSuggerito,
+                  }), 120);
+                },
+                style:{padding:'8px 16px', borderRadius:8, border:'none', background:'#f59e0b', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
+              }, 'Paga lezione')
           )
         )
 
@@ -8453,6 +8513,54 @@ const GoogleCalendarPageView = ({ userRuolo, appUser }) => {
   );
 };
 
+// ── Tab EXTRA: lezioni 5a/3a/2a occorrenza mensile da decidere/contabilizzare ──
+const ExtraLezioniTab = ({ daDecidere, saltate, daPagare, onGenera, onNonGenera, onContabilizza, onSelectLesson }) => {
+  const fmtData = (d) => { try { return new Date(d+"T00:00:00").toLocaleDateString('it-IT', {weekday:'short', day:'numeric', month:'short'}); } catch(e){ return d; } };
+  const righeVuote = daDecidere.length===0 && saltate.length===0 && daPagare.length===0;
+  return React.createElement('div', { style: {padding:20} }
+    , React.createElement('div', { style: {display:'flex', alignItems:'center', gap:8, marginBottom:16, padding:'10px 14px', background:'rgba(245,158,11,0.10)', border:'1px solid rgba(245,158,11,0.35)', borderRadius:10} }
+      , React.createElement(Ic, { n:'alert', size:16, stroke:'#f59e0b' })
+      , React.createElement('span', { style:{fontSize:13, fontWeight:600, color:'#f59e0b'} }, 'Lezioni extra — 5ª/3ª/2ª occorrenza del mese, oltre il pacchetto previsto')
+    )
+    , righeVuote ? (
+      React.createElement('div', { style:{textAlign:'center', padding:'32px 0', color:C.textDim} }, 'Nessuna lezione extra da gestire al momento')
+    ) : (
+      React.createElement('div', { style:{display:'flex', flexDirection:'column', gap:10} }
+        , daDecidere.map(l => (
+          React.createElement('div', { key:l.id, style:{display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:10, border:'1.5px solid rgba(245,158,11,0.4)', background:'rgba(245,158,11,0.06)'} }
+            , React.createElement('span', { style:{fontSize:10, fontWeight:700, color:'#fff', background:'#f59e0b', borderRadius:6, padding:'3px 8px', flexShrink:0} }, 'DA DECIDERE')
+            , React.createElement('div', { style:{flex:1, cursor:'pointer'}, onClick:()=>onSelectLesson(l) }
+              , React.createElement('div', { style:{fontSize:13, fontWeight:600} }, isColl(l) ? (l.courseName||'Collettiva') : (l.student||'—'))
+              , React.createElement('div', { style:{fontSize:11, color:C.textMuted} }, 'Lezione soglia: ', fmtData(l.date), ' · extra sarebbe: ', fmtData(l.extraDataPotenziale))
+            )
+            , React.createElement('button', { onClick:()=>onGenera(l), style:{padding:'7px 14px', borderRadius:8, border:'none', background:'#f59e0b', color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"} }, 'Genera')
+            , React.createElement('button', { onClick:()=>onNonGenera(l), style:{padding:'7px 14px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.textMuted, fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"} }, 'Non generare')
+          )
+        ))
+        , daPagare.map(l => (
+          React.createElement('div', { key:l.id, style:{display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:10, border:`1.5px solid ${C.tealBorder}`, background:C.tealBg} }
+            , React.createElement('span', { style:{fontSize:10, fontWeight:700, color:'#fff', background:C.teal, borderRadius:6, padding:'3px 8px', flexShrink:0} }, 'DA PAGARE')
+            , React.createElement('div', { style:{flex:1, cursor:'pointer'}, onClick:()=>onSelectLesson(l) }
+              , React.createElement('div', { style:{fontSize:13, fontWeight:600} }, isColl(l) ? (l.courseName||'Collettiva') : (l.student||'—'))
+              , React.createElement('div', { style:{fontSize:11, color:C.textMuted} }, 'Lezione extra generata: ', fmtData(l.date))
+            )
+            , React.createElement('button', { onClick:()=>onContabilizza(l), style:{padding:'7px 14px', borderRadius:8, border:'none', background:C.teal, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"} }, 'Contabilizza')
+          )
+        ))
+        , saltate.map(l => (
+          React.createElement('div', { key:l.id, style:{display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:10, border:`1px solid ${C.border}`, background:C.bg, opacity:0.7} }
+            , React.createElement('span', { style:{fontSize:10, fontWeight:700, color:C.textDim, background:C.surfaceHover, borderRadius:6, padding:'3px 8px', flexShrink:0} }, 'SALTATA')
+            , React.createElement('div', { style:{flex:1} }
+              , React.createElement('div', { style:{fontSize:13, fontWeight:600, color:C.textMuted} }, isColl(l) ? (l.courseName||'Collettiva') : (l.student||'—'))
+              , React.createElement('div', { style:{fontSize:11, color:C.textDim} }, 'Lezione soglia del ', fmtData(l.date), ' — extra non generata, conteggio ripartito dal mese successivo')
+            )
+          )
+        ))
+      )
+    )
+  );
+};
+
 const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV, config:calConfig, onNavigate, onQuickAction, gruppi:propGruppiCal, iscrizioniAnno:propIscrizioniCal }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
@@ -8900,6 +9008,22 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
           const gap      = daysMap[dataNormFull.recurrence] || 7;
           const nextDate = yyyymmdd(addDays(new Date((dataNormFull.date||"")+"T00:00:00"), gap));
+
+          // Lezione extra: non creare automaticamente, metti in pausa per decisione admin.
+          const infoExtra = calcolaInfoExtra(dataNormFull);
+          if (infoExtra.haExtraPotenziale && !dataNormFull.extraDecisione) {
+            setLessons(prev => prev.map(l => l.id === dataNormFull.id
+              ? { ...l, extraDaDecidere: true, extraDataPotenziale: nextDate }
+              : l));
+            const sbExtra = window.supabaseClient;
+            if (sbExtra) {
+              sbExtra.from('lezioni').update({
+                extra_da_decidere: true, extra_data_potenziale: nextDate,
+              }).eq('id', dataNormFull.id).then(({ error }) => {
+                if (error) console.warn('[FM] extra_da_decidere update error:', error.message);
+              });
+            }
+          } else {
           // Check sincrono nello state React per evitare doppio render
           const alreadyInState = (lessons||[]).some(l =>
             l.date === nextDate && l.hour === dataNormFull.hour &&
@@ -8931,6 +9055,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             // Insert sicuro su Supabase (con guard + check DB)
             safeInsertRecurringLesson(nextLesson, setLessons);
             gcalSyncLesson('sync_one', nextLesson);
+          }
           }
         }
       }
@@ -9036,6 +9161,23 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           const gap     = daysMap[lesson.recurrence] || 7;
           const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap));
 
+          // Lezione extra (5a/3a/2a occorrenza mensile): non creare automaticamente,
+          // metti in pausa e lascia decidere l'admin dalla tab "Extra".
+          const infoExtra = calcolaInfoExtra(lesson);
+          if (!isCambioOra && infoExtra.haExtraPotenziale && !lesson.extraDecisione) {
+            const sbExtra = window.supabaseClient;
+            if (sbExtra) {
+              sbExtra.from('lezioni').update({
+                extra_da_decidere: true, extra_data_potenziale: nextDate,
+              }).eq('id', lesson.id).then(({ error }) => {
+                if (error) console.warn('[FM] extra_da_decidere update error:', error.message);
+              });
+            }
+            return updated.map(l => l.id === lesson.id
+              ? { ...l, extraDaDecidere: true, extraDataPotenziale: nextDate }
+              : l);
+          }
+
           const alreadyExists = updated.some(l =>
             l.id !== lesson.id &&
             l.date === nextDate &&
@@ -9089,7 +9231,123 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       });
       setSelLesson(p => p ? {...p, attendance:val} : p);
     };
-  
+
+    // ═══ Gestione lezione extra: Genera / Non genera / Contabilizza ═══════
+    const handleGeneraExtra = (lesson) => {
+      const nextDate = lesson.extraDataPotenziale;
+      if (!nextDate) return;
+      const nextLesson = {
+        ...lesson,
+        id: uid(),
+        date: nextDate,
+        attendance: "",
+        notes: "",
+        exercises: "",
+        topic: "",
+        inRecupero: false,
+        recuperoScadenza: null,
+        extraDaDecidere: false,
+        extraDataPotenziale: null,
+        extraDecisione: null,
+        isLezioneExtra: true,
+        extraContabilizzata: false,
+        extraLessonId: null,
+        tipo: lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
+      };
+      setLessons(prev => [
+        ...prev.map(l => l.id === lesson.id
+          ? { ...l, extraDecisione: 'generata', extraLessonId: nextLesson.id, extraDaDecidere: false }
+          : l),
+        nextLesson,
+      ]);
+      const sb = window.supabaseClient;
+      if (sb) {
+        sb.from('lezioni').update({
+          extra_decisione: 'generata', extra_lesson_id: nextLesson.id, extra_da_decidere: false,
+        }).eq('id', lesson.id).then(({ error }) => {
+          if (error) console.warn('[FM] extra_decisione update error:', error.message);
+        });
+      }
+      safeInsertRecurringLesson(nextLesson, setLessons);
+      gcalSyncLesson('sync_one', nextLesson);
+    };
+
+    const handleNonGeneraExtra = (lesson) => {
+      const daysMap = { "Ogni settimana":7, "Ogni 2 settimane":14, "Ogni mese":30 };
+      const gap = daysMap[lesson.recurrence] || 7;
+      // Salta l'occorrenza extra: la prossima lezione riparte 2 cicli dopo (nuovo conteggio dal mese successivo)
+      const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap*2));
+      const nextLesson = {
+        ...lesson,
+        id: uid(),
+        date: nextDate,
+        attendance: "",
+        notes: "",
+        exercises: "",
+        topic: "",
+        inRecupero: false,
+        recuperoScadenza: null,
+        extraDaDecidere: false,
+        extraDataPotenziale: null,
+        extraDecisione: null,
+        isLezioneExtra: false,
+        extraContabilizzata: false,
+        extraLessonId: null,
+        tipo: lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
+      };
+      setLessons(prev => [
+        ...prev.map(l => l.id === lesson.id
+          ? { ...l, extraDecisione: 'saltata', extraDaDecidere: false }
+          : l),
+        nextLesson,
+      ]);
+      const sb = window.supabaseClient;
+      if (sb) {
+        sb.from('lezioni').update({
+          extra_decisione: 'saltata', extra_da_decidere: false,
+        }).eq('id', lesson.id).then(({ error }) => {
+          if (error) console.warn('[FM] extra_decisione update error:', error.message);
+        });
+      }
+      safeInsertRecurringLesson(nextLesson, setLessons);
+      gcalSyncLesson('sync_one', nextLesson);
+    };
+
+    // Apre "Aggiungi entrata" precompilato nella Contabilità per la lezione extra generata
+    const handleContabilizzaExtra = (extraLesson) => {
+      const N = PACCHETTO_PER_RICORRENZA[extraLesson.recurrence] || 4;
+      const studentObj = isColl(extraLesson)
+        ? null
+        : propStudents.find(s => s.name === extraLesson.student);
+      const importoSuggerito = studentObj && studentObj.monthlyFee
+        ? Math.round((Number(studentObj.monthlyFee) / N) * 100) / 100
+        : null;
+      if (onNavigate) onNavigate('contabilita');
+      if (onQuickAction) {
+        setTimeout(() => onQuickAction({
+          type: 'apriEntrataExtra',
+          lessonId: extraLesson.id,
+          studentId: studentObj ? studentObj.id : null,
+          studentName: extraLesson.student || '',
+          courseId: extraLesson.courseId || null,
+          courseName: extraLesson.courseName || '',
+          importo: importoSuggerito,
+        }), 120);
+      }
+    };
+
+    // ═══ Righe per la tab EXTRA: solo admin ═══════════════════════════════
+    const lezioniExtraDaDecidere = useMemo(() =>
+      (lessons||[]).filter(l => l.extraDaDecidere && !l.extraDecisione), [lessons]);
+    const lezioniExtraSaltate = useMemo(() =>
+      (lessons||[]).filter(l => l.extraDecisione === 'saltata'), [lessons]);
+    const lezioniExtraDaPagare = useMemo(() =>
+      (lessons||[]).filter(l => l.isLezioneExtra && !l.extraContabilizzata), [lessons]);
+    const tutteRigheExtra = useMemo(() =>
+      [...lezioniExtraDaDecidere, ...lezioniExtraSaltate, ...lezioniExtraDaPagare]
+        .sort((a,b) => (a.date||'').localeCompare(b.date||'')),
+      [lezioniExtraDaDecidere, lezioniExtraSaltate, lezioniExtraDaPagare]);
+
     const [filterCorso,   setFilterCorso]   = useState("");
     const [filterDocente, setFilterDocente] = useState("");
     const [filterTipo,    setFilterTipo]    = useState("");
@@ -9375,6 +9633,19 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   )
                 ))
               )
+              , role === "admin" && tutteRigheExtra.length > 0 && (
+                React.createElement('button', { onClick: () => setViewMode("extra"),
+                  style: {padding:"7px 12px", borderRadius:8,
+                    border:`1.5px solid ${viewMode==="extra" ? '#f59e0b' : 'rgba(245,158,11,0.4)'}`,
+                    background: viewMode==="extra" ? '#f59e0b' : 'rgba(245,158,11,0.12)',
+                    color: viewMode==="extra" ? '#fff' : '#f59e0b',
+                    cursor:"pointer", fontSize:12, fontWeight:700, fontFamily:"'Open Sans',sans-serif",
+                    display:"flex", alignItems:"center", gap:6}}
+                  , React.createElement(Ic, { n: "alert", size: 13, stroke: viewMode==="extra"?'#fff':'#f59e0b'})
+                  , "EXTRA"
+                  , React.createElement('span', { style: {background: viewMode==="extra" ? 'rgba(255,255,255,0.3)' : '#f59e0b', color:'#fff', borderRadius:10, padding:'1px 7px', fontSize:11}}, tutteRigheExtra.length)
+                )
+              )
               , role === "admin" && (
                 React.createElement('div', { style: {display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6023}}
                   , React.createElement(Btn, { variant: "secondary", onClick: () => { setAddDate(viewMode==="day"?yyyymmdd(curDate):yyyymmdd(today)); setModal("addprova"); },
@@ -9483,6 +9754,15 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, isMobile: isMobile, config: calConfig, courses: propCourses, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
               , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, config: calConfig, isMobile: isMobile, courses: propCourses, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
               , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, config: calConfig, courses: propCourses, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
+              , appView==='calendario' && viewMode === "extra" && React.createElement(ExtraLezioniTab, {
+                  daDecidere: lezioniExtraDaDecidere,
+                  saltate: lezioniExtraSaltate,
+                  daPagare: lezioniExtraDaPagare,
+                  onGenera: handleGeneraExtra,
+                  onNonGenera: handleNonGeneraExtra,
+                  onContabilizza: handleContabilizzaExtra,
+                  onSelectLesson: l => { setSelLesson(l); setModal("detail"); },
+                })
             )
           )
           )
@@ -10450,10 +10730,31 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
     : null;
   const [catSpese,   setCatSpese]   = useState(CATEGORIE_DEFAULT);
   const [catEntrate, setCatEntrate] = useState(CAT_ENTRATE_DEFAULT);
+  const [prefillEntrata, setPrefillEntrata] = useState(null);
+  const [extraLessonIdPendente, setExtraLessonIdPendente] = useState(null);
   // Handle quick action from dashboard
   React.useEffect(()=>{
     if(quickAction==="addEntrata"){ setTab("entrate"); setModal("addq"); if(clearQuickAction)clearQuickAction(); }
     else if(quickAction==="addSpesa"){ setTab("spese"); setModal("add"); if(clearQuickAction)clearQuickAction(); }
+    else if(quickAction && quickAction.type === "apriEntrataExtra"){
+      setTab("entrate");
+      setPrefillEntrata({
+        categoria: "quota",
+        studentId: quickAction.studentId != null ? String(quickAction.studentId) : "",
+        importo: quickAction.importo != null ? quickAction.importo : "",
+        mese: new Date().getMonth()+1,
+        anno: new Date().getFullYear(),
+        data: yyyymmdd(today),
+        metodo: "Bonifico bancario",
+        desc: `Lezione extra${quickAction.courseName ? ' - '+quickAction.courseName : (quickAction.studentName ? ' - '+quickAction.studentName : '')}`,
+        note: "",
+        stato: "pagato",
+        noRicevuta: false,
+      });
+      setExtraLessonIdPendente(quickAction.lessonId || null);
+      setModal("addq");
+      if(clearQuickAction) clearQuickAction();
+    }
   },[quickAction]);
   const isMobile = useIsMobile();
   const [_entrate, _setEntrate] = useState(INIT_ENTRATE_QUOTE);
@@ -10478,7 +10779,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
     const [searchQ,  setSearchQ]  = useState("");
     const [filterQMese,setFQMese] = useState("");
   
-    const closeModal = () => { setModal(null); setSelSpesa(null); setSelQuota(null); };
+    const closeModal = () => { setModal(null); setSelSpesa(null); setSelQuota(null); setPrefillEntrata(null); setExtraLessonIdPendente(null); };
     const handleAdd    = d => { setSpese(p=>[...p,{...d,id:uid()}]); closeModal(); };
     const handleEdit   = d => { setSpese(p=>p.map(x=>x.id===d.id?{...x,...d}:x)); closeModal(); };
     const handleDel    = () => { setSpese(p=>p.filter(x=>x.id!==_optionalChain([selSpesa, 'optionalAccess', _60 => _60.id]))); closeModal(); };
@@ -10502,6 +10803,13 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         } catch(e) { console.warn('[FM] save contatori:', e?.message); }
       }
       setEntrate(p=>[...p,{...d, id:uid(), numRicevuta, dataPagamento, noRicevuta: d.noRicevuta||false}]);
+      if (extraLessonIdPendente) {
+        const sb = window.supabaseClient;
+        if (sb) sb.from('lezioni').update({ extra_contabilizzata: true }).eq('id', extraLessonIdPendente)
+          .then(({ error }) => { if (error) console.warn('[FM] extra_contabilizzata update error:', error.message); });
+        setExtraLessonIdPendente(null);
+      }
+      setPrefillEntrata(null);
       closeModal();
     };
     const handleEditQ  = d => { setEntrate(p=>p.map(x=>x.id===d.id?{...x,...d, dataPagamento: d.data||d.dataPagamento||x.dataPagamento}:x)); closeModal(); };
@@ -10928,7 +11236,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         , ruoloCV==="admin" && modal==="add"    && React.createElement(Modal, { title: "Registra spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}, React.createElement(SpesaForm, { onSave: handleAdd, onClose: closeModal, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}))
         , modal==="edit"   && selSpesa && React.createElement(Modal, { title: "Modifica spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}, React.createElement(SpesaForm, { initial: selSpesa, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), onSave: handleEdit, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}))
         , modal==="delete" && selSpesa && React.createElement(ConfirmDel, { label: selSpesa.desc, onConfirm: handleDel, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7232}})
-        , ruoloCV==="admin" && modal==="addq"   && React.createElement(Modal, { title: "Nuova entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}, React.createElement(EntrataForm, { students: students, onSave: handleAddQ, onClose: closeModal, categorie: catEntrate, onAddCategoriaEntr: (cat)=>setCatEntrate(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}))
+        , ruoloCV==="admin" && modal==="addq"   && React.createElement(Modal, { title: "Nuova entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}, React.createElement(EntrataForm, { students: students, initial: prefillEntrata, onSave: handleAddQ, onClose: closeModal, categorie: catEntrate, onAddCategoriaEntr: (cat)=>setCatEntrate(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}))
         , modal==="editq"  && selQuota && React.createElement(Modal, { title: "Modifica entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}, React.createElement(EntrataForm, { students: students, initial: selQuota, onSave: handleEditQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}))
         , modal==="deleteq"&& selQuota && React.createElement(ConfirmDel, { label: selQuota.desc, onConfirm: handleDelQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7235}})
         , modal==="ricevuta" && selQuota && (
