@@ -2509,8 +2509,17 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
 
     const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
     const settimane = Math.max(giorni,1)/7;
+
+    // Individuale: conteggio ESATTO dalle serie ricorrenti reali già a calendario (legge il/i
+    // giorno/i veri di lezione invece di stimare "settimane disponibili ÷ 7", che può sbagliare
+    // di ±1 lezione a seconda di che giorno cade l'iscrizione). Fallback alla stima solo se
+    // l'allievo non ha ancora nessuna lezione individuale registrata.
+    const nome = s.name||s.nome||'';
+    const individualeReale = contaLezioniIndividualiReali(nome, s.id, lessons, dataInizio, dataFine);
+    const individuale = individualeReale != null ? individualeReale : Math.floor(settimane) * nCorsiIndividuali;
+
     return {
-      individuale: Math.floor(settimane)   * nCorsiIndividuali,
+      individuale,
       collettiva:  Math.floor(settimane/2) * nCorsiCollettivi,
     };
   };
@@ -2554,9 +2563,15 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     // se l'adattatore letto da Supabase mappa una colonna NULL come stringa vuota '' invece che
     // null/undefined, "'' != null" risulta comunque true e Number('') vale 0, forzando la soglia
     // a 0 anche quando l'allievo non ha alcuna eccezione impostata.
+    // L'eccezione individuale (sogliaIndividualeEcc) NON viene più usata come numero fisso da
+    // applicare al posto del conteggio: da quando il conteggio individuale è esatto (leggendo le
+    // serie reali a calendario), un numero fisso finirebbe per ignorare i mesi parziali (es.
+    // iscrizione a metà mese) — lo stesso bug che si voleva risolvere. Il campo resta in
+    // anagrafica come promemoria/etichetta per l'admin ("questo allievo ha un accordo diverso"),
+    // ma il numero mostrato è sempre quello calcolato da sogliaAllievo().
     const isEccInd  = s.sogliaIndividualeEcc!=null && s.sogliaIndividualeEcc!=='' && !isNaN(Number(s.sogliaIndividualeEcc));
     const isEccColl = s.sogliaCollettivaEcc!=null  && s.sogliaCollettivaEcc!==''  && !isNaN(Number(s.sogliaCollettivaEcc));
-    const sogliaInd  = Math.round(isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale);
+    const sogliaInd  = Math.round(soglie.individuale);
     const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
     const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
     const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
@@ -3534,6 +3549,83 @@ function prossimoGapGiorni(lesson) {
     return 7 - attuale;
   }
   return null;
+}
+
+// Conta ESATTAMENTE quante occorrenze di una serie ricorrente (individuata da una qualunque
+// lezione reale della serie, usata come "ancora") cadono nella finestra [dataInizio, dataFine]
+// (Date, inclusive). Cammina indietro dall'ancora fino a superare dataInizio, poi in avanti
+// contando — usa le stesse funzioni già testate per la lezione extra, quindi coerente con
+// quella logica. Ritorna null se la ricorrenza non è gestita (es. "Nessuna").
+function contaOccorrenzeInFinestra(lessonAncora, dataInizio, dataFine) {
+  const recurrence = lessonAncora && lessonAncora.recurrence;
+  if (!recurrence || recurrence === "Nessuna") return null;
+  if (recurrence !== "2 volte a settimana" && !GAP_PER_RICORRENZA[recurrence]) return null;
+
+  let cur = { date: lessonAncora.date, recurrence, gapGiorni: lessonAncora.gapGiorni };
+  let safety = 0;
+  // Cammina indietro finché non siamo prima (o a) dataInizio
+  while (new Date(cur.date + "T00:00:00") > dataInizio && safety < 400) {
+    let gapIndietro;
+    if (recurrence === "2 volte a settimana") {
+      gapIndietro = 7 - gapProssimaLezione(cur);
+    } else {
+      gapIndietro = GAP_PER_RICORRENZA[recurrence];
+    }
+    const prevDate = addDays(new Date(cur.date + "T00:00:00"), -gapIndietro);
+    cur = { date: yyyymmdd(prevDate), recurrence, gapGiorni: recurrence === "2 volte a settimana" ? gapIndietro : null };
+    safety++;
+  }
+  // Cammina in avanti contando le occorrenze dentro la finestra
+  let count = 0;
+  safety = 0;
+  while (new Date(cur.date + "T00:00:00") <= dataFine && safety < 400) {
+    const curDate = new Date(cur.date + "T00:00:00");
+    if (curDate >= dataInizio) count++;
+    const gapAvanti = gapProssimaLezione(cur);
+    const nextGapGiorni = prossimoGapGiorni(cur);
+    const nextDate = addDays(curDate, gapAvanti);
+    cur = { date: yyyymmdd(nextDate), recurrence, gapGiorni: nextGapGiorni };
+    safety++;
+  }
+  return count;
+}
+
+// Calcola il numero ESATTO di lezioni individuali attese per un allievo nella finestra
+// [dataInizio, dataFine], leggendo le sue serie ricorrenti REALI già a calendario (raggruppate
+// per orario, che distingue automaticamente corsi/giorni diversi) invece di stimare "settimane
+// disponibili ÷ 7". Ritorna null se l'allievo non ha ancora nessuna lezione individuale a
+// calendario (fallback al vecchio calcolo approssimato in quel caso).
+function contaLezioniIndividualiReali(nome, studentId, lessons, dataInizio, dataFine) {
+  const lezIndividuali = (lessons || []).filter(l =>
+    !isColl(l) && !isProva(l) && !isSalaProve(l) && l.tipo !== 'recupero' &&
+    studentInLesson(l, nome, studentId)
+  );
+  if (lezIndividuali.length === 0) return null; // nessun dato: fallback al vecchio calcolo
+
+  // Raggruppa per orario: stesso orario = stessa serie (stesso giorno/i della settimana)
+  const serie = {};
+  lezIndividuali.forEach(l => {
+    const key = l.hour || '—';
+    if (!serie[key]) serie[key] = [];
+    serie[key].push(l);
+  });
+
+  let totale = 0;
+  Object.values(serie).forEach(lezSerie => {
+    // Usa la prima lezione della serie come ancora
+    const ancora = lezSerie[0];
+    if (ancora.recurrence && ancora.recurrence !== "Nessuna") {
+      const n = contaOccorrenzeInFinestra(ancora, dataInizio, dataFine);
+      if (n != null) { totale += n; return; }
+    }
+    // Ricorrenza "Nessuna" o non gestita: conta le occorrenze reali di quella serie
+    // che cadono effettivamente nella finestra (una per una, senza dedurre schema).
+    lezSerie.forEach(l => {
+      const d = new Date(l.date + "T00:00:00");
+      if (d >= dataInizio && d <= dataFine) totale++;
+    });
+  });
+  return totale;
 }
 const isProva     = l => _optionalChain([l, 'optionalAccess', _47 => _47.tipo]) === "prova";
 const isSalaProve = l => _optionalChain([l, 'optionalAccess', _47b => _47b.tipo]) === "sala_prove";

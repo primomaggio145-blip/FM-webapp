@@ -1588,6 +1588,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     (lessons||[]).forEach(l => {
       if (isColl(l) || l.tipo === 'prova' || l.tipo === 'sala_prove' || l.tipo === 'recupero') return;
       if (l.attendance === 'recuperata') return;
+      if (l.isLezioneExtra) return; // lezione extra concordata: non conta ai fini della soglia
       if (!l.date) return;
       const [ly,lm] = (l.date||'').split('-').map(Number);
       if (ly !== annoCurr || lm !== meseCurr) return;
@@ -1596,10 +1597,32 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
       conteggioPerAllievo[key] = (conteggioPerAllievo[key]||0) + 1;
     });
 
+    // Soglia individuale REALE per allievo: stessa logica esatta del report principale
+    // (conta le occorrenze vere delle serie a calendario nella finestra corretta, invece di un
+    // numero fisso mensile che ignora i mesi parziali/iscrizioni a metà mese).
+    const getSogliaReale = (student) => {
+      const nomeSt = student.name||student.nome||'';
+      const enroll = student.enrollDate ? new Date(student.enrollDate+"T00:00:00") : null;
+      const isMeseIscrizioneSt = enroll && enroll.getFullYear()===annoCurr && (enroll.getMonth()+1)===meseCurr;
+      const inizioMeseSt = new Date(annoCurr, meseCurr-1, 1);
+      const fineMeseSt = new Date(annoCurr, meseCurr, 0);
+      let dIn = inizioMeseSt;
+      if (isMeseIscrizioneSt && enroll > inizioMeseSt) dIn = enroll;
+      let dFi = fineMeseSt;
+      const oggiCap = oggi < fineMeseSt ? oggi : fineMeseSt;
+      if (!isMeseIscrizioneSt && oggiCap < dFi) dFi = oggiCap;
+      if (dFi < dIn) dFi = dIn;
+      const reale = contaLezioniIndividualiReali(nomeSt, student.id, lessons, dIn, dFi);
+      return reale != null ? reale : getSogliaStudente(nomeSt);
+    };
+
     // Trova chi supera la propria soglia
-    const superanoSoglia = Object.entries(conteggioPerAllievo)
-      .filter(([nome, count]) => count > getSogliaStudente(nome))
-      .map(([nome, count]) => ({ nome, count, soglia: getSogliaStudente(nome) }))
+    const superanoSoglia = (students||[])
+      .map(st => {
+        const nomeSt = st.name||st.nome||'';
+        return { nome: nomeSt, count: conteggioPerAllievo[nomeSt]||0, soglia: getSogliaReale(st) };
+      })
+      .filter(a => a.count > a.soglia)
       .sort((a,b) => b.count - a.count);
 
     if (superanoSoglia.length > 0) {
@@ -1887,9 +1910,16 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
     const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
     const enroll = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
     const isMeseIscrizione = enroll && enroll.getFullYear()===annoCurr && (enroll.getMonth()+1)===meseCurr;
+    const nome = s.name||s.nome||'';
 
     if (!isMeseIscrizione && !isUltimoMeseConLezioni) {
-      return { individuale: nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE, collettiva: nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO };
+      const inizioMeseFull = new Date(annoCurr, meseCurr-1, 1);
+      const fineMeseFull    = new Date(annoCurr, meseCurr, 0);
+      const individualeReale = contaLezioniIndividualiReali(nome, s.id, propLessonsDash, inizioMeseFull, fineMeseFull);
+      return {
+        individuale: individualeReale != null ? individualeReale : nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE,
+        collettiva: nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO,
+      };
     }
     const inizioMese = new Date(annoCurr, meseCurr-1, 1);
     const fineMese    = new Date(annoCurr, meseCurr, 0);
@@ -1903,8 +1933,9 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
     if (dataFine < dataInizio) dataFine = dataInizio;
     const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
     const settimane = Math.max(giorni,1)/7;
+    const individualeReale = contaLezioniIndividualiReali(nome, s.id, propLessonsDash, dataInizio, dataFine);
     return {
-      individuale: Math.round(nCorsiIndividuali*(PUNTI_CORSO_INDIVIDUALE/4)*settimane),
+      individuale: individualeReale != null ? individualeReale : Math.round(nCorsiIndividuali*(PUNTI_CORSO_INDIVIDUALE/4)*settimane),
       collettiva:  Math.round(nCorsiCollettivi*(PUNTI_CORSO_COLLETTIVO/4)*settimane),
     };
   };
@@ -1941,7 +1972,7 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
     const soglie = sogliaAllievo(s);
     const isEccInd  = s.sogliaIndividualeEcc!=null;
     const isEccColl = s.sogliaCollettivaEcc!=null;
-    const sogliaInd  = Math.round(isEccInd  ? Number(s.sogliaIndividualeEcc) : soglie.individuale);
+    const sogliaInd  = Math.round(soglie.individuale);
     const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
     const countInd  = contInd[nome]||0;
     const countColl = contColl[nome]||0;
