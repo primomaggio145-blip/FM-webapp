@@ -246,6 +246,12 @@
           ? JSON.stringify(s.extraInstruments) : null,
         extra_teachers: s.extraTeachers && Object.keys(s.extraTeachers).length > 0
           ? JSON.stringify(s.extraTeachers) : null,
+        // NOTA: mancava dal mapper — un brano aggiunto al repertorio dell'allievo
+        // (es. dal modal LEZIONE) veniva aggiornato solo nello stato React locale;
+        // al primo resync/refresh il campo tornava al valore DB (senza il brano nuovo),
+        // dando l'impressione che il brano appena salvato fosse stato eliminato.
+        repertorio: s.repertorio && s.repertorio.length > 0
+          ? JSON.stringify(s.repertorio) : null,
         updated_at: new Date().toISOString(),
       };
     },
