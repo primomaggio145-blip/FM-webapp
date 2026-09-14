@@ -879,7 +879,7 @@
   //  PER LE LEZIONI: solo ultimi 60 giorni + future (non tutto il DB storico)
   //  Le lezioni più vecchie rimangono in memoria dal caricamento iniziale
   // ═══════════════════════════════════════════════════════════════════════════
-  async function loadAll() {
+  async function loadAllOnce() {
     const sb = window.supabaseClient;
     if (!sb) return null;
     log('Caricamento da Supabase...');
@@ -895,12 +895,12 @@
         { data: sL, error: e4 }, { data: sB, error: e5 },
         { data: sP, error: e6 }, { data: sQ, error: e7 },
         { data: sEV, error: e8 }, { data: sAL, error: e9 },
-        { data: sCFG },
+        { data: sCFG, error: e11 },
         { data: sSALA, error: e10 },
-        { data: sANNI },
-        { data: sISCR },
-        { data: sCP },
-        { data: sGR },
+        { data: sANNI, error: e12 },
+        { data: sISCR, error: e13 },
+        { data: sCP, error: e14 },
+        { data: sGR, error: e15 },
       ] = await Promise.all([
         sb.from('studenti').select('*').order('nome'),
         sb.from('docenti').select('*').order('nome'),
@@ -920,10 +920,20 @@
         sb.from('gruppi_collettivi').select('*'),
       ]);
 
-      // Log errori
-      [['studenti',e1],['docenti',e2],['corsi',e3],['lezioni',e4],
-       ['brani',e5],['spese',e6],['quote',e7],['concerti',e8],['allegati',e9],['prenotazioni_sala',e10]].forEach(([t,e]) => {
-        if (e) fail(`Errore lettura ${t}:`, e.message);
+      // Log errori — TUTTE le 15 query, non solo un sottoinsieme (prima mancavano
+      // sito_config, anni_scolastici, iscrizioni_anno, concerti_partecipanti,
+      // gruppi_collettivi: se una di queste falliva per un problema di rete
+      // transitorio al primo caricamento pagina, l'errore passava inosservato e
+      // la sezione risultava vuota finché l'utente non premeva "Aggiorna dati".
+      const erroriQuery = [
+        ['studenti',e1],['docenti',e2],['corsi',e3],['lezioni',e4],
+        ['brani',e5],['spese',e6],['quote',e7],['concerti',e8],['allegati',e9],
+        ['sito_config',e11],['prenotazioni_sala',e10],['anni_scolastici',e12],
+        ['iscrizioni_anno',e13],['concerti_partecipanti',e14],['gruppi_collettivi',e15],
+      ];
+      let hasErrors = false;
+      erroriQuery.forEach(([t,e]) => {
+        if (e) { fail(`Errore lettura ${t}:`, e.message); hasErrors = true; }
       });
 
       // Converti array di righe sito_config in oggetto config
@@ -1025,8 +1035,31 @@
         `corsi:${data.courses.length}`,
         `lezioni:${data.lessons.length}`
       );
+      data._hasErrors = hasErrors;
       return data;
-    } catch(e) { fail('loadAll fallito:', e); return null; }
+    } catch(e) { fail('loadAllOnce fallito:', e); return null; }
+  }
+
+  // Wrapper con retry automatico: se una o più query del caricamento iniziale
+  // falliscono (es. un hiccup di rete proprio all'apertura della pagina — il
+  // momento più delicato, con 15 richieste lanciate in parallelo), ritenta fino
+  // a 3 volte con attesa crescente, invece di mostrare dati incompleti finché
+  // l'utente non preme manualmente "Aggiorna dati".
+  async function loadAll() {
+    const TENTATIVI = 3;
+    let risultato = null;
+    for (let i = 0; i < TENTATIVI; i++) {
+      risultato = await loadAllOnce();
+      if (risultato && !risultato._hasErrors) return risultato;
+      if (i < TENTATIVI - 1) {
+        warn(`Caricamento incompleto (tentativo ${i+1}/${TENTATIVI}), ritento tra ${(i+1)*1000}ms…`);
+        await new Promise(r => setTimeout(r, (i+1) * 1000));
+      }
+    }
+    if (risultato && risultato._hasErrors) {
+      warn('Caricamento completato con alcuni errori dopo ' + TENTATIVI + ' tentativi — vedi i log sopra.');
+    }
+    return risultato;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
