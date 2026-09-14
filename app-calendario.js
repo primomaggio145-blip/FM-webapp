@@ -8802,7 +8802,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       }
 
       // ── 3. Salva allegati della lezione con il nuovo lessonId ──
-      if (data.allegati && data.allegati.length > 0 && propSetAllegati) {
+      // (i file sono già stati caricati su Storage dal form; qui li colleghiamo al DB,
+      // altrimenti restano "storage non collegato": la tabella lezioni non ha una colonna
+      // allegati e il salvataggio della lezione da solo non li avrebbe mai persistiti)
+      if (data.allegati && data.allegati.length > 0) {
         const student = (allStudents||[]).find(s=>(s.name||s.nome||'')===data.student);
         const newAllegati = data.allegati.map(a => ({
           ...a,
@@ -8812,7 +8815,31 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           corso: data.instrument || a.corso || '',
           createdAt: new Date().toISOString(),
         }));
-        propSetAllegati(p => [...(p||[]), ...newAllegati]);
+        if (propSetAllegati) propSetAllegati(p => [...(p||[]), ...newAllegati]);
+        const sbAtt = window.supabaseClient;
+        if (sbAtt) {
+          newAllegati.forEach(a => {
+            if (!a.fileUrl) return; // niente file reale da collegare
+            const newId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+              ? crypto.randomUUID()
+              : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                  const r = Math.random()*16|0, v = c==='x' ? r : (r&0x3|0x8);
+                  return v.toString(16);
+                });
+            sbAtt.from('allegati').insert({
+              id: newId,
+              lezione_id: lessonId,
+              allievo_nome: a.allievoNome || '',
+              corso: a.corso || '',
+              file_url: a.fileUrl,
+              file_name: a.fileName,
+              file_type: a.fileType,
+              descrizione: a.descrizione || '',
+            }).then(({ error }) => {
+              if (error) console.warn('[FM] allegato lezione (handleAdd) DB error:', error.message);
+            });
+          });
+        }
       }
 
       closeModal();
@@ -8949,6 +8976,50 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               window.__FM_RECENTLY_WRITTEN__.set(String(data.id), Date.now());
             }
           });
+      }
+
+      // ── Salva allegati aggiunti dal form di modifica della lezione ──
+      // (stessa situazione di handleAdd: i file sono già su Storage, qui vanno collegati
+      // al DB inserendo la riga in "allegati", altrimenti restano "storage non collegato".
+      // Filtra quelli già presenti in propAllegati per non duplicare al salvataggio successivo.)
+      if (data.allegati && data.allegati.length > 0) {
+        const idsGiaNoti = new Set((propAllegati||[]).map(a => a.id));
+        const daCollegare = data.allegati.filter(a => a.fileUrl && !idsGiaNoti.has(a.id));
+        if (daCollegare.length > 0) {
+          const student = (allStudents||[]).find(s=>(s.name||s.nome||'')===dataNormFull.student);
+          const nuoviAllegati = daCollegare.map(a => ({
+            ...a,
+            lezioneId: data.id,
+            allievoId: student?.id || '',
+            allievoNome: dataNormFull.student || '',
+            corso: dataNormFull.instrument || a.corso || '',
+            createdAt: new Date().toISOString(),
+          }));
+          if (propSetAllegati) propSetAllegati(p => [...(p||[]), ...nuoviAllegati]);
+          const sbAtt = window.supabaseClient;
+          if (sbAtt) {
+            nuoviAllegati.forEach(a => {
+              const newId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+                    const r = Math.random()*16|0, v = c==='x' ? r : (r&0x3|0x8);
+                    return v.toString(16);
+                  });
+              sbAtt.from('allegati').insert({
+                id: newId,
+                lezione_id: data.id,
+                allievo_nome: a.allievoNome || '',
+                corso: a.corso || '',
+                file_url: a.fileUrl,
+                file_name: a.fileName,
+                file_type: a.fileType,
+                descrizione: a.descrizione || '',
+              }).then(({ error }) => {
+                if (error) console.warn('[FM] allegato lezione (handleEdit) DB error:', error.message);
+              });
+            });
+          }
+        }
       }
 
       // ── 1. Aggiungi i brani NUOVI al catalogo globale ──
