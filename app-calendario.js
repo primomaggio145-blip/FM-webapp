@@ -7942,7 +7942,13 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
 };
 
 // ── Vista admin: gestione richieste sala prove ────────────────────────────────
-const SalaProveView = ({ prenotazioni, onUpdate, onDelete, role, appUser, lessons }) => {
+const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role, appUser, lessons }) => {
+  // Gli allievi non devono vedere le prenotazioni sala prove altrui — solo le proprie (se presenti).
+  // Admin e docente continuano a vedere tutte le prenotazioni (necessario per gestirle/per sapere
+  // quando la sala è occupata), come già avviene nel calendario principale.
+  const prenotazioni = role === 'allievo'
+    ? (_prenotazioniRaw||[]).filter(p => p.userId === (appUser && appUser.userId))
+    : (_prenotazioniRaw||[]);
   const isMobile = useIsMobile();
   const [svPanel,      setSvPanel]      = useState("calendario");
   const [svCalMode,    setSvCalMode]    = useState("week");
