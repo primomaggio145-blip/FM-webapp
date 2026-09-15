@@ -3614,7 +3614,26 @@ function contaLezioniIndividualiReali(nome, studentId, lessons, dataInizio, data
   Object.values(serie).forEach(lezSerie => {
     // Usa la prima lezione della serie come ancora
     const ancora = lezSerie[0];
-    if (ancora.recurrence && ancora.recurrence !== "Nessuna") {
+    if (ancora.recurrence === "2 volte a settimana") {
+      // Se in calendario esistono già lezioni reali su ENTRAMBI i giorni della coppia,
+      // contiamo direttamente le occorrenze dei giorni della settimana osservati — non ci
+      // affidiamo al campo gapGiorni, che potrebbe non essere impostato correttamente se le
+      // due lezioni sono state create manualmente/indipendentemente (non tramite la catena
+      // automatica) e quindi non riflette la vera alternanza.
+      const giorniOsservati = new Set(lezSerie.map(l => new Date(l.date + "T00:00:00").getDay()));
+      if (giorniOsservati.size >= 2) {
+        let count = 0;
+        for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) {
+          if (giorniOsservati.has(d.getDay())) count++;
+        }
+        totale += count;
+        return;
+      }
+      // Un solo giorno osservato finora (es. allievo appena iscritto, seconda lezione non
+      // ancora creata): deduciamo il secondo giorno dal gapGiorni, come best-effort.
+      const n = contaOccorrenzeInFinestra(ancora, dataInizio, dataFine);
+      if (n != null) { totale += n; return; }
+    } else if (ancora.recurrence && ancora.recurrence !== "Nessuna") {
       const n = contaOccorrenzeInFinestra(ancora, dataInizio, dataFine);
       if (n != null) { totale += n; return; }
     }
