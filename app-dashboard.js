@@ -1049,6 +1049,12 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                     )
                   )
                 )
+                , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}, className: "form-2col", marginTop:10}
+                  , React.createElement(SField, { label: "Importo iscrizione annuale (€)" ,
+                    type: "number", value: draft.importoIscrizione != null ? draft.importoIscrizione : 30,
+                    onChange: e=>setD("importoIscrizione", Number(e.target.value)),
+                    placeholder: "30" })
+                )
               )
             )
           )
@@ -1308,6 +1314,7 @@ const CONFIG_DEFAULT = {
   inizioAnno:`${ANNO}-09-01`, fineAnno:`${ANNO+1}-06-30`, dataSaggio:`${ANNO+1}-06-07`,
   mesiAttivi:[0,1,2,3,4,8,9,10,11],
   progressivoRicevute:1,
+  importoIscrizione: 30, // importo iscrizione annuale (€), configurabile in Impostazioni
   // Sale dove si svolgono le lezioni
   sale: ['Sala A', 'Sala B', 'Studio'],
   // Contatore ricevute per anno solare: { "2025": 42, "2026": 1 }

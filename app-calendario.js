@@ -1338,7 +1338,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
     MESI_AS.some(x => x.m === e.mese && x.y === e.anno)
   );
   const totaleVersato   = entrateStudent.reduce((t,e) => t + e.importo, 0);
-  const entrataPerMese  = (m, y) => entrateStudent.find(e => e.mese===m && e.anno===y);
+  const entrataPerMese  = (m, y) => entrateStudent.filter(e => e.mese===m && e.anno===y);
 
   // Repertorio
   const repertorio = student.repertorio || [];
@@ -1825,7 +1825,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
           , React.createElement(MeseSelector, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3507}})
           /* Grafico a barre entrate anno scolastico */
           , (() => {
-            const vals = MESI_AS.map(x=>_optionalChain([entrataPerMese, 'call', _31 => _31(x.m,x.y), 'optionalAccess', _32 => _32.importo])||0);
+            const vals = MESI_AS.map(x=>entrataPerMese(x.m,x.y).reduce((t,e)=>t+(Number(e.importo)||0),0));
             const maxV = Math.max(...vals, 1);
             const totAnno = vals.reduce((t,v)=>t+v,0);
             const MESI_S2 = ["Set","Ott","Nov","Dic","Gen","Feb","Mar","Apr","Mag","Giu"];
@@ -1856,9 +1856,12 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
           })()
           /* KPI mese selezionato */
           , (() => {
-            const entSel  = entrataPerMese(selMese.m, selMese.y);
+            const entiSel = entrataPerMese(selMese.m, selMese.y);
+            const entSel  = entiSel[0] || null;
+            const sumSel  = entiSel.reduce((t,e)=>t+(Number(e.importo)||0),0);
             const pm = selMese.m===1?12:selMese.m-1, py = selMese.m===1?selMese.y-1:selMese.y;
-            const entPrev = entrataPerMese(pm, py);
+            const entiPrev = entrataPerMese(pm, py);
+            const sumPrev  = entiPrev.reduce((t,e)=>t+(Number(e.importo)||0),0);
             const MESI_ALL2 = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
             const MESI_S3 = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
             return (
@@ -1872,8 +1875,8 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                             isFuture(selMese)?"mese futuro":"quota mancante",
                      hex:   entSel?C.green:isFuture(selMese)?C.textDim:C.red},
                     {label:`Incassato ${MESI_S3[selMese.m-1]}`,
-                     value: entSel?`€${entSel.importo.toLocaleString("it-IT")}`:"—",
-                     desc:  entPrev?`mese prec.: €${entPrev.importo}`:"primo mese",
+                     value: entSel?`€${sumSel.toLocaleString("it-IT")}${entiSel.length>1?` (${entiSel.length})`:""}`:"—",
+                     desc:  entiPrev.length?`mese prec.: €${sumPrev}`:"primo mese",
                      hex:   entSel?C.green:C.textDim},
                   ].map(k=>(
                     React.createElement('div', { key: k.label, style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 20px",borderTop:`3px solid ${k.hex}30`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3561}}
@@ -1891,35 +1894,38 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                        , MESI_ALL2[selMese.m-1], " " , selMese.y
                     )
                     , React.createElement('span', { style: {fontSize:13,fontWeight:600,color:entSel?C.green:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3575}}
-                      , entSel?`€${entSel.importo.toLocaleString("it-IT")}`:"Non pagata"
+                      , entSel?`€${sumSel.toLocaleString("it-IT")}`:"Non pagata"
                     )
                   )
-                  , entSel ? (
-                    React.createElement('div', { style: {display:"grid",gridTemplateColumns:"80px 1fr auto",gap:12,alignItems:"center",padding:"14px 20px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3580}}
-                      , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3581}}
-                        , React.createElement('div', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3582}}, new Date(entSel.data+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"}))
-                      )
-                      , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3584}}
-                        , React.createElement('div', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3585}}, entSel.desc)
-                        , React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3586}}, entSel.metodo)
-                      )
-                      , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3588}}
-                        , React.createElement('div', { style: {fontSize:15,fontWeight:600,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3589}}, "€", entSel.importo)
-                        , React.createElement('button', { onClick: ()=>setRicevutaEnt(entSel), title: "Stampa ricevuta" ,
-                          style: {background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:6,
-                            cursor:"pointer",color:C.gold,padding:"4px 8px",display:"flex",alignItems:"center",gap:4,fontSize:11},
-                          onMouseEnter: e=>{e.currentTarget.style.background=C.gold;e.currentTarget.style.color=C.bg;},
-                          onMouseLeave: e=>{e.currentTarget.style.background=C.goldBg;e.currentTarget.style.color=C.gold;}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3590}}
-                          , React.createElement(Ic, { n: "receipt", size: 12, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3595}}), "Ricevuta"
+                  , entiSel.length ? (
+                    entiSel.map((e,idx) => (
+                      React.createElement('div', { key: e.id||idx, style: {display:"grid",gridTemplateColumns:"80px 1fr auto",gap:12,alignItems:"center",padding:"14px 20px",
+                        borderTop: idx>0?`1px solid ${C.border}`:"none"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3580}}
+                        , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3581}}
+                          , React.createElement('div', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3582}}, new Date(e.data+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"}))
                         )
-                        , React.createElement('button', { onClick: ()=>eliminaPagamento(entSel.id),
-                          style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,padding:4,display:"flex",borderRadius:6},
-                          onMouseEnter: e=>e.currentTarget.style.color=C.red,
-                          onMouseLeave: e=>e.currentTarget.style.color=C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3597}}
-                          , React.createElement(Ic, { n: "trash", size: 14, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3601}})
+                        , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3584}}
+                          , React.createElement('div', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3585}}, e.desc)
+                          , React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3586}}, e.metodo)
+                        )
+                        , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3588}}
+                          , React.createElement('div', { style: {fontSize:15,fontWeight:600,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3589}}, "€", e.importo)
+                          , !e.noRicevuta && React.createElement('button', { onClick: ()=>setRicevutaEnt(e), title: "Stampa ricevuta" ,
+                            style: {background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:6,
+                              cursor:"pointer",color:C.gold,padding:"4px 8px",display:"flex",alignItems:"center",gap:4,fontSize:11},
+                            onMouseEnter: ev=>{ev.currentTarget.style.background=C.gold;ev.currentTarget.style.color=C.bg;},
+                            onMouseLeave: ev=>{ev.currentTarget.style.background=C.goldBg;ev.currentTarget.style.color=C.gold;}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3590}}
+                            , React.createElement(Ic, { n: "receipt", size: 12, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3595}}), "Ricevuta"
+                          )
+                          , React.createElement('button', { onClick: ()=>eliminaPagamento(e.id),
+                            style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,padding:4,display:"flex",borderRadius:6},
+                            onMouseEnter: ev=>ev.currentTarget.style.color=C.red,
+                            onMouseLeave: ev=>ev.currentTarget.style.color=C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3597}}
+                            , React.createElement(Ic, { n: "trash", size: 14, stroke: "currentColor", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3601}})
+                          )
                         )
                       )
-                    )
+                    ))
                   ) : (
                     React.createElement('div', { style: {padding:"24px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3606}}
                       , React.createElement('span', { style: {fontSize:13,color:C.textDim,fontStyle:"italic"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3607}}
@@ -1960,19 +1966,21 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
               , React.createElement('tbody', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3640}}
                 , sortFnQuote(MESI_AS.map((x,i)=>{
                   const pm = x.m===1?12:x.m-1, py = x.m===1?x.y-1:x.y;
-                  const ent  = entrataPerMese(x.m,x.y);
-                  const entP = entrataPerMese(pm,py);
+                  const entsMese  = entrataPerMese(x.m,x.y);
+                  const entsPMese = entrataPerMese(pm,py);
+                  const ent  = entsMese[0]  || null;
+                  const entP = entsPMese[0] || null;
                   const isF  = isFuture(x);
-                  const stato = ent?"pagata":isF?"futuro":"non pagata";
-                  return { x, i, ent, entP, isF, stato,
+                  const stato = entsMese.length?"pagata":isF?"futuro":"non pagata";
+                  return { x, i, entsMese, entsPMese, ent, entP, isF, stato,
                     mese: x.y*100+x.m,
-                    importo: ent ? Number(ent.importo)||0 : 0 };
+                    importo: entsMese.reduce((t,e)=>t+(Number(e.importo)||0),0) };
                 }), (r,k) => {
                   if(k==="mese")    return r.mese;
                   if(k==="importo") return r.importo;
                   if(k==="stato")   return r.stato;
                   return 0;
-                }).map(({x,i,ent,entP,isF,stato})=>{
+                }).map(({x,i,entsMese,entsPMese,ent,entP,isF,stato,importo})=>{
                   const isS    = x.m===selMese.m && x.y===selMese.y;
                   const stColor = ent?C.green:isF?C.textDim:C.red;
                   const stBg    = ent?C.greenBg:isF?C.bg:C.redBg;
@@ -1989,7 +1997,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,
                         color:ent?C.green:isF?C.textDim:C.red}}
-                        , isF?"—":ent?`€${ent.importo}`:`€${student.monthlyFee}`
+                        , isF?"—":ent?`€${importo}${entsMese.length>1?` (${entsMese.length})`:""}`:`€${student.monthlyFee}`
                       )
                       , React.createElement('td', { style: {padding:"11px 18px"}}
                         , React.createElement('span', { style: {fontSize:11,background:stBg,color:stColor,border:`1px solid ${stBd}`,
@@ -2009,17 +2017,17 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                         )
                         , isF && React.createElement('span', { style: {color:C.textDim}}, "—")
                       )
-                      , React.createElement('td', { style: {padding:"11px 12px"}, onClick: e=>e.stopPropagation()}
-                        , ent && (
-                          React.createElement('button', { onClick: ()=>setRicevutaEnt(ent), title: "Stampa ricevuta",
+                      , React.createElement('td', { style: {padding:"11px 12px",display:"flex",gap:4,flexWrap:"wrap"}, onClick: e=>e.stopPropagation()}
+                        , entsMese.filter(e=>!e.noRicevuta).map(e=>(
+                          React.createElement('button', { key: e.id, onClick: ()=>setRicevutaEnt(e), title: e.categoria&&e.categoria!=="quota"?`Stampa ricevuta (${e.categoria})`:"Stampa ricevuta",
                             style: {background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:6,
                               cursor:"pointer",color:C.gold,padding:"3px 8px",display:"flex",alignItems:"center",gap:4,fontSize:11,
                               fontFamily:"'Open Sans',sans-serif"},
-                            onMouseEnter: e=>{e.currentTarget.style.background=C.gold;e.currentTarget.style.color=C.bg;},
-                            onMouseLeave: e=>{e.currentTarget.style.background=C.goldBg;e.currentTarget.style.color=C.gold;}}
+                            onMouseEnter: ev=>{ev.currentTarget.style.background=C.gold;ev.currentTarget.style.color=C.bg;},
+                            onMouseLeave: ev=>{ev.currentTarget.style.background=C.goldBg;ev.currentTarget.style.color=C.gold;}}
                             , React.createElement(Ic, { n: "receipt", size: 11, stroke: "currentColor"})
                           )
-                        )
+                        ))
                       )
                     )
                   );
@@ -10835,7 +10843,8 @@ const CAT_ENTRATE_DEFAULT = [
   { id:"altro",        label:"Altro",              icon:"plus",    student:false },
 ];
 
-const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrForm, onAddCategoriaEntr }) => {
+const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrForm, onAddCategoriaEntr, config:_configEF }) => {
+  const importoIscrizioneCfg = (_configEF && _configEF.importoIscrizione != null) ? Number(_configEF.importoIscrizione) : 30;
   const [nuovaCatE, setNuovaCatE] = React.useState("");
   const [showAddCatE, setShowAddCatE] = React.useState(false);
   const MESI_ALL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
@@ -10860,7 +10869,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
     const s = students.find(st=>st.id===Number(e.target.value));
     set("studentId", e.target.value);
     if(s && f.categoria==="quota") set("importo", s.monthlyFee);
-    if(s && f.categoria==="iscrizione") set("importo", s.monthlyFee * 2);
+    if(s && f.categoria==="iscrizione") set("importo", importoIscrizioneCfg);
   };
 
   const validate = () => {
@@ -10959,7 +10968,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
               , f.categoria==="quota"?"Quota mensile prevista":"Importo suggerito"
             )
             , React.createElement('span', { style: {fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6760}}, "€"
-              , f.categoria==="quota"?selStudent.monthlyFee:selStudent.monthlyFee*2, " / "  , f.categoria==="quota"?"mese":"anno"
+              , f.categoria==="quota"?selStudent.monthlyFee:importoIscrizioneCfg, " / "  , f.categoria==="quota"?"mese":"anno"
             )
           )
         )
@@ -11474,7 +11483,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                         , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7195}}, e.metodo)
                         , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:17,fontWeight:600,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7196}}, fmt(e.importo))
                         , React.createElement('div', { style: {display:"flex",gap:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7197}}
-                          , React.createElement('button', { onClick: ()=>{setSelQuota(e);setModal("ricevuta");},
+                          , !e.noRicevuta && React.createElement('button', { onClick: ()=>{setSelQuota(e);setModal("ricevuta");},
                             title: "Stampa ricevuta" ,
                             style: {background:"none",border:"none",cursor:"pointer",color:C.textMuted,padding:4,display:"flex",borderRadius:6},
                             onMouseEnter: el=>el.currentTarget.style.color=C.gold,
@@ -11583,8 +11592,8 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         , ruoloCV==="admin" && modal==="add"    && React.createElement(Modal, { title: "Registra spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}, React.createElement(SpesaForm, { onSave: handleAdd, onClose: closeModal, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}))
         , modal==="edit"   && selSpesa && React.createElement(Modal, { title: "Modifica spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}, React.createElement(SpesaForm, { initial: selSpesa, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), onSave: handleEdit, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}))
         , modal==="delete" && selSpesa && React.createElement(ConfirmDel, { label: selSpesa.desc, onConfirm: handleDel, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7232}})
-        , ruoloCV==="admin" && modal==="addq"   && React.createElement(Modal, { title: "Nuova entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}, React.createElement(EntrataForm, { students: students, initial: prefillEntrata, onSave: handleAddQ, onClose: closeModal, categorie: catEntrate, onAddCategoriaEntr: (cat)=>setCatEntrate(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}))
-        , modal==="editq"  && selQuota && React.createElement(Modal, { title: "Modifica entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}, React.createElement(EntrataForm, { students: students, initial: selQuota, onSave: handleEditQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}))
+        , ruoloCV==="admin" && modal==="addq"   && React.createElement(Modal, { title: "Nuova entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}, React.createElement(EntrataForm, { students: students, initial: prefillEntrata, onSave: handleAddQ, onClose: closeModal, categorie: catEntrate, onAddCategoriaEntr: (cat)=>setCatEntrate(p=>[...p,cat]), config: config, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}))
+        , modal==="editq"  && selQuota && React.createElement(Modal, { title: "Modifica entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}, React.createElement(EntrataForm, { students: students, initial: selQuota, onSave: handleEditQ, onClose: closeModal, config: config, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}))
         , modal==="deleteq"&& selQuota && React.createElement(ConfirmDel, { label: selQuota.desc, onConfirm: handleDelQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7235}})
         , modal==="ricevuta" && selQuota && (
           React.createElement(RicevutaModal, {

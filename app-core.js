@@ -873,7 +873,7 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
   const cfg = config || CONFIG_DEFAULT;
   const stile = {...RICEVUTA_STYLE_DEFAULT, ...(cfg.ricevutaStyle||{})};
 
-  const numRic = entrata.numRicevuta || (String(cfg.progressivoRicevute||1).padStart(3,"0") + "/" + (entrata.anno||new Date().getFullYear()));
+  const numRic = entrata.noRicevuta ? "—" : (entrata.numRicevuta || (String(cfg.progressivoRicevute||1).padStart(3,"0") + "/" + (entrata.anno||new Date().getFullYear())));
   const intestatario = (student && student.nomeRicevuta && student.nomeRicevuta.trim()) || (student && student.name) || entrata.studentName || "—";
   const MESI_N = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const dataStampa = new Date().toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"});
