@@ -528,6 +528,17 @@
   //              assegnato dall'app → MANTENIAMO sempre l'ID; per nuovi record
   //              con ID placeholder (corto, tipo 'c3'), generiamo un vero ID univoco
   // ═══════════════════════════════════════════════════════════════════════════
+  // Se Supabase segnala che una colonna non esiste nello schema (PGRST204,
+  // "Could not find the 'X' column..."), la rimuove dalla row e restituisce true
+  // per permettere un retry — evita che UNA colonna mancante blocchi l'intera riga.
+  function stripMissingColumn(row, errorMessage) {
+    const m = /Could not find the '([^']+)' column/i.exec(errorMessage || '');
+    if (!m || !(m[1] in row)) return null;
+    const col = m[1];
+    delete row[col];
+    return col;
+  }
+
   async function writeTable(table, changes, adapter) {
     const sb = window.supabaseClient;
     if (!sb) return;
@@ -539,7 +550,14 @@
         if (table === 'lezioni' && ('contact_name' in row || 'phone' in row)) {
           log(`[DEBUG contatto] UPDATE lezioni [${item.id}] → contact_name="${row.contact_name}" phone="${row.phone}"`);
         }
-        const { error } = await sb.from(table).update(row).eq('id', item.id);
+        let { error } = await sb.from(table).update(row).eq('id', item.id);
+        if (error) {
+          const missingCol = stripMissingColumn(row, error.message);
+          if (missingCol) {
+            fail(`UPDATE ${table} [${item.id}]: colonna '${missingCol}' mancante sul DB — riprovo senza (AGGIUNGERE LA COLONNA!):`, error.message);
+            ({ error } = await sb.from(table).update(row).eq('id', item.id));
+          }
+        }
         if (error) fail(`UPDATE ${table} [${item.id}]:`, error.message, '| row:', row);
         else {
           log(`✎ ${table}`, item.id);
@@ -565,7 +583,14 @@
           const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(row.id || ''));
           if (!row.id || !isValidUUID) row.id = newId();
         }
-        const { error } = await sb.from(table).insert(row);
+        let { error } = await sb.from(table).insert(row);
+        if (error) {
+          const missingCol = stripMissingColumn(row, error.message);
+          if (missingCol) {
+            fail(`INSERT ${table}: colonna '${missingCol}' mancante sul DB — riprovo senza (AGGIUNGERE LA COLONNA!):`, error.message);
+            ({ error } = await sb.from(table).insert(row));
+          }
+        }
         if (error) {
           // Se duplicate key (record già esiste): proviamo upsert
           if (error.code === '23505') {
