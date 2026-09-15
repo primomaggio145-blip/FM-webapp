@@ -3534,21 +3534,46 @@ function calcolaInfoExtra(lesson) {
   const haExtraPotenziale = isSoglia && haOccorrenzaSuccessivaStessoMese;
   return { isSoglia, haExtraPotenziale, N };
 }
-// Gap (in giorni) fino alla prossima lezione della stessa serie, gestendo l'alternanza 3/4
-// per "2 volte a settimana".
+// Gap (in giorni) fino alla prossima lezione della stessa serie, gestendo l'alternanza per
+// "2 volte a settimana" — supporta QUALSIASI coppia di giorni (non solo 3/4), leggendo il vero
+// gap salvato su gapGiorni; 3 è solo il default per una lezione appena creata senza abbinamento.
 function gapProssimaLezione(lesson) {
   if (lesson && lesson.recurrence === "2 volte a settimana") {
-    return lesson.gapGiorni === 4 ? 4 : 3;
+    const g = Number(lesson.gapGiorni);
+    return (g > 0 && g < 7) ? g : 3;
   }
   return GAP_PER_RICORRENZA[_optionalChain([lesson, 'optionalAccess', _47b => _47b.recurrence])] || 7;
 }
 // Valore di gapGiorni da assegnare alla lezione APPENA CREATA (per continuare l'alternanza).
 function prossimoGapGiorni(lesson) {
   if (lesson && lesson.recurrence === "2 volte a settimana") {
-    const attuale = lesson.gapGiorni === 4 ? 4 : 3;
-    return 7 - attuale;
+    return 7 - gapProssimaLezione(lesson);
   }
   return null;
+}
+
+// Cerca, tra le lezioni esistenti, l'eventuale "gemella" di una lezione "2 volte a settimana"
+// appena creata/modificata (stesso allievo, stesso orario, ricorrenza uguale, giorno della
+// settimana diverso) e calcola il vero gap in giorni tra le due — necessario perché la creazione
+// automatica della lezione successiva sappia alternare correttamente i due giorni reali scelti,
+// non solo la coppia di default (3/4 giorni).
+function rilevaCoppiaSettimanale(nuovaLezione, tutteLeLezioni) {
+  if (!nuovaLezione || nuovaLezione.recurrence !== "2 volte a settimana" || isColl(nuovaLezione)) return null;
+  const nuovoGiorno = new Date(nuovaLezione.date + "T00:00:00").getDay();
+  const abbinata = (tutteLeLezioni || []).find(l =>
+    l.id !== nuovaLezione.id &&
+    l.recurrence === "2 volte a settimana" &&
+    l.hour === nuovaLezione.hour &&
+    !isColl(l) &&
+    studentInLesson(l, nuovaLezione.student, nuovaLezione.studentId) &&
+    new Date(l.date + "T00:00:00").getDay() !== nuovoGiorno
+  );
+  if (!abbinata) return null;
+  const giornoAbbinata = new Date(abbinata.date + "T00:00:00").getDay();
+  let gapNuovaVersoAbbinata = (giornoAbbinata - nuovoGiorno + 7) % 7;
+  if (!gapNuovaVersoAbbinata) gapNuovaVersoAbbinata = 7;
+  const gapAbbinataVersoNuova = 7 - gapNuovaVersoAbbinata;
+  return { abbinataId: abbinata.id, gapNuova: gapNuovaVersoAbbinata, gapAbbinata: gapAbbinataVersoNuova, gapAbbinataAttuale: abbinata.gapGiorni };
 }
 
 // Conta ESATTAMENTE quante occorrenze di una serie ricorrente (individuata da una qualunque
@@ -8887,9 +8912,27 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     }, []);
     React.useEffect(() => { loadGcalSalaBusy(false); }, [loadGcalSalaBusy]);
 
-    const handleAdd = (data) => {
+    const handleAdd = (rawData) => {
       const lessonId = uid();
-      setLessons(p => [...p, { ...data, id: lessonId }]);
+      let dataFinal = { ...rawData, id: lessonId };
+
+      // "2 volte a settimana": se esiste già un'altra lezione della stessa serie (stesso allievo,
+      // stesso orario) su un giorno diverso, rileva l'abbinamento e calcola il vero gap in giorni
+      // tra i due — altrimenti la creazione automatica della lezione successiva (dopo aver segnato
+      // una presenza) userebbe il gap di default e andrebbe fuori sincrono con i giorni reali scelti.
+      const coppia = rilevaCoppiaSettimanale(dataFinal, lessons);
+      if (coppia) {
+        dataFinal = { ...dataFinal, gapGiorni: coppia.gapNuova };
+        if (coppia.gapAbbinataAttuale !== coppia.gapAbbinata) {
+          setLessons(p => p.map(l => l.id === coppia.abbinataId ? { ...l, gapGiorni: coppia.gapAbbinata } : l));
+          const sbP = window.supabaseClient;
+          if (sbP) sbP.from('lezioni').update({ gap_giorni: coppia.gapAbbinata }).eq('id', coppia.abbinataId)
+            .then(({ error }) => { if (error) console.warn('[FM] gap_giorni abbinamento error:', error.message); });
+        }
+      }
+
+      setLessons(p => [...p, dataFinal]);
+      const data = dataFinal; // mantiene compatibilità col resto della funzione, che usa "data"
 
       // ── 1. Aggiungi i brani NUOVI al catalogo globale (sharedRepertorio) ──
       if (data._newBrani && Object.keys(data._newBrani).length > 0) {
@@ -9112,7 +9155,22 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       const mergedCourseId   = dataNorm.courseId   || existingLesson?.courseId   || null;
       const mergedCourseName = dataNorm.courseName || existingLesson?.courseName || null;
 
-      const dataNormFull = { ...dataNorm, students: mergedStudents, courseId: mergedCourseId, courseName: mergedCourseName };
+      let dataNormFull = { ...dataNorm, students: mergedStudents, courseId: mergedCourseId, courseName: mergedCourseName };
+
+      // "2 volte a settimana": stesso rilevamento automatico dell'abbinamento usato in handleAdd —
+      // serve anche qui, es. quando si crea la seconda lezione della coppia modificando/duplicando
+      // una lezione esistente invece di usare il form "nuova lezione".
+      const coppiaEdit = rilevaCoppiaSettimanale(dataNormFull, lessons);
+      if (coppiaEdit) {
+        dataNormFull = { ...dataNormFull, gapGiorni: coppiaEdit.gapNuova };
+        if (coppiaEdit.gapAbbinataAttuale !== coppiaEdit.gapAbbinata) {
+          setLessons(p => p.map(l => l.id === coppiaEdit.abbinataId ? { ...l, gapGiorni: coppiaEdit.gapAbbinata } : l));
+          const sbP2 = window.supabaseClient;
+          if (sbP2) sbP2.from('lezioni').update({ gap_giorni: coppiaEdit.gapAbbinata }).eq('id', coppiaEdit.abbinataId)
+            .then(({ error }) => { if (error) console.warn('[FM] gap_giorni abbinamento error:', error.message); });
+        }
+      }
+
       setLessons(p => p.map(l => l.id === data.id ? { ...l, ...dataNormFull } : l));
 
       // Write diretto su Supabase — non aspetta il debounce di fm_sync
