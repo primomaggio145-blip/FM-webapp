@@ -3909,6 +3909,23 @@ const studentInLesson = (l, name, studentId) => {
   if (cn && nn && (cn === nn || cn.includes(nn) || nn.includes(cn))) return true;
   return false;
 };
+// Trova la lezione precedente della stessa serie (stesso allievo per le individuali, stesso
+// corso/gruppo per le collettive) — usata per mostrare argomento ed esercizi della volta scorsa.
+const trovaLezionePrecedente = (lesson, tutteLeLezioni) => {
+  if (!lesson || !lesson.date) return null;
+  const candidati = (tutteLeLezioni || []).filter(l => {
+    if (l.id === lesson.id || !l.date || l.date >= lesson.date) return false;
+    if (isColl(lesson)) {
+      return isColl(l) && l.courseId && lesson.courseId && l.courseId === lesson.courseId
+        && (!lesson.gruppoId || l.gruppoId === lesson.gruppoId);
+    }
+    return !isColl(l) && l.tipo !== 'prova' && l.tipo !== 'sala_prove' &&
+      studentInLesson(l, lesson.student, lesson.studentId);
+  });
+  if (candidati.length === 0) return null;
+  candidati.sort((a, b) => b.date.localeCompare(a.date) || (b.hour || '').localeCompare(a.hour || ''));
+  return candidati[0];
+};
 const lessonLabel = l => isColl(l)
   ? (l.courseName||"Collettiva")
   : (l.student||"");
@@ -4647,7 +4664,7 @@ const LessonPill = ({ lesson, onClick, compact=false, courses }) => {
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses }) => {
+const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses }) => {
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
   // Per l'allievo: risolve il proprio id/nome per filtrare la presenza individuale
@@ -4895,6 +4912,22 @@ const LessonDetailModal = ({ lesson, onEdit, onDelete, onAttendance, onIscrizion
           )
         );
           })()
+
+        /* ── Lezione precedente — argomento ed esercizi della volta scorsa ── */
+        , prevLesson && (prevLesson.topic || prevLesson.exercises) && (
+          React.createElement('div', { style: {padding:"10px 12px", background:C.surfaceHover, borderRadius:8, border:`1px dashed ${C.border}`}}
+            , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:6, marginBottom:6}}
+              , React.createElement(Ic, { n:"clock", size:12, stroke:C.textDim})
+              , React.createElement('span', { style: {fontSize:10, color:C.textDim, letterSpacing:"0.06em", textTransform:"uppercase"}}
+                , "Lezione precedente · ", (() => { try { return new Date(prevLesson.date+"T00:00:00").toLocaleDateString('it-IT',{day:'numeric',month:'short'}); } catch(e){ return prevLesson.date; } })()
+              )
+            )
+            , prevLesson.topic && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginBottom:prevLesson.exercises?4:0}}
+                , React.createElement('strong', null, "Argomento: "), prevLesson.topic)
+            , prevLesson.exercises && React.createElement('div', { style: {fontSize:12, color:C.textMuted}}
+                , React.createElement('strong', null, "Esercizi: "), prevLesson.exercises)
+          )
+        )
 
         /* ── Argomento — inline editable ── */
         , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:4}}
@@ -10182,6 +10215,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         , modal === "detail" && selLesson && (
           React.createElement(LessonDetailModal, {
             lesson: lessons.find(l => l.id === selLesson.id) || selLesson,
+            prevLesson: trovaLezionePrecedente(lessons.find(l => l.id === selLesson.id) || selLesson, lessons),
             courses: propCourses,
             onEdit: () => setModal("edit"),
             onDelete: () => setModal("delete"),
