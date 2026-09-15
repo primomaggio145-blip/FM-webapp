@@ -564,19 +564,34 @@ function App() {
         const key = l.id + '_' + nowStr;
         if (_reminderSent.has(key)) return;
 
-        // Filtra per utente corrente
+        // Filtra per utente corrente — match ESATTO (non substring: "Anna" non deve
+        // corrispondere a "Annamaria", altrimenti il reminder arriva anche a chi non
+        // c'entra nulla con quella specifica lezione)
         const ruolo = curUser.ruolo || 'admin';
         if (ruolo === 'allievo') {
           const myId   = curUser.allievoId;
-          const myNome = (curUser.nome||'').toLowerCase();
-          const match  = (myId && String(l.studentId) === String(myId))
-                      || (myNome && (l.student||'').toLowerCase().includes(myNome));
+          const myNome = (curUser.nome||'').toLowerCase().trim();
+          let match = false;
+          if (isColl(l)) {
+            match = (l.students||[]).some(function(s){
+              if (!s) return false;
+              if (myId != null && s.id != null && String(s.id) === String(myId)) return true;
+              const sn = (s.name||'').toLowerCase().trim();
+              return !!myNome && !!sn && sn === myNome;
+            });
+          } else {
+            const lNome = (l.student||'').toLowerCase().trim();
+            match = (myId != null && String(l.studentId) === String(myId))
+                 || (!!myNome && !!lNome && lNome === myNome);
+          }
           if (!match) return;
         } else if (ruolo === 'docente') {
-          const myNome = (curUser.nome||'').toLowerCase();
-          if (!(l.teacher||'').toLowerCase().includes(myNome)) return;
+          const myNome   = (curUser.nome||'').toLowerCase().trim();
+          const lTeacher = (l.teacher||'').toLowerCase().trim();
+          if (!(myNome && lTeacher && lTeacher === myNome)) return;
         }
-        // admin vede tutte
+        // admin vede tutte (nessun filtro: per l'admin il reminder è un riepilogo di
+        // tutte le lezioni della scuola, non legato a una singola lezione personale)
 
         _reminderSent.add(key);
         const titolo  = `⏰ Lezione tra 1 ora`;
