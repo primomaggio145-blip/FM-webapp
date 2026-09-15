@@ -8881,6 +8881,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           tonality:   b.tonality   || b.tonalita    || '',
           difficulty: b.difficulty || 'Intermedio',
           tipo:       b.tipo       || b.type        || 'individuale',
+          strumento:  data.instrument || '',
           note:       b.note       || b.notes       || '',
           lezioni:    0,
         }));
@@ -8899,7 +8900,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               id: b.id,
               titolo: b.title || '',
               compositore: b.composer || '',
-              strumento: null,
+              strumento: data.instrument || null,
               eventi_ids: [],
               versioni: [],
               note: b.note || '',
@@ -9189,6 +9190,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           tonality:   b.tonality   || b.tonalita    || '',
           difficulty: b.difficulty || 'Intermedio',
           tipo:       b.tipo       || b.type        || 'individuale',
+          strumento:  data.instrument || '',
           note:       b.note       || b.notes       || '',
           lezioni:    0,
         }));
@@ -9207,7 +9209,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               id: b.id,
               titolo: b.title || '',
               compositore: b.composer || '',
-              strumento: null,
+              strumento: data.instrument || null,
               eventi_ids: [],
               versioni: [],
               note: b.note || '',
