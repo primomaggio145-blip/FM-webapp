@@ -8889,6 +8889,25 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           const toAdd = nuoviBrani.filter(b => !existingIds.has(b.id));
           return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
         });
+        // Persisti su Supabase: "brani" NON è nel motore di diff-sync generico
+        // (gestito a parte da RepertorioView), quindi senza un insert diretto qui il
+        // brano restava solo nello stato React e spariva al primo refresh/aggiornamento.
+        const sbBr = window.supabaseClient;
+        if (sbBr) {
+          nuoviBrani.forEach(b => {
+            sbBr.from('brani').insert({
+              id: b.id,
+              titolo: b.title || '',
+              compositore: b.composer || '',
+              strumento: null,
+              eventi_ids: [],
+              versioni: [],
+              note: b.note || '',
+            }).then(({ error }) => {
+              if (error) console.warn('[FM] nuovo brano (handleAdd) DB error:', error.message);
+            });
+          });
+        }
       }
 
       // ── 2. Propaga tutti i brani selezionati al repertorio dello studente ──
@@ -9174,6 +9193,25 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           const toAdd = nuoviBrani.filter(b => !existingIds.has(b.id));
           return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
         });
+        // Persisti su Supabase: "brani" NON è nel motore di diff-sync generico
+        // (gestito a parte da RepertorioView), quindi senza un insert diretto qui il
+        // brano restava solo nello stato React e spariva al primo refresh/aggiornamento.
+        const sbBr2 = window.supabaseClient;
+        if (sbBr2) {
+          nuoviBrani.forEach(b => {
+            sbBr2.from('brani').insert({
+              id: b.id,
+              titolo: b.title || '',
+              compositore: b.composer || '',
+              strumento: null,
+              eventi_ids: [],
+              versioni: [],
+              note: b.note || '',
+            }).then(({ error }) => {
+              if (error) console.warn('[FM] nuovo brano (handleEdit) DB error:', error.message);
+            });
+          });
+        }
       }
 
       // ── 2. Propaga eventuali nuovi brani al repertorio dello studente ──
