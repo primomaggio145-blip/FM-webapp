@@ -29,7 +29,7 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <!-- 1. Supabase SDK -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <!--
     Cache-busting: senza questo, dopo un deploy il browser (o la CDN di GitHub Pages)
     può continuare a servire versioni vecchie di supabase_integration.js/fm_sync.js
@@ -124,17 +124,22 @@
 
   <script>
     // Error handler globale — cattura errori JS e Promise non gestite
-    window.onerror = function(msg, src, line) {
+    window.onerror = function(msg, src, line, col, error) {
       document.getElementById('spinner').style.display = 'none';
       var d = document.createElement('div');
       d.className = 'err';
-      d.textContent = 'ERRORE JS:\n' + msg + '\nLinea: ' + line + '\nFile: ' + src;
+      d.textContent = 'ERRORE JS:\n' + msg
+        + '\nFile: ' + src
+        + '\nLinea:Colonna: ' + line + ':' + col
+        + (error && error.stack ? '\n\nStack:\n' + error.stack : '\n(nessuno stack disponibile — probabile errore cross-origin o script caricato senza crossorigin)');
       document.getElementById('loading').appendChild(d);
     };
     window.onunhandledrejection = function(e) {
       var d = document.createElement('div');
       d.className = 'err';
-      d.textContent = 'Promise error: ' + (e.reason?.message || e.reason);
+      var reason = e.reason;
+      d.textContent = 'Promise error: ' + (reason && reason.message ? reason.message : reason)
+        + (reason && reason.stack ? '\n\nStack:\n' + reason.stack : '');
       document.getElementById('loading').appendChild(d);
     };
   </script>
