@@ -2444,25 +2444,20 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 // ════════════════════════════════════════════════════════════════════════════════
 
 // ─── REPORT LEZIONI MENSILE ───────────────────────────────────────────────────
-const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSelectAllievo }) => {
+// Calcolo unificato del report lezioni (soglie + conteggi) per un mese/anno dato.
+// Usata sia da ReportLezioniMensile (scheda ALLIEVI) sia da ReportLezioniCard (Dashboard),
+// così le due viste mostrano SEMPRE esattamente gli stessi numeri — questa funzione condivisa
+// esiste apposta per evitare la duplicazione della logica, che in passato ha causato
+// disallineamenti tra le due schede (formule diverse, conteggi diversi).
+function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese, anno }) {
   const now3 = new Date();
-  const meseCurr = now3.getMonth() + 1;
-  const annoCurr = now3.getFullYear();
-  const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
-  const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
   const cfg = config || {};
-  // Valori per corso (configurabili a livello globale, con fallback ai valori richiesti)
   const PUNTI_CORSO_INDIVIDUALE = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
   const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
 
-  const [reportOpen, setReportOpen] = useState(false);
-  const [reportMese, setReportMese] = useState(meseCurr);
-  const [reportAnno, setReportAnno] = useState(annoCurr);
-  const [reportFiltro, setReportFiltro] = useState('tutti');
-
   // Ultimo mese che contiene effettivamente delle lezioni (esclude lezioni programmate nel futuro):
   // serve per capire se il mese selezionato è "in corso" (dati parziali) e va quindi prorata la soglia.
-  const oggiYM = annoCurr*12 + meseCurr;
+  const oggiYM = anno*12 + mese;
   let ultimoMeseConLezioni = null;
   (lessons||[]).forEach(l => {
     if (!l.date) return;
@@ -2472,56 +2467,46 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     if (ym > oggiYM) return; // ignora lezioni future
     if (!ultimoMeseConLezioni || ym > ultimoMeseConLezioni.ym) ultimoMeseConLezioni = { anno:ly, mese:lm, ym };
   });
-  const isUltimoMeseConLezioni = !!ultimoMeseConLezioni && ultimoMeseConLezioni.anno===reportAnno && ultimoMeseConLezioni.mese===reportMese;
+  const isUltimoMeseConLezioni = !!ultimoMeseConLezioni && ultimoMeseConLezioni.anno===anno && ultimoMeseConLezioni.mese===mese;
 
-  // Data di fine anno scolastico (inserita manualmente nelle Impostazioni → Archivio anni
-  // scolastici) — l'anno di riferimento è quello la cui finestra Set(inizio)→Ago(fine) contiene
-  // il mese selezionato nel report.
+  // Data di fine anno scolastico (Impostazioni → Archivio anni scolastici) — l'anno di
+  // riferimento è quello la cui finestra Set(inizio)→Ago(fine) contiene il mese selezionato.
   const annoScolasticoDelMese = (anniScolastici||[]).find(a => {
-    const annoRif = reportMese >= 9 ? reportAnno : reportAnno - 1;
+    const annoRif = mese >= 9 ? anno : anno - 1;
     return Number(a.annoInizio) === annoRif;
   });
   const dataFineAnno = annoScolasticoDelMese && annoScolasticoDelMese.dataFineAnno
     ? new Date(annoScolasticoDelMese.dataFineAnno+"T00:00:00") : null;
-  const isMeseFineAnno = !!dataFineAnno && dataFineAnno.getFullYear()===reportAnno && (dataFineAnno.getMonth()+1)===reportMese;
+  const isMeseFineAnno = !!dataFineAnno && dataFineAnno.getFullYear()===anno && (dataFineAnno.getMonth()+1)===mese;
 
   // Soglia di un allievo per il mese selezionato — sempre calcolata sulle settimane realmente
   // disponibili in quel mese per quell'allievo (la finestra [inizio, fine] si restringe per il
-  // mese d'iscrizione, per il mese in corso e per il mese di fine anno scolastico; per un mese
-  // pieno ordinario coincide semplicemente con l'intero mese):
+  // mese d'iscrizione, per il mese in corso e per il mese di fine anno scolastico):
   //   corso individuale (cadenza 1/settimana):  floor(settimane_disponibili)      × nr. corsi
   //   corso collettivo  (cadenza 1/2 settimane): floor(settimane_disponibili ÷ 2) × nr. corsi
-  // Questa unica formula riproduce automaticamente anche lo standard pieno (4 individuali,
-  // 2 collettive) per qualunque mese intero di 28-31 giorni, senza bisogno di un caso a parte.
   const sogliaAllievo = (s) => {
     const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
     const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
 
     const enroll = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
-    const isMeseIscrizione = enroll && enroll.getFullYear()===reportAnno && (enroll.getMonth()+1)===reportMese;
+    const isMeseIscrizione = enroll && enroll.getFullYear()===anno && (enroll.getMonth()+1)===mese;
 
-    const inizioMese = new Date(reportAnno, reportMese-1, 1);
-    const fineMese    = new Date(reportAnno, reportMese, 0);
+    const inizioMese = new Date(anno, mese-1, 1);
+    const fineMese    = new Date(anno, mese, 0);
     let dataInizio = inizioMese;
     if (isMeseIscrizione && enroll > inizioMese) dataInizio = enroll;
     let dataFine = fineMese;
-    // Il "cap a oggi" (mese in corso) si applica SOLO se questo NON è anche il mese d'iscrizione:
-    // per il mese d'iscrizione la finestra arriva sempre a fine mese (come da esempi confermati:
-    // iscritto il 07.09 → finestra 07.09→30.09, non 07.09→oggi). Il cap a oggi serve per un
-    // allievo iscritto in un mese precedente di cui si guarda il progresso nel mese in corso.
-    // Va inoltre applicato solo se l'iscrizione è GIÀ iniziata (oggi >= dataInizio): se la data
-    // d'iscrizione è futura, il cap capovolgerebbe la finestra collassando la soglia a 0.
+    // Il "cap a oggi" (mese in corso) si applica SOLO se questo NON è anche il mese d'iscrizione,
+    // e solo se l'iscrizione è già iniziata (altrimenti la finestra collasserebbe a 0).
     if (isUltimoMeseConLezioni && !isMeseIscrizione && now3 >= dataInizio && now3 < dataFine) dataFine = now3;
     if (isMeseFineAnno && dataFineAnno < dataFine) dataFine = dataFineAnno;
-    if (dataFine < dataInizio) return { individuale:0, collettiva:0 }; // finestra vuota (es. iscrizione futura, non ancora iniziata)
+    if (dataFine < dataInizio) return { individuale:0, collettiva:0 }; // finestra vuota (es. iscrizione futura)
 
     const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
     const settimane = Math.max(giorni,1)/7;
 
-    // Individuale: conteggio ESATTO dalle serie ricorrenti reali già a calendario (legge il/i
-    // giorno/i veri di lezione invece di stimare "settimane disponibili ÷ 7", che può sbagliare
-    // di ±1 lezione a seconda di che giorno cade l'iscrizione). Fallback alla stima solo se
-    // l'allievo non ha ancora nessuna lezione individuale registrata.
+    // Individuale: conteggio ESATTO dalle serie ricorrenti reali già a calendario. Fallback
+    // alla stima solo se l'allievo non ha ancora nessuna lezione individuale registrata.
     const nome = s.name||s.nome||'';
     const individualeReale = contaLezioniIndividualiReali(nome, s.id, lessons, dataInizio, dataFine);
     const individuale = individualeReale != null ? individualeReale : Math.floor(settimane) * nCorsiIndividuali;
@@ -2532,15 +2517,13 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     };
   };
 
-  // Lezioni del mese selezionato, deduplicate per id (record duplicato = bug di sincronizzazione
-  // a monte, non va contato due volte — questa è l'unica vista impattata, quindi la protezione
-  // va messa qui).
+  // Lezioni del mese selezionato, deduplicate per id
   const lezioniMese = [];
   const lezioniGiaContate = new Set();
   (lessons||[]).forEach(l => {
     if (!l.date) return;
     const [ly,lm] = l.date.split('-').map(Number);
-    if (ly!==reportAnno||lm!==reportMese) return;
+    if (ly!==anno||lm!==mese) return;
     if (l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
     const lid = l.id!=null ? String(l.id) : `${l.date}|${l.hour}|${l.student||l.studentId||l.courseId||''}`;
     if (lezioniGiaContate.has(lid)) return; // record duplicato: già conteggiato
@@ -2554,9 +2537,7 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     const nome = s.name||s.nome||'';
     if (!nome) return;
     // Conteggio per allievo: usa studentInLesson/studAttendance (stesso match ID+nome usato
-    // ovunque nell'app) invece di un dizionario indicizzato solo per nome — una lezione salvata
-    // con solo studentId (senza il campo nome "student") altrimenti non veniva mai contata,
-    // risultando sempre a 0.
+    // ovunque nell'app) invece di un dizionario indicizzato solo per nome.
     let countIndReale = 0, countCollReale = 0;
     lezioniMese.forEach(l => {
       if (!studentInLesson(l, nome, s.id)) return;
@@ -2567,24 +2548,14 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
     const countInd  = countIndReale;
     const countColl = countCollReale;
     const soglie = sogliaAllievo(s);
-    // Un'eccezione è "impostata" solo se contiene un numero valido — non basta "!= null":
-    // se l'adattatore letto da Supabase mappa una colonna NULL come stringa vuota '' invece che
-    // null/undefined, "'' != null" risulta comunque true e Number('') vale 0, forzando la soglia
-    // a 0 anche quando l'allievo non ha alcuna eccezione impostata.
-    // L'eccezione individuale (sogliaIndividualeEcc) NON viene più usata come numero fisso da
-    // applicare al posto del conteggio: da quando il conteggio individuale è esatto (leggendo le
-    // serie reali a calendario), un numero fisso finirebbe per ignorare i mesi parziali (es.
-    // iscrizione a metà mese) — lo stesso bug che si voleva risolvere. Il campo resta in
-    // anagrafica come promemoria/etichetta per l'admin ("questo allievo ha un accordo diverso"),
-    // ma il numero mostrato è sempre quello calcolato da sogliaAllievo().
+    // Un'eccezione è "impostata" solo se contiene un numero valido.
     const isEccInd  = s.sogliaIndividualeEcc!=null && s.sogliaIndividualeEcc!=='' && !isNaN(Number(s.sogliaIndividualeEcc));
     const isEccColl = s.sogliaCollettivaEcc!=null  && s.sogliaCollettivaEcc!==''  && !isNaN(Number(s.sogliaCollettivaEcc));
     const sogliaInd  = Math.round(soglie.individuale);
     const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
     const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
     const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
-    // Stato complessivo dell'allievo: la carenza (sotto soglia), su uno qualsiasi dei due tipi,
-    // ha priorità — poi l'eccedenza — altrimenti è in linea su entrambi.
+    // Stato complessivo dell'allievo: la carenza (sotto soglia) ha priorità, poi l'eccedenza.
     const deltaPeggiore = Math.min(individuale.delta, collettiva.delta) < 0
       ? Math.min(individuale.delta, collettiva.delta)
       : Math.max(individuale.delta, collettiva.delta);
@@ -2592,9 +2563,30 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
   });
   report.sort((a,b)=>a.deltaPeggiore-b.deltaPeggiore);
 
-  const superano    = report.filter(r=>r.deltaPeggiore>0);
-  const inLinea     = report.filter(r=>r.deltaPeggiore===0);
-  const sottosoglia = report.filter(r=>r.deltaPeggiore<0);
+  return {
+    report,
+    superano:    report.filter(r=>r.deltaPeggiore>0),
+    inLinea:     report.filter(r=>r.deltaPeggiore===0),
+    sottosoglia: report.filter(r=>r.deltaPeggiore<0),
+    PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO,
+  };
+}
+
+const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSelectAllievo }) => {
+  const now3 = new Date();
+  const meseCurr = now3.getMonth() + 1;
+  const annoCurr = now3.getFullYear();
+  const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+  const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportMese, setReportMese] = useState(meseCurr);
+  const [reportAnno, setReportAnno] = useState(annoCurr);
+  const [reportFiltro, setReportFiltro] = useState('tutti');
+
+  const { report, superano, inLinea, sottosoglia, PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO } =
+    calcolaReportLezioni({ lessons, students, config, anniScolastici, mese: reportMese, anno: reportAnno });
+  const allieviAttiviCount = (students||[]).filter(s=>s.status==='attivo'||!s.status).length;
 
   const filtrato = reportFiltro==='oltre' ? superano
     : reportFiltro==='sotto' ? sottosoglia
@@ -2667,7 +2659,7 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
         )
       )
       , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:6}}
-        , `Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · mese d'iscrizione e mese in corso calcolati in proporzione alle settimane trascorse · ${allieviAttivi.length} allievi attivi`
+        , `Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · mese d'iscrizione e mese in corso calcolati in proporzione alle settimane trascorse · ${allieviAttiviCount} allievi attivi`
         , React.createElement('span',null,'Clicca su un allievo per aprire il profilo')
       )
     )

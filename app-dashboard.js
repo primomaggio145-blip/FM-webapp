@@ -1874,123 +1874,22 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
 
 
 // ─── REPORT LEZIONI CARD (Dashboard) ────────────────────────────────────────
-const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
+const ReportLezioniCard = ({ lessons, students, config, anniScolastici, onNavigate }) => {
   const now3 = new Date();
   const meseCurr = now3.getMonth() + 1;
   const annoCurr = now3.getFullYear();
   const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
-  const cfg = config || {};
-  // Stessi valori di riferimento di ReportLezioniMensile (scheda ALLIEVI)
-  const PUNTI_CORSO_INDIVIDUALE = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
-  const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
 
   // Sezioni collassabili indipendenti
   const [openOltre,   setOpenOltre]   = useState(true);
   const [openInLinea, setOpenInLinea] = useState(false);
   const [openSotto,   setOpenSotto]   = useState(false);
 
-  // ── Da qui in poi: IDENTICA logica di calcolo di ReportLezioniMensile (AllieviView),
-  // per garantire che i due report mostrino sempre gli stessi numeri ──────────────────
-
-  // Ultimo mese che contiene effettivamente delle lezioni (esclude il futuro): serve per
-  // capire se il mese corrente è "in corso" (dati parziali) e va quindi prorata la soglia.
-  const oggiYM = annoCurr*12 + meseCurr;
-  let ultimoMeseConLezioni = null;
-  (lessons||[]).forEach(l => {
-    if (!l.date) return;
-    const [ly,lm] = l.date.split('-').map(Number);
-    if (!ly||!lm) return;
-    const ym = ly*12+lm;
-    if (ym > oggiYM) return;
-    if (!ultimoMeseConLezioni || ym > ultimoMeseConLezioni.ym) ultimoMeseConLezioni = { anno:ly, mese:lm, ym };
-  });
-  const isUltimoMeseConLezioni = !!ultimoMeseConLezioni && ultimoMeseConLezioni.anno===annoCurr && ultimoMeseConLezioni.mese===meseCurr;
-
-  const sogliaAllievo = (s) => {
-    const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
-    const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
-    const enroll = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
-    const isMeseIscrizione = enroll && enroll.getFullYear()===annoCurr && (enroll.getMonth()+1)===meseCurr;
-    const nome = s.name||s.nome||'';
-
-    if (!isMeseIscrizione && !isUltimoMeseConLezioni) {
-      const inizioMeseFull = new Date(annoCurr, meseCurr-1, 1);
-      const fineMeseFull    = new Date(annoCurr, meseCurr, 0);
-      const individualeReale = contaLezioniIndividualiReali(nome, s.id, lessons, inizioMeseFull, fineMeseFull);
-      return {
-        individuale: individualeReale != null ? individualeReale : nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE,
-        collettiva: nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO,
-      };
-    }
-    const inizioMese = new Date(annoCurr, meseCurr-1, 1);
-    const fineMese    = new Date(annoCurr, meseCurr, 0);
-    let dataInizio = inizioMese;
-    if (isMeseIscrizione && enroll > inizioMese) dataInizio = enroll;
-    let dataFine = fineMese;
-    if (isUltimoMeseConLezioni) {
-      const oggiCap = now3 < fineMese ? now3 : fineMese;
-      if (oggiCap < dataFine) dataFine = oggiCap;
-    }
-    if (dataFine < dataInizio) dataFine = dataInizio;
-    const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
-    const settimane = Math.max(giorni,1)/7;
-    const individualeReale = contaLezioniIndividualiReali(nome, s.id, lessons, dataInizio, dataFine);
-    return {
-      individuale: individualeReale != null ? individualeReale : Math.round(nCorsiIndividuali*(PUNTI_CORSO_INDIVIDUALE/4)*settimane),
-      collettiva:  Math.round(nCorsiCollettivi*(PUNTI_CORSO_COLLETTIVO/4)*settimane),
-    };
-  };
-
-  // Conteggio lezioni svolte nel mese corrente, individuali+collettive, con dedup per id
-  const contInd = {}, contColl = {};
-  const lezioniGiaContate = new Set();
-  (lessons||[]).forEach(l => {
-    if (!l.date) return;
-    const [ly,lm] = l.date.split('-').map(Number);
-    if (ly!==annoCurr||lm!==meseCurr) return;
-    if (l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
-    const lid = l.id!=null ? String(l.id) : `${l.date}|${l.hour}|${l.student||l.courseId||''}`;
-    if (lezioniGiaContate.has(lid)) return;
-    lezioniGiaContate.add(lid);
-    if (isColl(l)) {
-      (l.students||[]).forEach(st => {
-        if (!st || !st.name) return;
-        if (studAttendance(l, st.name, st.id)==='recuperata') return;
-        if (l.isLezioneExtra) return; // lezione extra concordata: non conta ai fini della soglia
-        contColl[st.name] = (contColl[st.name]||0)+1;
-      });
-    } else {
-      if (l.attendance==='recuperata') return;
-      if (l.isLezioneExtra) return; // lezione extra concordata: non conta ai fini della soglia
-      const k = l.student||String(l.studentId||''); if(!k) return;
-      contInd[k] = (contInd[k]||0)+1;
-    }
-  });
-
-  const allieviAttivi = (students||[]).filter(s=>s.status==='attivo'||s.stato==='attivo'||!s.status);
-  const report = allieviAttivi.map(s => {
-    const nome = s.name||s.nome||'';
-    const soglie = sogliaAllievo(s);
-    const isEccInd  = s.sogliaIndividualeEcc!=null;
-    const isEccColl = s.sogliaCollettivaEcc!=null;
-    const sogliaInd  = Math.round(soglie.individuale);
-    const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
-    const countInd  = contInd[nome]||0;
-    const countColl = contColl[nome]||0;
-    const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
-    const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
-    // Stato complessivo: la carenza (su uno qualsiasi dei due tipi) ha priorità, poi l'eccedenza
-    // — identico criterio di ReportLezioniMensile
-    const deltaPeggiore = Math.min(individuale.delta, collettiva.delta) < 0
-      ? Math.min(individuale.delta, collettiva.delta)
-      : Math.max(individuale.delta, collettiva.delta);
-    return { id:s.id, nome, individuale, collettiva, deltaPeggiore };
-  }).filter(r=>r.nome);
-  report.sort((a,b)=>a.deltaPeggiore-b.deltaPeggiore);
-
-  const superano    = report.filter(r=>r.deltaPeggiore>0);
-  const inLinea     = report.filter(r=>r.deltaPeggiore===0);
-  const sottosoglia = report.filter(r=>r.deltaPeggiore<0);
+  // Stessa funzione di calcolo condivisa con REPORT LEZIONI in ALLIEVI (calcolaReportLezioni,
+  // definita in app-calendario.js) — garantisce che le due schede mostrino sempre gli stessi
+  // identici numeri, invece di due formule duplicate che possono disallinearsi nel tempo.
+  const { report, superano, inLinea, sottosoglia, PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO } =
+    calcolaReportLezioni({ lessons, students, config, anniScolastici, mese: meseCurr, anno: annoCurr });
 
   const cella = (stat) => {
     const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
@@ -3044,6 +2943,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   lessons: _lessons,
                   students: _studentsAnno,
                   config,
+                  anniScolastici: propAnni,
                   onNavigate,
                 })
             )
