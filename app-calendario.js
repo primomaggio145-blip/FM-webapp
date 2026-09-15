@@ -8924,6 +8924,17 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       const lessonId = uid();
       let dataFinal = { ...rawData, id: lessonId };
 
+      // Il form lezione salva l'allievo come nome (select a testo), mai come ID —
+      // risolvi qui l'ID reale dal record studente corrispondente, altrimenti la
+      // lezione resta orfana e l'allievo collegato via profilo non la vedrà mai.
+      // Ricalcolato sempre dal nome corrente (non solo se assente), altrimenti se
+      // l'admin cambia allievo su una lezione che aveva già un altro studentId,
+      // resterebbe l'ID vecchio disallineato dal nome nuovo.
+      if (dataFinal.student) {
+        const _foundStuAdd = (propStudents||[]).find(s => (s.name||s.nome||'') === dataFinal.student);
+        dataFinal.studentId = _foundStuAdd ? _foundStuAdd.id : (dataFinal.studentId || null);
+      }
+
       // "2 volte a settimana": se esiste già un'altra lezione della stessa serie (stesso allievo,
       // stesso orario) su un giorno diverso, rileva l'abbinamento e calcola il vero gap in giorni
       // tra i due — altrimenti la creazione automatica della lezione successiva (dopo aver segnato
@@ -9164,6 +9175,15 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       const mergedCourseName = dataNorm.courseName || existingLesson?.courseName || null;
 
       let dataNormFull = { ...dataNorm, students: mergedStudents, courseId: mergedCourseId, courseName: mergedCourseName };
+
+      // Stesso fix di handleAdd: il form salva l'allievo come nome, mai come ID —
+      // risolvilo qui prima di scrivere su Supabase (vedi campo studente_id sotto).
+      // Ricalcolato sempre dal nome corrente per evitare un ID vecchio disallineato
+      // se l'admin cambia l'allievo assegnato a una lezione già collegata a un altro.
+      if (dataNormFull.student) {
+        const _foundStuEdit = (propStudents||[]).find(s => (s.name||s.nome||'') === dataNormFull.student);
+        dataNormFull.studentId = _foundStuEdit ? _foundStuEdit.id : (dataNormFull.studentId || null);
+      }
 
       // "2 volte a settimana": stesso rilevamento automatico dell'abbinamento usato in handleAdd —
       // serve anche qui, es. quando si crea la seconda lezione della coppia modificando/duplicando
