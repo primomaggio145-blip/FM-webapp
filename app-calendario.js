@@ -4388,7 +4388,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
                     , React.createElement('div', { style: {padding:14, display:"flex", flexDirection:"column", gap:10, background:C.surface}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4353}}
                       , React.createElement(BranoFormInline, {
                         onSave: b => {
-                          const newId = "r_"+Date.now();
+                          const newId = uid();
                           const newBrano = {...b, id:newId, tipo: b.tipo||b.type||"individuale", note: b.note||b.notes||""};
                           // Salva nel ref locale per handleSave
                           newlyCreatedBraniRef.current[newId] = newBrano;
@@ -8905,6 +8905,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               note: b.note || '',
             }).then(({ error }) => {
               if (error) console.warn('[FM] nuovo brano (handleAdd) DB error:', error.message);
+              else {
+                window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+                window.__FM_RECENTLY_WRITTEN__.set(`brani:${b.id}`, Date.now());
+              }
             });
           });
         }
@@ -9209,6 +9213,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               note: b.note || '',
             }).then(({ error }) => {
               if (error) console.warn('[FM] nuovo brano (handleEdit) DB error:', error.message);
+              else {
+                window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+                window.__FM_RECENTLY_WRITTEN__.set(`brani:${b.id}`, Date.now());
+              }
             });
           });
         }
