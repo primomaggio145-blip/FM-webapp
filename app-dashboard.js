@@ -1915,7 +1915,7 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
     if (!isMeseIscrizione && !isUltimoMeseConLezioni) {
       const inizioMeseFull = new Date(annoCurr, meseCurr-1, 1);
       const fineMeseFull    = new Date(annoCurr, meseCurr, 0);
-      const individualeReale = contaLezioniIndividualiReali(nome, s.id, propLessonsDash, inizioMeseFull, fineMeseFull);
+      const individualeReale = contaLezioniIndividualiReali(nome, s.id, lessons, inizioMeseFull, fineMeseFull);
       return {
         individuale: individualeReale != null ? individualeReale : nCorsiIndividuali*PUNTI_CORSO_INDIVIDUALE,
         collettiva: nCorsiCollettivi*PUNTI_CORSO_COLLETTIVO,
@@ -1933,7 +1933,7 @@ const ReportLezioniCard = ({ lessons, students, config, onNavigate }) => {
     if (dataFine < dataInizio) dataFine = dataInizio;
     const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
     const settimane = Math.max(giorni,1)/7;
-    const individualeReale = contaLezioniIndividualiReali(nome, s.id, propLessonsDash, dataInizio, dataFine);
+    const individualeReale = contaLezioniIndividualiReali(nome, s.id, lessons, dataInizio, dataFine);
     return {
       individuale: individualeReale != null ? individualeReale : Math.round(nCorsiIndividuali*(PUNTI_CORSO_INDIVIDUALE/4)*settimane),
       collettiva:  Math.round(nCorsiCollettivi*(PUNTI_CORSO_COLLETTIVO/4)*settimane),
