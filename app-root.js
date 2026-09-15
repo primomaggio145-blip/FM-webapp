@@ -4474,6 +4474,19 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         })()
     )
 
+    /* ── Quote e importi ───────────────────────────────────────────────────── */
+    , activeTab==="anno" && React.createElement(ImpSection, {title:"Quote e importi", icon:"euro"}
+      , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
+          'Importo dell\'iscrizione annuale suggerito quando registri una nuova entrata di categoria "Iscrizione". Può cambiare di anno in anno.')
+      , React.createElement('div', {style:{maxWidth:220}}
+        , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:".06em",textTransform:"uppercase",display:"block",marginBottom:5}}, "Importo iscrizione annuale (€)")
+        , React.createElement('input', {type:'number', min:0, step:'0.01',
+            value: draft.importoIscrizione != null ? draft.importoIscrizione : 30,
+            onChange: e => setD('importoIscrizione', e.target.value===''?0:Number(e.target.value)),
+            style:{width:"100%",background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:14,fontWeight:600,padding:"9px 13px",fontFamily:"'Oswald',sans-serif"}})
+      )
+    )
+
     /* ── Esporta ricevute ─────────────────────────────────────────────────── */
     , activeTab==="anno" && React.createElement(EsportaRicevuteSection, {anniScolastici: propAnni, showToast})
 

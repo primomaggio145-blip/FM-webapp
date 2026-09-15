@@ -1049,12 +1049,6 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                     )
                   )
                 )
-                , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}, className: "form-2col", marginTop:10}
-                  , React.createElement(SField, { label: "Importo iscrizione annuale (€)" ,
-                    type: "number", value: draft.importoIscrizione != null ? draft.importoIscrizione : 30,
-                    onChange: e=>setD("importoIscrizione", Number(e.target.value)),
-                    placeholder: "30" })
-                )
               )
             )
           )
