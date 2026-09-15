@@ -3918,6 +3918,20 @@ const trovaLezionePrecedente = (lesson, tutteLeLezioni) => {
   candidati.sort((a, b) => b.date.localeCompare(a.date) || (b.hour || '').localeCompare(a.hour || ''));
   return candidati[0];
 };
+// Due lezioni individuali sono della "stessa serie" se hanno lo stesso allievo reale, OPPURE
+// (quando l'allievo non è ancora assegnato) sono entrambe placeholder "nuovo iscritto" con lo
+// stesso nome provvisorio. Senza questo secondo caso, il controllo anti-duplicato non funziona
+// mai per le lezioni "nuovo iscritto" (perché richiede uno "student" valorizzato su entrambe),
+// e la catena placeholder continua a propagarsi in parallelo anche dopo aver assegnato l'allievo.
+function stessaSerieIndividuale(l, lesson) {
+  if (l.student && lesson.student) return l.student === lesson.student;
+  if (!l.student && !lesson.student && l.nuovoIscritto && lesson.nuovoIscritto) {
+    const cn1 = (l.contactName || '').trim().toLowerCase();
+    const cn2 = (lesson.contactName || '').trim().toLowerCase();
+    return !!cn1 && cn1 === cn2;
+  }
+  return false;
+}
 const lessonLabel = l => isColl(l)
   ? (l.courseName||"Collettiva")
   : (l.student||"");
@@ -9224,6 +9238,39 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         }
       }
 
+      // "NUOVO ISCRITTO" → allievo reale assegnato: se questa lezione era un placeholder senza
+      // allievo (nuovoIscritto) e ora ha un allievo vero, propaga l'assegnazione a eventuali
+      // lezioni FUTURE della stessa catena rimaste orfane come placeholder — altrimenti restano
+      // duplicati paralleli (una versione con l'allievo, una senza) man mano che la ricorrenza
+      // continua a generare nuove occorrenze da entrambe.
+      if (existingLesson && existingLesson.nuovoIscritto && !existingLesson.student &&
+          dataNormFull.student && !isColl(dataNormFull)) {
+        const nomeOriginale = (existingLesson.contactName || '').trim().toLowerCase();
+        if (nomeOriginale) {
+          const orfane = (lessons || []).filter(l =>
+            l.id !== dataNormFull.id && !l.student && l.nuovoIscritto &&
+            (l.contactName || '').trim().toLowerCase() === nomeOriginale &&
+            l.hour === dataNormFull.hour && l.teacher === dataNormFull.teacher
+          );
+          if (orfane.length > 0) {
+            const orfaneIds = new Set(orfane.map(l => l.id));
+            setLessons(p => p.map(l => orfaneIds.has(l.id)
+              ? { ...l, student: dataNormFull.student, studentId: dataNormFull.studentId, nuovoIscritto: false }
+              : l));
+            const sbOrf = window.supabaseClient;
+            if (sbOrf) {
+              orfane.forEach(l => {
+                sbOrf.from('lezioni').update({
+                  student: dataNormFull.student, studente_id: dataNormFull.studentId || null, nuovo_iscritto: false,
+                }).eq('id', l.id).then(({ error }) => {
+                  if (error) console.warn('[FM] propagazione nuovo_iscritto error:', error.message);
+                });
+              });
+            }
+          }
+        }
+      }
+
       setLessons(p => p.map(l => l.id === data.id ? { ...l, ...dataNormFull } : l));
 
       // Write diretto su Supabase — non aspetta il debounce di fm_sync
@@ -9426,7 +9473,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             l.date === nextDate && l.hour === dataNormFull.hour &&
             (isColl(dataNormFull)
               ? (l.courseId && dataNormFull.courseId && l.courseId === dataNormFull.courseId)
-              : (l.student && dataNormFull.student && l.student === dataNormFull.student))
+              : stessaSerieIndividuale(l, dataNormFull))
           );
           if (!alreadyInState) {
             const nextLesson = {
@@ -9581,7 +9628,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             l.hour === lesson.hour &&
             (isColl(lesson)
               ? (l.courseId && lesson.courseId && l.courseId === lesson.courseId)
-              : (l.student  && lesson.student  && l.student  === lesson.student))
+              : stessaSerieIndividuale(l, lesson))
           );
           if (!alreadyExists) {
             const nextLesson = {
