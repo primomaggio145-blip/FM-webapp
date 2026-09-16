@@ -151,38 +151,99 @@
     da Supabase, garantendo che React usi sempre i dati reali e mai i dati demo.
   -->
 
+  <!-- ── Reload automatico ad ogni nuovo deploy rilevato ── -->
+  <script>
+    // Ricarica automaticamente la pagina quando un nuovo Service Worker prende il
+    // controllo, O quando il controllo periodico sotto rileva che uno dei moduli
+    // JS dell'app è cambiato sul repository. Senza questo, una scheda già aperta
+    // può continuare a girare con codice/dati della versione precedente per ore o
+    // giorni, con l'utente ignaro di usare una versione con bug già risolti nel codice.
+    // Il guard "reloading" evita loop: dopo il reload la pagina riparte già
+    // aggiornata, quindi i controlli successivi non rilevano più differenze.
+    //
+    // CRITICO: prima di ricaricare, attendo l'invio di qualunque modifica non ancora
+    // sincronizzata su Supabase (window.__FM_FLUSH__, esposto da fm_sync.js). Senza
+    // questo, un reload che arriva entro la finestra di debounce di una modifica
+    // (creazione lezione/allievo/brano/ecc.) la cancellava senza mai salvarla —
+    // il record sembrava sparire "da solo" al refresh successivo.
+    let reloading = false;
+    async function reloadDopoFlush() {
+      if (reloading) return;
+      reloading = true;
+      try {
+        if (window.__FM_FLUSH__) {
+          // Timeout di sicurezza: se la rete è lenta/assente non restiamo bloccati per sempre
+          await Promise.race([
+            window.__FM_FLUSH__(),
+            new Promise(resolve => setTimeout(resolve, 4000)),
+          ]);
+        }
+      } catch (e) { /* procedi comunque col reload */ }
+      window.location.reload();
+    }
+
+    // ── Controllo periodico nuovi deploy ──────────────────────────────────
+    // Ogni 3 minuti, richiede TUTTI i moduli JS dell'app con cache disattivata e
+    // confronta i rispettivi header Last-Modified/ETag con quelli letti al
+    // caricamento pagina. Se anche uno solo è cambiato, significa che è stato
+    // pubblicato un aggiornamento sul repository mentre la pagina era aperta:
+    // forza il reload (con flush) invece di lasciare l'utente su una versione
+    // obsoleta finché non chiude/riapre la scheda da solo.
+    (function() {
+      const MODULI_DA_CONTROLLARE = [
+        'fm_sync.js',
+        'app-core.js',
+        'app-dashboard.js',
+        'app-calendario.js',
+        'app-views-a.js',
+        'app-views-b.js',
+        'app-root.js',
+        'app-gcal.js',
+      ];
+      const versioniIniziali = {};
+      let primaLettura = true;
+
+      async function leggiVersione(file) {
+        try {
+          const res = await fetch(file, { method: 'HEAD', cache: 'no-store' });
+          return res.headers.get('last-modified') || res.headers.get('etag') || null;
+        } catch (e) { return null; }
+      }
+
+      async function controllaAggiornamenti() {
+        const risultati = await Promise.all(MODULI_DA_CONTROLLARE.map(leggiVersione));
+        if (primaLettura) {
+          MODULI_DA_CONTROLLARE.forEach((file, i) => { versioniIniziali[file] = risultati[i]; });
+          primaLettura = false;
+          return;
+        }
+        for (let i = 0; i < MODULI_DA_CONTROLLARE.length; i++) {
+          const file = MODULI_DA_CONTROLLARE[i];
+          const vAttuale = risultati[i];
+          // Se la rete non risponde per questo file (null), non consideriamo un
+          // aggiornamento — evita falsi positivi durante un hiccup di connessione
+          if (vAttuale && versioniIniziali[file] && vAttuale !== versioniIniziali[file]) {
+            console.log('[FM] Nuova versione rilevata (' + file + ') — ricarico…');
+            reloadDopoFlush();
+            return;
+          }
+        }
+      }
+
+      // Prima lettura subito (registra la baseline), poi un controllo ogni 3 minuti
+      controllaAggiornamenti();
+      setInterval(controllaAggiornamenti, 3 * 60 * 1000);
+      // Controlla anche quando l'utente torna sulla scheda dopo averla lasciata in
+      // background (scenario tipico: tablet/telefono lasciato aperto per giorni)
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') controllaAggiornamenti();
+      });
+    })();
+  </script>
+
   <!-- ── Registrazione Service Worker per PWA ── -->
   <script>
     if ('serviceWorker' in navigator) {
-      // Ricarica automaticamente la pagina quando un nuovo Service Worker prende il
-      // controllo. Senza questo, dopo un deploy il nuovo SW viene installato e attivato
-      // "in background" ma la pagina già aperta continua a girare con codice/dati della
-      // versione precedente finché l'utente non fa un hard refresh manuale — ed è anche
-      // la causa più probabile dei dati vuoti su un refresh normale: se il cambio di
-      // controllo avviene A META' caricamento, le fetch in corso possono essere interrotte.
-      // Il guard "reloading" evita loop: dopo il reload la pagina riparte già con
-      // l'ultimo controller attivo, quindi non scatta un altro controllerchange subito dopo.
-      //
-      // CRITICO: prima di ricaricare, attendo l'invio di qualunque modifica non ancora
-      // sincronizzata su Supabase (window.__FM_FLUSH__, esposto da fm_sync.js). Senza
-      // questo, un reload che arriva entro la finestra di debounce di una modifica
-      // (creazione lezione/allievo/brano/ecc.) la cancellava senza mai salvarla —
-      // il record sembrava sparire "da solo" al refresh successivo.
-      let reloading = false;
-      async function reloadDopoFlush() {
-        if (reloading) return;
-        reloading = true;
-        try {
-          if (window.__FM_FLUSH__) {
-            // Timeout di sicurezza: se la rete è lenta/assente non restiamo bloccati per sempre
-            await Promise.race([
-              window.__FM_FLUSH__(),
-              new Promise(resolve => setTimeout(resolve, 4000)),
-            ]);
-          }
-        } catch (e) { /* procedi comunque col reload */ }
-        window.location.reload();
-      }
       navigator.serviceWorker.addEventListener('controllerchange', reloadDopoFlush);
       // Segnale esplicito ridondante già inviato da service-worker.js su 'activate'
       navigator.serviceWorker.addEventListener('message', function(event) {
