@@ -4631,8 +4631,22 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
                     const sb = window.supabaseClient; if (!sb) return;
                     const allStu = (window.__FM_DATA__&&window.__FM_DATA__.students) || [];
                     const allCourses = (window.__FM_DATA__&&window.__FM_DATA__.courses) || [];
+                    const allDocenti = (window.__FM_DATA__&&window.__FM_DATA__.docenti) || [];
                     if (allStu.length === 0) { alert('⚠️ Nessun allievo trovato in window.__FM_DATA__.students.\nProva a ricaricare la pagina e riprova.'); return; }
                     const annoInt = parseInt(annoAttivo) || annoAttivo;
+                    // Risolve l'id del docente dal nome/teacherKey testuale dello studente (students.teacher):
+                    // senza questo, docente_id resterebbe null e la RLS "docente_legge_proprie_iscrizioni"
+                    // (che confronta docente_id) non farebbe mai vedere queste righe al docente.
+                    const trovaDocenteId = (nomeTeacher) => {
+                      if (!nomeTeacher) return null;
+                      const k = nomeTeacher.toLowerCase().trim();
+                      const d = allDocenti.find(d => {
+                        const tk = (d.teacherKey||'').toLowerCase().trim();
+                        const nm = (d.nome||'').toLowerCase().trim();
+                        return tk===k || nm===k || tk.includes(k) || k.includes(tk) || nm.includes(k) || k.includes(nm);
+                      });
+                      return d ? d.id : null;
+                    };
                     const righe = allStu.filter(s=>s.status!=='inattivo').map(s => {
                       const corso = allCourses.find(c=>String(c.id)===String(s.courseId)||c.name===s.course);
                       return {
@@ -4640,7 +4654,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
                         anno_inizio: annoInt,
                         corso_id: corso?String(corso.id):null,
                         corso_nome: corso?(corso.name||corso.nome):(s.course||''),
-                        docente_id: null,
+                        docente_id: trovaDocenteId(s.teacher||s.docente||''),
                         docente_nome: s.teacher||s.docente||'',
                         data_iscrizione: yyyymmdd(new Date()),
                       };
