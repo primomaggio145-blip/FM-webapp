@@ -3,7 +3,7 @@
 //   - app.js, fm_sync.js, supabase_integration.js → NETWORK-FIRST (sempre freschi)
 //   - webapp.html, manifest.json, icone          → NETWORK-FIRST con fallback cache
 //   - API Supabase, font Google (googleapis/gstatic) → solo network, mai cache
-const CACHE_VERSION = 'fm-v11'; // v11: ignora dominio/percorso mandato dal server (residuo pre-migrazione a www.fmspettacolo.it), usa sempre la base reale corrente
+const CACHE_VERSION = 'fm-v12'; // v12: fix TypeError 'put' su richieste HEAD (controllo periodico aggiornamenti)
 
 // File pre-cachati all'install (solo per fallback offline)
 const CACHE_STATIC = [
@@ -66,7 +66,10 @@ self.addEventListener('fetch', event => {
           // Salva in cache solo le versioni SENZA cache-busting (?v=...): quelle
           // versionate sono uniche ad ogni caricamento pagina e non verrebbero mai
           // ritrovate in cache — salvarle farebbe solo crescere lo storage a vuoto.
-          if (response && response.status === 200 && !url.search) {
+          // La Cache API accetta SOLO richieste GET: le HEAD del controllo periodico
+          // di aggiornamento (webapp.html) andrebbero a schiantarsi su c.put() con
+          // "Request method 'HEAD' is unsupported" se non escluse qui.
+          if (response && response.status === 200 && !url.search && event.request.method === 'GET') {
             const clone = response.clone();
             caches.open(CACHE_VERSION).then(c => c.put(event.request, clone));
           }
@@ -81,7 +84,7 @@ self.addEventListener('fetch', event => {
   event.respondWith(
     fetch(event.request, { cache: 'no-store' })
       .then(response => {
-        if (response && response.status === 200 && response.type !== 'opaque') {
+        if (response && response.status === 200 && response.type !== 'opaque' && event.request.method === 'GET') {
           const clone = response.clone();
           caches.open(CACHE_VERSION).then(c => c.put(event.request, clone));
         }
