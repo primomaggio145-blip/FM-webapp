@@ -11310,7 +11310,31 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       setPrefillEntrata(null);
       closeModal();
     };
-    const handleEditQ  = d => { setEntrate(p=>p.map(x=>x.id===d.id?{...x,...d, dataPagamento: d.data||d.dataPagamento||x.dataPagamento}:x)); closeModal(); };
+    const handleEditQ  = async d => {
+      const originale = entrate.find(x=>x.id===d.id);
+      const anno = d.anno || (originale && originale.anno) || new Date().getFullYear();
+      const dataPagamento = d.data || d.dataPagamento || (originale && originale.dataPagamento) || '';
+      const avevaRicevuta = !!(originale && !originale.noRicevuta && originale.numRicevuta);
+      let numRicevuta = (originale && originale.numRicevuta) || '';
+      if (d.noRicevuta) {
+        // "Emetti ricevuta" disattivato in modifica: nessuna ricevuta
+        numRicevuta = '';
+      } else if (!avevaRicevuta) {
+        // Prima non prevedeva ricevuta, ora sì: assegna un nuovo numero progressivo
+        const contatoriRicevute = config.contatoriRicevute || {};
+        const annoKey = String(anno);
+        const progressivo = contatoriRicevute[annoKey] ?? config.progressivoRicevute ?? 1;
+        numRicevuta = String(progressivo).padStart(3,"0") + "/" + anno;
+        const nuoviContatori = {...contatoriRicevute, [annoKey]: progressivo + 1};
+        setConfig(p=>({...p, contatoriRicevute: nuoviContatori, progressivoRicevute: progressivo + 1}));
+        try {
+          const sb = window.supabaseClient;
+          if (sb) await sb.from('sito_config').upsert({chiave:'contatoriRicevute', valore: JSON.stringify(nuoviContatori)});
+        } catch(e) { console.warn('[FM] save contatori:', e?.message); }
+      }
+      setEntrate(p=>p.map(x=>x.id===d.id?{...x,...d, numRicevuta, noRicevuta: d.noRicevuta||false, dataPagamento}:x));
+      closeModal();
+    };
     const handleDelQ   = () => { setEntrate(p=>p.filter(x=>x.id!==_optionalChain([selQuota, 'optionalAccess', _61 => _61.id]))); closeModal(); };
   
     // Stats ribbon

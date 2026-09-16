@@ -144,6 +144,7 @@
       metodo: r.metodo || 'Contanti', categoria: 'quota', desc: r.note || '',
       stato: sm[r.stato] || r.stato || 'attesa',
       dataPagamento: r.data_pagamento || '', numRicevuta: r.num_ricevuta || '',
+      noRicevuta: r.no_ricevuta === true,
     };
   }
   function adaptSpesa(r) {
@@ -342,7 +343,7 @@
         stato: smToDB[q.stato] || q.stato || 'da pagare',
         data_pagamento: q.dataPagamento || q.data || null,
         num_ricevuta: q.numRicevuta || '', metodo: q.metodo || 'Contanti',
-        note: q.note || '',
+        note: q.note || '', no_ricevuta: q.noRicevuta === true,
       };
     },
     spese(s) {
