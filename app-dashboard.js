@@ -1963,7 +1963,108 @@ const ReportLezioniCard = ({ lessons, students, config, anniScolastici, onNaviga
   );
 };
 
-const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, notifiche:propNotifiche, setNotifiche:propSetNotifiche, panels:propPanels, setPanels:propSetPanels, iscrizioniAnno:propIscrizioniAnnoDash, onQuickAction }) => {
+// ─── SELETTORE TEMA (bambino/teen/adulto) — anteprima dal vivo + salvataggio ──
+// La scelta è SEMPRE per-dispositivo (mai sincronizzata su Supabase): vedi
+// applyTema/getTemaDispositivo in app-core.js.
+const TEMA_CARDS = [
+  { id:'bambino', label:'🧒 Bambino',  desc:'Colori vivaci, pulsanti grandi',      swatch:['#ff6f61','#7e57c2','#fff9e6'] },
+  { id:'teen',    label:'🧑 Teenager', desc:'Sfondo personalizzabile',             swatch:['#1a4fa0','#0f172a','#f8fafc'] },
+  { id:'adulto',  label:'👤 Adulto',   desc:'Aspetto standard, come oggi',         swatch:['#1a4fa0','#f4f6fa','#ffffff'] },
+];
+const SelettoreTemaModal = ({ temaAttuale, sfondoTeenAttuale, onPreview, onSalva, onAnnulla }) => {
+  const [temaBozza, setTemaBozza] = useState(temaAttuale || 'adulto');
+  const [sfondoBozza, setSfondoBozza] = useState(sfondoTeenAttuale || { tipo:'preset', valore:'blu' });
+  const [errImg, setErrImg] = useState('');
+
+  const scegli = (id) => { setTemaBozza(id); onPreview(id); };
+
+  const applicaSfondoLive = (sfondo) => {
+    setSfondoBozza(sfondo);
+    const layer = document.getElementById('fm-sfondo-teen-layer');
+    if (!layer) return;
+    if (sfondo.tipo === 'immagine') layer.style.background = `url(${sfondo.valore}) center/cover no-repeat`;
+    else if (sfondo.tipo === 'preset') layer.style.background = (TEMA_SFONDO_PRESET.find(p=>p.id===sfondo.valore)||{}).css || '';
+    else layer.style.background = sfondo.valore;
+  };
+
+  const onFileImg = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setErrImg('');
+    if (file.size > 900*1024) { setErrImg('Immagine troppo grande (max ~900KB): scegline una più leggera.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => applicaSfondoLive({ tipo:'immagine', valore: reader.result });
+    reader.readAsDataURL(file);
+  };
+
+  const annullaETorna = () => { onPreview(temaAttuale); onAnnulla(); };
+
+  return (
+    React.createElement('div', { style:{position:'fixed',inset:0,zIndex:9999,background:'rgba(0,0,0,0.5)',
+      display:'flex',alignItems:'center',justifyContent:'center',padding:16}, onClick:annullaETorna }
+      , React.createElement('div', { style:{background:C.surface,borderRadius:16,padding:24,maxWidth:520,width:'100%',
+          maxHeight:'90vh',overflowY:'auto'}, onClick:e=>e.stopPropagation() }
+        , React.createElement('h3', {style:{fontSize:18,fontWeight:700,marginBottom:4}}, '🎨 Scegli come vedere l\'app')
+        , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginBottom:16}}
+          , 'La scelta vale solo su questo dispositivo. Premi "Prova" per vedere l\'anteprima dal vivo prima di salvare.')
+        , React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:10,marginBottom:16}}
+          , TEMA_CARDS.map(card => React.createElement('div', { key:card.id,
+              style:{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:12,
+                border:`2px solid ${temaBozza===card.id?C.gold:C.border}`,cursor:'pointer',
+                background:temaBozza===card.id?C.goldBg:'transparent'},
+              onClick:()=>scegli(card.id) }
+            , React.createElement('div', {style:{display:'flex',gap:4}}
+              , card.swatch.map((hex,i) => React.createElement('div', {key:i, style:{width:16,height:16,borderRadius:4,background:hex,border:'1px solid rgba(0,0,0,0.1)'}}))
+            )
+            , React.createElement('div', {style:{flex:1}}
+              , React.createElement('div', {style:{fontSize:14,fontWeight:600}}, card.label)
+              , React.createElement('div', {style:{fontSize:12,color:C.textMuted}}, card.desc)
+            )
+            , temaBozza===card.id && React.createElement('span', {style:{fontSize:11,fontWeight:700,color:C.gold}}, '✓ IN ANTEPRIMA')
+          ))
+        )
+        , temaBozza === 'teen' && React.createElement('div', {style:{marginBottom:16,padding:14,borderRadius:12,background:C.bg,border:`1px solid ${C.border}`}}
+          , React.createElement('div', {style:{fontSize:13,fontWeight:600,marginBottom:10}}, 'Sfondo personalizzato')
+          , React.createElement('div', {style:{display:'flex',flexWrap:'wrap',gap:8,marginBottom:12}}
+            , TEMA_SFONDO_PRESET.map(p => React.createElement('div', {key:p.id,
+                onClick:()=>applicaSfondoLive({tipo:'preset', valore:p.id}),
+                title:p.label,
+                style:{width:44,height:44,borderRadius:8,background:p.css,cursor:'pointer',
+                  border: sfondoBozza.tipo==='preset'&&sfondoBozza.valore===p.id ? `3px solid ${C.gold}` : '2px solid transparent'}
+              }))
+          )
+          , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}
+            , React.createElement('label', {style:{fontSize:12,color:C.textMuted,display:'flex',alignItems:'center',gap:6}}
+              , 'Colore libero:'
+              , React.createElement('input', {type:'color',
+                  value: sfondoBozza.tipo==='colore'?sfondoBozza.valore:'#1a4fa0',
+                  onChange:e=>applicaSfondoLive({tipo:'colore', valore:e.target.value})})
+            )
+            , React.createElement('label', {style:{fontSize:12,color:C.textMuted,cursor:'pointer',
+                padding:'6px 12px',border:`1px solid ${C.border}`,borderRadius:8}}
+              , '📷 Carica immagine'
+              , React.createElement('input', {type:'file', accept:'image/*', style:{display:'none'}, onChange:onFileImg})
+            )
+          )
+          , errImg && React.createElement('div', {style:{fontSize:12,color:C.red,marginTop:8}}, errImg)
+        )
+        , React.createElement('div', {style:{display:'flex',gap:10,justifyContent:'flex-end'}}
+          , React.createElement('button', {onClick:annullaETorna,
+              style:{padding:'9px 18px',borderRadius:9,border:`1px solid ${C.border}`,background:'none',
+                color:C.textMuted,fontSize:13,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
+            , 'Annulla')
+          , React.createElement('button', {onClick:()=>onSalva(temaBozza, temaBozza==='teen'?sfondoBozza:null),
+              style:{padding:'9px 18px',borderRadius:9,border:'none',background:C.gold,
+                color:'#fff',fontSize:13,fontWeight:600,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
+            , 'Salva su questo dispositivo')
+        )
+      )
+    )
+  );
+};
+
+const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, notifiche:propNotifiche, setNotifiche:propSetNotifiche, panels:propPanels, setPanels:propSetPanels, iscrizioniAnno:propIscrizioniAnnoDash, onQuickAction, temaAttivo, setTemaAttivoPreview, sfondoTeen, salvaTemaDispositivo }) => {
+  const [selettoreTemaAperto, setSelettoreTemaAperto] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Clock live: aggiorna ogni 60s per far scorrere la progressbar e la timeline
   const [dashNow, setDashNow] = useState(new Date());
@@ -2384,11 +2485,23 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 
             /* ── RIGA 1: KPI ── */
             , React.createElement('div', null
-              /* Pulsante mostra/nascondi importi */
-              , (ruolo === "admin" || ruolo === "allievo" || ruolo === "docente") && React.createElement('div', {
-                  style:{display:"flex",justifyContent:"flex-end",marginBottom:8}
+              /* Pulsante mostra/nascondi importi + Cambia vista */
+              , React.createElement('div', {
+                  style:{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:8}
                 }
                 , React.createElement('button', {
+                    onClick: ()=>setSelettoreTemaAperto(true),
+                    title: "Scegli come vedere l'app su questo dispositivo",
+                    style:{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",
+                      background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,
+                      cursor:"pointer",fontFamily:"'Open Sans',sans-serif",fontSize:11,
+                      color:C.textMuted,transition:"all 0.15s"},
+                    onMouseEnter:e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;},
+                    onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}
+                  }
+                  , "🎨 Cambia vista"
+                )
+                , (ruolo === "admin" || ruolo === "allievo" || ruolo === "docente") && React.createElement('button', {
                     onClick: ()=>setShowAmounts(p=>!p),
                     title: showAmounts ? "Nascondi importi" : "Mostra importi",
                     style:{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",
@@ -2970,6 +3083,14 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
           ruolo: ruolo,
           onRuolo: function(){}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2391}}
         )
+
+        , selettoreTemaAperto && React.createElement(SelettoreTemaModal, {
+          temaAttuale: temaAttivo,
+          sfondoTeenAttuale: sfondoTeen,
+          onPreview: setTemaAttivoPreview,
+          onSalva: (tema, sfondo) => { salvaTemaDispositivo(tema, sfondo); setSelettoreTemaAperto(false); },
+          onAnnulla: () => setSelettoreTemaAperto(false),
+        })
       )
     );
 };

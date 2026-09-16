@@ -38,6 +38,39 @@ function App() {
       _forceAccentRerender(n => n+1);
     }
   }, [sharedConfig.accentColor]);
+
+  // ── Tema per fascia d'età (bambino/teen/adulto) ────────────────────────
+  // Default: se l'utente loggato è un allievo con data di nascita nota, la
+  // fascia d'età calcolata da quella; altrimenti 'adulto'. Una scelta salvata
+  // su QUESTO dispositivo (dal pulsante "Cambia vista" in Dashboard) ha
+  // sempre la precedenza sul default automatico — vedi TEMA_STORAGE_KEY.
+  const [temaAttivo, setTemaAttivo] = useState(() => getTemaDispositivo() || 'adulto');
+  const [sfondoTeen, setSfondoTeenState] = useState(() => getSfondoTeenDispositivo());
+  const [, _forceTemaRerender] = useState(0);
+  useEffect(() => {
+    const scelto = getTemaDispositivo();
+    if (scelto) { setTemaAttivo(scelto); return; }
+    if (user && user.ruolo === 'allievo') {
+      const stud = (sharedStudents||[]).find(s => String(s.id) === String(user.allievoId||user.studentId));
+      if (stud && stud.birthdate) setTemaAttivo(fasciaEtaDefault(stud.birthdate));
+    }
+  }, [user, sharedStudents]);
+  useEffect(() => {
+    applyTema(temaAttivo);
+    // Tornare ad 'adulto' non deve cancellare il colore accento personalizzato
+    // dalla scuola in Impostazioni — TEMA_ADULTO è uno snapshot dei colori di
+    // DEFAULT, presi prima di qualunque personalizzazione.
+    if (temaAttivo === 'adulto' && sharedConfig.accentColor) applyAccentColor(sharedConfig.accentColor);
+    if (typeof document !== 'undefined') document.body.setAttribute('data-fm-tema', temaAttivo);
+    _forceTemaRerender(n => n+1);
+  }, [temaAttivo, sharedConfig.accentColor]);
+  // Salva la scelta (tema + eventuale sfondo teen) SOLO su questo dispositivo —
+  // mai su Supabase — chiamata dal pulsante "Cambia vista" in Dashboard.
+  const salvaTemaDispositivo = (nomeTema, sfondo) => {
+    setTemaDispositivo(nomeTema);
+    setTemaAttivo(nomeTema);
+    if (nomeTema === 'teen') { setSfondoTeenDispositivo(sfondo||null); setSfondoTeenState(sfondo||null); }
+  };
   // Esponi config globalmente per componenti che non ricevono la prop (es. WeekCalSala)
   React.useEffect(() => { window.__FM_CONFIG__ = sharedConfig; }, [sharedConfig]);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
@@ -763,7 +796,7 @@ function App() {
   // ad ogni render di App (ogni cambio stato), causando il reset dei setInterval interni
   const renderCurrentView = () => {
     switch(view) {
-      case 'dashboard':   return React.createElement(DashboardView, { appUser: user, onNavigate: setView, config: sharedConfig, setConfig: setSharedConfig, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, docenti: sharedDocenti, lessons: sharedLessons, concerti: sharedConcerti, richieste: sharedRichieste, notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, panels: sharedPanels, setPanels: setSharedPanels, iscrizioniAnno: sharedIscrizioniAnno, onQuickAction: (action)=>setSharedQuickAction(action)});
+      case 'dashboard':   return React.createElement(DashboardView, { appUser: user, onNavigate: setView, config: sharedConfig, setConfig: setSharedConfig, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, docenti: sharedDocenti, lessons: sharedLessons, concerti: sharedConcerti, richieste: sharedRichieste, notifiche: sharedNotifiche, setNotifiche: setSharedNotifiche, panels: sharedPanels, setPanels: setSharedPanels, iscrizioniAnno: sharedIscrizioniAnno, onQuickAction: (action)=>setSharedQuickAction(action), temaAttivo: temaAttivo, setTemaAttivoPreview: setTemaAttivo, sfondoTeen: sfondoTeen, salvaTemaDispositivo: salvaTemaDispositivo});
       case 'allievi':     return React.createElement(AllieviView, { students: sharedStudents, setStudents: setSharedStudents, courses: sharedCourses, setCourses: setSharedCourses, lessons: sharedLessons, setLessons: setSharedLessons, entrate: sharedEntrate, setEntrate: setSharedEntrate, annoInizioAttivo: sharedConfig.annoInizioAttivo, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, iscrizioniAnno: sharedIscrizioniAnno, setIscrizioniAnno: setSharedIscrizioniAnno, anniScolastici: sharedAnniScolastici, gruppi: sharedGruppi});
       case 'docenti':     return React.createElement(DocentiView, { students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, setDocenti: setSharedDocenti, courses: sharedCourses, userRuolo: user?.ruolo||"admin", appUser: user, annoInizioAttivo: sharedConfig.annoInizioAttivo, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), iscrizioniAnno: sharedIscrizioniAnno, anniScolastici: sharedAnniScolastici, spese: sharedSpese});
       case 'corsi':       return React.createElement(CorsiView, { courses: sharedCourses, setCourses: setSharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, lessons: sharedLessons, userRuolo: user?.ruolo||"admin", appUser: user, iscrizioniAnno: sharedIscrizioniAnno, annoInizioAttivo: sharedConfig.annoInizioAttivo, anniScolastici: sharedAnniScolastici, gruppi: sharedGruppi, setGruppi: setSharedGruppi});
@@ -824,9 +857,17 @@ function App() {
   return (
     React.createElement(React.Fragment, null
       , React.createElement('style', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10785}}, G)
+      , React.createElement('style', {__self: this}, buildTemaCSS(temaAttivo))
+      , temaAttivo === 'teen' && React.createElement('div', { id:"fm-sfondo-teen-layer", style: {
+          position:"fixed", inset:0, zIndex:-1, display:"none",
+          background: sfondoTeen && sfondoTeen.tipo==='immagine' ? `url(${sfondoTeen.valore}) center/cover no-repeat`
+                    : sfondoTeen && sfondoTeen.tipo==='preset' ? (TEMA_SFONDO_PRESET.find(p=>p.id===sfondoTeen.valore)||{}).css
+                    : sfondoTeen && sfondoTeen.tipo==='colore' ? sfondoTeen.valore
+                    : TEMA_SFONDO_PRESET[0].css,
+        }})
       , React.createElement('div', { style: {display:"flex",height:"100dvh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
         , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), config: sharedConfig, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
-        , React.createElement('div', { key: view, className: "main-scroll", style: {flex:1,overflow:"auto",background:C.bg,animation:"fadeIn 0.25s ease",
+        , React.createElement('div', { key: view, className: "main-scroll", style: {flex:1,overflow:"auto",background:temaAttivo==='teen'?'transparent':C.bg,animation:"fadeIn 0.25s ease",
           paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 4px)",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10788}}
           , renderCurrentView()
         )

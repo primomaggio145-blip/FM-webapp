@@ -56,6 +56,112 @@ const applyAccentColor = (hex) => {
   C.sidebarActive = _shadeHex(hex, -22);
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// TEMA PER FASCIA D'ETÀ — bambino / teenager / adulto
+// Stesso identico principio di applyAccentColor: si muta C (stesso oggetto
+// condiviso, mai riassegnato) e si forza un re-render dal componente App.
+// La scelta è SEMPRE per-dispositivo (localStorage), MAI sincronizzata su
+// Supabase: un genitore che usa il telefono del figlio può passare a "adulto"
+// su quel dispositivo senza toccare l'account, e viceversa.
+// ═══════════════════════════════════════════════════════════════════════════════
+const TEMA_STORAGE_KEY = 'fm_tema_dispositivo';
+const TEMA_SFONDO_TEEN_KEY = 'fm_sfondo_teen_dispositivo';
+
+// Snapshot del tema "adulto" = esattamente i valori attuali di C, presi PRIMA
+// di qualunque mutazione — permette di tornare all'aspetto originale in ogni momento.
+const TEMA_ADULTO = { ...C };
+
+const TEMA_BAMBINO = {
+  bg:"#fff9e6", surface:"#ffffff", surfaceHover:"#fff3cc", surface2:"#ffedb3",
+  border:"#ffd54f", borderHover:"#ffca28",
+  gold:"#ff6f61", goldDim:"#e2574a", goldBg:"#ffe8e5", goldLight:"#ff8a7a",
+  text:"#3d2b1f", textMuted:"#8a6a52", textDim:"#b39a86",
+  green:"#2e9e5b", greenBg:"#eafff1", greenBorder:"#a8f0c6",
+  red:"#e5484d",  redBg:"#fff0f0",   redBorder:"#ffb3b5",
+  blue:"#42a5f5", blueBg:"#e3f2fd",  blueBorder:"#90caf9",
+  orange:"#ff9800",orangeBg:"#fff3e0",orangeBorder:"#ffcc80",
+  purple:"#ab47bc",purpleBg:"#f3e5f5",purpleBorder:"#e1bee7",
+  teal:"#26c6da", tealBg:"#e0f7fa",  tealBorder:"#80deea",
+  orange2:"#ffb300", orange2Bg:"#fff8e1", orange2Border:"#ffe082",
+  sidebar:"#7e57c2", sidebarActive:"#5e35b1", sidebarText:"#ffffff", sidebarActiveTxt:"#ffffff",
+};
+
+// Il teen mantiene una palette leggibile e "adulta" nei contrasti — la parte
+// davvero personalizzabile per loro è lo SFONDO (vedi TEMA_SFONDO_PRESET sotto
+// e applyTema()), non i colori dei componenti.
+const TEMA_TEEN = { ...TEMA_ADULTO };
+
+const TEMA_PALETTE = { adulto: TEMA_ADULTO, bambino: TEMA_BAMBINO, teen: TEMA_TEEN };
+
+// Preset di sfondo per i teenager (oltre alla possibilità di caricare un'immagine propria)
+const TEMA_SFONDO_PRESET = [
+  { id:'blu',      label:'Blu notte',    css:'linear-gradient(160deg,#1e293b,#0f172a)' },
+  { id:'tramonto', label:'Tramonto',     css:'linear-gradient(160deg,#ff9a8b,#ff6a88,#a86bd1)' },
+  { id:'oceano',   label:'Oceano',       css:'linear-gradient(160deg,#0ea5e9,#0369a1)' },
+  { id:'foresta',  label:'Foresta',      css:'linear-gradient(160deg,#22c55e,#166534)' },
+  { id:'neon',     label:'Neon',         css:'linear-gradient(160deg,#f72585,#7209b7,#3a0ca3)' },
+  { id:'chiaro',   label:'Chiaro',       css:'linear-gradient(160deg,#f8fafc,#e2e8f0)' },
+];
+
+// Applica un tema per età: muta C esattamente come applyAccentColor(), quindi
+// chi chiama deve SEMPRE forzare un re-render subito dopo (mutare l'oggetto
+// da solo non fa ripartire React).
+const applyTema = (nomeTema) => {
+  const palette = TEMA_PALETTE[nomeTema] || TEMA_ADULTO;
+  Object.assign(C, palette);
+};
+
+// Calcola la fascia d'età di default da usare per un allievo, in base alla
+// data di nascita. Ritorna 'adulto' se la data manca o non è valida (mai
+// bloccare/rompere l'app per un dato assente).
+const fasciaEtaDefault = (birthdate) => {
+  if (!birthdate) return 'adulto';
+  const eta = age(birthdate);
+  if (typeof eta !== 'number') return 'adulto';
+  if (eta <= 10) return 'bambino';
+  if (eta <= 17) return 'teen';
+  return 'adulto';
+};
+
+// ── Persistenza per-dispositivo (mai su Supabase) ──────────────────────────
+const getTemaDispositivo = () => {
+  try { return localStorage.getItem(TEMA_STORAGE_KEY) || null; } catch(e) { return null; }
+};
+const setTemaDispositivo = (nomeTema) => {
+  try {
+    if (nomeTema) localStorage.setItem(TEMA_STORAGE_KEY, nomeTema);
+    else localStorage.removeItem(TEMA_STORAGE_KEY);
+  } catch(e) {}
+};
+const getSfondoTeenDispositivo = () => {
+  try {
+    const raw = localStorage.getItem(TEMA_SFONDO_TEEN_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+};
+const setSfondoTeenDispositivo = (sfondo) => {
+  try {
+    if (sfondo) localStorage.setItem(TEMA_SFONDO_TEEN_KEY, JSON.stringify(sfondo));
+    else localStorage.removeItem(TEMA_SFONDO_TEEN_KEY);
+  } catch(e) { /* immagine troppo grande per localStorage: ignorata silenziosamente,
+                  chi chiama (SelettoreTemaModal) mostra già un avviso preventivo */ }
+};
+
+// CSS extra per il tema bambino (testo/pulsanti più grandi, angoli più morbidi) e
+// per il layer di sfondo del tema teen. Tenuto SEPARATO dalla stringa G (il resto
+// del CSS globale dell'app) per poterlo rigenerare ad ogni cambio tema senza dover
+// toccare gli 8 punti sparsi nei vari file che iniettano G.
+const buildTemaCSS = (nomeTema) => `
+  [data-fm-tema="bambino"] { font-size: 108%; }
+  [data-fm-tema="bambino"] button, [data-fm-tema="bambino"] input, [data-fm-tema="bambino"] select,
+  [data-fm-tema="bambino"] .card, [data-fm-tema="bambino"] textarea {
+    border-radius: 16px !important;
+  }
+  [data-fm-tema="teen"] #fm-sfondo-teen-layer {
+    display: block !important;
+  }
+`;
+
 const G = `
   @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Libre+Baskerville:ital,wght@0,400;1,400&family=Open+Sans:wght@300;400;500;600&display=swap');
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
