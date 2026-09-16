@@ -2406,10 +2406,10 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               , ruolo==="docente" ? React.createElement(React.Fragment, null
                   , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni settimana",
                       value: _lessons.filter(function(l){return matchDocLezione(l) && l.attendance !== "recuperata";}).length,
-                      sub: "mie lezioni", hex: C.teal})
+                      sub: "mie lezioni", hex: C.teal, onClick: () => onNavigate('calendario')})
                   , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
                       value: (()=>{ const p=_lessons.filter(l=>matchDocLezione(l)&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0]; return p?new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}):"—"; })(),
-                      sub: "data più vicina", hex: C.gold})
+                      sub: "data più vicina", hex: C.gold, onClick: () => onNavigate('calendario')})
                   , React.createElement(KpiCard, { icon: "euro", label: "Compenso mese",
                       value: fmt((()=>{
                         const m=oggi.getMonth()+1, y=oggi.getFullYear();
@@ -2422,7 +2422,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                           : 0;
                         return compensoLezioni + altreCompetenze;
                       })()),
-                      sub: "mese corrente", hex: C.green, hideAmounts: !showAmounts})
+                      sub: "mese corrente", hex: C.green, hideAmounts: !showAmounts, onClick: () => onNavigate('calendario')})
                 )
               : ruolo==="allievo" ? React.createElement(React.Fragment, null
                   , (() => {
@@ -2469,24 +2469,24 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   })()
                   , React.createElement(KpiCard, { icon: "calendar", label: "Le mie lezioni",
                       value: (_lessons||[]).filter(l => matchLezioneAllievo(l) && l.attendance !== 'recuperata').length,
-                      sub: "questa settimana", hex: C.teal})
+                      sub: "questa settimana", hex: C.teal, onClick: () => onNavigate('calendario')})
                   , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
                       value: (()=>{
                         const p=(_lessons||[]).filter(l=>matchLezioneAllievo(l)&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0];
                         return p ? new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}) : "—";
                       })(),
-                      sub: "data più vicina", hex: C.gold})
+                      sub: "data più vicina", hex: C.gold, onClick: () => onNavigate('calendario')})
                 )
               : React.createElement(React.Fragment, null
                   , (() => {
                       // KPI cards configurabili — ordine salvato in panels.kpiOrder
                       const ALL_KPI = [
-                        { id:'allievi',  icon:"users",    label:"Allievi attivi",  value: allieviAttivi, sub: `${_studentsAnno.length} totali`, hex: C.gold },
-                        { id:'corsiIndividuali', icon:"music", label:"Corsi individuali attivi", value: corsiIndividualiAttivi, sub: "strumenti principali + extra", hex: C.blue },
-                        { id:'lezioni',  icon:"calendar", label:"Lezioni oggi",    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal },
-                        { id:'entrate',  icon:"up",       label:"Entrate mese",    value: fmt(entrMeseLiveLive), hex: C.green, trend:+8, hideAmounts:!showAmounts },
-                        { id:'uscite',   icon:"down",     label:"Uscite mese",     value: fmt(uscMeseLiveLive),  hex: C.red,   trend:+12, hideAmounts:!showAmounts },
-                        { id:'saldo',    icon:"chart",    label:`Saldo ${ANNO}`,   value: fmt(saldoAnnoLiveLive), hex: saldoAnnoLiveLive>=0?C.green:C.red, hideAmounts:!showAmounts },
+                        { id:'allievi',  icon:"users",    label:"Allievi attivi",  value: allieviAttivi, sub: `${_studentsAnno.length} totali`, hex: C.gold, nav:'allievi' },
+                        { id:'corsiIndividuali', icon:"music", label:"Corsi individuali attivi", value: corsiIndividualiAttivi, sub: "strumenti principali + extra", hex: C.blue, nav:'allievi' },
+                        { id:'lezioni',  icon:"calendar", label:"Lezioni oggi",    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal, nav:'calendario' },
+                        { id:'entrate',  icon:"up",       label:"Entrate mese",    value: fmt(entrMeseLiveLive), hex: C.green, trend:+8, hideAmounts:!showAmounts, nav:'contabilita' },
+                        { id:'uscite',   icon:"down",     label:"Uscite mese",     value: fmt(uscMeseLiveLive),  hex: C.red,   trend:+12, hideAmounts:!showAmounts, nav:'contabilita' },
+                        { id:'saldo',    icon:"chart",    label:`Saldo ${ANNO}`,   value: fmt(saldoAnnoLiveLive), hex: saldoAnnoLiveLive>=0?C.green:C.red, hideAmounts:!showAmounts, nav:'contabilita' },
                       ];
                       const kpiOrder = panels.kpiOrder && panels.kpiOrder.length > 0
                         ? panels.kpiOrder
@@ -2495,7 +2495,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                         .map(id => ALL_KPI.find(k=>k.id===id))
                         .filter(Boolean)
                         .concat(ALL_KPI.filter(k=>!kpiOrder.includes(k.id)));
-                      return sorted.map(k => React.createElement(KpiCard, { key:k.id, icon:k.icon, label:k.label, value:k.value, sub:k.sub, hex:k.hex, trend:k.trend, hideAmounts:k.hideAmounts }));
+                      return sorted.map(k => React.createElement(KpiCard, { key:k.id, icon:k.icon, label:k.label, value:k.value, sub:k.sub, hex:k.hex, trend:k.trend, hideAmounts:k.hideAmounts, onClick: () => onNavigate(k.nav) }));
                     })()
                 )
             )
