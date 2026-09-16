@@ -2845,7 +2845,7 @@ const supabaseUpsertConFallbackColonne = async (sb, table, row, { isUpdate=false
   return secondo;
 };
 
-const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV, iscrizioniAnno:propIscrizioniAnno, setIscrizioniAnno:propSetIscrizioniAnno, anniScolastici:propAnniScolasticiAV, gruppi:propGruppiAV }) => {
+const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, setLessons:propSetLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV, iscrizioniAnno:propIscrizioniAnno, setIscrizioniAnno:propSetIscrizioniAnno, anniScolastici:propAnniScolasticiAV, gruppi:propGruppiAV }) => {
   const _ruoloAV = propUserRuoloAV || "admin";
   const _nomeAV  = (_appUserAV && _appUserAV.nome) || "";
   const isMobile = useIsMobile();
@@ -2869,12 +2869,15 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const courses     = _nullishCoalesce(propCourses, () => ( _courses));
   const setCourses  = _nullishCoalesce(propSetCourses, () => ( _setCourses));
   const lessons     = _nullishCoalesce(propLessons, () => ( []));
+  const setLessons  = _nullishCoalesce(propSetLessons, () => ( (()=>{})));
   const entrate     = _nullishCoalesce(propEntrate, () => ( []));
   const setEntrate  = _nullishCoalesce(propSetEntrate, () => ( (()=>{})));
   const [view,     setView]     = useState(_ruoloAV==="allievo" ? "detail" : "list");
   const [selected, setSelected] = useState(_ruoloAV==="allievo" ? (students[0]||null) : null);
   const [modal,    setModal]    = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  // Riepilogo primo pagamento mostrato obbligatoriamente dopo la creazione di un nuovo allievo
+  const [prorationInfo, setProrationInfo] = useState(null);
   const iscrizioniAnno = propIscrizioniAnno || [];
   const setIscrizioniAnno = propSetIscrizioniAnno || (()=>{});
 
@@ -3034,6 +3037,68 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             }
           } catch(e) { console.warn('[FM] auto-iscrizione error:', e?.message); }
         }
+
+        // ── Riepilogo primo pagamento (proration) ──────────────────────────────
+        // Cerca lezioni individuali già fissate a calendario che combaciano per NOME col nuovo
+        // allievo (create prima con "Nuovo iscritto" o digitando direttamente il nome), le
+        // collega al nuovo studentId, e calcola l'importo dovuto usando ESATTAMENTE la stessa
+        // funzione già usata dal Report lezioni individuali — nessuna nuova logica di conteggio.
+        try {
+          const nomeNuovo = (d.name||'').trim().toLowerCase();
+          let lessonsAggiornate = lessons;
+          let nLezioniCollegate = 0;
+          if (nomeNuovo) {
+            const orfane = (lessons||[]).filter(l =>
+              !isColl(l) && !l.studentId &&
+              (
+                (l.nuovoIscritto && (l.contactName||'').trim().toLowerCase() === nomeNuovo) ||
+                (!l.nuovoIscritto && (l.student||'').trim().toLowerCase() === nomeNuovo)
+              )
+            );
+            nLezioniCollegate = orfane.length;
+            if (orfane.length > 0) {
+              const orfaneIds = new Set(orfane.map(l=>l.id));
+              lessonsAggiornate = lessons.map(l => orfaneIds.has(l.id)
+                ? { ...l, student: d.name, studentId: newStudent.id, nuovoIscritto: false }
+                : l);
+              setLessons(lessonsAggiornate);
+              orfane.forEach(l => {
+                sb.from('lezioni').update({ student: d.name, studente_id: newStudent.id, nuovo_iscritto: false })
+                  .eq('id', l.id).then(({ error: eLez }) => { if (eLez) console.warn('[FM] collegamento lezione nuovo allievo error:', eLez.message); });
+              });
+            }
+          }
+          const enroll = d.enrollDate ? new Date(d.enrollDate+"T00:00:00") : new Date();
+          const dataInizioProration = enroll;
+          const dataFineProration   = new Date(enroll.getFullYear(), enroll.getMonth()+1, 0);
+          const nCorsiIndividuali = [d.instrument, ...(d.extraInstruments||[])].filter(Boolean).length;
+          const pacchettoStandard = nCorsiIndividuali * 4;
+          const monthlyFee = Number(d.monthlyFee)||0;
+          const importoIscrizioneCfg = (propConfig && propConfig.importoIscrizione != null) ? Number(propConfig.importoIscrizione) : 30;
+          const conteggioReale = nomeNuovo ? contaLezioniIndividualiReali(d.name, newStudent.id, lessonsAggiornate, dataInizioProration, dataFineProration) : null;
+          let lezioniContate, importoLezioni, extra, isStima;
+          if (conteggioReale != null && pacchettoStandard > 0) {
+            lezioniContate = conteggioReale;
+            importoLezioni = Math.round((monthlyFee / pacchettoStandard) * conteggioReale * 100) / 100;
+            extra = conteggioReale - pacchettoStandard;
+            isStima = false;
+          } else {
+            const giorniP = Math.round((dataFineProration - dataInizioProration)/86400000) + 1;
+            const settimaneP = Math.max(giorniP,1)/7;
+            lezioniContate = Math.floor(settimaneP) * nCorsiIndividuali;
+            importoLezioni = pacchettoStandard > 0 ? Math.round((monthlyFee / pacchettoStandard) * lezioniContate * 100) / 100 : monthlyFee;
+            extra = 0;
+            isStima = true;
+          }
+          setProrationInfo({
+            studentId: newStudent.id, studentName: d.name,
+            mese: enroll.getMonth()+1, anno: enroll.getFullYear(),
+            nCorsiIndividuali, pacchettoStandard, lezioniContate, extra,
+            monthlyFee, importoLezioni, importoIscrizione: importoIscrizioneCfg,
+            totale: Math.round((importoLezioni + importoIscrizioneCfg)*100)/100,
+            isStima, hasCollettivo: !!d.complementaryCourse, lezioniCollegate: nLezioniCollegate,
+          });
+        } catch(eProration) { console.warn('[FM] calcolo primo pagamento nuovo allievo error:', eProration?.message); }
       } else if (error) {
         console.warn('[FM] handleAddStudent error:', error.message);
         // Fallback offline
@@ -3046,6 +3111,50 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
     } finally {
       addStudentInFlightRef.current = false;
     }
+  };
+
+  // Registra il primo pagamento (quota prorata + iscrizione) dal modale di riepilogo —
+  // azione FACOLTATIVA: se l'admin non la usa, l'allievo resta comunque creato normalmente.
+  const registraPagamentoNuovoAllievo = async (info) => {
+    if (!info) return;
+    const MESI_NOME_PN = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+    const cfg = propConfig || {};
+    const contatoriRicevute = {...(cfg.contatoriRicevute||{})};
+    const annoKey = String(info.anno);
+    const genNumero = () => {
+      const progressivo = contatoriRicevute[annoKey] ?? cfg.progressivoRicevute ?? 1;
+      contatoriRicevute[annoKey] = progressivo + 1;
+      return String(progressivo).padStart(3,"0") + "/" + info.anno;
+    };
+    const oggi = yyyymmdd(new Date());
+    const nuoveEntrate = [];
+    if (info.importoLezioni > 0) {
+      nuoveEntrate.push({
+        id: uid(), studentId: info.studentId, studentName: info.studentName,
+        importo: info.importoLezioni, mese: info.mese, anno: info.anno,
+        categoria: 'quota', desc: `Quota ${MESI_NOME_PN[info.mese-1]} ${info.anno} (primo mese, prorata)`,
+        stato: 'pagato', data: oggi, dataPagamento: oggi,
+        metodo: 'Contanti', numRicevuta: genNumero(), noRicevuta: false,
+      });
+    }
+    if (info.importoIscrizione > 0) {
+      nuoveEntrate.push({
+        id: uid(), studentId: info.studentId, studentName: info.studentName,
+        importo: info.importoIscrizione, mese: info.mese, anno: info.anno,
+        categoria: 'iscrizione', desc: `Iscrizione ${info.anno}/${info.anno+1}`,
+        stato: 'pagato', data: oggi, dataPagamento: oggi,
+        metodo: 'Contanti', numRicevuta: genNumero(), noRicevuta: false,
+      });
+    }
+    if (nuoveEntrate.length > 0) {
+      setEntrate(p => [...p, ...nuoveEntrate]);
+      if (propSetConfigAV) propSetConfigAV(p => ({...p, contatoriRicevute, progressivoRicevute: contatoriRicevute[annoKey]}));
+      try {
+        const sb = window.supabaseClient;
+        if (sb) await sb.from('sito_config').upsert({chiave:'contatoriRicevute', valore: JSON.stringify(contatoriRicevute)});
+      } catch(e) { console.warn('[FM] save contatori (primo pagamento nuovo allievo):', e?.message); }
+    }
+    setProrationInfo(null);
   };
 
   const handleEditStudent = async (d) => {
@@ -3188,6 +3297,48 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         )
       )
       , _ruoloAV==="admin" && modal==="add" && React.createElement(Modal, { title: "Nuovo allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}, React.createElement(StudentForm, { onSave: handleAddStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}))
+
+      /* Riepilogo primo pagamento — mostrato SEMPRE dopo la creazione di un nuovo allievo */
+      , prorationInfo && React.createElement(Modal, { title: "Primo pagamento — riepilogo", onClose: ()=>setProrationInfo(null), wide: true }
+        , React.createElement('div', { style: {padding:24} }
+          , React.createElement('div', { style: {background:`${C.gold}10`,border:`1px solid ${C.goldDim}`,borderRadius:10,
+              padding:"12px 16px",marginBottom:16,fontSize:12.5,color:C.text,lineHeight:1.5,display:"flex",gap:8,alignItems:"flex-start"} }
+            , React.createElement(Ic, { n:"info", size:15, stroke:C.gold })
+            , React.createElement('span', null
+              , React.createElement('strong', null, "Il nome dell'allievo deve corrispondere ESATTAMENTE ")
+              , "al nome usato nelle lezioni già fissate a calendario (\"", prorationInfo.studentName, "\"), altrimenti il conteggio non può essere esatto."
+            )
+          )
+          , prorationInfo.isStima && React.createElement('div', { style: {background:C.orangeBg,border:`1px solid ${C.orangeBorder}`,borderRadius:10,
+              padding:"12px 16px",marginBottom:16,fontSize:12.5,color:C.orange,lineHeight:1.5} }
+            , "⚠️ Nessuna lezione trovata a calendario con questo nome: l'importo qui sotto è STIMATO in base al pacchetto standard, non un conteggio esatto. Verifica il nome oppure fissa prima le lezioni in Calendario."
+          )
+          , prorationInfo.lezioniCollegate > 0 && React.createElement('div', { style: {fontSize:12,color:C.green,marginBottom:12} }
+            , `✓ Collegate automaticamente ${prorationInfo.lezioniCollegate} lezioni già a calendario con questo nome.`
+          )
+          , React.createElement('div', { style: {fontSize:13,lineHeight:1.9,color:C.text} }
+            , React.createElement('div', null, `Corsi individuali: ${prorationInfo.nCorsiIndividuali} · pacchetto standard: ${prorationInfo.pacchettoStandard} lezioni/mese`)
+            , React.createElement('div', null, `Lezioni ${prorationInfo.isStima?"stimate":"reali"} nel mese di iscrizione: `, React.createElement('strong', null, prorationInfo.lezioniContate))
+            , prorationInfo.extra > 0 && React.createElement('div', { style: {color:C.gold,fontWeight:600,marginTop:4} }
+              , `🔶 Include ${prorationInfo.extra} lezione${prorationInfo.extra>1?"i":""} extra rispetto al pacchetto standard`
+            )
+            , prorationInfo.hasCollettivo && React.createElement('div', { style: {fontSize:11.5,color:C.textDim,marginTop:4} }
+              , "Il corso collettivo non è incluso in questo calcolo."
+            )
+            , React.createElement('div', { style: {marginTop:14,paddingTop:14,borderTop:`1px solid ${C.border}`} }
+              , React.createElement('div', { style: {display:"flex",justifyContent:"space-between"} }, React.createElement('span', null, "Quota lezioni (prorata)"), React.createElement('span', null, `€${prorationInfo.importoLezioni.toFixed(2)}`))
+              , React.createElement('div', { style: {display:"flex",justifyContent:"space-between"} }, React.createElement('span', null, "Iscrizione annuale"), React.createElement('span', null, `€${prorationInfo.importoIscrizione.toFixed(2)}`))
+              , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:16,marginTop:8,color:C.green} }, React.createElement('span', null, "Totale da incassare"), React.createElement('span', null, `€${prorationInfo.totale.toFixed(2)}`))
+            )
+          )
+          , React.createElement('div', { style: {display:"flex",gap:10,marginTop:22,justifyContent:"flex-end"} }
+            , React.createElement('button', { onClick: ()=>setProrationInfo(null),
+                style: {padding:"10px 18px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:C.textMuted,cursor:"pointer",fontSize:13,fontFamily:"'Open Sans',sans-serif"} }, "Chiudi senza registrare")
+            , React.createElement('button', { onClick: ()=>registraPagamentoNuovoAllievo(prorationInfo),
+                style: {padding:"10px 18px",borderRadius:8,border:"none",background:C.green,color:"#fff",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif"} }, "Registra pagamento (facoltativo)")
+          )
+        )
+      )
       , _ruoloAV==="admin" && modal==="edit" && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], role: propUserRuoloAV||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
       , _ruoloAV==="admin" && modal==="delete" && selected && React.createElement(ConfirmDelete, { label: selected.name, description: "Questa azione è irreversibile."   , onConfirm: handleDeleteStudent, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3911}})
 
