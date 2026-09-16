@@ -2862,7 +2862,17 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const _avTeacherKey = _avDocRecord ? (_avDocRecord.teacherKey||_avDocRecord.nome||_nomeAV) : _nomeAV;
   const _avAllievoId = (_appUserAV && _appUserAV.allievoId) || null;
   const students = _ruoloAV==="docente" && _avTeacherKey
-    ? _allStudents.filter(s=>{ const t=(s.teacher||"").toLowerCase().trim(); const k=_avTeacherKey.toLowerCase().trim(); return t===k||t.includes(k)||k.includes(t); })
+    ? _allStudents.filter(s=>{
+        const t=(s.teacher||"").toLowerCase().trim(); const k=_avTeacherKey.toLowerCase().trim();
+        if (t===k||t.includes(k)||k.includes(t)) return true;
+        // Include anche gli allievi iscritti a un corso collettivo/complementare
+        // insegnato da questo docente — non solo chi ha lui come insegnante di strumento.
+        if (s.complementaryCourse) {
+          const corso = (propCourses||[]).find(c => c.id === s.complementaryCourse);
+          if (corso && _avDocenteId && (corso.docenti||[]).map(String).includes(String(_avDocenteId))) return true;
+        }
+        return false;
+      })
     : _ruoloAV==="allievo" && (_avAllievoId||_nomeAV)
     ? (_avAllievoId ? _allStudents.filter(s=>String(s.id)===String(_avAllievoId)) : _allStudents.filter(s=>(s.name||s.nome||"").toLowerCase()===_nomeAV.toLowerCase()))
     : _allStudents;
