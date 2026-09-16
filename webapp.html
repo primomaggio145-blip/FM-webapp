@@ -179,6 +179,11 @@
           ]);
         }
       } catch (e) { /* procedi comunque col reload */ }
+      // Impedisce il popup nativo "Le modifiche potrebbero non essere salvate":
+      // riusa lo stesso flag già usato da app-root.js per il pulsante "Esci" —
+      // senza questo, il reload automatico (silenzioso per definizione) veniva
+      // interrotto da una conferma che l'utente non ha mai chiesto di vedere.
+      window.__FM_ALLOW_EXIT__ = true;
       window.location.reload();
     }
 
