@@ -2422,7 +2422,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                           : 0;
                         return compensoLezioni + altreCompetenze;
                       })()),
-                      sub: "mese corrente", hex: C.green, hideAmounts: !showAmounts, onClick: () => onNavigate('calendario')})
+                      sub: "mese corrente", hex: C.green, hideAmounts: !showAmounts, onClick: () => { onQuickAction && onQuickAction('showCompensi'); onNavigate('contabilita'); }})
                 )
               : ruolo==="allievo" ? React.createElement(React.Fragment, null
                   , (() => {

@@ -11406,6 +11406,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
   React.useEffect(()=>{
     if(quickAction==="addEntrata"){ setTab("entrate"); setModal("addq"); if(clearQuickAction)clearQuickAction(); }
     else if(quickAction==="addSpesa"){ setTab("spese"); setModal("add"); if(clearQuickAction)clearQuickAction(); }
+    else if(quickAction==="showCompensi"){ setTab("compensi"); if(clearQuickAction)clearQuickAction(); }
     else if(quickAction && quickAction.type === "apriEntrataExtra"){
       setTab("entrate");
       setPrefillEntrata({
