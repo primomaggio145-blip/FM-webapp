@@ -2914,7 +2914,17 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         .filter(i => String(i.annoInizio) === String(annoSel))
         .map(i => String(i.studentId))
     );
-    return students.filter(s => idIscritti.has(String(s.id)));
+    const filtered = students.filter(s => idIscritti.has(String(s.id)));
+    // Fail-safe per il DOCENTE: se ha allievi assegnati (teacherKey) ma NESSUNO risulta
+    // iscritto nell'anno selezionato — tipicamente perché la lettura di `iscrizioni_anno`
+    // è bloccata per il suo ruolo (RLS Supabase) o le iscrizioni non sono ancora state
+    // migrate per il nuovo anno — mostriamo comunque i suoi allievi invece di un elenco
+    // vuoto: è un ruolo di sola lettura, quindi il rischio di mostrare un allievo "di troppo"
+    // è preferibile al nascondere allievi reali del docente.
+    if (_ruoloAV === 'docente' && students.length > 0 && filtered.length === 0) {
+      return students;
+    }
+    return filtered;
   }, [students, iscrizioniAnno, annoSel, _ruoloAV]);
 
   // Allievi NON ancora iscritti nell'anno selezionato (candidati per import da anno precedente)
