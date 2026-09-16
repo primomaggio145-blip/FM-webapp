@@ -8372,28 +8372,34 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
   // (mai un corso collettivo come default, anche se ne ha assegnati più di uno) —
   // se non ha corsi individuali ma un solo corso collettivo, usa quello.
   const _defaultCorso = React.useMemo(() => {
+    const _allCorsi = window.__FM_DATA__?.courses||[];
+    const _allStudents = window.__FM_DATA__?.students||[];
+    let risultato = "";
     if (ruolo === "allievo") {
       const allievoId = appUser && appUser.allievoId;
       const nome = ((appUser && appUser.nome) || "").toLowerCase().trim();
-      const stu = (window.__FM_DATA__?.students||[]).find(s =>
+      const stu = _allStudents.find(s =>
         (allievoId != null && String(s.id) === String(allievoId)) ||
         (s.name||s.nome||"").toLowerCase().trim() === nome
       );
-      return (stu && stu.instrument && CORSI.includes(stu.instrument)) ? stu.instrument : "";
-    }
-    if (ruolo === "docente") {
+      risultato = (stu && stu.instrument && CORSI.includes(stu.instrument)) ? stu.instrument : "";
+      if (!risultato) console.warn('[FM] Biblioteca: filtro default allievo non impostato', { allievoId, nome, studenteTrovato: !!stu, strumento: stu && stu.instrument, corsiDisponibili: CORSI, totStudentiCaricati: _allStudents.length });
+    } else if (ruolo === "docente") {
       const docenteId = appUser && appUser.docenteId;
-      const mieiCorsi = (window.__FM_DATA__?.courses||[])
+      const mieiCorsi = _allCorsi
         .filter(c => docenteId != null && (c.docenti||[]).map(String).includes(String(docenteId)));
       const mieiIndividuali = mieiCorsi
         .filter(c => (c.type||c.tipo) === 'individuale')
         .map(c => c.name||c.nome)
         .filter(Boolean);
-      if (mieiIndividuali.length > 0) return mieiIndividuali[0];
-      const mieiNomi = mieiCorsi.map(c => c.name||c.nome).filter(Boolean);
-      return mieiNomi.length === 1 ? mieiNomi[0] : "";
+      if (mieiIndividuali.length > 0) risultato = mieiIndividuali[0];
+      else {
+        const mieiNomi = mieiCorsi.map(c => c.name||c.nome).filter(Boolean);
+        risultato = mieiNomi.length === 1 ? mieiNomi[0] : "";
+      }
+      if (!risultato) console.warn('[FM] Biblioteca: filtro default docente non impostato', { docenteId, corsiAssegnati: mieiCorsi.map(c=>({nome:c.name||c.nome, type:c.type||c.tipo, docenti:c.docenti})), totCorsiCaricati: _allCorsi.length });
     }
-    return "";
+    return risultato;
   }, []); // calcolato una sola volta all'apertura della scheda
 
   const [libri,      setLibri]      = useState([]);
