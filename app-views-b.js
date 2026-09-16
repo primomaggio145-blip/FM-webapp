@@ -488,6 +488,15 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const lezPrevM = selMese.m===1 ? 12 : selMese.m-1;
   const lezPrevY = selMese.m===1 ? selMese.y-1 : selMese.y;
   const lezPrev  = lezioniMese(selected, lezPrevM, lezPrevY);
+  // Lezioni di PROVA del mese selezionato: NON contano per il compenso (restano
+  // fuori da lezioniMese/stipendioMese), ma il docente deve comunque poterle
+  // vedere nel dettaglio del mese — evidenziate, per sapere quali sono.
+  const lezSelProva = lessons.filter(l => {
+    if(!isProva(l)) return false;
+    if(!matchTeacher(selected, l.teacher)) return false;
+    const [ly,lm] = (l.date||'').split("-").map(Number);
+    return ly===selMese.y && lm===selMese.m;
+  });
   const altreSel   = altreCompetenzeMese(selected, selMese.m, selMese.y);
   const altrePrev  = altreCompetenzeMese(selected, lezPrevM, lezPrevY);
   const totAltreSel  = altreSel.reduce((t,s)=>t+(Number(s.importo)||0), 0);
@@ -746,8 +755,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                 return (
                   React.createElement('div', { key: l.id, style: {display:"grid",gridTemplateColumns:"90px 1fr 1fr auto",gap:12,alignItems:"center",
                     padding:"12px 20px",borderBottom:i<lezSelAll.length-1?`1px solid ${C.border}`:"none",
-                    borderLeft:`3px solid ${isColl(l)?C.purple:"transparent"}`,
-                    background:isColl(l)?`${C.purple}06`:"transparent"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10318}}
+                    borderLeft:`3px solid ${isColl(l)?C.purple:isProva(l)?C.gold:"transparent"}`,
+                    background:isColl(l)?`${C.purple}06`:isProva(l)?`${C.gold}0c`:"transparent"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10318}}
                     , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10322}}
                       , React.createElement('div', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10323}}, new Date(l.date+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"}))
                       , React.createElement('div', { style: {fontSize:13,fontWeight:600,color:isColl(l)?C.purple:selected.colore}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10324}}, l.hour)
@@ -759,6 +768,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                         )
                         , isColl(l) && React.createElement('span', { style: {fontSize:10,background:C.purpleBg,color:C.purple,
                           border:`1px solid ${C.purpleBorder}`,borderRadius:4,padding:"1px 6px",letterSpacing:"0.05em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10331}}, "collettiva")
+                        , isProva(l) && React.createElement('span', { style: {fontSize:10,background:`${C.gold}20`,color:C.gold,
+                          border:`1px solid ${C.gold}50`,borderRadius:4,padding:"1px 6px",letterSpacing:"0.05em",fontWeight:700}}, "PROVA")
                       )
                       , React.createElement('div', { style: {fontSize:11,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10334}}
                         , isColl(l)
@@ -907,23 +918,33 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               )
               , React.createElement('span', { style: {fontSize:13,color:C.green,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10453}}, "€", stipLezSel.toLocaleString("it-IT"))
             )
-            , lezSel.length===0 ? (
+            , (lezSel.length===0 && lezSelProva.length===0) ? (
               React.createElement('div', { style: {textAlign:"center",padding:"32px 0",color:C.textDim,fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10456}}
                 , isFuture(selMese)?"Mese non ancora iniziato":"Nessuna lezione registrata questo mese"
               )
             ) : (
-              lezSel.slice().sort((a,b)=>a.date.localeCompare(b.date)).map((l,i)=>(
+              [...lezSel.map(l=>({...l, __prova:false})), ...lezSelProva.map(l=>({...l, __prova:true}))]
+                .sort((a,b)=>a.date.localeCompare(b.date))
+                .map((l,i,arr)=>(
                 React.createElement('div', { key: l.id, style: {display:"grid",gridTemplateColumns:"90px 1fr auto",gap:12,alignItems:"center",
-                  padding:"11px 20px",borderBottom:i<lezSel.length-1?`1px solid ${C.border}`:"none"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10461}}
+                  padding:"11px 20px",borderBottom:i<arr.length-1?`1px solid ${C.border}`:"none",
+                  borderLeft:l.__prova?`3px solid ${C.gold}`:"3px solid transparent",
+                  background:l.__prova?`${C.gold}0c`:"transparent"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10461}}
                   , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10463}}
                     , new Date(l.date+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"}), " " , l.hour
                   )
                   , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 10466}}
-                    , React.createElement('div', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10467}}, l.student)
+                    , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:6}}
+                      , React.createElement('span', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10467}}, l.student)
+                      , l.__prova && React.createElement('span', { style: {fontSize:10,background:`${C.gold}20`,color:C.gold,
+                          border:`1px solid ${C.gold}50`,borderRadius:4,padding:"1px 6px",letterSpacing:"0.05em",fontWeight:700}}, "PROVA")
+                    )
                     , React.createElement('div', { style: {fontSize:11,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10468}}, l.topic||"—")
                   )
                   , React.createElement('div', { style: {textAlign:"right",display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10470}}
-                    , React.createElement('div', { style: {fontSize:13,fontWeight:600,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10471}}, "€", selected.tariffaOra)
+                    , l.__prova
+                      ? React.createElement('div', { style: {fontSize:12,color:C.textDim,fontStyle:"italic"}}, "non pagata")
+                      : React.createElement('div', { style: {fontSize:13,fontWeight:600,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10471}}, "€", selected.tariffaOra)
                     , l.attendance && React.createElement(Badge, { label: (typeof ATT_STYLES!=="undefined"&&ATT_STYLES[l.attendance]&&ATT_STYLES[l.attendance].label) || l.attendance, color: l.attendance==="presente"?"green":l.attendance==="assente"?"red":"gold", __self: this, __source: {fileName: _jsxFileName, lineNumber: 10472}})
                   )
                 )
@@ -2562,9 +2583,15 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
   const isBand  = userRuolo === 'band';
   const isAdmin = userRuolo === 'admin';
 
-  const miePrenotazioni = isBand
-    ? prenotazioni.filter(p => p.userId === (appUser?.userId || appUser?.id))
-    : prenotazioni;
+  // Chi vede cosa nell'elenco prenotazioni sala prove:
+  // - admin: tutte (deve poterle gestire/approvare)
+  // - docente: tutte le approvate (per sapere quando la sala è occupata) + le proprie in attesa
+  // - allievo/band: SOLO le proprie — mai le prenotazioni altrui
+  const miePrenotazioni = isAdmin
+    ? prenotazioni
+    : userRuolo === 'docente'
+    ? prenotazioni.filter(p => p.stato === 'approvata' || p.userId === (appUser?.userId || appUser?.id))
+    : prenotazioni.filter(p => p.userId === (appUser?.userId || appUser?.id));
 
   const MESI = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
   const GIORNI = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
