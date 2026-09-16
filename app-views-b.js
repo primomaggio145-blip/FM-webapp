@@ -226,10 +226,11 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const prevYear  = curMonth===1 ? curYear-1 : curYear;
 
   // Lezioni del mese di un docente: la presenza "presente", "assente" o "recupero" contano per il compenso
-  // (in_recupero, vuoto → non retribuiti)
-  // Lezioni del mese di un docente che contano per il COMPENSO: presenza presente|assente|recupero
+  // (in_recupero, vuoto → non retribuiti). Le lezioni di PROVA non vanno mai pagate al docente,
+  // anche se svolte e marcate presente/assente.
   const lezioniMese = (d, m, y) => lessons.filter(l => {
     if(l.attendance === 'recuperata') return false;
+    if(isProva(l)) return false;
     if(!matchTeacher(d, l.teacher)) return false;
     const att = l.attendance || '';
     if(att !== 'presente' && att !== 'assente' && att !== 'recupero') return false;

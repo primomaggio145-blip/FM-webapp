@@ -4278,10 +4278,11 @@ const INIT_LESSONS = (() => {
 })();
 
 // ─── FORM LEZIONE ─────────────────────────────────────────────────────────────
-// Presenza che conta come lezione svolta (pagabile al docente)
+// Presenza che conta come lezione svolta (pagabile al docente). Le lezioni di PROVA
+// non sono mai pagabili al docente, anche se svolte.
 const PRESENZE_PAGATE = ['presente','assente','recupero'];
 const PRESENZE_SVOLTE = ['presente','assente','recupero'];
-const isLezionePagabile = (l) => PRESENZE_PAGATE.includes((l.attendance||'').toLowerCase());
+const isLezionePagabile = (l) => !isProva(l) && PRESENZE_PAGATE.includes((l.attendance||'').toLowerCase());
 const isLezioneSvolta   = (l) => PRESENZE_SVOLTE.includes((l.attendance||'').toLowerCase());
 
 const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"", notes:"", exercises:"", repertorioIds:[], linkUrl:"", allegati:[], inRecupero:false, recuperoScadenza:null, durata:45, nuovoIscritto:false, contactName:"", phone:"" };
