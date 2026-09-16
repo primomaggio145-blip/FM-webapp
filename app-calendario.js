@@ -8368,8 +8368,9 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
   const CORSI = (window.__FM_DATA__?.courses||[]).map(c => c.name||c.nome).filter(Boolean);
 
   // Filtro corso di default in base al ruolo loggato: un allievo vede subito i manuali
-  // del proprio strumento, un docente con un solo corso assegnato vede subito quello
-  // (se ne ha più di uno si lascia "Tutti i corsi" per non nascondergli nulla).
+  // del proprio strumento; un docente vede subito uno dei propri corsi INDIVIDUALI
+  // (mai un corso collettivo come default, anche se ne ha assegnati più di uno) —
+  // se non ha corsi individuali ma un solo corso collettivo, usa quello.
   const _defaultCorso = React.useMemo(() => {
     if (ruolo === "allievo") {
       const allievoId = appUser && appUser.allievoId;
@@ -8382,11 +8383,15 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
     }
     if (ruolo === "docente") {
       const docenteId = appUser && appUser.docenteId;
-      const miei = (window.__FM_DATA__?.courses||[])
-        .filter(c => docenteId != null && (c.docenti||[]).map(String).includes(String(docenteId)))
+      const mieiCorsi = (window.__FM_DATA__?.courses||[])
+        .filter(c => docenteId != null && (c.docenti||[]).map(String).includes(String(docenteId)));
+      const mieiIndividuali = mieiCorsi
+        .filter(c => (c.type||c.tipo) === 'individuale')
         .map(c => c.name||c.nome)
         .filter(Boolean);
-      return miei.length === 1 ? miei[0] : "";
+      if (mieiIndividuali.length > 0) return mieiIndividuali[0];
+      const mieiNomi = mieiCorsi.map(c => c.name||c.nome).filter(Boolean);
+      return mieiNomi.length === 1 ? mieiNomi[0] : "";
     }
     return "";
   }, []); // calcolato una sola volta all'apertura della scheda
