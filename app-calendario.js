@@ -8363,19 +8363,43 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
   const ruolo = userRuolo || "allievo";
   const canUpload = ruolo === "admin" || ruolo === "docente";
 
+  const CATEGORIE = ["Teoria","Solfeggio","Metodo","Spartito","Manuale","Altro"];
+  // Elenco corsi/strumenti per il campo e il filtro (stessa fonte usata da Repertorio)
+  const CORSI = (window.__FM_DATA__?.courses||[]).map(c => c.name||c.nome).filter(Boolean);
+
+  // Filtro corso di default in base al ruolo loggato: un allievo vede subito i manuali
+  // del proprio strumento, un docente con un solo corso assegnato vede subito quello
+  // (se ne ha più di uno si lascia "Tutti i corsi" per non nascondergli nulla).
+  const _defaultCorso = React.useMemo(() => {
+    if (ruolo === "allievo") {
+      const allievoId = appUser && appUser.allievoId;
+      const nome = ((appUser && appUser.nome) || "").toLowerCase().trim();
+      const stu = (window.__FM_DATA__?.students||[]).find(s =>
+        (allievoId != null && String(s.id) === String(allievoId)) ||
+        (s.name||s.nome||"").toLowerCase().trim() === nome
+      );
+      return (stu && stu.instrument && CORSI.includes(stu.instrument)) ? stu.instrument : "";
+    }
+    if (ruolo === "docente") {
+      const docenteId = appUser && appUser.docenteId;
+      const miei = (window.__FM_DATA__?.courses||[])
+        .filter(c => docenteId != null && (c.docenti||[]).map(String).includes(String(docenteId)))
+        .map(c => c.name||c.nome)
+        .filter(Boolean);
+      return miei.length === 1 ? miei[0] : "";
+    }
+    return "";
+  }, []); // calcolato una sola volta all'apertura della scheda
+
   const [libri,      setLibri]      = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [search,     setSearch]     = useState("");
   const [filterCat,  setFilterCat]  = useState("");
-  const [filterCorso,setFilterCorso]= useState("");
+  const [filterCorso,setFilterCorso]= useState(_defaultCorso);
   const [uploading,  setUploading]  = useState(false);
   const [modal,      setModal]      = useState(null); // "add"
   const [delTarget,  setDelTarget]  = useState(null);
   const [rinominaTarget, setRinominaTarget] = useState(null);
-
-  const CATEGORIE = ["Teoria","Solfeggio","Metodo","Spartito","Manuale","Altro"];
-  // Elenco corsi/strumenti per il campo e il filtro (stessa fonte usata da Repertorio)
-  const CORSI = (window.__FM_DATA__?.courses||[]).map(c => c.name||c.nome).filter(Boolean);
 
   // ── Carica da Supabase Storage bucket "biblioteca" ──────────────────────────
   const carica = React.useCallback(async () => {
@@ -12318,17 +12342,40 @@ const AllievoBraniView = ({allievo,allievoId,brani,allStudents,lessons,onBack})=
             , braniFiltrati.map(b=>{
               const d=diffById(b.difficulty);
               const p=periodoById(b.periodo);
+              // Appiattisce link e allegati/spartiti di tutte le versioni del brano
+              // (vista di sola lettura: l'allievo deve vedere tutte le informazioni,
+              // non solo titolo/compositore/tonalità)
+              const _link = [];
+              const _file = [];
+              (b.versioni||[]).forEach(v => {
+                (v.link||[]).forEach(l => _link.push(l));
+                (v.spartiti||[]).forEach(fi => _file.push(fi));
+                (v.allegati||[]).forEach(fi => _file.push(fi));
+              });
               return(
                 React.createElement('div', { key: b.id, style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,
-                  padding:"14px 18px",display:"flex",gap:14,alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7627}}
-                  , React.createElement('div', { style: {flex:1,minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7629}}
-                    , React.createElement('div', { style: {fontSize:14,fontWeight:600,marginBottom:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7630}}, b.title)
-                    , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7631}}, b.composer, b.tonality?` · ${b.tonality}`:"")
+                  padding:"14px 18px",display:"flex",flexDirection:"column",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7627}}
+                  , React.createElement('div', { style: {display:"flex",gap:14,alignItems:"center"} }
+                    , React.createElement('div', { style: {flex:1,minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7629}}
+                      , React.createElement('div', { style: {fontSize:14,fontWeight:600,marginBottom:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7630}}, b.title)
+                      , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7631}}, b.composer, b.tonality?` · ${b.tonality}`:"")
+                    )
+                    , React.createElement('div', { style: {display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7633}}
+                      , React.createElement(DiffBadge, { diff: b.difficulty, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7634}})
+                      , b.periodo&&React.createElement('span', { style: {background:p.hex+"18",color:p.hex,border:`1px solid ${p.hex}30`,borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:600}, __source: {fileName: _jsxFileName, lineNumber: 7635}}, b.periodo)
+                      , React.createElement('span', { style: {fontSize:11,color:C.textDim} }, (lessons||[]).filter(l=>(l.repertorioIds||[]).includes(b.id)).length, " lez." )
+                    )
                   )
-                  , React.createElement('div', { style: {display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7633}}
-                    , React.createElement(DiffBadge, { diff: b.difficulty, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7634}})
-                    , b.periodo&&React.createElement('span', { style: {background:p.hex+"18",color:p.hex,border:`1px solid ${p.hex}30`,borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7635}}, b.periodo)
-                    , React.createElement('span', { style: {fontSize:11,color:C.textDim} }, (lessons||[]).filter(l=>(l.repertorioIds||[]).includes(b.id)).length, " lez." )
+                  , (_link.length>0 || _file.length>0) && React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:6,borderTop:`1px solid ${C.border}`,paddingTop:10} }
+                    , _link.map((l,li)=>React.createElement('a',{key:'l'+li,href:l.url,target:'_blank',rel:'noopener noreferrer',
+                        style:{fontSize:12,color:C.blue,display:'flex',alignItems:'center',gap:6}},
+                        React.createElement(Ic,{n:'link',size:11,stroke:C.blue}),l.label||l.url))
+                    , _file.length>0 && React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6}}
+                      , _file.map((fi,fii)=>React.createElement('a',{key:fi.id||fii,href:fi.fileUrl,target:'_blank',rel:'noopener noreferrer',
+                          style:{fontSize:12,color:C.text,display:'flex',alignItems:'center',gap:6,padding:'5px 8px',
+                            background:C.bg,borderRadius:6,border:`1px solid ${C.border}`}},
+                          React.createElement(Ic,{n:'paperclip',size:11,stroke:C.textMuted}),fi.fileName))
+                    )
                   )
                 )
               );

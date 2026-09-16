@@ -58,14 +58,27 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
   const _lessonsRep   = _propLessonsRep || [];
   const _concertiRep  = _propConcertiRep || [];
   const usageCount    = id => _lessonsRep.filter(l => (l.repertorioIds||[]).includes(id)).length;
-  // Conta allievi assegnati attraverso TUTTE le versioni del brano
+  // Conta allievi collegati al brano: sia quelli assegnati esplicitamente dal modal del
+  // brano (v.allievi), sia quelli collegati indirettamente tramite una lezione che ha
+  // questo brano nel proprio repertorioIds (prima venivano contati solo i primi).
   const allieviOfBrano= id => {
     const b = brani.find(x=>x.id===id); if (!b) return [];
-    const ids = new Set();
+    const idKeys = new Set();
+    const nameKeys = new Set();
     const out = [];
-    (b.versioni||[]).forEach(v => (v.allievi||[]).forEach(a => {
-      if (!ids.has(a.studentId)) { ids.add(a.studentId); out.push(a); }
-    }));
+    const addOne = (studentId, studentName) => {
+      const idKey = studentId!=null ? String(studentId) : null;
+      const nameKey = (studentName||'').toLowerCase().trim();
+      if (idKey && idKeys.has(idKey)) return;
+      if (!idKey && nameKey && nameKeys.has(nameKey)) return;
+      if (idKey) idKeys.add(idKey);
+      if (nameKey) nameKeys.add(nameKey);
+      out.push({ studentId: studentId!=null?studentId:null, studentName: studentName||'' });
+    };
+    (b.versioni||[]).forEach(v => (v.allievi||[]).forEach(a => addOne(a.studentId, a.studentName)));
+    _lessonsRep.forEach(l => {
+      if ((l.repertorioIds||[]).includes(id)) addOne(l.studentId, l.student);
+    });
     return out;
   };
   const allieviCount  = id => allieviOfBrano(id).length;
@@ -556,6 +569,17 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
               /* Versioni con toggle */
               , React.createElement('div',{style:{padding:'16px 22px',maxHeight:'65vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:10}}
                 , selBrano.note && React.createElement('div',{style:{fontSize:13,color:C.textMuted,fontStyle:'italic',marginBottom:4}},selBrano.note)
+                /* Lezioni & Allievi collegati — include sia gli allievi assegnati dal
+                   modal del brano sia quelli collegati indirettamente tramite lezione */
+                , (()=>{ const _allieviColl = allieviOfBrano(selBrano.id); const _nLez = usageCount(selBrano.id);
+                    return (_allieviColl.length>0 || _nLez>0) && React.createElement('div',{style:{background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,padding:'10px 14px',display:'flex',flexDirection:'column',gap:6}}
+                      , React.createElement('div',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.05em',textTransform:'uppercase',fontWeight:600}}, 'Lezioni & allievi collegati')
+                      , React.createElement('div',{style:{fontSize:12,color:C.textDim}}, _nLez, ' lezion', _nLez===1?'e':'i')
+                      , _allieviColl.length>0 && React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:5}},
+                          _allieviColl.map((a,ai)=>React.createElement('span',{key:a.studentId||ai,style:{fontSize:11,padding:'3px 9px',borderRadius:20,background:`${C.teal}18`,color:C.teal,border:`1px solid ${C.tealBorder}`}},a.studentName))
+                        )
+                    );
+                  })()
                 , (selBrano.versioni||[]).map((v,idx)=>{
                     const fileCount=(v.spartiti||[]).length+(v.allegati||[]).length+(v.link||[]).length;
                     const label=[selBrano.title,v.strumento||selBrano.strumento,v.tonalita].filter(Boolean).join(' - ')||`Versione ${idx+1}`;
