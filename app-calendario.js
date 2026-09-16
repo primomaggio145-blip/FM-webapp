@@ -3703,6 +3703,8 @@ const safeInsertRecurringLesson = async (lesson, setLessons) => {
       q = q.eq('corso_id', lesson.courseId);
     } else if (lesson.student) {
       q = q.eq('student', lesson.student);
+    } else if (lesson.nuovoIscritto && lesson.contactName) {
+      q = q.eq('contact_name', lesson.contactName);
     }
     const { data: existing } = await q.limit(1);
     if (existing && existing.length > 0) {
@@ -3746,6 +3748,12 @@ const safeInsertRecurringLesson = async (lesson, setLessons) => {
     corso_id:         lesson.courseId   || null,
     corso_nome:       lesson.courseName || null,
     students:         lesson.students && lesson.students.length > 0 ? JSON.stringify(lesson.students) : null,
+    // NUOVO ISCRITTO: mancavano del tutto — una lezione "nuovo iscritto" con ricorrenza
+    // impostata perdeva questi dati ad ogni occorrenza auto-generata (es. dopo aver
+    // segnato la presenza sulla prima), lasciando l'admin senza sapere chi doveva venire.
+    contact_name:     lesson.contactName || null,
+    phone:            lesson.phone       || null,
+    nuovo_iscritto:   lesson.nuovoIscritto || false,
   };
 
   try {
@@ -9350,7 +9358,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             if (error) console.warn('[FM] handleEdit update error:', error.message);
             else {
               window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
-              window.__FM_RECENTLY_WRITTEN__.set(String(data.id), Date.now());
+              window.__FM_RECENTLY_WRITTEN__.set(`lezioni:${data.id}`, Date.now());
             }
           });
       }

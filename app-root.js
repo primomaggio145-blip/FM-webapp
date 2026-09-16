@@ -1101,6 +1101,8 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
         in_recupero: false, recupero_scadenza: null,
         durata: nuovaLez.durata||45,
         corso_id: nuovaLez.courseId||null, corso_nome: nuovaLez.courseName||null,
+        contact_name: nuovaLez.contactName||null, phone: nuovaLez.phone||null,
+        nuovo_iscritto: nuovaLez.nuovoIscritto||false,
       });
 
       // 2. Segna la lezione ORIGINALE come "recuperata" → esce dalla lista "lezioni in recupero"
