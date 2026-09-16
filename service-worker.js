@@ -3,7 +3,7 @@
 //   - app.js, fm_sync.js, supabase_integration.js → NETWORK-FIRST (sempre freschi)
 //   - webapp.html, manifest.json, icone          → NETWORK-FIRST con fallback cache
 //   - API Supabase, font Google (googleapis/gstatic) → solo network, mai cache
-const CACHE_VERSION = 'fm-v10'; // v10: gestisce anche URL push con dominio diverso da quello corrente
+const CACHE_VERSION = 'fm-v11'; // v11: ignora dominio/percorso mandato dal server (residuo pre-migrazione a www.fmspettacolo.it), usa sempre la base reale corrente
 
 // File pre-cachati all'install (solo per fallback offline)
 const CACHE_STATIC = [
@@ -104,35 +104,28 @@ self.addEventListener('push', event => {
   try { data = event.data ? event.data.json() : {}; }
   catch (e) { data = { title: 'Futuro Musica', body: event.data?.text() || '' }; }
 
-  // Base reale dell'app (es. https://<utente>.github.io/FM-webapp/): GitHub Pages ospita
-  // il progetto in un sottopercorso, non alla radice del dominio. Usare la scope del SW
-  // invece di percorsi assoluti "/xxx" evita che il link finisca alla radice del dominio
-  // (che non esiste → 404) invece che dentro la cartella dell'app.
+  // Base reale dell'app, letta a runtime dallo scope del service worker — es.
+  // "https://www.fmspettacolo.it/". Non ci fidiamo del dominio/percorso che il server
+  // mette in data.url: dopo un cambio di dominio (com'è successo qui: da GitHub Pages
+  // sotto /FM-webapp/ al dominio proprio www.fmspettacolo.it) quel valore resta spesso
+  // vecchio (es. "/FM-webapp/webapp.html") e produce un 404 anche se il DOMINIO combacia,
+  // perché è il PERCORSO a non esistere più su quel dominio. Per questo ricostruiamo
+  // sempre il link sulla nostra base nota + nome file fisso, tenendo dal valore del
+  // server solo eventuali query/hash utili per un deep-link (es. "#notifiche").
   const base = self.registration.scope;
 
   const title = data.title || 'Futuro Musica';
 
-  // Normalizza l'URL di destinazione:
-  // - un path che il server manda come "/webapp.html" va interpretato come relativo
-  //   alla cartella dell'app, non alla radice del dominio;
-  // - se il server manda un URL con un dominio DIVERSO da quello corrente (es. residuo
-  //   di una migrazione di dominio, o vecchio link GitHub Pages), ne teniamo solo il
-  //   percorso e lo ricostruiamo sulla base corretta di QUESTO service worker, invece
-  //   di aprire un dominio che potrebbe non esistere più / non reindirizzare bene.
-  let rawUrl = data.url || 'webapp.html';
-  let targetUrl;
+  let targetUrl = base + 'webapp.html';
   try {
-    const parsed = new URL(rawUrl, base);
-    if (parsed.origin !== self.location.origin) {
-      const p = parsed.pathname.replace(/^\//, '');
-      targetUrl = new URL(p || 'webapp.html', base).href + parsed.search + parsed.hash;
-    } else {
-      targetUrl = parsed.href;
+    if (data.url) {
+      const parsed = new URL(data.url, base);
+      targetUrl = base + 'webapp.html' + parsed.search + parsed.hash;
     }
-  } catch (e) { targetUrl = base + 'webapp.html'; }
+  } catch (e) { /* usa il default già impostato sopra */ }
 
   const iconUrl  = new URL('icons/icon-192.png', base).href;
-  console.log('[FM SW] push ricevuto — base:', base, '| data.url:', data.url, '| targetUrl risolto:', targetUrl);
+  console.log('[FM SW] push ricevuto — base:', base, '| data.url originale:', data.url, '| targetUrl risolto:', targetUrl);
 
   const options = {
     body:               data.body || 'Hai una nuova notifica',
@@ -151,8 +144,8 @@ self.addEventListener('push', event => {
 // Se la PWA è installata e la url richiesta rientra nel suo scope, il sistema operativo/
 // browser la instrada automaticamente all'app installata (comportamento nativo PWA);
 // altrimenti clients.openWindow() apre l'URL nel browser mobile di default. Qui ci limitiamo
-// a garantire che l'URL sia sempre corretto (con il prefisso /FM-webapp/) e a riusare una
-// finestra dell'app già aperta, se presente, invece di aprirne una nuova.
+// a garantire che l'URL sia sempre corretto (sulla base reale del dominio attuale) e a
+// riusare una finestra dell'app già aperta, se presente, invece di aprirne una nuova.
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   const base = self.registration.scope;
