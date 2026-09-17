@@ -11198,9 +11198,9 @@ const ReportView = ({ spese, entrate }) => {
   // selezionato, con saldo progressivo calcolato dal 1° del mese.
   const primaNota = meseSel===0 ? [] : (() => {
     const righe = [
-      ...entrateView.map(e=>({ id:`e-${e.id}`, data: e.dataPagamento||'', tipo:'entrata',
+      ...entrateView.map(e=>({ id:`e-${e.id}`, data: e.dataPagamento||e.data||'', tipo:'entrata',
         desc: e.desc||'', categoria: e.categoria||'', metodo: e.metodo||'', importo: Number(e.importo)||0 })),
-      ...speseView.map(s=>({ id:`s-${s.id}`, data: s.data||'', tipo:'uscita',
+      ...speseView.map(s=>({ id:`s-${s.id}`, data: s.data||s.dataPagamento||'', tipo:'uscita',
         desc: s.desc||'', categoria: s.categoria||'', metodo: s.metodo||'', importo: -(Number(s.importo)||0) })),
     ].sort((a,b)=> (a.data||'').localeCompare(b.data||'') || (a.tipo==='entrata'?-1:1));
     let prog = 0;

@@ -141,7 +141,8 @@
       id: String(r.id), studentId: r.studente_id || null,
       studentName: r.studente_nome || '', importo: parseFloat(r.importo) || 0,
       mese: r.mese, anno: r.anno, data: r.data_pagamento || '',
-      metodo: r.metodo || 'Contanti', categoria: 'quota', desc: r.note || '',
+      metodo: r.metodo || 'Contanti', categoria: r.categoria || 'quota', desc: r.descrizione || '',
+      note: r.note || '',
       stato: sm[r.stato] || r.stato || 'attesa',
       dataPagamento: r.data_pagamento || '', numRicevuta: r.num_ricevuta || '',
       noRicevuta: r.no_ricevuta === true,
@@ -346,6 +347,7 @@
         stato: smToDB[q.stato] || q.stato || 'da pagare',
         data_pagamento: q.dataPagamento || q.data || null,
         num_ricevuta: q.numRicevuta || '', metodo: q.metodo || 'Contanti',
+        categoria: q.categoria || 'quota', descrizione: q.desc || '',
         note: q.note || '', no_ricevuta: q.noRicevuta === true,
       };
     },
