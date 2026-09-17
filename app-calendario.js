@@ -10901,7 +10901,7 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
   const [f, setF] = useState(initial || {
     categoria:"docenti", desc:"", importo:"",
     mese:MESE_ATT, anno:ANNO_ATT,
-    metodo:"Bonifico bancario", data:yyyymmdd(oggi),
+    metodo:"", data:yyyymmdd(oggi),
     docenteId:"", note:"", isAcconto:false,
   });
   const [err, setErr] = useState({});
@@ -10912,6 +10912,7 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
     if(!f.desc.trim())                          e.desc    = "Descrizione obbligatoria";
     if(!f.importo||isNaN(f.importo)||Number(f.importo)<=0) e.importo = "Importo non valido";
     if(!f.data)                                 e.data    = "Data obbligatoria";
+    if(!f.metodo)                               e.metodo  = "Metodo di pagamento obbligatorio";
     return e;
   };
 
@@ -11046,7 +11047,7 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
           , React.createElement(Input, { label: "Anno", type: "number", value: f.anno, onChange: e=>set("anno",Number(e.target.value)), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6386}})
         )
 
-        , React.createElement(Sel, { label: "Metodo di pagamento"  , value: f.metodo, onChange: e=>set("metodo",e.target.value), options: METODI_PAG, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6389}})
+        , React.createElement(Sel, { label: "Metodo di pagamento"  , value: f.metodo, onChange: e=>set("metodo",e.target.value), options: METODI_PAG, error: err.metodo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6389}})
         , React.createElement(Textarea, { label: "Note", value: f.note, onChange: e=>set("note",e.target.value), placeholder: "Note aggiuntive..." , __self: this, __source: {fileName: _jsxFileName, lineNumber: 6390}})
       )
       , React.createElement('div', { style: {padding:"14px 22px",borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"flex-end",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6392}}
@@ -11499,7 +11500,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
     categoria: "quota",
     studentId: "", importo: "", mese: new Date().getMonth()+1,
     anno: new Date().getFullYear(), data: yyyymmdd(today),
-    metodo: "Bonifico bancario", desc: "", note: "",
+    metodo: "", desc: "", note: "",
     stato: "pagato",  // default: registrare un'entrata = già pagata
     noRicevuta: false, // default: emetti ricevuta
   });
@@ -11523,6 +11524,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
     if(needStudent && !f.studentId) e.studentId = "Seleziona un allievo";
     if(!f.importo||isNaN(f.importo)||Number(f.importo)<=0) e.importo = "Importo non valido";
     if(!f.data)                     e.data      = "Data obbligatoria";
+    if(!f.metodo)                   e.metodo    = "Metodo di pagamento obbligatorio";
     if(!needStudent && !f.desc.trim()) e.desc   = "Descrizione obbligatoria";
     return e;
   };
@@ -11640,7 +11642,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
           , React.createElement(Input, { label: "Importo (€) *"  , type: "number", value: f.importo, onChange: e=>set("importo",e.target.value), error: err.importo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6784}})
           , React.createElement(Input, { label: "Data *" , type: "date", value: f.data, onChange: e=>set("data",e.target.value), error: err.data, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6785}})
         )
-        , React.createElement(Sel, { label: "Metodo di pagamento"  , value: f.metodo, onChange: e=>set("metodo",e.target.value), options: METODI_PAG, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6787}})
+        , React.createElement(Sel, { label: "Metodo di pagamento"  , value: f.metodo, onChange: e=>set("metodo",e.target.value), options: METODI_PAG, error: err.metodo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6787}})
         , React.createElement('div', null
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}, "Stato pagamento")
           , React.createElement('div', {style:{display:"flex",gap:8}}
@@ -11747,7 +11749,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         mese: new Date().getMonth()+1,
         anno: new Date().getFullYear(),
         data: yyyymmdd(today),
-        metodo: "Bonifico bancario",
+        metodo: "",
         desc: `Lezione extra${quickAction.courseName ? ' - '+quickAction.courseName : (quickAction.studentName ? ' - '+quickAction.studentName : '')}`,
         note: "",
         stato: "pagato",
