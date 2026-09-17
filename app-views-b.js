@@ -2835,6 +2835,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
   const [myAuthId,    setMyAuthId]    = useState(null);
   const [loading,     setLoading]     = useState(true);
   const [tab,         setTab]         = useState('ricevuti'); // 'ricevuti' | 'inviati'
+  const [canaleFiltro, setCanaleFiltro] = useState('tutti'); // 'tutti' | 'interno' | 'whatsapp'
   const [showCompose, setShowCompose] = useState(false);
   const [toast,       setToast]       = useState(null);
   const isMobile = useIsMobile();
@@ -2886,7 +2887,8 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
     else setMessaggi(p => p.map(m => m.id===id ? {...m,letto:true} : m));
   };
 
-  const lista = tab==='ricevuti' ? ricevuti : inviati;
+  const listaBase = tab==='ricevuti' ? ricevuti : inviati;
+  const lista = canaleFiltro==='tutti' ? listaBase : listaBase.filter(m => (m.canale||'interno')===canaleFiltro);
 
   return React.createElement('div', {style:{minHeight:'100%',background:C.bg}}
     /* Header */
@@ -2918,6 +2920,18 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
                 marginBottom:-1,display:'flex',alignItems:'center',gap:6}}
               , lbl
               , React.createElement('span',{style:{fontSize:11,background:tab===id?C.tealBg:C.bg,color:tab===id?C.teal:C.textDim,borderRadius:10,padding:'1px 7px',border:`1px solid ${tab===id?C.tealBorder:C.border}`}},cnt)
+            )
+          )
+      )
+      /* Filtro canale */
+      , React.createElement('div', {style:{display:'flex',gap:6,padding:'8px 20px 12px'}}
+        , [['tutti','Tutti'],['interno','💬 Interni'],['whatsapp','📲 WhatsApp']].map(([id,lbl]) =>
+            React.createElement('button', {key:id, onClick:()=>setCanaleFiltro(id),
+              style:{padding:'5px 12px',borderRadius:20,border:`1px solid ${canaleFiltro===id?C.teal:C.border}`,
+                background:canaleFiltro===id?C.tealBg:'transparent',cursor:'pointer',
+                fontFamily:"'Open Sans',sans-serif",fontSize:11,fontWeight:canaleFiltro===id?700:400,
+                color:canaleFiltro===id?C.teal:C.textMuted}}
+              , lbl
             )
           )
       )
@@ -2959,6 +2973,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
                       , React.createElement('div',{style:{fontSize:12,fontWeight:nonLetto?600:500,color:C.text,marginBottom:3}},m.oggetto||'(senza oggetto)')
                       , React.createElement('div',{style:{fontSize:12,color:C.textMuted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},m.testo)
                       , React.createElement('div',{style:{display:'flex',gap:6,marginTop:5}}
+                        , m.canale==='whatsapp' && React.createElement('span',{style:{fontSize:10,background:'#dcfce7',color:'#16a34a',border:'1px solid #bbf7d0',borderRadius:4,padding:'1px 6px'}},'📲 Ricevuto su WhatsApp')
                         , m.inviato_push && React.createElement('span',{style:{fontSize:10,background:C.tealBg,color:C.teal,border:`1px solid ${C.tealBorder}`,borderRadius:4,padding:'1px 6px'}},'📱 Push')
                         , m.inviato_wa && React.createElement('span',{style:{fontSize:10,background:'#dcfce7',color:'#16a34a',border:'1px solid #bbf7d0',borderRadius:4,padding:'1px 6px'}},'💬 WA')
                         , m.inviato_email && React.createElement('span',{style:{fontSize:10,background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:4,padding:'1px 6px'}},'📧 Email')
