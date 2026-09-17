@@ -27,6 +27,20 @@ function App() {
   const [sharedRichieste,      setSharedRichieste]      = useState([]);
   const [sharedNotifiche,      setSharedNotifiche]      = useState([]);
   const [sharedConfig,         setSharedConfig]         = useState(_d.config ? {...CONFIG_DEFAULT, ..._d.config} : CONFIG_DEFAULT);
+  // Auto-guarigione: ogni volta che si arriva al Calendario da un'altra vista,
+  // ricarica le lezioni dell'anno scolastico ATTIVO — corregge il caso in cui una
+  // navigazione precedente in Allievi/Corsi/Docenti abbia lasciato lo stato
+  // lezioni ristretto a un anno diverso (passato), che altrimenti sarebbe restato
+  // "incollato" anche dopo essere tornati al calendario normale.
+  const _vistaPrecedente = React.useRef(view);
+  React.useEffect(() => {
+    const arrivoAlCalendario = view === 'calendario' && _vistaPrecedente.current !== 'calendario';
+    _vistaPrecedente.current = view;
+    if (!arrivoAlCalendario) return;
+    const annoAttivo = sharedConfig.annoInizioAttivo;
+    if (annoAttivo == null) return;
+    if (window.__FM_LOAD_LEZIONI_ANNO__) window.__FM_LOAD_LEZIONI_ANNO__(annoAttivo);
+  }, [view, sharedConfig.annoInizioAttivo]);
 
   // Applica subito il colore accento salvato (anche al primo caricamento,
   // non solo quando l'admin lo cambia in Impostazioni). Forza un re-render
@@ -81,6 +95,16 @@ function App() {
   React.useEffect(() => {
     window.__FM_DATA__ = {...(window.__FM_DATA__||{}), iscrizioniAnno: sharedIscrizioniAnno, anniScolastici: sharedAnniScolastici};
   }, [sharedIscrizioniAnno, sharedAnniScolastici]);
+  // CRITICO: window.__FM_DATA__.lessons deve rispecchiare SEMPRE lo stato React
+  // reale, non restare congelato allo snapshot del boot. __FM_FORCE_REFRESH__ lo
+  // usa come base "lezioni già in memoria" per non perdere quelle fuori dalla
+  // finestra oggi+24h — se questa fotocopia resta ferma (es. dopo che
+  // __FM_LOAD_LEZIONI_ANNO__ l'ha sovrascritta sfogliando un anno scolastico
+  // precedente da Allievi/Corsi/Docenti), ogni refresh successivo cancellava
+  // dalla vista lezioni reali dell'anno corrente non toccate di recente.
+  React.useEffect(() => {
+    window.__FM_DATA__ = {...(window.__FM_DATA__||{}), lessons: sharedLessons};
+  }, [sharedLessons]);
   const [sharedEntrate,         setSharedEntrate]         = useState(_d.entrate  || INIT_ENTRATE_QUOTE);
   // ── Stato globale per pannelli dashboard e ruolo simulazione ──
   const [sharedPanels,  setSharedPanels]  = useState(_d.dashboardPanels || {});
