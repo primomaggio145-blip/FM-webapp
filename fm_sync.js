@@ -153,6 +153,9 @@
       importo: parseFloat(r.importo) || 0, mese: r.mese ?? 0,
       anno: r.anno || new Date().getFullYear(), metodo: r.metodo || '',
       data: r.data || '', docenteId: r.docente_id || null, note: r.note || '',
+      haAcconto: r.ha_acconto || false,
+      accontoImporto: r.acconto_importo != null ? parseFloat(r.acconto_importo) : null,
+      importoLordo: r.importo_lordo != null ? parseFloat(r.importo_lordo) : null,
     };
   }
   function adaptBrano(r) {
@@ -352,6 +355,9 @@
         importo: parseFloat(s.importo) || 0, mese: s.mese ?? null,
         anno: s.anno || new Date().getFullYear(), metodo: s.metodo || null,
         data: s.data || null, docente_id: s.docenteId || null, note: s.note || null,
+        ha_acconto: s.haAcconto || false,
+        acconto_importo: s.accontoImporto != null ? s.accontoImporto : null,
+        importo_lordo: s.importoLordo != null ? s.importoLordo : null,
         updated_at: new Date().toISOString(),
       };
     },
