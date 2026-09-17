@@ -10894,18 +10894,15 @@ const INIT_ENTRATE_QUOTE = (()=>{
 })();
 
 // ─── FORM SPESA ───────────────────────────────────────────────────────────────
-const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_catSpeseForm, onAddCategoria }) => {
+const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_catSpeseForm, onAddCategoria, lessons:_lessonsSF, spese:_speseSF }) => {
   const CATEGORIE = _catSpeseForm || CATEGORIE_DEFAULT;
   const [nuovaCat, setNuovaCat] = useState("");
   const [showAddCat, setShowAddCat] = useState(false);
-  const [f, setF] = useState(initial ? {
-    ...initial,
-    importo: initial.haAcconto && initial.importoLordo!=null ? initial.importoLordo : initial.importo,
-  } : {
+  const [f, setF] = useState(initial || {
     categoria:"docenti", desc:"", importo:"",
     mese:MESE_ATT, anno:ANNO_ATT,
     metodo:"Bonifico bancario", data:yyyymmdd(oggi),
-    docenteId:"", note:"", haAcconto:false, accontoImporto:"",
+    docenteId:"", note:"", isAcconto:false,
   });
   const [err, setErr] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
@@ -10915,10 +10912,6 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
     if(!f.desc.trim())                          e.desc    = "Descrizione obbligatoria";
     if(!f.importo||isNaN(f.importo)||Number(f.importo)<=0) e.importo = "Importo non valido";
     if(!f.data)                                 e.data    = "Data obbligatoria";
-    if(f.haAcconto && (!f.accontoImporto || isNaN(f.accontoImporto) || Number(f.accontoImporto)<=0))
-      e.accontoImporto = "Importo acconto non valido";
-    if(f.haAcconto && Number(f.accontoImporto) >= Number(f.importo))
-      e.accontoImporto = "L'acconto non può essere pari o superiore al compenso lordo";
     return e;
   };
 
@@ -10929,21 +10922,45 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
     let desc = f.desc;
     if(f.categoria==="docenti"&&f.docenteId&&!f.desc) {
       const d = (_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI).find(x=>x.id===f.docenteId);
-      if(d) desc = `Compenso mensile ${(d.nome||d.name)}`;
+      if(d) desc = f.isAcconto ? `Acconto compenso ${MESI[f.mese]} — ${d.nome||d.name}` : `Compenso mensile ${d.nome||d.name}`;
     }
-    const importoLordo = Number(f.importo);
-    const accontoImporto = f.haAcconto ? Number(f.accontoImporto) : null;
-    const importoFinale = f.haAcconto ? Math.round((importoLordo - accontoImporto)*100)/100 : importoLordo;
-    onSave({
-      ...f, desc,
-      importo: importoFinale,
-      haAcconto: !!f.haAcconto,
-      accontoImporto: accontoImporto,
-      importoLordo: f.haAcconto ? importoLordo : null,
-    });
+    onSave({...f, desc, importo:Number(f.importo), isAcconto: !!f.isAcconto});
   };
 
   const cat = catById(f.categoria);
+  const docenteSel = f.categoria==="docenti" && f.docenteId
+    ? (_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI).find(x=>x.id===f.docenteId)
+    : null;
+
+  // Acconti già registrati per questo docente nello stesso mese/anno (esclude il record che stiamo modificando)
+  const acconti = (docenteSel && !f.isAcconto)
+    ? (_speseSF||[]).filter(s => s.id!==(initial&&initial.id) && s.isAcconto &&
+        String(s.docenteId)===String(docenteSel.id) && Number(s.mese)===Number(f.mese) && Number(s.anno)===Number(f.anno))
+    : [];
+  const totaleAcconti = acconti.reduce((t,s)=>t+(Number(s.importo)||0), 0);
+
+  // Suggerimento compenso lordo = lezioni del mese (presente/assente/recupero, no prova/recuperata) × tariffa oraria
+  const matchTeacherSF = (d, teacherField) => {
+    if(!teacherField || !d) return false;
+    const tf = teacherField.toLowerCase().trim();
+    const key = (d.teacherKey || d.nome || d.name || '').toLowerCase().trim();
+    const nom = (d.nome || d.name || '').toLowerCase().trim();
+    if(!key && !nom) return false;
+    return tf===key || tf===nom || tf.includes(key) || key.includes(tf) || tf.includes(nom) || nom.includes(tf);
+  };
+  const lezioniCompensoSF = (docenteSel && !f.isAcconto)
+    ? (_lessonsSF||[]).filter(l => {
+        if(l.attendance==='recuperata') return false;
+        if(isProva(l)) return false;
+        if(!matchTeacherSF(docenteSel, l.teacher)) return false;
+        const att = l.attendance || '';
+        if(att!=='presente' && att!=='assente' && att!=='recupero') return false;
+        const [ly,lm] = (l.date||'').split("-").map(Number);
+        return ly===Number(f.anno) && lm===Number(f.mese)+1;
+      })
+    : [];
+  const compensoLordoSuggerito = docenteSel ? lezioniCompensoSF.length * (Number(docenteSel.tariffaOra)||0) : 0;
+  const importoSuggerito = Math.max(0, Math.round((compensoLordoSuggerito - totaleAcconti)*100)/100);
 
   return (
     React.createElement(React.Fragment, null
@@ -10965,29 +10982,34 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
           )
         )
 
-        /* Se categoria = docenti, mostra select docente */
+        /* Se categoria = docenti, mostra select docente + spunta acconto */
         , f.categoria==="docenti" && (
-          React.createElement(Sel, { label: "Docente", value: f.docenteId, onChange: e=>{ set("docenteId",e.target.value); const _dList=(_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI); const d=_dList.find(x=>x.id===e.target.value); if(d) set("desc",`Compenso mensile ${d.nome||d.name}`); },
-            options: [{value:"",label:"— seleziona docente —"},...(_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI).map(d=>({value:d.id,label:d.nome||d.name}))], __self: this, __source: {fileName: _jsxFileName, lineNumber: 6375}})
-        )
-
-        /* Acconto — solo per compensi docenti */
-        , f.categoria==="docenti" && (
-          React.createElement('div', { style: {padding:"12px 14px", background:C.goldBg, borderRadius:8, border:`1px solid ${C.goldDim}`} }
-            , React.createElement('label', { style: {display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, fontWeight:600, color:C.text} }
-              , React.createElement('input', { type:"checkbox", checked: !!f.haAcconto,
-                  onChange: e => set("haAcconto", e.target.checked), style:{width:16, height:16, cursor:"pointer"} })
-              , "Il docente ha già ricevuto un acconto su questo compenso"
+          React.createElement(React.Fragment, null
+            , React.createElement(Sel, { label: "Docente", value: f.docenteId, onChange: e=>{ set("docenteId",e.target.value); const _dList=(_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI); const d=_dList.find(x=>x.id===e.target.value); if(d) set("desc",f.isAcconto?`Acconto compenso ${MESI[f.mese]} — ${d.nome||d.name}`:`Compenso mensile ${d.nome||d.name}`); },
+                options: [{value:"",label:"— seleziona docente —"},...(_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI).map(d=>({value:d.id,label:d.nome||d.name}))], __self: this, __source: {fileName: _jsxFileName, lineNumber: 6375}})
+            , React.createElement('label', { style: {display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, fontWeight:600, color:C.text, padding:"10px 0"} }
+              , React.createElement('input', { type:"checkbox", checked: !!f.isAcconto,
+                  onChange: e => {
+                    set("isAcconto", e.target.checked);
+                    if (docenteSel && !f.desc) set("desc", e.target.checked ? `Acconto compenso ${MESI[f.mese]} — ${docenteSel.nome||docenteSel.name}` : `Compenso mensile ${docenteSel.nome||docenteSel.name}`);
+                  }, style:{width:16, height:16, cursor:"pointer"} })
+              , "Questo pagamento è un ACCONTO (da detrarre dal compenso mensile finale)"
             )
-            , f.haAcconto && (
-              React.createElement('div', { style: {marginTop:10, display:"flex", flexDirection:"column", gap:8} }
-                , React.createElement(Input, { label: "Importo acconto già percepito (€) *", type:"number",
-                    value: f.accontoImporto, onChange: e=>set("accontoImporto", e.target.value),
-                    error: err.accontoImporto, placeholder: "0.00" })
-                , !isNaN(f.importo) && f.importo!=="" && f.accontoImporto && !isNaN(f.accontoImporto) && (
-                  React.createElement('div', { style: {fontSize:12, color:C.textMuted} }
-                    , "Compenso lordo: ", fmt(Number(f.importo)||0), " — Acconto: ", fmt(Number(f.accontoImporto)||0)
-                    , " → ", React.createElement('strong', { style:{color:C.gold} }, "Da versare: ", fmt(Math.round(((Number(f.importo)||0)-(Number(f.accontoImporto)||0))*100)/100))
+            , !f.isAcconto && docenteSel && (
+              React.createElement('div', { style: {padding:"12px 14px", background:C.goldBg, borderRadius:8, border:`1px solid ${C.goldDim}`, fontSize:12, display:"flex", flexDirection:"column", gap:6} }
+                , React.createElement('div', null
+                  , React.createElement('strong', null, lezioniCompensoSF.length), " lezioni × ", fmt(Number(docenteSel.tariffaOra)||0), " = ", React.createElement('strong', null, fmt(compensoLordoSuggerito)), " compenso lordo stimato per ", MESI[f.mese], " ", f.anno
+                )
+                , acconti.length > 0 && (
+                  React.createElement('div', null
+                    , "Acconti già registrati questo mese: ", acconti.map((a,i) => (i>0?", ":"")+fmt(a.importo)).join(''), " (totale ", fmt(totaleAcconti), ")"
+                  )
+                )
+                , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between"} }
+                  , React.createElement('span', null, "Da versare suggerito: ", React.createElement('strong', {style:{color:C.gold}}, fmt(importoSuggerito)))
+                  , React.createElement('button', { onClick: ()=>set("importo", String(importoSuggerito)),
+                      style:{padding:"5px 12px", borderRadius:6, border:"none", background:C.gold, color:"#fff", fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"'Open Sans',sans-serif"} }
+                    , "Usa questo importo"
                   )
                 )
               )
@@ -11017,7 +11039,7 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
         , React.createElement(Input, { label: "Descrizione *" , value: f.desc, onChange: e=>set("desc",e.target.value), error: err.desc, placeholder: "Es. Bolletta luce gennaio, Spartiti..."    , __self: this, __source: {fileName: _jsxFileName, lineNumber: 6379}})
 
         , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6381}}
-          , React.createElement(Input, { label: f.categoria==="docenti" && f.haAcconto ? "Compenso lordo (€) *" : "Importo (€) *"  , type: "number", value: f.importo, onChange: e=>set("importo",e.target.value), error: err.importo, placeholder: "0.00", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6382}})
+          , React.createElement(Input, { label: "Importo (€) *"  , type: "number", value: f.importo, onChange: e=>set("importo",e.target.value), error: err.importo, placeholder: "0.00", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6382}})
           , React.createElement(Input, { label: "Data *", type: "date", value: f.data, onChange: e=>set("data",e.target.value), error: err.data, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6383}})
           , React.createElement(Sel, { label: "Mese di riferimento"  , value: f.mese, onChange: e=>set("mese",Number(e.target.value)),
             options: MESI.map((m,i)=>({value:i,label:m})), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6384}})
@@ -11086,11 +11108,10 @@ const DocenteView = ({ docente, spese, onBack }) => {
                 , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 6448}}
                   , React.createElement('div', { style: {fontSize:13, display:"flex", alignItems:"center", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6449}}
                     , s.desc
-                    , s.haAcconto && React.createElement('span', { style:{fontSize:10, fontWeight:700, color:C.gold, background:C.goldBg, border:`1px solid ${C.goldDim}`, borderRadius:6, padding:"1px 6px"} }, "ACCONTO PERCEPITO")
+                    , s.isAcconto && React.createElement('span', { style:{fontSize:10, fontWeight:700, color:C.gold, background:C.goldBg, border:`1px solid ${C.goldDim}`, borderRadius:6, padding:"1px 6px"} }, "ACCONTO")
                   )
                   , React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6450}}
                     , new Date(s.data+"T00:00:00").toLocaleDateString("it-IT"), " · "  , s.metodo
-                    , s.haAcconto && ` · Lordo ${fmt(s.importoLordo)} − Acconto ${fmt(s.accontoImporto)}`
                   )
                 )
                 , React.createElement('span', { style: {fontFamily:"'Oswald',sans-serif",fontSize:16,fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6454}}, fmt(s.importo))
@@ -11632,7 +11653,7 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota, ruoloCV, i
   )
 );
 
-const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, spese:propSpese, setSpese:propSetSpese, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV, quickAction, clearQuickAction, userRuolo:_ruoloCV, appUser:_appUserCV }) => {
+const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, spese:propSpese, setSpese:propSetSpese, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV, lessons:propLessonsCV, quickAction, clearQuickAction, userRuolo:_ruoloCV, appUser:_appUserCV }) => {
   const ruoloCV = _ruoloCV || "admin";
   const _loginNomeCV = (_appUserCV && _appUserCV.nome) || "";
   const myDocIdCV = ruoloCV==="docente"
@@ -11924,12 +11945,11 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7000}}
                           , React.createElement('div', { style: {fontSize:13,fontWeight:500, display:"flex", alignItems:"center", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7001}}
                             , s.desc
-                            , s.haAcconto && React.createElement('span', { style:{fontSize:9, fontWeight:700, color:C.gold, background:C.goldBg, border:`1px solid ${C.goldDim}`, borderRadius:6, padding:"1px 5px", whiteSpace:"nowrap"} }, "ACCONTO")
+                            , s.isAcconto && React.createElement('span', { style:{fontSize:9, fontWeight:700, color:C.gold, background:C.goldBg, border:`1px solid ${C.goldDim}`, borderRadius:6, padding:"1px 5px", whiteSpace:"nowrap"} }, "ACCONTO")
                           )
                           , React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7002}}
                             , new Date(s.data+"T00:00:00").toLocaleDateString("it-IT")
                             , doc && React.createElement(React.Fragment, null, " · "  , React.createElement('span', { style: {color:cat.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7004}}, doc.name))
-                            , s.haAcconto && React.createElement(React.Fragment, null, " · Lordo "+fmt(s.importoLordo)+" − Acconto "+fmt(s.accontoImporto))
                             , s.note && React.createElement(React.Fragment, null, " · "  , s.note)
                           )
                         )
@@ -12172,8 +12192,8 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
           )
         )
 
-        , ruoloCV==="admin" && modal==="add"    && React.createElement(Modal, { title: "Registra spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}, React.createElement(SpesaForm, { onSave: handleAdd, onClose: closeModal, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}))
-        , modal==="edit"   && selSpesa && React.createElement(Modal, { title: "Modifica spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}, React.createElement(SpesaForm, { initial: selSpesa, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), onSave: handleEdit, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}))
+        , ruoloCV==="admin" && modal==="add"    && React.createElement(Modal, { title: "Registra spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}, React.createElement(SpesaForm, { onSave: handleAdd, onClose: closeModal, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), lessons: propLessonsCV||[], spese: spese, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7230}}))
+        , modal==="edit"   && selSpesa && React.createElement(Modal, { title: "Modifica spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}, React.createElement(SpesaForm, { initial: selSpesa, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), onSave: handleEdit, onClose: closeModal, lessons: propLessonsCV||[], spese: spese, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}))
         , modal==="delete" && selSpesa && React.createElement(ConfirmDel, { label: selSpesa.desc, onConfirm: handleDel, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7232}})
         , ruoloCV==="admin" && modal==="addq"   && React.createElement(Modal, { title: "Nuova entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}, React.createElement(EntrataForm, { students: students, initial: prefillEntrata, onSave: handleAddQ, onClose: closeModal, categorie: catEntrate, onAddCategoriaEntr: (cat)=>setCatEntrate(p=>[...p,cat]), config: config, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}))
         , modal==="editq"  && selQuota && React.createElement(Modal, { title: "Modifica entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}, React.createElement(EntrataForm, { students: students, initial: selQuota, onSave: handleEditQ, onClose: closeModal, config: config, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}))
