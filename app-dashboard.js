@@ -2505,18 +2505,29 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   });
                 });
                 if (coppie.length === 0) return null;
-                return React.createElement('div', { style:{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderRadius:12,border:`1.5px solid ${C.redBorder}`,background:C.redBg,cursor:'pointer'},
-                    onClick: () => onNavigate('calendario') }
-                  , React.createElement(Ic, { n:'alert', size:18, stroke:C.red })
-                  , React.createElement('div', {style:{flex:1}}
-                    , React.createElement('div', {style:{fontSize:13,fontWeight:700,color:C.red}}, 'Conflitti orario rilevati')
-                    , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}
-                      , coppie.length===1
-                        ? `1 sovrapposizione: ${coppie[0][0].date} ore ${coppie[0][0].hour}`
-                        : `${coppie.length} sovrapposizioni tra lezioni con stesso insegnante o strumento`
+                const etichetta = l => isColl(l) ? (l.courseName||"Collettiva") : (l.student||l.contactName||"—");
+                const fmtData = d => { try { return new Date(d+"T00:00:00").toLocaleDateString('it-IT', {weekday:'short', day:'numeric', month:'short'}); } catch(e){ return d; } };
+                return React.createElement('div', { style:{padding:'14px 18px',borderRadius:12,border:`1.5px solid ${C.redBorder}`,background:C.redBg} }
+                  , React.createElement('div', { style:{display:'flex',alignItems:'center',gap:12,cursor:'pointer'}, onClick: () => onNavigate('calendario') }
+                    , React.createElement(Ic, { n:'alert', size:18, stroke:C.red })
+                    , React.createElement('div', {style:{flex:1}}
+                      , React.createElement('div', {style:{fontSize:13,fontWeight:700,color:C.red}}, 'Conflitti orario rilevati')
+                      , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}
+                        , coppie.length===1 ? '1 sovrapposizione trovata' : `${coppie.length} sovrapposizioni trovate`
+                      )
                     )
+                    , React.createElement('span', {style:{fontSize:12,fontWeight:700,color:C.red}}, 'Vai al Calendario →')
                   )
-                  , React.createElement('span', {style:{fontSize:12,fontWeight:700,color:C.red}}, 'Vai al Calendario →')
+                  , React.createElement('div', { style:{marginTop:10, display:'flex', flexDirection:'column', gap:6} }
+                    , coppie.map(([a, b], i) => (
+                        React.createElement('div', { key:i, style:{fontSize:12, color:C.text, padding:'8px 10px', background:'rgba(255,255,255,0.5)', borderRadius:8} }
+                          , React.createElement('strong', null, fmtData(a.date), ' · ', a.hour)
+                          , ' — ', etichetta(a), ' (', a.instrument||'—', a.teacher?`, ${a.teacher}`:'', ')'
+                          , React.createElement('span', {style:{color:C.red, fontWeight:700}}, ' ⟷ ')
+                          , etichetta(b), ' (', b.instrument||'—', b.teacher?`, ${b.teacher}`:'', ')'
+                        )
+                      ))
+                  )
                 );
               })()
 
