@@ -78,10 +78,16 @@ const LiveClock = () => {
 };
 
 // ─── KPI CARD ─────────────────────────────────────────────────────────────────
+const KPI_EMOJI = {
+  calendar:"📅", clock:"⏰", euro:"💶", users:"🧑‍🎓", group:"👥", user:"🧑‍🏫",
+  music:"🎵", mic:"🎤", courses:"🎸", star:"⭐", check:"✅", alert:"⚠️",
+  up:"📈", down:"📉", list:"📋", book:"📚", drum:"🥁", bell:"🔔",
+};
 const KpiCard = ({ icon, label, value, sub, hex=C.gold, bg, trend, onClick, hideAmounts }) => {
   const [displayed, setDisplayed] = useState(0);
   const isNum = typeof value === "number";
   const isMonetary = typeof value === "string" && value.startsWith("€");
+  const isBambinoKpi = typeof document !== 'undefined' && document.body.getAttribute('data-fm-tema') === 'bambino';
 
   useEffect(()=>{
     if(!isNum){ setDisplayed(value); return; }
@@ -106,7 +112,9 @@ const KpiCard = ({ icon, label, value, sub, hex=C.gold, bg, trend, onClick, hide
       , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1252}}
         , React.createElement('div', { style: {width:38,height:38,borderRadius:10,background:bg||`${hex}15`,
           display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1253}}
-          , React.createElement(Ic, { n: icon, size: 18, stroke: hex, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1255}})
+          , isBambinoKpi
+            ? React.createElement('span', {style:{fontSize:20}}, KPI_EMOJI[icon] || '⭐')
+            : React.createElement(Ic, { n: icon, size: 18, stroke: hex, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1255}})
         )
         , trend!==undefined && (
           React.createElement('div', { style: {display:"flex",alignItems:"center",gap:4,fontSize:11,
@@ -2425,11 +2433,21 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             borderBottom:`1px solid ${C.border}`,padding:"16px 20px",
             display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2162}}
             , React.createElement('div', { style: {animation:"fadeUp 0.4s ease both"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2165}}
-              , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:30,fontWeight:300,letterSpacing:"0.02em",lineHeight:1.15}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2166}}, "Buongiorno, "
+              , temaAttivo === 'bambino'
+                ? React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:34,fontWeight:600,letterSpacing:"0.01em",lineHeight:1.15,display:"flex",alignItems:"center",gap:10}}
+                  , React.createElement('span',{style:{fontSize:38}}, "🎉")
+                  , "Ciao, "
+                  , React.createElement('span', { style: {fontWeight:800,color:C.gold} }, myNome || "Musicista")
+                  , "!"
+                )
+                : React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:30,fontWeight:300,letterSpacing:"0.02em",lineHeight:1.15}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2166}}, "Buongiorno, "
                  , IS_PWA ? React.createElement('br') : null
                  , React.createElement('span', { style: {fontWeight:600,color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2167}}
                   , myNome || (ruolo==="admin"?"Amministratore":ruolo==="docente"?"Docente":ruolo==="allievo"?"Allievo":"Utente")
                 )
+              )
+              , temaAttivo === 'bambino' && React.createElement('p', {style:{fontSize:14,color:C.gold,marginTop:6,fontWeight:600}}
+                , "🎵 Pronto per suonare oggi? 🎶"
               )
               , React.createElement('p', { style: {fontSize:13,color:C.textMuted,marginTop:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2171}}
                 , _annoScolasticoLabelDash
@@ -2485,7 +2503,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
 
             /* ── RIGA 1: KPI ── */
             , React.createElement('div', null
-              /* Pulsante mostra/nascondi importi + Cambia vista */
+              /* Pulsante mostra/nascondi importi + Cambia tema */
               , React.createElement('div', {
                   style:{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:8}
                 }
@@ -2499,7 +2517,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                     onMouseEnter:e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.color=C.gold;},
                     onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted;}
                   }
-                  , "🎨 Cambia vista"
+                  , "🎨 Cambia tema"
                 )
                 , (ruolo === "admin" || ruolo === "allievo" || ruolo === "docente") && React.createElement('button', {
                     onClick: ()=>setShowAmounts(p=>!p),

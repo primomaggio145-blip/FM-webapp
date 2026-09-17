@@ -86,10 +86,24 @@ const TEMA_BAMBINO = {
   sidebar:"#7e57c2", sidebarActive:"#5e35b1", sidebarText:"#ffffff", sidebarActiveTxt:"#ffffff",
 };
 
-// Il teen mantiene una palette leggibile e "adulta" nei contrasti — la parte
-// davvero personalizzabile per loro è lo SFONDO (vedi TEMA_SFONDO_PRESET sotto
-// e applyTema()), non i colori dei componenti.
-const TEMA_TEEN = { ...TEMA_ADULTO };
+// Il teen ha una palette propria: più scura/moderna e vivace, ben distinta sia
+// dal bambino (troppo infantile) sia dall'adulto (troppo "ufficio"). Sopra a
+// questa base resta comunque disponibile lo sfondo personalizzabile (vedi
+// TEMA_SFONDO_PRESET sotto e applyTema()).
+const TEMA_TEEN = {
+  bg:"#0f172a", surface:"#1e293b", surfaceHover:"#273549", surface2:"#334155",
+  border:"#334155", borderHover:"#475569",
+  gold:"#a78bfa", goldDim:"#8b5cf6", goldBg:"rgba(167,139,250,0.14)", goldLight:"#c4b5fd",
+  text:"#f1f5f9", textMuted:"#94a3b8", textDim:"#64748b",
+  green:"#4ade80", greenBg:"rgba(74,222,128,0.12)", greenBorder:"#4ade8060",
+  red:"#fb7185",  redBg:"rgba(251,113,133,0.12)",   redBorder:"#fb718560",
+  blue:"#60a5fa", blueBg:"rgba(96,165,250,0.12)",   blueBorder:"#60a5fa60",
+  orange:"#fb923c",orangeBg:"rgba(251,146,60,0.12)",orangeBorder:"#fb923c60",
+  purple:"#a78bfa",purpleBg:"rgba(167,139,250,0.14)",purpleBorder:"#a78bfa60",
+  teal:"#22d3ee", tealBg:"rgba(34,211,238,0.12)",   tealBorder:"#22d3ee60",
+  orange2:"#fbbf24", orange2Bg:"rgba(251,191,36,0.12)", orange2Border:"#fbbf2460",
+  sidebar:"#1e1b4b", sidebarActive:"#312e81", sidebarText:"rgba(255,255,255,0.85)", sidebarActiveTxt:"#ffffff",
+};
 
 const TEMA_PALETTE = { adulto: TEMA_ADULTO, bambino: TEMA_BAMBINO, teen: TEMA_TEEN };
 

@@ -866,7 +866,7 @@ function App() {
                     : TEMA_SFONDO_PRESET[0].css,
         }})
       , React.createElement('div', { style: {display:"flex",height:"100dvh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), config: sharedConfig, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), config: sharedConfig, temaAttivo: temaAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , React.createElement('div', { key: view, className: "main-scroll", style: {flex:1,overflow:"auto",background:temaAttivo==='teen'?'transparent':C.bg,animation:"fadeIn 0.25s ease",
           paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 4px)",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10788}}
           , renderCurrentView()

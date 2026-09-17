@@ -1826,7 +1826,17 @@ const CestinoView = ({ userRuolo:_ruoloCestino }) => {
   );
 };
 
-const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction, config }) => {
+// Emoji al posto delle icone quando il tema bambino è attivo (vedi NavBtn)
+const NAV_EMOJI = {
+  dashboard:"🏠", allievi:"🧑‍🎓", docenti:"🧑‍🏫", corsi:"🎵", calendario:"📅",
+  concerti:"🎤", contabilita:"💶", repertorio:"🎼", allegati:"📎",
+  biblioteca:"📚", messaggi:"💬", utenti:"👥", notifiche:"🔔", reminders:"📱",
+  impostazioni:"⚙️", schedaScuola:"🏫", modulistica:"📄", sala_prove:"🥁",
+  googleCalendar:"🗓️", cestino:"🗑️",
+  showCalendario:"📅", showRecuperi:"⏰", showElenco:"📋", showSalaProve:"🥁",
+};
+
+const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction, config, temaAttivo }) => {
   const [sidebarLogoOk, setSidebarLogoOk] = useState(true);
   const sidebarNomeScuola = (config && config.nomeScuola) || "Futuro Musica";
   const ruoloHex = {admin:C.gold, docente:C.teal, allievo:C.blue}[_optionalChain([user, 'optionalAccess', _89 => _89.ruolo])] || C.gold;
@@ -1923,6 +1933,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
               const perms     = IS_PWA ? (PWA_PERMS[effRole]||PWA_PERMS["admin"]) : (ROLE_PERMS[effRole]||ROLE_PERMS["admin"]);
               const isAdmin   = sideRuolo === "admin" && !IS_PWA;
 
+              const isBambino = temaAttivo === 'bambino';
               // Helper: render a single nav button
               const NavBtn = ({id, label, icon, indent=false}) => {
                 if(perms[id] === false) return null;
@@ -1931,16 +1942,18 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                   key: id,
                   onClick: () => setView(id),
                   style: {width:"100%",display:"flex",alignItems:"center",gap:10,
-                    padding: indent ? "7px 10px 7px 26px" : "9px 12px",
+                    padding: indent ? "7px 10px 7px 26px" : (isBambino ? "12px 12px" : "9px 12px"),
                     borderRadius:0,border:"none",cursor:"pointer",
                     background: active ? "rgba(255,255,255,0.15)" : "transparent",
                     color: active ? "#ffffff" : indent ? "rgba(255,255,255,0.65)" : C.sidebarText,
                     fontFamily:"'Open Sans',sans-serif",
-                    fontSize: indent ? 12 : 13,
-                    fontWeight: active ? 600 : 400,
+                    fontSize: indent ? 12 : (isBambino ? 15 : 13),
+                    fontWeight: active ? 600 : (isBambino ? 600 : 400),
                     textAlign:"left",transition:"all 0.15s",marginBottom:1,
                     borderLeft: active ? "3px solid #8c1818" : indent ? "3px solid rgba(255,255,255,0.1)" : "3px solid transparent"}},
-                  React.createElement(Ic, {n:icon, size: indent?12:15, stroke: active?"#ffffff": indent?"rgba(255,255,255,0.5)":C.sidebarText}),
+                  isBambino
+                    ? React.createElement('span', {style:{fontSize: indent?16:20}}, NAV_EMOJI[id] || '⭐')
+                    : React.createElement(Ic, {n:icon, size: indent?12:15, stroke: active?"#ffffff": indent?"rgba(255,255,255,0.5)":C.sidebarText}),
                   label
                 );
               };
@@ -1959,7 +1972,9 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                     fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight: hasActive?600:400,
                     textAlign:"left",transition:"all 0.15s",marginBottom:1,
                     borderLeft: hasActive ? "3px solid rgba(255,255,255,0.3)" : "3px solid transparent"}},
-                  React.createElement(Ic,{n:icon, size:15, stroke: hasActive?"#ffffff":C.sidebarText}),
+                  isBambino
+                    ? React.createElement('span', {style:{fontSize:18}}, NAV_EMOJI[id] || '⭐')
+                    : React.createElement(Ic,{n:icon, size:15, stroke: hasActive?"#ffffff":C.sidebarText}),
                   React.createElement('span',{style:{flex:1}}, label),
                   React.createElement('span',{style:{fontSize:10,opacity:0.5,transition:"transform 0.2s",
                     display:"inline-block",transform: isOpen?"rotate(90deg)":"rotate(0deg)"}}, "▶")
