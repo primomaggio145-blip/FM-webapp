@@ -11080,9 +11080,28 @@ class ReportErrorBoundary extends React.Component {
 
 const ReportView = ({ spese, entrate }) => {
   const [anno, setAnno] = useState(ANNO_ATT);
+  const [metodoSel, setMetodoSel] = useState("tutti");
 
-  const speseAnno    = spese.filter(s=>s.anno===anno);
-  const entrateAnno  = entrate.filter(e=>e.anno===anno);
+  const NON_SPEC = "Non specificato";
+  const METODI_REPORT = [...METODI_PAG, NON_SPEC];
+  const metodoOf = (x) => (x.metodo && METODI_PAG.includes(x.metodo)) ? x.metodo : NON_SPEC;
+
+  const speseAnnoAll    = spese.filter(s=>s.anno===anno);
+  const entrateAnnoAll  = entrate.filter(e=>e.anno===anno);
+
+  // Riepilogo per metodo di pagamento: SEMPRE su tutto l'anno, indipendentemente dal filtro attivo
+  const perMetodo = METODI_REPORT.map(m => {
+    const eM = entrateAnnoAll.filter(e=>metodoOf(e)===m);
+    const sM = speseAnnoAll.filter(s=>metodoOf(s)===m);
+    const totE = eM.reduce((t,e)=>t+e.importo,0);
+    const totS = sM.reduce((t,s)=>t+s.importo,0);
+    return { metodo:m, entrate:totE, uscite:totS, saldo:totE-totS, nEntrate:eM.length, nUscite:sM.length };
+  }).filter(m=>m.entrate>0||m.uscite>0);
+
+  // Il metodo selezionato trasforma tutto il resto del Report in una sotto-contabilità
+  // dedicata a quel solo metodo — stessa logica del filtro anno, applicata a cascata.
+  const speseAnno   = metodoSel==="tutti" ? speseAnnoAll   : speseAnnoAll.filter(s=>metodoOf(s)===metodoSel);
+  const entrateAnno = metodoSel==="tutti" ? entrateAnnoAll : entrateAnnoAll.filter(e=>metodoOf(e)===metodoSel);
 
   const totUscite  = speseAnno.reduce((t,s)=>t+s.importo,0);
   const totEntrate = entrateAnno.reduce((t,e)=>t+e.importo,0);
@@ -11110,7 +11129,7 @@ const ReportView = ({ spese, entrate }) => {
       , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6494}}
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 6495}}
           , React.createElement('h2', { style: {fontFamily:"'Oswald',sans-serif",fontSize:24,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6496}}, "Report & saldo netto"   )
-          , React.createElement('p', { style: {color:C.textMuted,fontSize:13,marginTop:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6497}}, "Anno " , anno)
+          , React.createElement('p', { style: {color:C.textMuted,fontSize:13,marginTop:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6497}}, "Anno " , anno, metodoSel!=="tutti" ? ` · ${metodoSel}` : "")
         )
         , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6499}}
           , React.createElement('button', { onClick: ()=>setAnno(p=>p-1), style: {background:C.surface,border:`1px solid ${C.border}`,
@@ -11123,6 +11142,22 @@ const ReportView = ({ spese, entrate }) => {
             , React.createElement(Ic, { n: "right", size: 16, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6507}})
           )
         )
+      )
+
+      /* Filtro metodo di pagamento — seleziona un metodo per trasformare tutto il Report
+         sottostante in una sotto-contabilità dedicata a quel solo metodo */
+      , React.createElement('div', { style: {display:"flex",gap:6,flexWrap:"wrap"} }
+        , ["tutti", ...METODI_REPORT].map(m=>(
+          React.createElement('button', { key: m, onClick: ()=>setMetodoSel(m),
+            style: {padding:"6px 13px",borderRadius:20,fontSize:12,cursor:"pointer",
+              border:`1px solid ${metodoSel===m?C.gold:C.border}`,
+              background:metodoSel===m?C.goldBg:C.surface,
+              color:metodoSel===m?C.gold:C.textMuted,
+              fontFamily:"'Open Sans',sans-serif",fontWeight:metodoSel===m?600:400,
+              transition:"all 0.15s"} }
+            , m==="tutti" ? "Tutti i metodi" : m
+          )
+        ))
       )
 
       /* KPI saldo */
@@ -11141,6 +11176,49 @@ const ReportView = ({ spese, entrate }) => {
             , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,color:k.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6525}}, k.val)
           )
         ))
+      )
+
+      /* Riepilogo per metodo di pagamento — sempre su tutto l'anno, click per filtrare */
+      , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"} }
+        , React.createElement('div', { style: {padding:"13px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8} }
+          , React.createElement(Ic, { n: "euro", size: 14, stroke: C.textMuted })
+          , React.createElement('span', { style: {fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted} }, "Riepilogo per metodo di pagamento")
+        )
+        , perMetodo.length===0 ? (
+          React.createElement('div', { style: {padding:"30px 0",textAlign:"center",color:C.textDim,fontSize:13} }, "Nessun movimento registrato")
+        ) : (
+          React.createElement('div', { style: {padding:"6px 0"} }
+            , perMetodo.map(pm=>{
+              const isSel = metodoSel===pm.metodo;
+              const pctBar = Math.max(pm.entrate, pm.uscite) > 0
+                ? (pm.entrate/(pm.entrate+pm.uscite||1))*100 : 0;
+              return (
+                React.createElement('div', { key: pm.metodo, onClick: ()=>setMetodoSel(isSel?"tutti":pm.metodo),
+                  style: {padding:"10px 20px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",
+                    background:isSel?C.goldBg:"transparent",transition:"background 0.1s"},
+                  onMouseEnter: e=>{if(!isSel)e.currentTarget.style.background=C.surfaceHover;},
+                  onMouseLeave: e=>{if(!isSel)e.currentTarget.style.background="transparent";} }
+                  , React.createElement('div', { style: {width:160,flexShrink:0} }
+                    , React.createElement('div', { style: {fontSize:13,fontWeight:isSel?600:500,color:isSel?C.gold:C.text} }, pm.metodo)
+                    , React.createElement('div', { style: {fontSize:11,color:C.textMuted} }, pm.nEntrate+pm.nUscite, " movimenti")
+                  )
+                  , React.createElement('div', { style: {flex:1,height:8,background:C.border,borderRadius:4,overflow:"hidden",display:"flex"} }
+                    , React.createElement('div', { style: {height:"100%",width:`${pctBar}%`,background:C.green,transition:"width 0.4s ease"} })
+                    , React.createElement('div', { style: {height:"100%",width:`${100-pctBar}%`,background:C.red,transition:"width 0.4s ease"} })
+                  )
+                  , React.createElement('div', { style: {textAlign:"right",flexShrink:0,minWidth:75} }
+                    , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:14,fontWeight:600,color:C.green} }, "+", fmt(pm.entrate))
+                    , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:12,color:C.red} }, "-", fmt(pm.uscite))
+                  )
+                  , React.createElement('div', { style: {textAlign:"right",flexShrink:0,minWidth:90} }
+                    , React.createElement('div', { style: {fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.05em"} }, "Saldo")
+                    , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:15,fontWeight:600,color:pm.saldo>=0?C.green:C.red} }, fmt(pm.saldo))
+                  )
+                )
+              );
+            })
+          )
+        )
       )
 
       /* Grafico entrate vs uscite */
