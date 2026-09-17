@@ -4097,6 +4097,30 @@ const trovaLezionePrecedente = (lesson, tutteLeLezioni) => {
   candidati.sort((a, b) => b.date.localeCompare(a.date) || (b.hour || '').localeCompare(a.hour || ''));
   return candidati[0];
 };
+// Trova le lezioni ESISTENTI che si sovrappongono in orario con `lezione` (stesso giorno,
+// fasce orarie che si intersecano considerando la durata) e condividono lo stesso strumento
+// (solo tra due lezioni individuali) oppure lo stesso insegnante (qualunque tipo di lezione,
+// perché un docente non può fisicamente essere in due posti contemporaneamente).
+function trovaConflittiOrario(lezione, tutteLeLezioni) {
+  if (!lezione || !lezione.date || !lezione.hour) return [];
+  const oraCompleta = h => (h && h.length === 5) ? h + ':00' : h;
+  const inizio = new Date(`${lezione.date}T${oraCompleta(lezione.hour)}`);
+  const fine = new Date(inizio.getTime() + (Number(lezione.durata) || 45) * 60000);
+  if (isNaN(inizio.getTime())) return [];
+  return (tutteLeLezioni || []).filter(l => {
+    if (l.id === lezione.id || l.date !== lezione.date || !l.hour) return false;
+    if (isSalaProve(l) || isSalaProve(lezione)) return false; // la sala prove ha una gestione conflitti propria
+    const lInizio = new Date(`${l.date}T${oraCompleta(l.hour)}`);
+    if (isNaN(lInizio.getTime())) return false;
+    const lFine = new Date(lInizio.getTime() + (Number(l.durata) || 45) * 60000);
+    const sovrapposte = inizio < lFine && lInizio < fine;
+    if (!sovrapposte) return false;
+    const stessoStrumento = !isColl(l) && !isColl(lezione) &&
+      l.instrument && lezione.instrument && l.instrument === lezione.instrument;
+    const stessoInsegnante = l.teacher && lezione.teacher && l.teacher === lezione.teacher;
+    return stessoStrumento || stessoInsegnante;
+  });
+}
 // Due lezioni individuali sono della "stessa serie" se hanno lo stesso allievo reale, OPPURE
 // (quando l'allievo non è ancora assegnato) sono entrambe placeholder "nuovo iscritto" con lo
 // stesso nome provvisorio. Senza questo secondo caso, il controllo anti-duplicato non funziona
@@ -4307,7 +4331,7 @@ const ATT_STYLES = {
   cambio_ora:  { bg:'rgba(139,92,246,0.10)', fg:'#7c3aed', bd:'rgba(139,92,246,0.4)', label:'Cambio ora'  },
 };
 
-const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, courses:_coursesRaw, role:_roleLF }) => {
+const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, courses:_coursesRaw, role:_roleLF, lessons:_lessonsLF }) => {
   const roleLF = _roleLF || "admin"; // admin = può modificare data; docente = data readOnly
   const _teacherOptsLes = (_docentiFLes||[]).map(d=>({value:d.nome||d.name||"",label:d.nome||d.name||""}));
   const repertorio = _repertorioRaw || [];
@@ -4348,6 +4372,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
   const [showBranoForm, setShowBranoForm] = useState(false);
   const [f, setF] = useState(initial || emptyLesson);
   const [err, setErr] = useState({});
+  const [conflittiOrario, setConflittiOrario] = useState(null); // array di lezioni in conflitto, o null
 
   // Corsi individuali dell'allievo selezionato — corso ★ (principale) + corsi extra,
   // trattati TUTTI allo stesso livello, ciascuno con il proprio insegnante collegato.
@@ -4434,6 +4459,8 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
   const handleSave = () => {
     const e = validate();
     if(Object.keys(e).length){ setErr(e); return; }
+    const conflitti = trovaConflittiOrario({ ...f, id: initial?.id || '__nuova__' }, _lessonsLF || []);
+    if (conflitti.length > 0) { setConflittiOrario(conflitti); return; }
     // Salva subito la lezione — non aspettare l'update degli stati brani
     onSave({ ...f, _newBrani: newlyCreatedBraniRef.current, _statiBrani: statiBrani });
     // Aggiorna gli stati dei brani in background (fire-and-forget)
@@ -4755,6 +4782,35 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
       , React.createElement('div', { style: {padding:"14px 22px", borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)", display:"flex", justifyContent:"flex-end", gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4390}}
         , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4391}}, "Annulla")
         , React.createElement(Btn, { onClick: handleSave, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4392}}, React.createElement(Ic, { n: "check", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4392}}), _optionalChain([initial, 'optionalAccess', _49 => _49.id]) ? "Salva modifiche" : "Aggiungi lezione")
+      )
+
+      /* Dialog bloccante: conflitto orario (stesso strumento o stesso insegnante) */
+      , conflittiOrario && conflittiOrario.length > 0 && React.createElement(Modal, {
+          title: "⚠️ Conflitto orario", onClose: () => setConflittiOrario(null)
+        }
+        , React.createElement('div', { style: {padding:22, display:"flex", flexDirection:"column", gap:12} }
+          , React.createElement('p', { style: {fontSize:13, color:C.text, margin:0} }
+            , "Non è possibile salvare: questa lezione si sovrappone in orario con ", conflittiOrario.length===1?"un'altra lezione già esistente":`${conflittiOrario.length} lezioni già esistenti`, "."
+          )
+          , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:8} }
+            , conflittiOrario.map(c => (
+                React.createElement('div', { key: c.id, style: {padding:"10px 12px", borderRadius:8, border:`1px solid ${C.redBorder}`, background:C.redBg, fontSize:12} }
+                  , React.createElement('div', { style: {fontWeight:600, color:C.red} }
+                    , c.hour, " · ", c.durata||45, " min · ", isColl(c) ? (c.courseName||"Collettiva") : (c.student||"—")
+                  )
+                  , React.createElement('div', { style: {color:C.textMuted, marginTop:2} }
+                    , c.instrument, " · ", c.teacher || "—"
+                  )
+                )
+              ))
+          )
+          , React.createElement('p', { style: {fontSize:12, color:C.textMuted, margin:0} }
+            , "Cambia orario, insegnante o strumento e riprova."
+          )
+          , React.createElement('div', { style: {display:"flex", justifyContent:"flex-end"} }
+            , React.createElement(Btn, { variant: "secondary", onClick: () => setConflittiOrario(null) }, "Ho capito")
+          )
+        )
       )
     )
   );
@@ -6734,7 +6790,7 @@ const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd }) => {
   );
 };
 
-const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose, gruppi:_gruppiCLF, iscrizioniAnno:_iscrCLF, annoSel:_annoSelCLF }) => {
+const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose, gruppi:_gruppiCLF, iscrizioniAnno:_iscrCLF, annoSel:_annoSelCLF, lessons:_lessonsCLF }) => {
   const docenti    = _docentiRaw    || [];
   const repertorio = _repertorioRaw || [];
   const collettivi = courses.filter(c => c.type === "collettivo");
@@ -6745,6 +6801,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
 
   const [step,        setStep]       = useState(initial ? 2 : 1); // edit → salta al step 2
   const [saving,      setSaving]     = useState(false); // guard anti doppio-click su "Crea lezione"
+  const [conflittiOrario, setConflittiOrario] = useState(null);
   const [selCourse,   setSelCourse]  = useState(initCourse);
   const [selStudents, setSelStudents]= useState(
     initial ? (initial.students || []).map(s => String(s.id)).filter(Boolean) : []
@@ -6842,7 +6899,6 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     if (saving) return; // previene doppio invio (doppio click) che creerebbe 2 lezioni distinte
     const e = validate();
     if (Object.keys(e).length) { setErr(e); return; }
-    setSaving(true);
     const teacherObj = docenti.find(d => d.id === form.teacherId);
     const prevAttById = {};
     (initial?.students || []).forEach(s => { if (s && s.id) prevAttById[String(s.id)] = s.attendance || ''; });
@@ -6851,7 +6907,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
       if (!s) return null;
       return { id: s.id, name: s.name, instrument: s.instrument, level: s.level||"", attendance: prevAttById[String(id)] || '' };
     }).filter(Boolean);
-    onSave({
+    const nuovaLezione = {
       id:         initial?.id || uid(),  // preserva id in edit mode
       tipo:       "collettivo",
       courseId:   selCourse.id,
@@ -6875,7 +6931,11 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
       durata: form.durata || 60,
       gruppoId:   selGruppoId || null,
       gruppoNome: selGruppo ? selGruppo.nome : null,
-    });
+    };
+    const conflitti = trovaConflittiOrario(nuovaLezione, _lessonsCLF || []);
+    if (conflitti.length > 0) { setConflittiOrario(conflitti); return; }
+    setSaving(true);
+    onSave(nuovaLezione);
   };
 
   // ── STEP 1: scegli corso ──
@@ -7273,6 +7333,31 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
            , (!saving && selStudents.length>0)?` (${selStudents.length} allievi)`:""
         )
       )
+      , conflittiOrario && conflittiOrario.length > 0 && React.createElement(Modal, {
+          title: "⚠️ Conflitto orario", onClose: () => setConflittiOrario(null)
+        }
+        , React.createElement('div', { style: {padding:22, display:"flex", flexDirection:"column", gap:12} }
+          , React.createElement('p', { style: {fontSize:13, color:C.text, margin:0} }
+            , "Non è possibile salvare: questa lezione si sovrappone in orario con ", conflittiOrario.length===1?"un'altra lezione già esistente":`${conflittiOrario.length} lezioni già esistenti`, "."
+          )
+          , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:8} }
+            , conflittiOrario.map(c => (
+                React.createElement('div', { key: c.id, style: {padding:"10px 12px", borderRadius:8, border:`1px solid ${C.redBorder}`, background:C.redBg, fontSize:12} }
+                  , React.createElement('div', { style: {fontWeight:600, color:C.red} }
+                    , c.hour, " · ", c.durata||45, " min · ", isColl(c) ? (c.courseName||"Collettiva") : (c.student||"—")
+                  )
+                  , React.createElement('div', { style: {color:C.textMuted, marginTop:2} }
+                    , c.instrument, " · ", c.teacher || "—"
+                  )
+                )
+              ))
+          )
+          , React.createElement('p', { style: {fontSize:12, color:C.textMuted, margin:0} }, "Cambia orario o insegnante e riprova.")
+          , React.createElement('div', { style: {display:"flex", justifyContent:"flex-end"} }
+            , React.createElement(Btn, { variant: "secondary", onClick: () => setConflittiOrario(null) }, "Ho capito")
+          )
+        )
+      )
     )
   );
 };
@@ -7285,12 +7370,13 @@ const emptyProva = {
   durata: 30,
 };
 
-const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, onSave, onClose, date }) => {
+const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, onSave, onClose, date, lessons:_lessonsTLF }) => {
   const docenti = _docentiRaw || [];
   const courses = _coursesRaw || [];
   // Merge initial con emptyProva per garantire tutti i campi (phone potrebbe mancare nelle lezioni di prova salvate prima)
   const [f, setF] = useState({...emptyProva, date: date || yyyymmdd(today), ...(initial||{})});
   const [err, setErr] = useState({});
+  const [conflittiOrario, setConflittiOrario] = useState(null);
   const set = (k,v) => setF(p=>({...p,[k]:v}));
 
   // Corsi individuali + collettivi come opzioni strumento/corso
@@ -7319,7 +7405,7 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
   const handleSave = () => {
     const e = validate();
     if(Object.keys(e).length){ setErr(e); return; }
-    onSave({
+    const nuovaLezione = {
       ...f,
       id: (initial && initial.id) || uid(),  // preserva id in edit mode
       tipo:"prova",
@@ -7328,7 +7414,10 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
       attendance: f.attendance || "",
       recurrence:"Nessuna", repertorioIds:[],
       durata: f.durata || 30,
-    });
+    };
+    const conflitti = trovaConflittiOrario(nuovaLezione, _lessonsTLF || []);
+    if (conflitti.length > 0) { setConflittiOrario(conflitti); return; }
+    onSave(nuovaLezione);
   };
 
   return (
@@ -7449,6 +7538,31 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
         , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5810}}, "Annulla")
         , React.createElement(Btn, { onClick: handleSave, style: {background:C.teal, borderColor:C.teal}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5811}}
           , React.createElement(Ic, { n: "user", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 5812}}), "Crea lezione prova"
+        )
+      )
+      , conflittiOrario && conflittiOrario.length > 0 && React.createElement(Modal, {
+          title: "⚠️ Conflitto orario", onClose: () => setConflittiOrario(null)
+        }
+        , React.createElement('div', { style: {padding:22, display:"flex", flexDirection:"column", gap:12} }
+          , React.createElement('p', { style: {fontSize:13, color:C.text, margin:0} }
+            , "Non è possibile salvare: questa lezione si sovrappone in orario con ", conflittiOrario.length===1?"un'altra lezione già esistente":`${conflittiOrario.length} lezioni già esistenti`, "."
+          )
+          , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:8} }
+            , conflittiOrario.map(c => (
+                React.createElement('div', { key: c.id, style: {padding:"10px 12px", borderRadius:8, border:`1px solid ${C.redBorder}`, background:C.redBg, fontSize:12} }
+                  , React.createElement('div', { style: {fontWeight:600, color:C.red} }
+                    , c.hour, " · ", c.durata||45, " min · ", isColl(c) ? (c.courseName||"Collettiva") : (c.student||"—")
+                  )
+                  , React.createElement('div', { style: {color:C.textMuted, marginTop:2} }
+                    , c.instrument, " · ", c.teacher || "—"
+                  )
+                )
+              ))
+          )
+          , React.createElement('p', { style: {fontSize:12, color:C.textMuted, margin:0} }, "Cambia orario o insegnante e riprova.")
+          , React.createElement('div', { style: {display:"flex", justifyContent:"flex-end"} }
+            , React.createElement(Btn, { variant: "secondary", onClick: () => setConflittiOrario(null) }, "Ho capito")
+          )
         )
       )
     )
@@ -10438,7 +10552,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
         , modal === "add" && (
           React.createElement(Modal, { title: "Nuova lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6136}}
-            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
+            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, lessons: lessons, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
           )
         )
         , modal === "edit" && selLesson && (
@@ -10453,6 +10567,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                     gruppi: propGruppiCal || [],
                     iscrizioniAnno: propIscrizioniCal || [],
                     annoSel: calConfig && calConfig.annoInizioAttivo,
+                    lessons: lessons,
                     onAddBrano: b => setRepertorio(p=>[...p,b]),
                     onSave: handleEdit,
                     onClose: closeModal,
@@ -10464,12 +10579,13 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                     initial: selLesson,
                     docenti: propDocenti,
                     courses: propCourses,
+                    lessons: lessons,
                     onSave: handleEdit,
                     onClose: closeModal,
                   })
               )
             : React.createElement(Modal, { title: "Modifica lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6141}}
-                , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
+                , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, lessons: lessons, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
               )
         )
         , modal === "detail" && selLesson && (
@@ -10524,6 +10640,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               gruppi: propGruppiCal || [],
               iscrizioniAnno: propIscrizioniCal || [],
               annoSel: calConfig && calConfig.annoInizioAttivo,
+              lessons: lessons,
               onAddBrano: b => setRepertorio(p=>[...p,b]),
               onSave: handleAddCollective,
               onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6162}})
@@ -10535,6 +10652,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               docenti: propDocenti,
               courses: propCourses,
               date: addDate,
+              lessons: lessons,
               onSave: handleAddProva,
               onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6172}})
           )

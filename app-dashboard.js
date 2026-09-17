@@ -2489,6 +2489,37 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                 );
               })()
 
+            /* Banner conflitti orario (stesso strumento o stesso insegnante, orari sovrapposti) */
+            , ruolo === 'admin' && (() => {
+                const oggiISO = yyyymmdd(new Date());
+                const rilevanti = (propLessonsDash||[]).filter(l => l.date && l.date >= oggiISO);
+                const coppieViste = new Set();
+                const coppie = [];
+                rilevanti.forEach(l => {
+                  const conflitti = trovaConflittiOrario(l, rilevanti);
+                  conflitti.forEach(c => {
+                    const chiave = [l.id, c.id].sort().join('|');
+                    if (coppieViste.has(chiave)) return;
+                    coppieViste.add(chiave);
+                    coppie.push([l, c]);
+                  });
+                });
+                if (coppie.length === 0) return null;
+                return React.createElement('div', { style:{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderRadius:12,border:`1.5px solid ${C.redBorder}`,background:C.redBg,cursor:'pointer'},
+                    onClick: () => onNavigate('calendario') }
+                  , React.createElement(Ic, { n:'alert', size:18, stroke:C.red })
+                  , React.createElement('div', {style:{flex:1}}
+                    , React.createElement('div', {style:{fontSize:13,fontWeight:700,color:C.red}}, 'Conflitti orario rilevati')
+                    , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}
+                      , coppie.length===1
+                        ? `1 sovrapposizione: ${coppie[0][0].date} ore ${coppie[0][0].hour}`
+                        : `${coppie.length} sovrapposizioni tra lezioni con stesso insegnante o strumento`
+                    )
+                  )
+                  , React.createElement('span', {style:{fontSize:12,fontWeight:700,color:C.red}}, 'Vai al Calendario →')
+                );
+              })()
+
             /* Helper ordine pannelli: legge panels.panelOrder e restituisce {order:N} */
             , (() => {
                 const _panelOrder = (panels.panelOrder && panels.panelOrder.length > 0)
