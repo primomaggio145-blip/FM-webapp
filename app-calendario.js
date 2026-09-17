@@ -11147,6 +11147,7 @@ class ReportErrorBoundary extends React.Component {
 const ReportView = ({ spese, entrate }) => {
   const [anno, setAnno] = useState(ANNO_ATT);
   const [metodoSel, setMetodoSel] = useState("tutti");
+  const [meseSel, setMeseSel] = useState(0); // 0 = tutto l'anno, 1-12 = mese specifico
 
   const NON_SPEC = "Non specificato";
   const METODI_REPORT = [...METODI_PAG, NON_SPEC];
@@ -11169,24 +11170,42 @@ const ReportView = ({ spese, entrate }) => {
   const speseAnno   = metodoSel==="tutti" ? speseAnnoAll   : speseAnnoAll.filter(s=>metodoOf(s)===metodoSel);
   const entrateAnno = metodoSel==="tutti" ? entrateAnnoAll : entrateAnnoAll.filter(e=>metodoOf(e)===metodoSel);
 
-  const totUscite  = speseAnno.reduce((t,s)=>t+s.importo,0);
-  const totEntrate = entrateAnno.reduce((t,e)=>t+e.importo,0);
+  // Vista mensile: se è selezionato un mese specifico, KPI/categorie/prima nota si restringono a quel mese.
+  // NOTA: nelle spese il campo "mese" è 0-indexed (getMonth()), nelle entrate è 1-indexed.
+  const speseView   = meseSel===0 ? speseAnno   : speseAnno.filter(s=>s.mese===meseSel-1);
+  const entrateView = meseSel===0 ? entrateAnno : entrateAnno.filter(e=>e.mese===meseSel);
+
+  const totUscite  = speseView.reduce((t,s)=>t+s.importo,0);
+  const totEntrate = entrateView.reduce((t,e)=>t+e.importo,0);
   const saldo      = totEntrate - totUscite;
 
-  // Per categoria
+  // Per categoria (rispetta la vista mensile se attiva)
   const perCat = CATEGORIE_DEFAULT.map(c=>({
     ...c,
-    tot: speseAnno.filter(s=>s.categoria===c.id).reduce((t,s)=>t+s.importo,0),
-    n:   speseAnno.filter(s=>s.categoria===c.id).length,
+    tot: speseView.filter(s=>s.categoria===c.id).reduce((t,s)=>t+s.importo,0),
+    n:   speseView.filter(s=>s.categoria===c.id).length,
   })).filter(c=>c.tot>0).sort((a,b)=>b.tot-a.tot);
 
-  // Per mese (entrate vs uscite)
+  // Per mese (entrate vs uscite) — grafico sempre sull'intero anno, indipendentemente dal mese selezionato
   const datiMesi = MESI.map((m,i)=>({
     mese:m,
     uscite:  speseAnno.filter(s=>s.mese===i).reduce((t,s)=>t+s.importo,0),
     entrate: entrateAnno.filter(e=>e.mese===(i+1)).reduce((t,e)=>t+e.importo,0),
   }));
   const maxVal = Math.max(...datiMesi.flatMap(d=>[d.uscite,d.entrate]),1);
+
+  // Prima nota mensile: elenco cronologico di tutti i movimenti (entrate e uscite) del mese
+  // selezionato, con saldo progressivo calcolato dal 1° del mese.
+  const primaNota = meseSel===0 ? [] : (() => {
+    const righe = [
+      ...entrateView.map(e=>({ id:`e-${e.id}`, data: e.dataPagamento||'', tipo:'entrata',
+        desc: e.desc||'', categoria: e.categoria||'', metodo: e.metodo||'', importo: Number(e.importo)||0 })),
+      ...speseView.map(s=>({ id:`s-${s.id}`, data: s.data||'', tipo:'uscita',
+        desc: s.desc||'', categoria: s.categoria||'', metodo: s.metodo||'', importo: -(Number(s.importo)||0) })),
+    ].sort((a,b)=> (a.data||'').localeCompare(b.data||'') || (a.tipo==='entrata'?-1:1));
+    let prog = 0;
+    return righe.map(r => { prog += r.importo; return { ...r, progressivo: Math.round(prog*100)/100 }; });
+  })();
 
   return (
     React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:20}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6491}}
@@ -11195,9 +11214,15 @@ const ReportView = ({ spese, entrate }) => {
       , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6494}}
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 6495}}
           , React.createElement('h2', { style: {fontFamily:"'Oswald',sans-serif",fontSize:24,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6496}}, "Report & saldo netto"   )
-          , React.createElement('p', { style: {color:C.textMuted,fontSize:13,marginTop:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6497}}, "Anno " , anno, metodoSel!=="tutti" ? ` · ${metodoSel}` : "")
+          , React.createElement('p', { style: {color:C.textMuted,fontSize:13,marginTop:3}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6497}}, meseSel===0 ? "Anno " : `${MESI[meseSel-1]} `, meseSel===0?anno:anno, metodoSel!=="tutti" ? ` · ${metodoSel}` : "")
         )
         , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6499}}
+          , React.createElement('select', { value: meseSel, onChange: e=>setMeseSel(Number(e.target.value)),
+              style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,
+                padding:"8px 10px",fontSize:13,cursor:"pointer",fontFamily:"'Open Sans',sans-serif"} }
+            , React.createElement('option', { value: 0 }, "Tutto l'anno")
+            , MESI.map((m,i)=>React.createElement('option', { key: m, value: i+1 }, m))
+          )
           , React.createElement('button', { onClick: ()=>setAnno(p=>p-1), style: {background:C.surface,border:`1px solid ${C.border}`,
             borderRadius:8,color:C.textMuted,padding:"7px 10px",cursor:"pointer",display:"flex"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6500}}
             , React.createElement(Ic, { n: "left", size: 16, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6502}})
@@ -11287,8 +11312,8 @@ const ReportView = ({ spese, entrate }) => {
         )
       )
 
-      /* Grafico entrate vs uscite */
-      , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:20}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6531}}
+      /* Grafico entrate vs uscite — solo in vista "Tutto l'anno" */
+      , meseSel===0 && React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:20}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6531}}
         , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:16,marginBottom:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6532}}
           , React.createElement('span', { style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6533}}, "Entrate vs Uscite mensili"   )
           , React.createElement('div', { style: {display:"flex",gap:12,marginLeft:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6534}}
@@ -11306,7 +11331,7 @@ const ReportView = ({ spese, entrate }) => {
             const hU = maxVal>0?Math.max((d.uscite/maxVal)*120,d.uscite>0?3:0):0;
             const isCur = i===MESE_ATT&&anno===ANNO_ATT;
             return (
-              React.createElement('div', { key: i, style: {flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6549}}
+              React.createElement('div', { key: i, onClick: ()=>setMeseSel(i+1), style: {flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6549}}
                 , React.createElement('div', { style: {display:"flex",gap:2,alignItems:"flex-end",width:"100%",justifyContent:"center",height:126}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6550}}
                   , React.createElement('div', { title: `Entrate: ${fmt(d.entrate)}`, style: {flex:1,height:hE,borderRadius:"3px 3px 0 0",
                     background:isCur?C.green:`${C.green}55`,transition:"height 0.3s",minHeight:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6551}})
@@ -11322,6 +11347,51 @@ const ReportView = ({ spese, entrate }) => {
         )
       )
 
+      /* Prima nota mensile — elenco cronologico di tutte le entrate/uscite del mese selezionato */
+      , meseSel!==0 && React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"} }
+        , React.createElement('div', { style: {padding:"13px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8} }
+          , React.createElement(Ic, { n: "receipt", size: 14, stroke: C.textMuted })
+          , React.createElement('span', { style: {fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted} }, `Prima nota — ${MESI[meseSel-1]} ${anno}`)
+        )
+        , primaNota.length===0 ? (
+          React.createElement('div', { style: {padding:"30px 0",textAlign:"center",color:C.textDim,fontSize:13} }, "Nessun movimento registrato in questo mese")
+        ) : (
+          React.createElement('div', { style: {overflowX:"auto"} }
+            , React.createElement('table', { style: {width:"100%",minWidth:640,borderCollapse:"collapse",fontSize:12.5} }
+              , React.createElement('thead', null
+                , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`} }
+                  , ["Data","Tipo","Descrizione","Categoria","Metodo","Importo","Progressivo"].map(h=>(
+                    React.createElement('th', { key: h, style: {textAlign:h==="Importo"||h==="Progressivo"?"right":"left",
+                      padding:"9px 14px",fontSize:10,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted,fontWeight:600} }, h)
+                  ))
+                )
+              )
+              , React.createElement('tbody', null
+                , primaNota.map(r=>(
+                  React.createElement('tr', { key: r.id, style: {borderBottom:`1px solid ${C.border}`} }
+                    , React.createElement('td', { style: {padding:"9px 14px",whiteSpace:"nowrap",color:C.textMuted} }, r.data ? new Date(r.data+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"}) : "—")
+                    , React.createElement('td', { style: {padding:"9px 14px"} }
+                      , React.createElement('span', { style: {fontSize:10,padding:"2px 8px",borderRadius:4,
+                          background:r.tipo==="entrata"?C.greenBg:C.redBg,
+                          color:r.tipo==="entrata"?C.green:C.red,
+                          border:`1px solid ${r.tipo==="entrata"?C.greenBorder:C.redBorder}`} }
+                        , r.tipo==="entrata"?"Entrata":"Uscita"
+                      )
+                    )
+                    , React.createElement('td', { style: {padding:"9px 14px"} }, r.desc||"—")
+                    , React.createElement('td', { style: {padding:"9px 14px",color:C.textMuted} }, r.categoria||"—")
+                    , React.createElement('td', { style: {padding:"9px 14px",color:C.textMuted,whiteSpace:"nowrap"} }, r.metodo||"—")
+                    , React.createElement('td', { style: {padding:"9px 14px",textAlign:"right",fontWeight:600,whiteSpace:"nowrap",
+                        color:r.importo>=0?C.green:C.red} }, `${r.importo>=0?"+":"-"}${fmt(Math.abs(r.importo))}`)
+                    , React.createElement('td', { style: {padding:"9px 14px",textAlign:"right",whiteSpace:"nowrap",fontWeight:600,
+                        color:r.progressivo>=0?C.text:C.red} }, fmt(r.progressivo))
+                  )
+                ))
+              )
+            )
+          )
+        )
+      )
       /* Breakdown per categoria */
       , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6566}}
         , React.createElement('div', { style: {padding:"13px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6567}}
@@ -11362,8 +11432,8 @@ const ReportView = ({ spese, entrate }) => {
         )
       )
 
-      /* Tabella mensile dettagliata */
-      , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6606}}
+      /* Tabella mensile dettagliata — solo in vista "Tutto l'anno" */
+      , meseSel===0 && React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6606}}
         , React.createElement('div', { style: {padding:"13px 20px",borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6607}}
           , React.createElement('span', { style: {fontSize:11,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6608}}, "Dettaglio mensile" )
         )
