@@ -5172,19 +5172,20 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
         )
 
         /* ── Argomento — inline editable ── */
-        , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:4}}
-          , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between"}}
+        , React.createElement('div', { style: {padding:"12px 14px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}`}}
+          , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6}}
             , React.createElement(InlineLabel, {label:"Argomento", icon:"note"})
             , React.createElement(SaveDot, null)
           )
           , canEdit
-            ? React.createElement('input', { value: localTopic, onChange: e=>setLocalTopic(e.target.value),
+            ? React.createElement('textarea', { value: localTopic, onChange: e=>setLocalTopic(e.target.value),
                 onBlur: () => saveField({topic: localTopic}),
-                placeholder: "Es. Scale maggiori, Chopin Notturno...",
-                style: {padding:"10px 12px", borderRadius:8, border:`1px solid ${C.border}`,
-                  background:C.bg, color:C.text, fontSize:13,
-                  fontFamily:"'Open Sans',sans-serif", outline:"none", width:"100%", boxSizing:"border-box"}})
-            : React.createElement('div', { style: {padding:"10px 12px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}`, fontSize:13, color:localTopic?C.text:C.textDim, fontStyle:localTopic?"normal":"italic"}},
+                rows: 3, placeholder: "Es. Scale maggiori, Chopin Notturno...",
+                style: {width:"100%", boxSizing:"border-box", padding:"8px 10px", borderRadius:7,
+                  border:`1px solid ${C.border}`, background:"rgba(255,255,255,0.08)",
+                  color:C.text, fontSize:13, fontFamily:"'Open Sans',sans-serif",
+                  outline:"none", resize:"vertical", lineHeight:1.5}})
+            : React.createElement('div', { style: {fontSize:13, color:localTopic?C.text:C.textDim, lineHeight:1.6, fontStyle:localTopic?"normal":"italic"}},
                 localTopic || "Nessun argomento")
         )
 
