@@ -96,6 +96,7 @@
       topic: r.topic || '', attendance: r.attendance || '',
       recurrence: r.recurrence || 'Nessuna', notes: r.notes || '',
       exercises: r.exercises || '', repertorio: r.repertorio || '',
+      notesRecupero: r.notes_recupero || '',
       linkUrl: r.link_url || '',
       inRecupero: r.in_recupero || false,
       recuperoScadenza: r.recupero_scadenza || null,

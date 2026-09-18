@@ -487,7 +487,7 @@ function App() {
           const fetchedIds = new Set(allFetched.map(function(r){ return r.id; }));
           // Mantieni le lezioni non toccate da questo poll
           const untouched = existingLessons.filter(function(l){ return !fetchedIds.has(l.id); });
-          const adaptL = function(r) {
+          const adaptLPollFallback = function(r) {
             return {
               id: r.id, date: r.data, hour: r.ora ? r.ora.slice(0,5) : '',
               student: r.student||'', tipo: r.tipo||'individuale',
@@ -497,6 +497,9 @@ function App() {
               notes: r.notes||'', type: r.tipo||'individuale',
               linkUrl: r.link_url||'', inRecupero: r.in_recupero||false,
               recuperoScadenza: r.recupero_scadenza||null,
+              contactName: r.contact_name||'', phone: r.phone||'',
+              nuovoIscritto: r.nuovo_iscritto||false, motivoAssenza: r.motivo_assenza||null,
+              exercises: r.exercises||'',
               durata: r.durata ? parseInt(r.durata) : (r.tipo==='collettivo'?60:45),
               repertorioIds: (function(){ try{return r.repertorio_ids?JSON.parse(r.repertorio_ids):[];}catch(e){return [];} })(),
               allegati: [],
@@ -504,6 +507,12 @@ function App() {
               courseId: r.corso_id||null, courseName: r.corso_nome||null,
               notesRecupero: r.notes_recupero||'',
             };
+          };
+          // Preferisce l'adapter condiviso di fm_sync.js (fonte unica di verità,
+          // sempre allineata a tutti i campi della tabella) — la copia sopra resta
+          // solo come fallback di emergenza, mai come percorso normale.
+          const adaptL = function(r) {
+            return window.__FM_ADAPT_LEZIONE__ ? window.__FM_ADAPT_LEZIONE__(r, []) : adaptLPollFallback(r);
           };
           const mergedLessons = [...untouched, ...allFetched.map(adaptL)];
           if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ lessons: mergedLessons });
