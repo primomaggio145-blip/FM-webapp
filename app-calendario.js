@@ -4906,7 +4906,7 @@ const LessonPill = ({ lesson, onClick, compact=false, courses }) => {
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses }) => {
+const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses, repertorio:_repertorioLDM }) => {
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
   // Per l'allievo: risolve il proprio id/nome per filtrare la presenza individuale
@@ -5217,17 +5217,37 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
           )
         )
 
-        /* Repertorio */
-        , (lesson.repertorioIds||[]).length > 0 ? (
-          React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4612}}
-            , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4613}}, "Brani studiati" )
-            , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4614}}
+        /* Repertorio — interattivo per chi può modificare, sola lettura per gli altri */
+        , React.createElement('div', {}
+          , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8}}, "Brano in repertorio")
+          , canEdit && (
+            React.createElement('select', {
+              value: "",
+              onChange: e => {
+                const id = e.target.value;
+                if (!id) return;
+                const ids = lesson.repertorioIds || [];
+                if (!ids.includes(id)) onUpdateLesson({ id: lesson.id, repertorioIds: [...ids, id] });
+              },
+              style: {background:C.bg, border:`1px solid ${C.border}`, borderRadius:8,
+                color:C.textMuted, fontSize:13, padding:"10px 14px", width:"100%",
+                fontFamily:"'Open Sans',sans-serif", appearance:"none", cursor:"pointer", marginBottom:8}}
+              , React.createElement('option', { value: "" }, (_repertorioLDM||[]).length === 0 ? "Nessun brano nel catalogo" : "+ Aggiungi brano al repertorio...")
+              , (_repertorioLDM||[]).filter(b=>!(lesson.repertorioIds||[]).includes(b.id)).map(b => (
+                  React.createElement('option', { key: b.id, value: b.id }
+                    , b.title, b.composer ? ` — ${b.composer}` : "", b.tonality ? ` (${b.tonality})` : ""
+                  )
+                ))
+            )
+          )
+          , (lesson.repertorioIds||[]).length > 0 ? (
+            React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4614}}
               , (lesson.repertorioIds||[]).map(id => {
-                const b = (window.__repertorio__||[]).find(r=>r.id===id);
+                const b = (_repertorioLDM||window.__repertorio__||[]).find(r=>r.id===id);
                 if(!b) return null;
-                const typeHex = b.type==="collettivo"?C.purple:C.gold;
-                const typeBg  = b.type==="collettivo"?C.purpleBg:"#e8edf5";
-                const typeBd  = b.type==="collettivo"?C.purpleBorder:C.goldDim;
+                const typeHex = (b.tipo||b.type)==="collettivo"?C.purple:C.gold;
+                const typeBg  = (b.tipo||b.type)==="collettivo"?C.purpleBg:"#e8edf5";
+                const typeBd  = (b.tipo||b.type)==="collettivo"?C.purpleBorder:C.goldDim;
                 return (
                   React.createElement('div', { key: id, style: {display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
                     background:typeBg, border:`1px solid ${typeBd}`, borderRadius:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4622}}
@@ -5236,16 +5256,19 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                       , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4626}}, b.title)
                       , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4627}}, b.composer, b.tonality ? ` · ${b.tonality}` : "")
                     )
+                    , canEdit && React.createElement('button', { onClick: () => onUpdateLesson({ id: lesson.id, repertorioIds: (lesson.repertorioIds||[]).filter(i=>i!==id) }),
+                        style: {background:"none", border:"none", cursor:"pointer", padding:4, display:"flex", borderRadius:4, flexShrink:0, color:C.textMuted}}
+                        , React.createElement(Ic, { n: "x", size: 14, stroke: "currentColor" })
+                      )
                   )
                 );
               })
             )
-          )
-        ) : !canEdit && (
-          React.createElement('div', { style:{padding:"10px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.border}`}}
-            , React.createElement('div', {style:{fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:4}}, "Brani studiati")
+          ) : !canEdit && (
+            React.createElement('div', { style:{padding:"10px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.border}`}}
             , React.createElement('div', {style:{fontSize:13,color:C.textDim,fontStyle:"italic"}}, "Nessun brano assegnato")
           )
+        )
         )
 
         /* ── Link URL — inline editable ── */
@@ -10594,6 +10617,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             lesson: lessons.find(l => l.id === selLesson.id) || selLesson,
             prevLesson: trovaLezionePrecedente(lessons.find(l => l.id === selLesson.id) || selLesson, lessons),
             courses: propCourses,
+            repertorio: repertorio,
             onEdit: () => setModal("edit"),
             onDelete: () => setModal("delete"),
             onAttendance: handleAttendance,
