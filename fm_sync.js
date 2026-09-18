@@ -107,6 +107,10 @@
       isLezioneExtra: r.is_lezione_extra || false,
       extraContabilizzata: r.extra_contabilizzata || false,
       extraLessonId: r.extra_lesson_id || null,
+      manualiIds: (() => {
+        if (!r.manuali_ids) return [];
+        try { return JSON.parse(r.manuali_ids); } catch(e) { return []; }
+      })(),
       gapGiorni: r.gap_giorni != null ? Number(r.gap_giorni) : null,
       contactName: r.contact_name || '',
       phone: r.phone || '',
@@ -328,6 +332,9 @@
         exercises: l.exercises || null,
         repertorio_ids: l.repertorioIds && l.repertorioIds.length > 0
           ? JSON.stringify(l.repertorioIds)
+          : null,
+        manuali_ids: l.manualiIds && l.manualiIds.length > 0
+          ? JSON.stringify(l.manualiIds)
           : null,
         // Campi collettive — essenziali per non perdere gli allievi
         corso_id:   l.courseId   || null,

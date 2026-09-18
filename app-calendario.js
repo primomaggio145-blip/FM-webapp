@@ -4906,7 +4906,7 @@ const LessonPill = ({ lesson, onClick, compact=false, courses }) => {
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses, repertorio:_repertorioLDM }) => {
+const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses, repertorio:_repertorioLDM, biblioteca:_bibliotecaLDM }) => {
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
   // Per l'allievo: risolve il proprio id/nome per filtrare la presenza individuale
@@ -5269,6 +5269,58 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
             , React.createElement('div', {style:{fontSize:13,color:C.textDim,fontStyle:"italic"}}, "Nessun brano assegnato")
           )
         )
+        )
+
+        /* Manuali/libri allegati (dalla Biblioteca) — interattivo per chi può modificare */
+        , React.createElement('div', {}
+          , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8}}, "Manuali allegati")
+          , canEdit && (
+            React.createElement('select', {
+              value: "",
+              onChange: e => {
+                const id = e.target.value;
+                if (!id) return;
+                const ids = lesson.manualiIds || [];
+                if (!ids.includes(id)) onUpdateLesson({ id: lesson.id, manualiIds: [...ids, id] });
+              },
+              style: {background:C.bg, border:`1px solid ${C.border}`, borderRadius:8,
+                color:C.textMuted, fontSize:13, padding:"10px 14px", width:"100%",
+                fontFamily:"'Open Sans',sans-serif", appearance:"none", cursor:"pointer", marginBottom:8}}
+              , React.createElement('option', { value: "" }, (_bibliotecaLDM||[]).length === 0 ? "Nessun manuale in Biblioteca" : "+ Allega manuale dalla Biblioteca...")
+              , (_bibliotecaLDM||[]).filter(b=>!(lesson.manualiIds||[]).includes(b.id)).map(b => (
+                  React.createElement('option', { key: b.id, value: b.id }
+                    , b.titolo, b.autore ? ` — ${b.autore}` : "", b.categoria ? ` (${b.categoria})` : ""
+                  )
+                ))
+            )
+          )
+          , (lesson.manualiIds||[]).length > 0 ? (
+            React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:6} }
+              , (lesson.manualiIds||[]).map(id => {
+                const m = (_bibliotecaLDM||[]).find(x=>x.id===id);
+                if(!m) return null;
+                return (
+                  React.createElement('div', { key: id, style: {display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
+                    background:C.tealBg, border:`1px solid ${C.tealBorder}`, borderRadius:8} }
+                    , React.createElement(Ic, { n: "courses", size: 14, stroke: C.teal })
+                    , React.createElement('a', { href: m.file_url, target: "_blank", rel: "noopener noreferrer",
+                        style: {flex:1, minWidth:0, textDecoration:"none", cursor:"pointer"} }
+                      , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:C.teal} }, m.titolo)
+                      , React.createElement('div', { style: {fontSize:11, color:C.textMuted} }, m.autore, m.categoria ? ` · ${m.categoria}` : "")
+                    )
+                    , canEdit && React.createElement('button', { onClick: () => onUpdateLesson({ id: lesson.id, manualiIds: (lesson.manualiIds||[]).filter(i=>i!==id) }),
+                        style: {background:"none", border:"none", cursor:"pointer", padding:4, display:"flex", borderRadius:4, flexShrink:0, color:C.textMuted}}
+                        , React.createElement(Ic, { n: "x", size: 14, stroke: "currentColor" })
+                      )
+                  )
+                );
+              })
+            )
+          ) : !canEdit && (
+            React.createElement('div', { style:{padding:"10px 12px",background:C.bg,borderRadius:8,border:`1px solid ${C.border}`}}
+              , React.createElement('div', {style:{fontSize:13,color:C.textDim,fontStyle:"italic"}}, "Nessun manuale allegato")
+            )
+          )
         )
 
         /* ── Link URL — inline editable ── */
@@ -9171,6 +9223,15 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
   const [_repertorioLocal, _setRepertorioLocal] = useState(INIT_REPERTORIO);
   const repertorio    = propRepertorio    || _repertorioLocal;
   const setRepertorio = propSetRepertorio || _setRepertorioLocal;
+  // Biblioteca (manuali/libri) — caricata a parte perché non fa parte dei dati condivisi
+  // dell'app, esattamente come in BibliotecaView.
+  const [biblioteca, setBiblioteca] = useState([]);
+  React.useEffect(() => {
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    sb.from("biblioteca").select("*").order("created_at", { ascending: false })
+      .then(({ data, error }) => { if (!error && data) setBiblioteca(data); });
+  }, []);
     const [viewMode,  setViewMode]  = useState("day");
     // In PWA/mobile la vista MESE è nascosta: se risultasse selezionata (es. resize
     // da desktop a mobile), torna automaticamente a SETTIMANA.
@@ -10618,6 +10679,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             prevLesson: trovaLezionePrecedente(lessons.find(l => l.id === selLesson.id) || selLesson, lessons),
             courses: propCourses,
             repertorio: repertorio,
+            biblioteca: biblioteca,
             onEdit: () => setModal("edit"),
             onDelete: () => setModal("delete"),
             onAttendance: handleAttendance,
@@ -10634,6 +10696,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   notes:          updated.notes        || null,
                   repertorio_ids: updated.repertorioIds && updated.repertorioIds.length > 0
                                     ? JSON.stringify(updated.repertorioIds) : null,
+                  manuali_ids:    updated.manualiIds && updated.manualiIds.length > 0
+                                    ? JSON.stringify(updated.manualiIds) : null,
                   students:       updated.students && updated.students.length > 0
                                     ? JSON.stringify(updated.students) : null,
                   motivo_assenza: updated.motivoAssenza || null,
