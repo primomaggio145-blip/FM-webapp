@@ -2213,6 +2213,15 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const nowMins = dashNow.getHours()*60+dashNow.getMinutes();
     const lezioniOggi      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(dashNow) && l.attendance !== 'recuperata';}).length;
     const lezComplete      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(dashNow)&&l.attendance !== 'recuperata'&&oraNum(l.hour||l.time||l.ora||"0:0")+(l.duration||l.durata||0)<=nowMins;}).length;
+    // Settimana corrente (lunedì-domenica) per la KPI "Lezioni settimana" del docente
+    const inizioSettDoc = new Date(dashNow);
+    inizioSettDoc.setDate(inizioSettDoc.getDate() - ((inizioSettDoc.getDay()+6)%7));
+    inizioSettDoc.setHours(0,0,0,0);
+    const fineSettDoc = new Date(inizioSettDoc);
+    fineSettDoc.setDate(fineSettDoc.getDate()+6);
+    const inizioSettDocISO = yyyymmdd(inizioSettDoc);
+    const fineSettDocISO = yyyymmdd(fineSettDoc);
+    const lezioniSettimanaDocente = (l) => { const d=l.date||l.data||""; return d>=inizioSettDocISO && d<=fineSettDocISO; };
     const lezioniSettimana = _lessons.filter(l=>{if(!l.recurring&&!l.ricorrente) return false; if(l.attendance==='recuperata') return false; const d=new Date(l.date||l.data||oggi); return d<=oggi&&(!l.endDate||new Date(l.endDate)>=oggi);}).length || _lessons.filter(l=>l.attendance!=='recuperata').length;
     const meseCorrente = oggi.getMonth()+1;
     const annoCorrente = oggi.getFullYear();
@@ -2578,7 +2587,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2188}}
               , ruolo==="docente" ? React.createElement(React.Fragment, null
                   , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni settimana",
-                      value: _lessons.filter(function(l){return matchDocLezione(l) && l.attendance !== "recuperata";}).length,
+                      value: _lessons.filter(function(l){return matchDocLezione(l) && l.attendance !== "recuperata" && lezioniSettimanaDocente(l);}).length,
                       sub: "mie lezioni", hex: C.teal, onClick: () => onNavigate('calendario')})
                   , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
                       value: (()=>{ const p=_lessons.filter(l=>matchDocLezione(l)&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0]; return p?new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}):"—"; })(),
