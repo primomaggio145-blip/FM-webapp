@@ -3546,7 +3546,7 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
               const myD = docenteId
                 ? (propDocenti||[]).find(d=>String(d.id)===docenteId)
                 : _nomeCorsi
-                  ? (propDocenti||[]).find(d=>d.teacherKey===_nomeCorsi||(d.nome||"").toLowerCase().includes(_nomeCorsi.toLowerCase()))
+                  ? (propDocenti||[]).find(d=>(d.teacherKey||"").toLowerCase()===(_nomeCorsi||"").toLowerCase()||(d.nome||"").toLowerCase().includes(_nomeCorsi.toLowerCase()))
                   : null;
               if (!myD) return []; // docente non trovato → nessun corso (sicurezza)
               return courses.filter(c=>(c.docenti||[]).map(String).includes(String(myD.id)));
@@ -7466,7 +7466,7 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
               fontFamily:"'Open Sans',sans-serif",appearance:"none",cursor:"pointer"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5744}}
             , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 5748}}, "— seleziona docente —"   )
             , docenti.map(d=>(
-              React.createElement('option', { key: d.id, value: d.teacherKey||d.nome, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5750}}, d.nome, " · "  , d.strumenti)
+              React.createElement('option', { key: d.id, value: d.nome||d.teacherKey, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5750}}, d.nome, " · "  , d.strumenti)
             ))
           )
           , err.teacher && React.createElement('div', { style: {fontSize:11,color:C.red,marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5753}}, err.teacher)
@@ -11730,7 +11730,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
   const _loginNomeCV = (_appUserCV && _appUserCV.nome) || "";
   const myDocIdCV = ruoloCV==="docente"
     ? ((_appUserCV && _appUserCV.docenteId)
-        || (()=>{ const d=(propDocentiCV||[]).find(x=>x.teacherKey===_loginNomeCV||(x.nome||"").toLowerCase().includes(_loginNomeCV.toLowerCase())); return d?d.id:null; })())
+        || (()=>{ const d=(propDocentiCV||[]).find(x=>(x.teacherKey||"").toLowerCase()===(_loginNomeCV||"").toLowerCase()||(x.nome||"").toLowerCase().includes(_loginNomeCV.toLowerCase())); return d?d.id:null; })())
     : null;
   const [catSpese,   setCatSpese]   = useState(CATEGORIE_DEFAULT);
   const [catEntrate, setCatEntrate] = useState(CAT_ENTRATE_DEFAULT);
