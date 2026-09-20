@@ -3008,6 +3008,19 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
     ? _allStudents.filter(s=>{
         const t=(s.teacher||"").toLowerCase().trim(); const k=_avTeacherKey.toLowerCase().trim();
         if (t===k||t.includes(k)||k.includes(t)) return true;
+        // BUG CORRETTO: mancava il controllo su extraTeachers — un allievo con QUESTO
+        // docente assegnato solo come insegnante di uno strumento EXTRA (non quello
+        // principale) non veniva mai trovato. Stessa logica già usata in DocentiView
+        // (corsiConDocente): extra e principale contano allo stesso livello.
+        if (s.extraTeachers && typeof s.extraTeachers === 'object') {
+          const extraAttivi = new Set(s.extraInstruments||[]);
+          const matchExtra = Object.entries(s.extraTeachers).some(([corso, teacherName]) => {
+            if (!corso || !extraAttivi.has(corso) || !teacherName) return false;
+            const tn = teacherName.toLowerCase().trim();
+            return tn===k || tn.includes(k) || k.includes(tn);
+          });
+          if (matchExtra) return true;
+        }
         // Include anche gli allievi iscritti a un corso collettivo/complementare
         // insegnato da questo docente — non solo chi ha lui come insegnante di strumento.
         if (s.complementaryCourse) {

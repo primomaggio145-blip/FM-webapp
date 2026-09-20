@@ -2202,7 +2202,22 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
       return t === k || t.includes(k) || k.includes(t);
     };
     const _myStudentsForDash = ruolo==="docente"
-      ? _studentsAnno.filter(s=>{ const t=(s.teacher||"").toLowerCase().trim(); const k=myDocTeacherKey.toLowerCase().trim(); return t===k||t.includes(k)||k.includes(t); })
+      ? _studentsAnno.filter(s=>{
+          const t=(s.teacher||"").toLowerCase().trim(); const k=myDocTeacherKey.toLowerCase().trim();
+          if (t===k||t.includes(k)||k.includes(t)) return true;
+          // BUG CORRETTO: mancava il controllo su extraTeachers — un allievo con questo
+          // docente assegnato solo come insegnante di uno strumento EXTRA (non quello
+          // principale) non veniva mai conteggiato tra i suoi allievi in dashboard.
+          if (s.extraTeachers && typeof s.extraTeachers === 'object') {
+            const extraAttivi = new Set(s.extraInstruments||[]);
+            return Object.entries(s.extraTeachers).some(([corso, teacherName]) => {
+              if (!corso || !extraAttivi.has(corso) || !teacherName) return false;
+              const tn = teacherName.toLowerCase().trim();
+              return tn===k || tn.includes(k) || k.includes(tn);
+            });
+          }
+          return false;
+        })
       : _studentsAnno;
     const allieviAttivi    = _myStudentsForDash.filter(a=>a.status==="attivo"||a.stato==="attivo").length;
     const corsiIndividualiAttivi = _myStudentsForDash
