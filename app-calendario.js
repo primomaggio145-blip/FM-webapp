@@ -2846,62 +2846,65 @@ const supabaseUpsertConFallbackColonne = async (sb, table, row, { isUpdate=false
 };
 
 // ─── Report pagamenti allievi (quote mensili + iscrizioni, raggruppato per allievo) ────
-const ReportPagamentiAllievi = ({ entrate, anniDisp, annoSel, setAnnoSel }) => {
+const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoSel }) => {
+  const now4 = new Date();
+  const [reportMese, setReportMese] = useState(now4.getMonth()+1);
+  const [reportAnno, setReportAnno] = useState(now4.getFullYear());
+  const [filtro, setFiltro] = useState("tutti"); // tutti | pagato | nonpagato
   const [search, setSearch] = useState("");
-  const [sortKey, setSortKey] = useState("nome");
-  const [sortDir, setSortDir] = useState("asc");
-  const [espansi, setEspansi] = useState({});
+  const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+  const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
 
   const inAnnoScolastico = (e) => (Number(e.mese)>=9 ? Number(e.anno)===annoSel : Number(e.anno)===annoSel+1);
+  const isMeseFuturo = new Date(reportAnno, reportMese-1, 1) > new Date(now4.getFullYear(), now4.getMonth(), 1);
 
-  const pagamentiAnno = (entrate||[]).filter(e =>
-    (e.categoria==="quota" || e.categoria==="iscrizione") && inAnnoScolastico(e)
+  const entrateQuota      = (entrate||[]).filter(e=>e.categoria==="quota");
+  const entrateIscrizione = (entrate||[]).filter(e=>e.categoria==="iscrizione" && inAnnoScolastico(e));
+
+  const trovaQuota = (s) => entrateQuota.find(e =>
+    Number(e.mese)===reportMese && Number(e.anno)===reportAnno &&
+    (e.studentId!=null ? String(e.studentId)===String(s.id) : (e.studentName||'').toLowerCase().trim()===(s.name||s.nome||'').toLowerCase().trim())
+  );
+  const trovaIscrizione = (s) => entrateIscrizione.find(e =>
+    e.studentId!=null ? String(e.studentId)===String(s.id) : (e.studentName||'').toLowerCase().trim()===(s.name||s.nome||'').toLowerCase().trim()
   );
 
-  const perAllievo = {};
-  pagamentiAnno.forEach(e => {
-    const key = e.studentId!=null ? `id:${e.studentId}` : `nome:${(e.studentName||'').toLowerCase().trim()}`;
-    if(!perAllievo[key]) perAllievo[key] = { key, studentId:e.studentId, nome:e.studentName||'—', pagamenti:[], totale:0, nQuote:0, nIscrizioni:0 };
-    perAllievo[key].pagamenti.push(e);
-    perAllievo[key].totale += Number(e.importo)||0;
-    if(e.categoria==="quota") perAllievo[key].nQuote++; else perAllievo[key].nIscrizioni++;
+  // Tutti gli allievi attivi — non solo chi ha pagato
+  const attivi = (students||[]).filter(s=>s.status==='attivo'||!s.status);
+
+  const righeComplete = attivi.map(s => {
+    const enrollDate = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
+    const primaDelIscrizione = enrollDate && (reportAnno < enrollDate.getFullYear() ||
+      (reportAnno===enrollDate.getFullYear() && reportMese < enrollDate.getMonth()+1));
+    const quota = trovaQuota(s);
+    const iscr  = trovaIscrizione(s);
+    const statoQuota = primaDelIscrizione ? "nd" : quota ? "pagato" : isMeseFuturo ? "futuro" : "nonpagato";
+    return { studentId:s.id, nome:s.name||s.nome||'—', quota, iscr, statoQuota };
   });
-  let righe = Object.values(perAllievo);
+
+  let righe = righeComplete;
   if(search.trim()) {
     const q = search.trim().toLowerCase();
     righe = righe.filter(r=>r.nome.toLowerCase().includes(q));
   }
-  righe.forEach(r=>r.pagamenti.sort((a,b)=>(a.dataPagamento||a.data||'').localeCompare(b.dataPagamento||b.data||'')));
-  righe.sort((a,b)=>{
-    let av,bv;
-    if(sortKey==="totale")       { av=a.totale; bv=b.totale; }
-    else if(sortKey==="npagamenti") { av=a.pagamenti.length; bv=b.pagamenti.length; }
-    else                          { av=a.nome.toLowerCase(); bv=b.nome.toLowerCase(); }
-    if(av<bv) return sortDir==="asc"?-1:1;
-    if(av>bv) return sortDir==="asc"?1:-1;
-    return 0;
-  });
-  const handleSort = k => { if(sortKey===k) setSortDir(p=>p==="asc"?"desc":"asc"); else { setSortKey(k); setSortDir("asc"); } };
-  const toggleEspanso = key => setEspansi(p=>({...p,[key]:!p[key]}));
-  const tuttiEspansi = righe.length>0 && righe.every(r=>espansi[r.key]);
-  const toggleTutti = () => {
-    const nuovo = !tuttiEspansi;
-    const next = {}; righe.forEach(r=>next[r.key]=nuovo); setEspansi(next);
-  };
+  righe = righe.slice().sort((a,b)=>a.nome.localeCompare(b.nome));
 
-  const totComplessivo = righe.reduce((t,r)=>t+r.totale,0);
-  const totQuote       = righe.reduce((t,r)=>t+r.nQuote,0);
-  const totIscrizioni  = righe.reduce((t,r)=>t+r.nIscrizioni,0);
+  const pagatiCount    = righeComplete.filter(r=>r.statoQuota==="pagato").length;
+  const nonPagatiCount = righeComplete.filter(r=>r.statoQuota==="nonpagato").length;
+  const iscrPagateCount = righeComplete.filter(r=>!!r.iscr).length;
 
-  const CAT_LABEL = { quota:"Quota mensile", iscrizione:"Iscrizione annuale" };
-  const MESI_LBL  = ["","Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+  const filtrato = filtro==="pagato" ? righe.filter(r=>r.statoQuota==="pagato")
+    : filtro==="nonpagato" ? righe.filter(r=>r.statoQuota==="nonpagato")
+    : righe;
+
+  const totIncassatoMese = righeComplete.reduce((t,r)=>t+(r.quota?Number(r.quota.importo)||0:0),0);
 
   return (
     React.createElement('div', null
-      /* Header: anno scolastico + ricerca + KPI */
+      /* Header: anno scolastico + mese + ricerca */
       , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8,marginBottom:14,flexWrap:'wrap'}}
         , anniDisp && anniDisp.length>1 && React.createElement(React.Fragment, null
-          , React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontWeight:600,letterSpacing:'.07em',textTransform:'uppercase'}},'Anno scolastico:')
+          , React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontWeight:600,letterSpacing:'.07em',textTransform:'uppercase'}},'A.S.:')
           , anniDisp.map(a => {
               const label = `${a.annoInizio}/${String(a.annoFine||a.annoInizio+1).slice(2)}`;
               const sel = String(a.annoInizio) === String(annoSel);
@@ -2911,77 +2914,65 @@ const ReportPagamentiAllievi = ({ entrate, anniDisp, annoSel, setAnnoSel }) => {
               );
             })
         )
+        , React.createElement('select',{value:reportMese,onChange:e=>setReportMese(Number(e.target.value)),
+            style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+          , MESI_SHORT.map((m,i)=>React.createElement('option',{key:i,value:i+1},m)))
+        , React.createElement('select',{value:reportAnno,onChange:e=>setReportAnno(Number(e.target.value)),
+            style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+          , [now4.getFullYear()-1,now4.getFullYear(),now4.getFullYear()+1].map(y=>React.createElement('option',{key:y,value:y},y)))
         , React.createElement('input', {type:'text', placeholder:'Cerca allievo…', value:search, onChange:e=>setSearch(e.target.value),
-            style:{padding:'7px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:13,minWidth:180}})
-        , React.createElement('button', {onClick:toggleTutti,
-            style:{padding:'6px 13px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.textMuted,cursor:'pointer',fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
-          , tuttiEspansi?'Comprimi tutti':'Espandi tutti'
-        )
+            style:{padding:'7px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:13,minWidth:160}})
         , React.createElement('div', {style:{marginLeft:'auto',textAlign:'right'}}
-          , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:C.green}}, `€${totComplessivo.toLocaleString('it-IT')}`)
-          , React.createElement('div', {style:{fontSize:11,color:C.textMuted}}, `${totQuote} quote · ${totIscrizioni} iscrizioni · ${righe.length} allievi`)
+          , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:C.green}}, `€${totIncassatoMese.toLocaleString('it-IT')}`)
+          , React.createElement('div', {style:{fontSize:11,color:C.textMuted}}, `incassato ${MESI_FULL[reportMese-1]} ${reportAnno}`)
         )
       )
-      /* Tabella raggruppata per allievo */
+      /* Filtro pillole */
+      , React.createElement('div', {style:{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}
+        , [
+            {id:'tutti',     label:`Tutti (${righeComplete.length})`},
+            {id:'pagato',    label:`✅ Pagato (${pagatiCount})`},
+            {id:'nonpagato', label:`❌ Non pagato (${nonPagatiCount})`},
+          ].map(f=>React.createElement('button',{key:f.id,onClick:()=>setFiltro(f.id),
+              style:{padding:'5px 13px',borderRadius:20,border:`1px solid ${filtro===f.id?C.gold:C.border}`,
+                background:filtro===f.id?C.goldBg:'none',color:filtro===f.id?C.gold:C.textMuted,
+                cursor:'pointer',fontSize:12,fontWeight:filtro===f.id?700:400,fontFamily:"'Open Sans',sans-serif"}},f.label))
+        , React.createElement('span', {style:{fontSize:11,color:C.textDim,marginLeft:8,alignSelf:'center'}}, `Iscrizione A.S. pagata: ${iscrPagateCount}/${righeComplete.length}`)
+      )
+      /* Tabella: tutti gli allievi attivi */
       , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}
-        , righe.length===0 ? (
-          React.createElement('div', {style:{padding:'30px 0',textAlign:'center',color:C.textDim,fontSize:13}}, 'Nessun pagamento registrato per questo anno scolastico')
-        ) : (
-          React.createElement('div', null
-            , React.createElement('div', {style:{display:'grid',gridTemplateColumns:'1fr 110px 110px 90px',gap:8,padding:'9px 20px',
-                borderBottom:`1px solid ${C.border}`,background:C.bg}}
-              , React.createElement('span', {onClick:()=>handleSort('nome'), style:{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted,fontWeight:600,cursor:'pointer'}}
-                , 'Allievo', sortKey==='nome'?(sortDir==='asc'?' ▲':' ▼'):'')
-              , React.createElement('span', {onClick:()=>handleSort('npagamenti'), style:{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted,fontWeight:600,cursor:'pointer',textAlign:'right'}}
-                , 'Pagamenti', sortKey==='npagamenti'?(sortDir==='asc'?' ▲':' ▼'):'')
-              , React.createElement('span', {onClick:()=>handleSort('totale'), style:{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted,fontWeight:600,cursor:'pointer',textAlign:'right'}}
-                , 'Totale', sortKey==='totale'?(sortDir==='asc'?' ▲':' ▼'):'')
-              , React.createElement('span', {style:{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted,fontWeight:600,textAlign:'right'}}, '')
+        , React.createElement('table', {style:{width:'100%',borderCollapse:'collapse'}}
+          , React.createElement('thead', null
+            , React.createElement('tr', {style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
+              , ["Allievo",`Quota ${MESI_SHORT[reportMese-1]}`,"Data pagamento","Metodo","Iscrizione A.S.","Stato"].map(h=>(
+                React.createElement('th', {key:h, style:{padding:"9px 16px",textAlign:"left",fontSize:10,textTransform:"uppercase",letterSpacing:"0.07em",color:C.textMuted,fontWeight:600}}, h)
+              ))
             )
-            , righe.map(r => {
-              const isEsp = !!espansi[r.key];
+          )
+          , React.createElement('tbody', null
+            , filtrato.length===0 ? (
+              React.createElement('tr', null, React.createElement('td', {colSpan:6, style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}}, 'Nessun allievo in questa categoria'))
+            ) : filtrato.map((r,i) => {
+              const clr = r.statoQuota==="pagato"?C.green : r.statoQuota==="nonpagato"?C.red : C.textDim;
+              const bg  = r.statoQuota==="pagato"?C.greenBg : r.statoQuota==="nonpagato"?C.redBg : C.bg;
+              const bd  = r.statoQuota==="pagato"?C.greenBorder : r.statoQuota==="nonpagato"?C.redBorder : C.border;
+              const lbl = r.statoQuota==="pagato"?"✅ Pagato" : r.statoQuota==="nonpagato"?"❌ Non pagato" : r.statoQuota==="futuro"?"Mese futuro":"Non ancora iscritto";
               return (
-                React.createElement('div', { key: r.key }
-                  , React.createElement('div', { onClick:()=>toggleEspanso(r.key),
-                      style:{display:'grid',gridTemplateColumns:'1fr 110px 110px 90px',gap:8,padding:'11px 20px',alignItems:'center',
-                        cursor:'pointer',borderBottom: isEsp?`1px solid ${C.border}`:'none',background:isEsp?C.surfaceHover:'transparent'} }
-                    , React.createElement('span', {style:{fontSize:13,fontWeight:isEsp?600:500}}, r.nome)
-                    , React.createElement('span', {style:{fontSize:12,color:C.textMuted,textAlign:'right'}}, r.pagamenti.length)
-                    , React.createElement('span', {style:{fontFamily:"'Oswald',sans-serif",fontSize:14,fontWeight:600,color:C.green,textAlign:'right'}}, `€${r.totale.toLocaleString('it-IT')}`)
-                    , React.createElement('span', {style:{textAlign:'right',color:C.textMuted,fontSize:12}}, isEsp?'▲':'▼')
+                React.createElement('tr', {key:r.studentId||r.nome,
+                  style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg}}
+                  , React.createElement('td', {style:{padding:"10px 16px",fontSize:13,fontWeight:600,color:C.text}}, r.nome)
+                  , React.createElement('td', {style:{padding:"10px 16px",fontFamily:"'Oswald',sans-serif",fontSize:14,fontWeight:600,color:r.quota?C.green:C.textDim}}
+                    , r.quota ? `€${Number(r.quota.importo).toLocaleString('it-IT')}` : "—")
+                  , React.createElement('td', {style:{padding:"10px 16px",color:C.textMuted,whiteSpace:"nowrap",fontSize:12.5}}
+                    , r.quota && (r.quota.dataPagamento||r.quota.data) ? new Date((r.quota.dataPagamento||r.quota.data)+"T00:00:00").toLocaleDateString("it-IT") : "—")
+                  , React.createElement('td', {style:{padding:"10px 16px",color:C.textMuted,fontSize:12.5}}, r.quota ? (r.quota.metodo||"—") : "—")
+                  , React.createElement('td', {style:{padding:"10px 16px"}}
+                    , r.iscr
+                      ? React.createElement('span', {style:{fontSize:11,padding:"2px 8px",borderRadius:4,background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`}}, `✅ €${Number(r.iscr.importo).toLocaleString('it-IT')}`)
+                      : React.createElement('span', {style:{fontSize:11,padding:"2px 8px",borderRadius:4,background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`}}, "❌ Non pagata")
                   )
-                  , isEsp && React.createElement('div', {style:{padding:'0 20px 10px'}}
-                    , React.createElement('table', {style:{width:'100%',borderCollapse:'collapse',fontSize:12.5}}
-                      , React.createElement('thead', null
-                        , React.createElement('tr', null
-                          , ["Categoria","Periodo","Importo","Data pagamento","Metodo","Stato","Ricevuta"].map(h=>(
-                            React.createElement('th', {key:h, style:{textAlign:h==="Importo"?"right":"left",padding:"6px 10px",fontSize:10,
-                              letterSpacing:"0.05em",textTransform:"uppercase",color:C.textDim,fontWeight:600,borderBottom:`1px solid ${C.border}`}}, h)
-                          ))
-                        )
-                      )
-                      , React.createElement('tbody', null
-                        , r.pagamenti.map(p => (
-                          React.createElement('tr', {key:p.id}
-                            , React.createElement('td', {style:{padding:"6px 10px",color:C.textMuted}}, CAT_LABEL[p.categoria]||p.categoria)
-                            , React.createElement('td', {style:{padding:"6px 10px"}}, p.categoria==="quota" ? `${MESI_LBL[p.mese]||''} ${p.anno}` : `A.S. ${annoSel}/${String(annoSel+1).slice(2)}`)
-                            , React.createElement('td', {style:{padding:"6px 10px",textAlign:"right",fontWeight:600,color:C.green}}, `€${Number(p.importo).toLocaleString('it-IT')}`)
-                            , React.createElement('td', {style:{padding:"6px 10px",color:C.textMuted,whiteSpace:"nowrap"}}
-                              , (p.dataPagamento||p.data) ? new Date((p.dataPagamento||p.data)+"T00:00:00").toLocaleDateString("it-IT") : "—")
-                            , React.createElement('td', {style:{padding:"6px 10px",color:C.textMuted,whiteSpace:"nowrap"}}, p.metodo||"—")
-                            , React.createElement('td', {style:{padding:"6px 10px"}}
-                              , React.createElement('span', {style:{fontSize:10,padding:"2px 7px",borderRadius:4,
-                                  background:p.stato==="pagato"?C.greenBg:C.orangeBg||C.goldBg,
-                                  color:p.stato==="pagato"?C.green:C.gold,
-                                  border:`1px solid ${p.stato==="pagato"?C.greenBorder:C.goldDim}`}}
-                                , p.stato==="pagato"?"Pagato":(p.stato||"—")
-                              )
-                            )
-                            , React.createElement('td', {style:{padding:"6px 10px",color:C.textDim,whiteSpace:"nowrap"}}, p.numRicevuta || (p.noRicevuta?"—":"Nessuna"))
-                          )
-                        ))
-                      )
-                    )
+                  , React.createElement('td', {style:{padding:"10px 16px"}}
+                    , React.createElement('span', {style:{fontSize:11,fontWeight:600,background:bg,color:clr,border:`1px solid ${bd}`,borderRadius:20,padding:"3px 10px"}}, lbl)
                   )
                 )
               );
@@ -2989,9 +2980,13 @@ const ReportPagamentiAllievi = ({ entrate, anniDisp, annoSel, setAnnoSel }) => {
           )
         )
       )
+      , React.createElement('div', {style:{padding:'10px 4px',fontSize:11,color:C.textDim}}
+        , `${righeComplete.length} allievi attivi · quota mensile riferita a ${MESI_FULL[reportMese-1]} ${reportAnno} · iscrizione riferita all'anno scolastico ${annoSel}/${String(annoSel+1).slice(2)}`
+      )
     )
   );
 };
+
 
 const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, setLessons:propSetLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV, iscrizioniAnno:propIscrizioniAnno, setIscrizioniAnno:propSetIscrizioniAnno, anniScolastici:propAnniScolasticiAV, gruppi:propGruppiAV }) => {
   const _ruoloAV = propUserRuoloAV || "admin";
@@ -3404,7 +3399,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         )
 
         , view==="report" && _ruoloAV==="admin" && React.createElement(ReportPagamentiAllievi, {
-            entrate, anniDisp, annoSel, setAnnoSel,
+            students: studentsAnno, entrate, anniDisp, annoSel, setAnnoSel,
           })
 
         /* ── Report Lezioni Mensile (solo admin, solo in vista lista) ── */
