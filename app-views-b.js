@@ -1578,6 +1578,48 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
             )
           )
 
+          /* ── Aggiornamento app ── */
+          // L'app controlla da sola nuove versioni ogni pochi minuti, ma in modalità PWA
+          // (soprattutto su iOS, quando l'app resta sospesa in background a lungo) può
+          // capitare che l'aggiornamento automatico non scatti subito. Questo pulsante
+          // forza la pulizia di service worker e cache locali e ricarica da zero,
+          // garantendo di ripartire sempre con l'ultima versione pubblicata.
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
+              , React.createElement(Ic, {n:"refresh",size:14,stroke:C.gold})
+              , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Aggiornamento app")
+            )
+            , React.createElement('div', {style:{padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:16}}
+              , React.createElement('div', null
+                , React.createElement('div', {style:{fontSize:13,fontWeight:500,marginBottom:3}}, "Forza aggiornamento")
+                , React.createElement('div', {style:{fontSize:12,color:C.textDim}}, "Se qualcosa sembra non aggiornato (es. dati mancanti in modalità app), usa questo pulsante")
+              )
+              , React.createElement('button', {
+                  onClick: async ()=>{
+                    try {
+                      if ('serviceWorker' in navigator) {
+                        const regs = await navigator.serviceWorker.getRegistrations();
+                        await Promise.all(regs.map(r=>r.unregister()));
+                      }
+                      if (window.caches && caches.keys) {
+                        const keys = await caches.keys();
+                        await Promise.all(keys.map(k=>caches.delete(k)));
+                      }
+                    } catch(e) { console.warn('[FM] forza aggiornamento:', e); }
+                    window.__FM_ALLOW_EXIT__ = true;
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('_r', Date.now());
+                    window.location.replace(url.toString());
+                  },
+                  style:{display:'flex',alignItems:'center',gap:6,padding:'8px 16px',borderRadius:9,
+                    border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:'pointer',
+                    fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",flexShrink:0}
+                }
+                , React.createElement(Ic,{n:"refresh",size:13,stroke:C.text}), " Aggiorna ora"
+              )
+            )
+          )
+
         )
       )
     )
