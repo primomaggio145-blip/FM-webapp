@@ -3137,7 +3137,13 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       // DIVERSA dal numero di anno (annoSel, es. 2026): va risolta cercando la riga corrispondente.
       // Senza questo campo l'allievo risultava "scollegato dall'anno scolastico" anche quando
       // l'iscrizione in iscrizioni_anno veniva creata correttamente.
-      const annoScolasticoRow = anniDisp.find(a => String(a.annoInizio)===String(annoSel));
+      // BUG CORRETTO: un nuovo allievo va SEMPRE iscritto all'anno scolastico ATTIVO
+      // (annoInizioAttivo), non all'anno che l'admin sta eventualmente sfogliando (annoSel) —
+      // altrimenti, se si crea un allievo mentre si sta consultando un anno passato, la sua
+      // iscrizione finisce silenziosamente sull'anno sbagliato e l'allievo risulta "non
+      // iscritto" per l'anno corrente.
+      const annoIscrizione = annoInizioAttivo != null ? annoInizioAttivo : annoSel;
+      const annoScolasticoRow = anniDisp.find(a => String(a.annoInizio)===String(annoIscrizione));
       const row = {
         nome: d.name||'', email: d.email||null, phone: d.phone||null,
         strumento: d.instrument||null, docente: d.teacher||null,
@@ -3150,7 +3156,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
         extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
       };
-      if (!annoScolasticoRow) console.warn('[FM] Nessuna riga anni_scolastici trovata per annoSel='+annoSel+': anno_scolastico_id resterà null.');
+      if (!annoScolasticoRow) console.warn('[FM] Nessuna riga anni_scolastici trovata per annoIscrizione='+annoIscrizione+': anno_scolastico_id resterà null.');
       const { data: inserted, error } = await supabaseUpsertConFallbackColonne(sb, 'studenti', row, { isUpdate:false });
       if (!error && inserted) {
         // Usa l'ID intero reale restituito da Supabase
@@ -3173,16 +3179,17 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         // vede come "nuovo" (non presente nella sua baseline) e lo inserisce DI NUOVO — da qui
         // il secondo record, sempre privo dei campi che il suo adattatore non conosceva ancora.
         if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ students: listaAggiornata });
-        // Crea automaticamente l'iscrizione per l'anno scolastico attualmente selezionato.
+        // Crea automaticamente l'iscrizione per l'anno scolastico ATTIVO (vedi nota sopra:
+        // mai per l'anno eventualmente sfogliato in quel momento dall'admin).
         // Senza un anno valido l'iscrizione non può essere creata: l'allievo resterebbe
         // "scollegato" — meglio avvisare subito piuttosto che fallire in silenzio.
-        if (annoSel == null) {
-          console.warn('[FM] auto-iscrizione saltata: nessun anno scolastico selezionato — allievo creato ma non collegato a un anno.');
+        if (annoIscrizione == null) {
+          console.warn('[FM] auto-iscrizione saltata: nessun anno scolastico attivo disponibile — allievo creato ma non collegato a un anno.');
         } else {
           try {
             const corso = courses.find(c=>(c.name||c.nome)===d.instrument || String(c.id)===String(d.courseId));
             const { data: iscrData, error: iscrErr } = await sb.from('iscrizioni_anno').upsert({
-              studente_id: inserted.id, anno_inizio: annoSel,
+              studente_id: inserted.id, anno_inizio: annoIscrizione,
               corso_id: corso?String(corso.id):null, corso_nome: corso?(corso.name||corso.nome):(d.instrument||''),
               docente_id: null, docente_nome: d.teacher||'',
               data_iscrizione: yyyymmdd(new Date()),
@@ -3190,6 +3197,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             if (iscrErr) console.warn('[FM] auto-iscrizione fallita — allievo creato ma NON collegato all\'anno scolastico:', iscrErr.message);
             if (iscrData) {
               setIscrizioniAnno(p => [...p, {
+
                 id: iscrData.id, studentId: iscrData.studente_id, annoInizio: iscrData.anno_inizio,
                 corsoId: iscrData.corso_id||'', corsoNome: iscrData.corso_nome||'',
                 docenteId: iscrData.docente_id||'', docenteNome: iscrData.docente_nome||'',
