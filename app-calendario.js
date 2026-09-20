@@ -3201,10 +3201,25 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         } else {
           try {
             const corso = courses.find(c=>(c.name||c.nome)===d.instrument || String(c.id)===String(d.courseId));
+            // BUG CORRETTO: docente_id era sempre scritto come null, indipendentemente da chi
+            // fosse il docente — solo docente_nome (testo) veniva salvato. Se in futuro qualche
+            // vista o una policy RLS filtrasse in base a questo ID, l'allievo risulterebbe
+            // "senza docente collegato" pur avendo il nome corretto. Risolviamo qui l'id reale
+            // cercando tra i docenti quello il cui nome/teacherKey corrisponde al docente scelto.
+            const teacherNameLower = (d.teacher||'').toLowerCase().trim();
+            const docenteAssegnato = teacherNameLower
+              ? (propDocentiAV||[]).find(doc => {
+                  const k = (doc.teacherKey||doc.nome||'').toLowerCase().trim();
+                  const n = (doc.nome||'').toLowerCase().trim();
+                  return teacherNameLower===k || teacherNameLower===n
+                    || teacherNameLower.includes(k) || (k&&k.includes(teacherNameLower))
+                    || teacherNameLower.includes(n) || (n&&n.includes(teacherNameLower));
+                })
+              : null;
             const { data: iscrData, error: iscrErr } = await sb.from('iscrizioni_anno').upsert({
               studente_id: inserted.id, anno_inizio: annoIscrizione,
               corso_id: corso?String(corso.id):null, corso_nome: corso?(corso.name||corso.nome):(d.instrument||''),
-              docente_id: null, docente_nome: d.teacher||'',
+              docente_id: docenteAssegnato ? docenteAssegnato.id : null, docente_nome: d.teacher||'',
               data_iscrizione: yyyymmdd(new Date()),
             }, {onConflict:'studente_id,anno_inizio'}).select().single();
             if (iscrErr) console.warn('[FM] auto-iscrizione fallita — allievo creato ma NON collegato all\'anno scolastico:', iscrErr.message);
