@@ -2845,6 +2845,154 @@ const supabaseUpsertConFallbackColonne = async (sb, table, row, { isUpdate=false
   return secondo;
 };
 
+// ─── Report pagamenti allievi (quote mensili + iscrizioni, raggruppato per allievo) ────
+const ReportPagamentiAllievi = ({ entrate, anniDisp, annoSel, setAnnoSel }) => {
+  const [search, setSearch] = useState("");
+  const [sortKey, setSortKey] = useState("nome");
+  const [sortDir, setSortDir] = useState("asc");
+  const [espansi, setEspansi] = useState({});
+
+  const inAnnoScolastico = (e) => (Number(e.mese)>=9 ? Number(e.anno)===annoSel : Number(e.anno)===annoSel+1);
+
+  const pagamentiAnno = (entrate||[]).filter(e =>
+    (e.categoria==="quota" || e.categoria==="iscrizione") && inAnnoScolastico(e)
+  );
+
+  const perAllievo = {};
+  pagamentiAnno.forEach(e => {
+    const key = e.studentId!=null ? `id:${e.studentId}` : `nome:${(e.studentName||'').toLowerCase().trim()}`;
+    if(!perAllievo[key]) perAllievo[key] = { key, studentId:e.studentId, nome:e.studentName||'—', pagamenti:[], totale:0, nQuote:0, nIscrizioni:0 };
+    perAllievo[key].pagamenti.push(e);
+    perAllievo[key].totale += Number(e.importo)||0;
+    if(e.categoria==="quota") perAllievo[key].nQuote++; else perAllievo[key].nIscrizioni++;
+  });
+  let righe = Object.values(perAllievo);
+  if(search.trim()) {
+    const q = search.trim().toLowerCase();
+    righe = righe.filter(r=>r.nome.toLowerCase().includes(q));
+  }
+  righe.forEach(r=>r.pagamenti.sort((a,b)=>(a.dataPagamento||a.data||'').localeCompare(b.dataPagamento||b.data||'')));
+  righe.sort((a,b)=>{
+    let av,bv;
+    if(sortKey==="totale")       { av=a.totale; bv=b.totale; }
+    else if(sortKey==="npagamenti") { av=a.pagamenti.length; bv=b.pagamenti.length; }
+    else                          { av=a.nome.toLowerCase(); bv=b.nome.toLowerCase(); }
+    if(av<bv) return sortDir==="asc"?-1:1;
+    if(av>bv) return sortDir==="asc"?1:-1;
+    return 0;
+  });
+  const handleSort = k => { if(sortKey===k) setSortDir(p=>p==="asc"?"desc":"asc"); else { setSortKey(k); setSortDir("asc"); } };
+  const toggleEspanso = key => setEspansi(p=>({...p,[key]:!p[key]}));
+  const tuttiEspansi = righe.length>0 && righe.every(r=>espansi[r.key]);
+  const toggleTutti = () => {
+    const nuovo = !tuttiEspansi;
+    const next = {}; righe.forEach(r=>next[r.key]=nuovo); setEspansi(next);
+  };
+
+  const totComplessivo = righe.reduce((t,r)=>t+r.totale,0);
+  const totQuote       = righe.reduce((t,r)=>t+r.nQuote,0);
+  const totIscrizioni  = righe.reduce((t,r)=>t+r.nIscrizioni,0);
+
+  const CAT_LABEL = { quota:"Quota mensile", iscrizione:"Iscrizione annuale" };
+  const MESI_LBL  = ["","Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+
+  return (
+    React.createElement('div', null
+      /* Header: anno scolastico + ricerca + KPI */
+      , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8,marginBottom:14,flexWrap:'wrap'}}
+        , anniDisp && anniDisp.length>1 && React.createElement(React.Fragment, null
+          , React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontWeight:600,letterSpacing:'.07em',textTransform:'uppercase'}},'Anno scolastico:')
+          , anniDisp.map(a => {
+              const label = `${a.annoInizio}/${String(a.annoFine||a.annoInizio+1).slice(2)}`;
+              const sel = String(a.annoInizio) === String(annoSel);
+              return React.createElement('button',{key:a.annoInizio, onClick:()=>setAnnoSel(a.annoInizio),
+                style:{padding:'4px 12px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.teal:C.bg,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:12,fontWeight:sel?700:400,fontFamily:"'Open Sans',sans-serif"}}
+                , label
+              );
+            })
+        )
+        , React.createElement('input', {type:'text', placeholder:'Cerca allievo…', value:search, onChange:e=>setSearch(e.target.value),
+            style:{padding:'7px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:13,minWidth:180}})
+        , React.createElement('button', {onClick:toggleTutti,
+            style:{padding:'6px 13px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.textMuted,cursor:'pointer',fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+          , tuttiEspansi?'Comprimi tutti':'Espandi tutti'
+        )
+        , React.createElement('div', {style:{marginLeft:'auto',textAlign:'right'}}
+          , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:C.green}}, `€${totComplessivo.toLocaleString('it-IT')}`)
+          , React.createElement('div', {style:{fontSize:11,color:C.textMuted}}, `${totQuote} quote · ${totIscrizioni} iscrizioni · ${righe.length} allievi`)
+        )
+      )
+      /* Tabella raggruppata per allievo */
+      , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}
+        , righe.length===0 ? (
+          React.createElement('div', {style:{padding:'30px 0',textAlign:'center',color:C.textDim,fontSize:13}}, 'Nessun pagamento registrato per questo anno scolastico')
+        ) : (
+          React.createElement('div', null
+            , React.createElement('div', {style:{display:'grid',gridTemplateColumns:'1fr 110px 110px 90px',gap:8,padding:'9px 20px',
+                borderBottom:`1px solid ${C.border}`,background:C.bg}}
+              , React.createElement('span', {onClick:()=>handleSort('nome'), style:{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted,fontWeight:600,cursor:'pointer'}}
+                , 'Allievo', sortKey==='nome'?(sortDir==='asc'?' ▲':' ▼'):'')
+              , React.createElement('span', {onClick:()=>handleSort('npagamenti'), style:{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted,fontWeight:600,cursor:'pointer',textAlign:'right'}}
+                , 'Pagamenti', sortKey==='npagamenti'?(sortDir==='asc'?' ▲':' ▼'):'')
+              , React.createElement('span', {onClick:()=>handleSort('totale'), style:{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted,fontWeight:600,cursor:'pointer',textAlign:'right'}}
+                , 'Totale', sortKey==='totale'?(sortDir==='asc'?' ▲':' ▼'):'')
+              , React.createElement('span', {style:{fontSize:10,letterSpacing:'0.06em',textTransform:'uppercase',color:C.textMuted,fontWeight:600,textAlign:'right'}}, '')
+            )
+            , righe.map(r => {
+              const isEsp = !!espansi[r.key];
+              return (
+                React.createElement('div', { key: r.key }
+                  , React.createElement('div', { onClick:()=>toggleEspanso(r.key),
+                      style:{display:'grid',gridTemplateColumns:'1fr 110px 110px 90px',gap:8,padding:'11px 20px',alignItems:'center',
+                        cursor:'pointer',borderBottom: isEsp?`1px solid ${C.border}`:'none',background:isEsp?C.surfaceHover:'transparent'} }
+                    , React.createElement('span', {style:{fontSize:13,fontWeight:isEsp?600:500}}, r.nome)
+                    , React.createElement('span', {style:{fontSize:12,color:C.textMuted,textAlign:'right'}}, r.pagamenti.length)
+                    , React.createElement('span', {style:{fontFamily:"'Oswald',sans-serif",fontSize:14,fontWeight:600,color:C.green,textAlign:'right'}}, `€${r.totale.toLocaleString('it-IT')}`)
+                    , React.createElement('span', {style:{textAlign:'right',color:C.textMuted,fontSize:12}}, isEsp?'▲':'▼')
+                  )
+                  , isEsp && React.createElement('div', {style:{padding:'0 20px 10px'}}
+                    , React.createElement('table', {style:{width:'100%',borderCollapse:'collapse',fontSize:12.5}}
+                      , React.createElement('thead', null
+                        , React.createElement('tr', null
+                          , ["Categoria","Periodo","Importo","Data pagamento","Metodo","Stato","Ricevuta"].map(h=>(
+                            React.createElement('th', {key:h, style:{textAlign:h==="Importo"?"right":"left",padding:"6px 10px",fontSize:10,
+                              letterSpacing:"0.05em",textTransform:"uppercase",color:C.textDim,fontWeight:600,borderBottom:`1px solid ${C.border}`}}, h)
+                          ))
+                        )
+                      )
+                      , React.createElement('tbody', null
+                        , r.pagamenti.map(p => (
+                          React.createElement('tr', {key:p.id}
+                            , React.createElement('td', {style:{padding:"6px 10px",color:C.textMuted}}, CAT_LABEL[p.categoria]||p.categoria)
+                            , React.createElement('td', {style:{padding:"6px 10px"}}, p.categoria==="quota" ? `${MESI_LBL[p.mese]||''} ${p.anno}` : `A.S. ${annoSel}/${String(annoSel+1).slice(2)}`)
+                            , React.createElement('td', {style:{padding:"6px 10px",textAlign:"right",fontWeight:600,color:C.green}}, `€${Number(p.importo).toLocaleString('it-IT')}`)
+                            , React.createElement('td', {style:{padding:"6px 10px",color:C.textMuted,whiteSpace:"nowrap"}}
+                              , (p.dataPagamento||p.data) ? new Date((p.dataPagamento||p.data)+"T00:00:00").toLocaleDateString("it-IT") : "—")
+                            , React.createElement('td', {style:{padding:"6px 10px",color:C.textMuted,whiteSpace:"nowrap"}}, p.metodo||"—")
+                            , React.createElement('td', {style:{padding:"6px 10px"}}
+                              , React.createElement('span', {style:{fontSize:10,padding:"2px 7px",borderRadius:4,
+                                  background:p.stato==="pagato"?C.greenBg:C.orangeBg||C.goldBg,
+                                  color:p.stato==="pagato"?C.green:C.gold,
+                                  border:`1px solid ${p.stato==="pagato"?C.greenBorder:C.goldDim}`}}
+                                , p.stato==="pagato"?"Pagato":(p.stato||"—")
+                              )
+                            )
+                            , React.createElement('td', {style:{padding:"6px 10px",color:C.textDim,whiteSpace:"nowrap"}}, p.numRicevuta || (p.noRicevuta?"—":"Nessuna"))
+                          )
+                        ))
+                      )
+                    )
+                  )
+                )
+              );
+            })
+          )
+        )
+      )
+    )
+  );
+};
+
 const AllieviView = ({ students:propStudents, setStudents:propSetStudents, courses:propCourses, setCourses:propSetCourses, lessons:propLessons, setLessons:propSetLessons, entrate:propEntrate, setEntrate:propSetEntrate, annoInizioAttivo, config:propConfig, setConfig:propSetConfigAV, docenti:propDocentiAV, quickAction:qaAV, clearQuickAction:clearQaAV, userRuolo:propUserRuoloAV, appUser:_appUserAV, iscrizioniAnno:propIscrizioniAnno, setIscrizioniAnno:propSetIscrizioniAnno, anniScolastici:propAnniScolasticiAV, gruppi:propGruppiAV }) => {
   const _ruoloAV = propUserRuoloAV || "admin";
   const _nomeAV  = (_appUserAV && _appUserAV.nome) || "";
@@ -3242,6 +3390,22 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   return (
     React.createElement(React.Fragment, null
       , React.createElement('div', { style: {maxWidth:1200,margin:"0 auto",padding:"clamp(12px, 3vw, 32px)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3882}}
+
+        /* ── Tab: Elenco allievi / Report pagamenti (solo admin) ── */
+        , (view==="list"||view==="report") && _ruoloAV==="admin" && React.createElement('div', {style:{display:'flex',gap:6,marginBottom:16,borderBottom:`1px solid ${C.border}`}}
+          , [{k:'list',lbl:'Elenco allievi'},{k:'report',lbl:'Report pagamenti'}].map(t=>(
+            React.createElement('button', {key:t.k, onClick:()=>setView(t.k),
+              style:{padding:'9px 16px',border:'none',borderBottom:`2px solid ${view===t.k?C.gold:'transparent'}`,
+                background:'transparent',color:view===t.k?C.gold:C.textMuted,cursor:'pointer',
+                fontSize:13,fontWeight:view===t.k?600:400,fontFamily:"'Open Sans',sans-serif"}}
+              , t.lbl
+            )
+          ))
+        )
+
+        , view==="report" && _ruoloAV==="admin" && React.createElement(ReportPagamentiAllievi, {
+            entrate, anniDisp, annoSel, setAnnoSel,
+          })
 
         /* ── Report Lezioni Mensile (solo admin, solo in vista lista) ── */
         , view==="list" && _ruoloAV==="admin" && React.createElement(ReportLezioniMensile, {
