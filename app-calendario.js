@@ -3048,26 +3048,24 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   }, [annoInizioAttivo]);
 
   // Filtra allievi per anno scolastico selezionato: SOLO chi ha una riga in iscrizioni_anno per quell'anno.
-  // Si applica sia ad admin che a docente (che è già filtrato per teacherKey in `students`);
-  // l'allievo vede sempre e solo se stesso, indipendentemente dall'anno selezionato.
+  // Si applica SOLO ad admin (unico ruolo con selettore anno, vedi "solo admin, solo in vista lista"
+  // più sotto); l'allievo vede sempre e solo se stesso, indipendentemente dall'anno selezionato.
   const studentsAnno = React.useMemo(() => {
     if (_ruoloAV === 'allievo') return students;
+    // Il DOCENTE non ha selettore di anno scolastico: `students` qui è già limitato ai
+    // soli allievi assegnati a lui (filtro per teacherKey applicato più sopra). Filtrare
+    // ANCHE per iscrizioni_anno è fragile: se anche una sola riga di iscrizione manca o
+    // non si è sincronizzata (es. errore silenzioso alla creazione dell'allievo), quell'
+    // allievo sparisce dalla vista del docente — bug osservato: un vecchio fail-safe
+    // interveniva solo quando TUTTI gli allievi risultavano non iscritti, non quando ne
+    // mancava solo una parte. Per il docente mostriamo quindi sempre tutti i suoi allievi.
+    if (_ruoloAV === 'docente') return students;
     const idIscritti = new Set(
       iscrizioniAnno
         .filter(i => String(i.annoInizio) === String(annoSel))
         .map(i => String(i.studentId))
     );
-    const filtered = students.filter(s => idIscritti.has(String(s.id)));
-    // Fail-safe per il DOCENTE: se ha allievi assegnati (teacherKey) ma NESSUNO risulta
-    // iscritto nell'anno selezionato — tipicamente perché la lettura di `iscrizioni_anno`
-    // è bloccata per il suo ruolo (RLS Supabase) o le iscrizioni non sono ancora state
-    // migrate per il nuovo anno — mostriamo comunque i suoi allievi invece di un elenco
-    // vuoto: è un ruolo di sola lettura, quindi il rischio di mostrare un allievo "di troppo"
-    // è preferibile al nascondere allievi reali del docente.
-    if (_ruoloAV === 'docente' && students.length > 0 && filtered.length === 0) {
-      return students;
-    }
-    return filtered;
+    return students.filter(s => idIscritti.has(String(s.id)));
   }, [students, iscrizioniAnno, annoSel, _ruoloAV]);
 
   // Allievi NON ancora iscritti nell'anno selezionato (candidati per import da anno precedente)

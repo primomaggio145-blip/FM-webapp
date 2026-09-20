@@ -182,35 +182,47 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     return corsi;
   };
   const allievi = (d) => {
-    // Filtra prima per anno scolastico selezionato (fonte di verità: iscrizioni_anno).
+    // Filtra per anno scolastico selezionato (rilevante solo per l'admin, che può sfogliare
+    // anni passati — il docente non ha questo selettore, resta sempre sull'anno attivo).
     const annoTarget = (typeof annoSelDoc !== 'undefined' && annoSelDoc != null) ? annoSelDoc : annoInizio;
-    const iscrAnnoList = _propIscrizioniDV || [];
-    const idsIscrittiAnno = new Set(
-      iscrAnnoList.filter(i => String(i.annoInizio) === String(annoTarget)).map(i => String(i.studentId))
-    );
     let base;
-    if (idsIscrittiAnno.size > 0) {
-      base = students.filter(s => idsIscrittiAnno.has(String(s.id)));
+    if (String(annoTarget) === String(annoInizio)) {
+      // Anno scolastico ATTIVO: l'assegnazione corrente (corsiConDocente, applicata più sotto)
+      // è già la fonte di verità — non serve passare da iscrizioni_anno. BUG CORRETTO: la
+      // condizione precedente controllava se l'intera tabella iscrizioni_anno (di TUTTI i
+      // docenti) avesse almeno una riga per l'anno, non se l'avesse questo specifico docente:
+      // bastava che un solo allievo di un altro docente fosse iscritto correttamente per far
+      // scattare comunque il filtro stretto, nascondendo allievi reali con iscrizione mancante
+      // o non sincronizzata (es. appena creati).
+      base = students;
     } else {
-      // Fallback: nessuna iscrizione registrata per l'anno (es. mai importata) —
-      // usa le lezioni effettive con QUESTO docente in quell'anno, invece di mostrare
-      // tutti gli allievi attualmente assegnati (che includerebbe anche altri anni)
-      const idsConLezioniDocente = new Set(
-        lessons.flatMap(l => {
-          if (!matchTeacher(d, l.teacher)) return [];
-          const [ly] = (l.date||'').split('-').map(Number);
-          const lm = parseInt((l.date||'').split('-')[1]||'0');
-          const inAnno = (lm>=9 && ly===Number(annoTarget)) || (lm<=8 && ly===Number(annoTarget)+1);
-          if (!inAnno) return [];
-          const ids = [];
-          if (l.studentId) ids.push(String(l.studentId));
-          (l.students||[]).forEach(s => { if (s && s.id) ids.push(String(s.id)); });
-          return ids;
-        })
+      // Anno PASSATO sfogliato dall'admin: qui iscrizioni_anno resta l'unica fonte storica.
+      const iscrAnnoList = _propIscrizioniDV || [];
+      const idsIscrittiAnno = new Set(
+        iscrAnnoList.filter(i => String(i.annoInizio) === String(annoTarget)).map(i => String(i.studentId))
       );
-      base = idsConLezioniDocente.size > 0
-        ? students.filter(s => idsConLezioniDocente.has(String(s.id)))
-        : students; // ultimo fallback: nessun dato storico disponibile
+      if (idsIscrittiAnno.size > 0) {
+        base = students.filter(s => idsIscrittiAnno.has(String(s.id)));
+      } else {
+        // Fallback: nessuna iscrizione registrata per quell'anno passato (es. mai importata) —
+        // usa le lezioni effettive con QUESTO docente in quell'anno.
+        const idsConLezioniDocente = new Set(
+          lessons.flatMap(l => {
+            if (!matchTeacher(d, l.teacher)) return [];
+            const [ly] = (l.date||'').split('-').map(Number);
+            const lm = parseInt((l.date||'').split('-')[1]||'0');
+            const inAnno = (lm>=9 && ly===Number(annoTarget)) || (lm<=8 && ly===Number(annoTarget)+1);
+            if (!inAnno) return [];
+            const ids = [];
+            if (l.studentId) ids.push(String(l.studentId));
+            (l.students||[]).forEach(s => { if (s && s.id) ids.push(String(s.id)); });
+            return ids;
+          })
+        );
+        base = idsConLezioniDocente.size > 0
+          ? students.filter(s => idsConLezioniDocente.has(String(s.id)))
+          : students; // ultimo fallback: nessun dato storico disponibile
+      }
     }
     return base
       .map(s => ({ ...s, _corsiConDocente: corsiConDocente(d, s) }))
