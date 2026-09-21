@@ -291,7 +291,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       const matchTonalita = (b.versioni||[]).some(v=>(v.tonalita||'').toLowerCase().includes(q));
       const strumentiBrano = strumentiDelBrano(b);
       return(!q||b.title.toLowerCase().includes(q)||b.composer.toLowerCase().includes(q)||matchTonalita)
-        &&(!fStrumento||strumentiBrano.includes(fStrumento)||(fStrumento==='__ensemble__'&&strumentiBrano.some(s=>!s)))
+        &&(!fStrumento||strumentiBrano.includes(fStrumento))
         &&(!fTipo||b.tipo===fTipo)
         &&(!fTonalita||(b.versioni||[]).some(v=>v.tonalita===fTonalita))
         &&(!fStato||(b.versioni||[]).some(v=>v.stato===fStato));
@@ -299,8 +299,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
 
     // Stessi filtri della tab Catalogo, applicati alla lista allievi (tab "Per allievo"):
     // ricerca su nome allievo + titolo/compositore/tonalità dei suoi brani, Strumento/Corso
-    // sul proprio strumento (o su un brano ensemble in repertorio), Tonalità/Stato su
-    // almeno un brano del proprio repertorio che corrisponda.
+    // sul proprio strumento, Tonalità/Stato su almeno un brano del proprio repertorio che
+    // corrisponda.
     const allieviFiltrati = useMemo(()=>_studBranoRep.filter(a=>{
       const stuName=(a.name||a.nome||"");
       const suoiBrani=brani.filter(b=>(a.repertorio||[]).some(r=>r.id===b.id));
@@ -308,9 +308,9 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       const matchQ = !q || stuName.toLowerCase().includes(q)
         || suoiBrani.some(b=>b.title.toLowerCase().includes(q)||b.composer.toLowerCase().includes(q)
             ||(b.versioni||[]).some(v=>(v.tonalita||'').toLowerCase().includes(q)));
-      const matchStrumento = !fStrumento || (fStrumento==='__ensemble__'
-        ? suoiBrani.some(b=>strumentiDelBrano(b).some(s=>!s))
-        : ((a.instrument||'')===fStrumento || suoiBrani.some(b=>strumentiDelBrano(b).includes(fStrumento))));
+      const matchStrumento = !fStrumento
+        || (a.instrument||'')===fStrumento
+        || suoiBrani.some(b=>strumentiDelBrano(b).includes(fStrumento));
       const matchTonalita = !fTonalita || suoiBrani.some(b=>(b.versioni||[]).some(v=>v.tonalita===fTonalita));
       const matchStato = !fStato || suoiBrani.some(b=>(b.versioni||[]).some(v=>v.stato===fStato));
       return matchQ && matchStrumento && matchTonalita && matchStato;
@@ -432,7 +432,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                             color:C.text,fontSize:13,padding:"9px 12px 9px 34px",fontFamily:"'Open Sans',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7819}})
                       )
                       , [
-                        {val:fStrumento,set:setFStrumento,opts:[{id:'__ensemble__',label:'🎭 Ensemble/Collettivo'},...tuttiStrumenti.map(s=>({id:s,label:s}))],ph:"Strumento/Corso"},
+                        {val:fStrumento,set:setFStrumento,opts:tuttiStrumenti.map(s=>({id:s,label:s})),ph:"Strumento/Corso"},
                         {val:fTonalita,set:setFTonalita,opts:tutteTonalita.map(t=>({id:t,label:t})),ph:"Tonalità"},
                         {val:fStato,set:setFStato,opts:Object.entries(STATO_BRANO_CONFIG).map(([id,cfg])=>({id,label:cfg.icon+' '+cfg.label})),ph:"Stato"},
                       ].map((f,i)=>(
@@ -568,7 +568,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                             color:C.text,fontSize:13,padding:"9px 12px 9px 34px",fontFamily:"'Open Sans',sans-serif"}})
                       )
                       , [
-                        {val:fStrumento,set:setFStrumento,opts:[{id:'__ensemble__',label:'🎭 Ensemble/Collettivo'},...tuttiStrumenti.map(s=>({id:s,label:s}))],ph:"Strumento/Corso"},
+                        {val:fStrumento,set:setFStrumento,opts:tuttiStrumenti.map(s=>({id:s,label:s})),ph:"Strumento/Corso"},
                         {val:fTonalita,set:setFTonalita,opts:tutteTonalita.map(t=>({id:t,label:t})),ph:"Tonalità"},
                         {val:fStato,set:setFStato,opts:Object.entries(STATO_BRANO_CONFIG).map(([id,cfg])=>({id,label:cfg.icon+' '+cfg.label})),ph:"Stato"},
                       ].map((f,i)=>(

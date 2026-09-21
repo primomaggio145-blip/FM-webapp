@@ -12894,11 +12894,11 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
                 , isOpen && React.createElement('div', {style:{padding:'14px',display:'flex',flexDirection:'column',gap:12}}
 
                   /* Corso/Strumento e Tonalità — ogni versione può avere un corso diverso
-                     (es. una versione "Pianoforte" e una "Ensemble/Collettivo" dello stesso brano) */
+                     (es. una versione "Pianoforte" e una senza corso specifico, generica) */
                   , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12} }
                     , React.createElement(Sel, { label: "Corso/Strumento versione", value: v.strumento||"",
                         onChange: e=>setVersione(idx,{strumento:e.target.value}),
-                        options: [{value:"",label:"🎭 Ensemble/Collettivo"},...strumentiDisp.map(i=>({value:i,label:i}))] })
+                        options: strumentiDisp.map(i=>({value:i,label:i})) })
                     , React.createElement(Sel, { label: "Tonalità / Scala", value: v.tonalita, onChange: e=>setVersione(idx,{tonalita:e.target.value}), options: TONALITY_OPTS })
                   )
 
