@@ -4284,7 +4284,8 @@ const trovaLezionePrecedente = (lesson, tutteLeLezioni) => {
         && (!lesson.gruppoId || l.gruppoId === lesson.gruppoId);
     }
     return !isColl(l) && l.tipo !== 'prova' && l.tipo !== 'sala_prove' &&
-      studentInLesson(l, lesson.student, lesson.studentId);
+      studentInLesson(l, lesson.student, lesson.studentId) &&
+      l.instrument && lesson.instrument && l.instrument === lesson.instrument;
   });
   if (candidati.length === 0) return null;
   candidati.sort((a, b) => b.date.localeCompare(a.date) || (b.hour || '').localeCompare(a.hour || ''));
