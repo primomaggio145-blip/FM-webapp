@@ -160,6 +160,7 @@
       anno: r.anno || new Date().getFullYear(), metodo: r.metodo || '',
       data: r.data || '', docenteId: r.docente_id || null, note: r.note || '',
       haAcconto: r.ha_acconto || false,
+      isAcconto: r.is_acconto === true,
       accontoImporto: r.acconto_importo != null ? parseFloat(r.acconto_importo) : null,
       importoLordo: r.importo_lordo != null ? parseFloat(r.importo_lordo) : null,
     };
@@ -366,6 +367,7 @@
         anno: s.anno || new Date().getFullYear(), metodo: s.metodo || null,
         data: s.data || null, docente_id: s.docenteId || null, note: s.note || null,
         ha_acconto: s.haAcconto || false,
+        is_acconto: s.isAcconto === true,
         acconto_importo: s.accontoImporto != null ? s.accontoImporto : null,
         importo_lordo: s.importoLordo != null ? s.importoLordo : null,
         updated_at: new Date().toISOString(),
