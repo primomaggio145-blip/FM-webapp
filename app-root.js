@@ -2497,9 +2497,39 @@ const RemindersView = ({ ruolo, onNavigate }) => {
     setSending(p => ({ ...p, [tipoId]: false }));
   };
 
+  // Ora legale UE: dall'ultima domenica di marzo (01:00 UTC) all'ultima domenica di ottobre (01:00 UTC).
+  // Calcolo deterministico, non dipende dal fuso del browser dell'admin.
+  const isEuDst = (date) => {
+    const y = date.getUTCFullYear();
+    const lastSunday = (monthIdx) => { // monthIdx 0-based: 2=marzo, 9=ottobre
+      const d = new Date(Date.UTC(y, monthIdx + 1, 0, 1, 0, 0));
+      d.setUTCDate(d.getUTCDate() - d.getUTCDay());
+      return d;
+    };
+    return date >= lastSunday(2) && date < lastSunday(9);
+  };
+  const romeUtcOffsetHours = (date) => isEuDst(date) ? 2 : 1;
+
   const cronExpr = (cfg, tipo) => {
-    const [hh, mm] = (cfg.ora_invio || '09:00').split(':');
-    return tipo === 'pagamento' ? `${mm||0} ${hh||9} 1 * *` : `${mm||0} ${hh||9} * * *`;
+    // Converte l'orario LOCALE italiano scelto nel pannello nell'equivalente UTC,
+    // perché pg_cron su Supabase valuta la schedule in UTC.
+    const [hh, mm] = (cfg.ora_invio || '09:00').split(':').map(Number);
+    const off = romeUtcOffsetHours(new Date());
+    let totalMin = ((hh * 60 + mm) - off * 60);
+    totalMin = ((totalMin % 1440) + 1440) % 1440;
+    const uh = String(Math.floor(totalMin / 60)).padStart(2, '0');
+    const um = String(totalMin % 60).padStart(2, '0');
+    return tipo === 'pagamento' ? `${um} ${uh} 1 * *` : `${um} ${uh} * * *`;
+  };
+
+  const alterJobSQL = (cfg, tipoId) => {
+    const cron = cronExpr(cfg, tipoId);
+    return `-- Verifica prima il nome esatto del job:\n` +
+      `-- select jobid, jobname, schedule from cron.job order by jobname;\n` +
+      `select cron.alter_job(\n` +
+      `  (select jobid from cron.job where jobname = '${tipoId}-reminder'),\n` +
+      `  schedule => '${cron}'\n` +
+      `); -- ${cfg.ora_invio || '09:00'} ora italiana → ${cron} UTC`;
   };
 
   const realLog     = log.filter(r => !r._errore);
@@ -2665,9 +2695,19 @@ const RemindersView = ({ ruolo, onNavigate }) => {
               )
               /* cron preview */
               , React.createElement('div', { style:{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:'10px 14px', fontSize:12, color:C.textMuted, marginBottom:14 } }
-                , '🕐 pg_cron: '
+                , '🕐 pg_cron (UTC): '
                 , React.createElement('code', { style:{ fontFamily:'monospace', background:`${C.gold}12`, color:C.gold, padding:'2px 8px', borderRadius:4 } }, cronExpr(cfg, tipo.id))
-                , ' — aggiorna il cron manualmente su Supabase → Database → Cron Jobs'
+                , React.createElement('span',{style:{marginLeft:6}}, `— equivalente a ${cfg.ora_invio||'09:00'} ora italiana`)
+              )
+              , React.createElement('div', { style:{ display:'flex', alignItems:'flex-start', gap:10, background:`${C.gold}08`, border:`1px solid ${C.goldDim}`, borderRadius:8, padding:'10px 14px', marginBottom:14 } }
+                , React.createElement('div', { style:{ flex:1, fontSize:12, color:C.textMuted, lineHeight:1.5 } }
+                  , 'Salvare qui aggiorna solo la configurazione (attivo/giorni/note), NON il job pg_cron reale. '
+                  , 'Per applicare davvero il nuovo orario, esegui questo SQL su Supabase → SQL Editor (verifica prima il nome del job, potrebbe non seguire questa convenzione):'
+                  , React.createElement('pre', { style:{ background:C.bg, border:`1px solid ${C.border}`, borderRadius:6, padding:'8px 10px', marginTop:8, fontSize:11, fontFamily:'monospace', whiteSpace:'pre-wrap', overflowX:'auto' } }, alterJobSQL(cfg, tipo.id))
+                )
+                , React.createElement('button', { onClick:()=>{ navigator.clipboard.writeText(alterJobSQL(cfg, tipo.id)); },
+                    style:{ padding:'6px 12px', borderRadius:8, border:`1px solid ${C.gold}`, background:C.goldBg, color:C.gold, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:"'Open Sans',sans-serif", whiteSpace:'nowrap', flexShrink:0 } }
+                  , '📋 Copia SQL')
               )
               /* salva */
               , React.createElement('div', { style:{ display:'flex', gap:10, justifyContent:'flex-end' } }
@@ -2692,7 +2732,7 @@ const RemindersView = ({ ruolo, onNavigate }) => {
       , React.createElement('div', { style:{ marginTop:8, padding:'14px 18px', background:`${C.gold}08`, border:`1px solid ${C.goldDim}`, borderRadius:12, fontSize:13, color:C.textMuted, lineHeight:1.6 } }
         , React.createElement('strong',{style:{color:C.gold}}, '🤖 Scheduling automatico via pg_cron')
         , React.createElement('br',null)
-        , 'Il servizio gira autonomamente su Supabase. Le modifiche all\'orario vengono lette dall\'Edge Function; per cambiare il trigger pg_cron aggiorna manualmente il Cron Job nella Dashboard Supabase.'
+        , 'Il servizio gira autonomamente su Supabase tramite pg_cron. L\'Edge Function legge da whatsapp_config solo se il reminder è attivo/disattivo — l\'orario mostrato qui è puramente informativo: il vero orario di invio è quello del job pg_cron su Supabase, che va aggiornato manualmente (usa il pulsante "📋 Copia SQL" nel pannello di modifica del singolo reminder).'
       )
     )
 
@@ -2928,14 +2968,15 @@ serve(async (req) => {
             , React.createElement('pre',{style:{...codeStyle,userSelect:'all'}},
 `{ id:'${wizard.id}', label:'${wizard.label}', icon:'bell',
   dest:'${wizard.dest}', scheduleDefault:'${wizard.ora_invio}',
-  cronDefault:'${(wizard.ora_invio.split(':')[1]||'0')} ${wizard.ora_invio.split(':')[0]||'9'} * * *',
+  cronDefault:'${cronExpr({ora_invio:wizard.ora_invio}, wizard.id)}', // UTC — equivale a ${wizard.ora_invio} ora italiana
   desc:'${wizard.desc||'Nuovo reminder'}' },`)
 
             , React.createElement('div',{style:{fontSize:11,color:C.gold,fontWeight:700,textTransform:'uppercase',letterSpacing:'0.07em'}},'📋 2. SQL pg_cron da eseguire su Supabase')
             , React.createElement('pre',{style:{...codeStyle,userSelect:'all'}},
-`SELECT cron.schedule(
+`-- Nota: orario già convertito da locale italiano a UTC (pg_cron valuta in UTC)
+SELECT cron.schedule(
   'whatsapp-${wizard.id}',
-  '${(wizard.ora_invio.split(':')[1]||'0')} ${wizard.ora_invio.split(':')[0]||'9'} * * *',
+  '${cronExpr({ora_invio:wizard.ora_invio}, wizard.id)}',
   $$SELECT net.http_post(
     url     := '${WA_SUPABASE_URL}/functions/v1/whatsapp-reminder?tipo=${wizard.id}',
     headers := jsonb_build_object(
@@ -2948,7 +2989,7 @@ serve(async (req) => {
             , React.createElement('button',{onClick:()=>setShowWizard(false),style:{padding:'9px 20px',borderRadius:8,border:`1px solid ${C.border}`,background:'none',color:C.textMuted,cursor:'pointer',fontSize:13,fontFamily:"'Open Sans',sans-serif"}},'Chiudi')
             , wizard.id && wizard.label && React.createElement('button',{
                 onClick:()=>{
-                  const code=`{ id:'${wizard.id}', label:'${wizard.label}', icon:'bell', dest:'${wizard.dest}', scheduleDefault:'${wizard.ora_invio}', cronDefault:'0 ${wizard.ora_invio.split(':')[0]||9} * * *', desc:'${wizard.desc}' },`;
+                  const code=`{ id:'${wizard.id}', label:'${wizard.label}', icon:'bell', dest:'${wizard.dest}', scheduleDefault:'${wizard.ora_invio}', cronDefault:'${cronExpr({ora_invio:wizard.ora_invio}, wizard.id)}', desc:'${wizard.desc}' },`;
                   navigator.clipboard?.writeText(code);
                   toast(true,'Codice copiato negli appunti!');
                 },
