@@ -259,7 +259,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     const sMese = (Number(s.mese)||0) + 1;
     return sMese === m && Number(s.anno) === y;
   });
-  const totaleAltreCompetenzeMese = (d, m, y) => altreCompetenzeMese(d,m,y).reduce((t,s)=>t+(Number(s.importo)||0), 0);
+  // Un ACCONTO è un anticipo già versato al docente: va SOTTRATTO dal compenso del mese in
+  // cui è stato richiesto (non sommato come competenza extra) — altrimenti finirebbe pagato due volte.
+  const totaleAltreCompetenzeMese = (d, m, y) => altreCompetenzeMese(d,m,y).reduce((t,s)=>t+(s.isAcconto ? -(Number(s.importo)||0) : (Number(s.importo)||0)), 0);
 
   // Compenso mensile = lezioni (presente/assente/recupero) × tariffa oraria + altre competenze registrate nel mese
   const stipendioMese = (d, m=curMonth, y=curYear) => lezioniMese(d,m,y).length * d.tariffaOra + totaleAltreCompetenzeMese(d,m,y);
@@ -511,8 +513,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   });
   const altreSel   = altreCompetenzeMese(selected, selMese.m, selMese.y);
   const altrePrev  = altreCompetenzeMese(selected, lezPrevM, lezPrevY);
-  const totAltreSel  = altreSel.reduce((t,s)=>t+(Number(s.importo)||0), 0);
-  const totAltrePrev = altrePrev.reduce((t,s)=>t+(Number(s.importo)||0), 0);
+  const totAltreSel  = altreSel.reduce((t,s)=>t+(s.isAcconto ? -(Number(s.importo)||0) : (Number(s.importo)||0)), 0);
+  const totAltrePrev = altrePrev.reduce((t,s)=>t+(s.isAcconto ? -(Number(s.importo)||0) : (Number(s.importo)||0)), 0);
   const stipLezSel  = lezSel.length * selected.tariffaOra;
   const stipSel  = stipLezSel + totAltreSel;
   const stipPrev = lezPrev.length * selected.tariffaOra + totAltrePrev;

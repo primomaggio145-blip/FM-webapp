@@ -989,9 +989,11 @@ const RICEVUTA_STYLE_DEFAULT = {
   firmaPresidenteUrl: "",
 };
 
-const RicevutaModal = ({ entrata, student, config, onClose }) => {
+const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
   const cfg = config || CONFIG_DEFAULT;
   const stile = {...RICEVUTA_STYLE_DEFAULT, ...(cfg.ricevutaStyle||{})};
+  const voci = [entrata, ...((righeExtra||[]).filter(v=>v && v.id!==entrata.id))];
+  const isMultiVoce = voci.length > 1;
 
   const numRic = entrata.noRicevuta ? "—" : (entrata.numRicevuta || (String(cfg.progressivoRicevute||1).padStart(3,"0") + "/" + (entrata.anno||new Date().getFullYear())));
   const intestatario = (student && student.nomeRicevuta && student.nomeRicevuta.trim()) || (student && student.name) || entrata.studentName || "—";
@@ -999,7 +1001,8 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
   const dataStampa = new Date().toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"});
   const dataPag    = entrata.data ? new Date(entrata.data+"T00:00:00").toLocaleDateString("it-IT") : dataStampa;
   const meseLabel  = entrata.mese ? MESI_N[entrata.mese-1]+" "+(entrata.anno||new Date().getFullYear()) : "";
-  const importoStr = `€ ${(entrata.importo||0).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+  const importoTotale = voci.reduce((t,v)=>t+(Number(v.importo)||0),0);
+  const importoStr = `€ ${importoTotale.toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const ac = stile.accentColor;
 
   // Genera HTML puro per la stampa in popup
@@ -1008,8 +1011,12 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
     const cfHtml = cfg.codiceFiscale ? `<div style="font-size:11px;color:#666">CF: ${cfg.codiceFiscale}</div>` : "";
     const nascitaRow = stile.showDataNascita!==false && student && student.birthdate
       ? `<tr><td class="k">Data di nascita</td><td class="v">${new Date(student.birthdate+"T00:00:00").toLocaleDateString("it-IT")}</td></tr>` : "";
-    const meseRow = stile.showCompetenza!==false && meseLabel ? `<tr><td class="k">Competenza</td><td class="v">${meseLabel}</td></tr>` : "";
+    const meseRow = stile.showCompetenza!==false && meseLabel && !isMultiVoce ? `<tr><td class="k">Competenza</td><td class="v">${meseLabel}</td></tr>` : "";
     const noteRow = stile.noteFooter ? `<tr><td class="k">Note</td><td class="v">${stile.noteFooter}</td></tr>` : "";
+    const descrizioneHtml = isMultiVoce
+      ? `<tr><td colspan="2" style="padding-top:14px;padding-bottom:4px;border-bottom:none;"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.08em;border-top:1px solid #eee;padding-top:10px;">Dettaglio pagamento</div></td></tr>`
+        + voci.map(v=>`<tr><td class="k">${v.desc||"—"}</td><td class="v">€ ${(Number(v.importo)||0).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>`).join("")
+      : (stile.showDescrizione!==false?`<tr><td class="k">Descrizione</td><td class="v">${entrata.desc||"Quota mensile"}</td></tr>`:"");
     const firmaImg = stile.firmaPresidenteUrl ? `<img src="${stile.firmaPresidenteUrl}" style="height:42px;max-width:160px;object-fit:contain;display:block;margin:0 auto 4px;" alt="firma">` : `<div class="firma-line"></div>`;
     const firmeHtml = stile.showFirme!==false ? `
       <div class="firma-wrap">
@@ -1062,7 +1069,7 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
       ${student&&student.codiceFiscale?`<tr><td class="k">Codice fiscale</td><td class="v">${student.codiceFiscale}</td></tr>`:""}
       ${nascitaRow}
       ${stile.showDataPagamento!==false?`<tr><td class="k">Data pagamento</td><td class="v">${dataPag}</td></tr>`:""}
-      ${stile.showDescrizione!==false?`<tr><td class="k">Descrizione</td><td class="v">${entrata.desc||"Quota mensile"}</td></tr>`:""}
+      ${descrizioneHtml}
       ${meseRow}
       ${stile.showMetodo!==false?`<tr><td class="k">Metodo di pagamento</td><td class="v">${entrata.metodo||"—"}</td></tr>`:""}
       ${noteRow}
@@ -1138,8 +1145,8 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
     {k:"Nominativo",   v:intestatario},
     ...(student&&student.codiceFiscale ? [{k:"Codice fiscale", v:student.codiceFiscale}] : []),
     {k:"Data pagamento", v:dataPag},
-    {k:"Descrizione",  v:entrata.desc||"Quota mensile"},
-    ...(meseLabel ? [{k:"Competenza", v:meseLabel}] : []),
+    ...(!isMultiVoce ? [{k:"Descrizione",  v:entrata.desc||"Quota mensile"}] : []),
+    ...(!isMultiVoce && meseLabel ? [{k:"Competenza", v:meseLabel}] : []),
     {k:"Metodo",       v:entrata.metodo||"—"},
     ...(stile.notePersonalizzate ? [{k:"Note", v:stile.notePersonalizzate}] : []),
   ];
@@ -1183,12 +1190,21 @@ const RicevutaModal = ({ entrata, student, config, onClose }) => {
                 , React.createElement('span', {style:{fontSize:13,fontWeight:600,color:"#1a1a2e"}}, r.v)
               ))
           )
+          /* Dettaglio voci multiple (quota + iscrizione ecc. sulla stessa ricevuta) */
+          , isMultiVoce && React.createElement('div', {style:{marginBottom:20,borderTop:"1px solid #eee",paddingTop:12}}
+            , React.createElement('div', {style:{fontSize:10,color:"#888",textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}, "Dettaglio pagamento")
+            , voci.map((v,i)=>React.createElement('div', {key:v.id||i, style:{display:"flex",justifyContent:"space-between",alignItems:"center",
+                padding:"6px 0",borderBottom:i<voci.length-1?"1px solid #f3f3f3":"none"}}
+                , React.createElement('span', {style:{fontSize:12,color:"#666"}}, v.desc||"—")
+                , React.createElement('span', {style:{fontSize:13,fontWeight:600,color:"#1a1a2e"}}, `€ ${(Number(v.importo)||0).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}`)
+              ))
+          )
           /* Nota: stile globale gestito in Impostazioni > Ricevuta */
           /* Importo */
           , React.createElement('div', {style:{textAlign:"center",margin:"20px 0",padding:"18px",
               border:`2px solid ${ac}`,borderRadius:8,background:ac+"12"}}
             , React.createElement('div', {style:{fontFamily:`'${stile.fontTitle}',Georgia,serif`,fontSize:36,fontWeight:700,color:ac,lineHeight:1}}, importoStr)
-            , React.createElement('div', {style:{fontSize:10,color:"#888",letterSpacing:".12em",textTransform:"uppercase",marginTop:4}}, "Importo ricevuto")
+            , React.createElement('div', {style:{fontSize:10,color:"#888",letterSpacing:".12em",textTransform:"uppercase",marginTop:4}}, isMultiVoce?`Totale ricevuto (${voci.length} voci)`:"Importo ricevuto")
           )
           /* Firme */
           , stile.showFirme && React.createElement('div', {style:{display:"flex",justifyContent:"space-between",marginTop:36}}

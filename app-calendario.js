@@ -2052,6 +2052,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
       , ricevutaEnt && (
         React.createElement(RicevutaModal, {
           entrata: ricevutaEnt,
+          righeExtra: ricevutaEnt.numRicevuta ? entrateStudent.filter(e=>e.numRicevuta===ricevutaEnt.numRicevuta) : [],
           student: student,
           config: config,
           onClose: ()=>setRicevutaEnt(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3716}}
@@ -11788,6 +11789,12 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
   });
   const [err, setErr] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
+  // Voci aggiuntive sulla STESSA ricevuta (es. quota mensile + iscrizione pagate insieme).
+  // Disponibile solo in creazione (non in modifica, dove l'entrata resta un unico record).
+  const [extraVoci, setExtraVoci] = useState([]);
+  const addExtraVoce = () => setExtraVoci(p=>[...p, { id: uid(), categoria:"iscrizione", importo: f.categoria==="iscrizione"?"":String(importoIscrizioneCfg), mese:f.mese, anno:f.anno }]);
+  const setExtraVoce = (id,k,v) => setExtraVoci(p=>p.map(x=>x.id===id?{...x,[k]:v}:x));
+  const removeExtraVoce = (id) => setExtraVoci(p=>p.filter(x=>x.id!==id));
 
   const CAT_ENTRATE_USE = _catEntrForm || CAT_ENTRATE_DEFAULT;
   const catObj     = CAT_ENTRATE_USE.find(c=>c.id===f.categoria)||CAT_ENTRATE_USE[0];
@@ -11808,6 +11815,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
     if(!f.data)                     e.data      = "Data obbligatoria";
     if(!f.metodo)                   e.metodo    = "Metodo di pagamento obbligatorio";
     if(!needStudent && !f.desc.trim()) e.desc   = "Descrizione obbligatoria";
+    extraVoci.forEach(v => { if(!v.importo||isNaN(v.importo)||Number(v.importo)<=0) e[`voce_${v.id}`] = "Importo non valido"; });
     return e;
   };
 
@@ -11821,6 +11829,11 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
       : f.categoria==="iscrizione"
       ? `Iscrizione ${f.anno}/${Number(f.anno)+1}${s?` — ${s.name}`:""}`
       : f.desc;
+    const descPerCategoria = (cat, mese, anno) => cat==="quota"
+      ? `Quota mensile ${MESI_ALL[mese-1]} ${anno}${s?` — ${s.name}`:""}`
+      : cat==="iscrizione"
+      ? `Iscrizione ${anno}/${Number(anno)+1}${s?` — ${s.name}`:""}`
+      : (CAT_ENTRATE_USE.find(c=>c.id===cat)||{}).label || "";
     onSave({
       ...f,
       studentId:    needStudent ? Number(f.studentId) : null,
@@ -11831,6 +11844,13 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
       desc:         autoDesc || f.desc,
       stato:        f.stato || 'pagato',
       dataPagamento: f.data || f.dataPagamento || '',
+      extraVoci: extraVoci.map(v => ({
+        categoria: v.categoria,
+        importo:   Number(v.importo),
+        mese:      Number(v.mese||f.mese),
+        anno:      Number(v.anno||f.anno),
+        desc:      descPerCategoria(v.categoria, Number(v.mese||f.mese), Number(v.anno||f.anno)),
+      })),
     });
   };
 
@@ -11925,6 +11945,42 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
           , React.createElement(Input, { label: "Data *" , type: "date", value: f.data, onChange: e=>set("data",e.target.value), error: err.data, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6785}})
         )
         , React.createElement(Sel, { label: "Metodo di pagamento"  , value: f.metodo, onChange: e=>set("metodo",e.target.value), options: METODI_PAG, error: err.metodo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6787}})
+
+        /* Voci aggiuntive sulla stessa ricevuta — solo in creazione, non in modifica */
+        , !initial && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}
+            , "Altre voci sulla stessa ricevuta"
+          )
+          , extraVoci.map(v => (
+            React.createElement('div', {key:v.id, style:{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}
+              , React.createElement('select', {value:v.categoria, onChange:e=>{
+                    const cat=e.target.value; setExtraVoce(v.id,'categoria',cat);
+                    if(cat==="iscrizione" && !v.importo) setExtraVoce(v.id,'importo',String(importoIscrizioneCfg));
+                  },
+                  style:{flex:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 10px",fontFamily:"'Open Sans',sans-serif",appearance:"none"}}
+                , CAT_ENTRATE_USE.filter(c=>c.id!=="__new__e__").map(c=>React.createElement('option',{key:c.id,value:c.id},c.label))
+              )
+              , React.createElement('input', {type:"number", placeholder:"Importo €", value:v.importo, onChange:e=>setExtraVoce(v.id,'importo',e.target.value),
+                  style:{width:110,background:C.surface,border:`1px solid ${err[`voce_${v.id}`]?C.red:C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 10px",fontFamily:"'Open Sans',sans-serif"}})
+              , React.createElement('button', {onClick:()=>removeExtraVoce(v.id), type:"button",
+                  style:{padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:"none",color:C.textMuted,cursor:"pointer",fontSize:13}}
+                , "✕"
+              )
+            )
+          ))
+          , React.createElement('button', {onClick:addExtraVoce, type:"button",
+              style:{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:20,border:`1px dashed ${C.teal}`,
+                background:"none",color:C.teal,cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+            , React.createElement(Ic,{n:"plus",size:12,stroke:C.teal}), " Aggiungi un'altra voce (stessa ricevuta)"
+          )
+          , extraVoci.length>0 && React.createElement('div', {style:{marginTop:10,padding:"10px 14px",background:C.tealBg,border:`1px solid ${C.tealBorder}`,borderRadius:8,
+              display:"flex",justifyContent:"space-between",alignItems:"center"}}
+            , React.createElement('span',{style:{fontSize:12,color:C.teal}}, `Totale ricevuta (${1+extraVoci.length} voci)`)
+            , React.createElement('span',{style:{fontFamily:"'Oswald',sans-serif",fontSize:17,fontWeight:600,color:C.teal}}
+              , `€${(Number(f.importo||0)+extraVoci.reduce((t,v)=>t+(Number(v.importo)||0),0)).toLocaleString('it-IT')}`
+            )
+          )
+        )
         , React.createElement('div', null
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}, "Stato pagamento")
           , React.createElement('div', {style:{display:"flex",gap:8}}
@@ -12074,7 +12130,8 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       const dataPagamento = d.dataPagamento || d.data || '';
       let numRicevuta = '';
       if (!d.noRicevuta) {
-        // Usa contatore per anno solare
+        // Usa contatore per anno solare — UN SOLO numero, condiviso anche dalle eventuali
+        // voci aggiuntive (extraVoci) registrate insieme sulla stessa ricevuta.
         const contatoriRicevute = config.contatoriRicevute || {};
         const annoKey = String(anno);
         const progressivo = contatoriRicevute[annoKey] ?? config.progressivoRicevute ?? 1;
@@ -12088,7 +12145,16 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
           if (sb) await sb.from('sito_config').upsert({chiave:'contatoriRicevute', valore: JSON.stringify(nuoviContatori)});
         } catch(e) { console.warn('[FM] save contatori:', e?.message); }
       }
-      setEntrate(p=>[...p,{...d, id:uid(), numRicevuta, dataPagamento, noRicevuta: d.noRicevuta||false}]);
+      const { extraVoci: _extraVoci, ...dPrimaria } = d;
+      const primaria = {...dPrimaria, id:uid(), numRicevuta, dataPagamento, noRicevuta: d.noRicevuta||false};
+      const extra = (_extraVoci||[]).filter(v=>v.importo>0).map(v => ({
+        id: uid(), studentId: d.studentId, studentName: d.studentName,
+        importo: Number(v.importo), mese: Number(v.mese), anno: Number(v.anno),
+        categoria: v.categoria, desc: v.desc, stato: d.stato||'pagato',
+        data: d.data, dataPagamento, metodo: d.metodo, note: '',
+        numRicevuta, noRicevuta: d.noRicevuta||false,
+      }));
+      setEntrate(p=>[...p, primaria, ...extra]);
       if (extraLessonIdPendente) {
         const sb = window.supabaseClient;
         if (sb) sb.from('lezioni').update({ extra_contabilizzata: true }).eq('id', extraLessonIdPendente)
@@ -12555,6 +12621,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         , modal==="ricevuta" && selQuota && (
           React.createElement(RicevutaModal, {
             entrata: selQuota,
+            righeExtra: selQuota.numRicevuta ? entrate.filter(e=>e.numRicevuta===selQuota.numRicevuta) : [],
             student: students.find(s=>s.id===selQuota.studentId),
             config: config,
             onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7237}}
