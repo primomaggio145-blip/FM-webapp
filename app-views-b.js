@@ -969,7 +969,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",marginBottom:16}, __self: this }
             , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}, __self: this }
               , React.createElement('span', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase"}, __self: this }, "Altre competenze " , MESI_LABEL_L[selMese.m-1], " " , selMese.y)
-              , React.createElement('span', { style: {fontSize:13,color:C.green,fontWeight:600}, __self: this }, "€", totAltreSel.toLocaleString("it-IT"))
+              , React.createElement('span', { style: {fontSize:13,color:totAltreSel<0?C.red:C.green,fontWeight:600}, __self: this }, totAltreSel<0?"-":"", "€", Math.abs(totAltreSel).toLocaleString("it-IT"))
             )
             , altreSel.length===0 ? (
               React.createElement('div', { style: {textAlign:"center",padding:"24px 0",color:C.textDim,fontSize:13}, __self: this }
@@ -983,10 +983,13 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                     , s.data ? new Date(s.data+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"}) : "—"
                   )
                   , React.createElement('div', {__self: this }
-                    , React.createElement('div', { style: {fontSize:13,fontWeight:500}, __self: this }, s.desc || "Competenza")
+                    , React.createElement('div', { style: {fontSize:13,fontWeight:500,display:"flex",alignItems:"center",gap:6}, __self: this }
+                      , s.desc || "Competenza"
+                      , s.isAcconto && React.createElement('span', { style:{fontSize:10, fontWeight:700, color:C.gold, background:C.goldBg, border:`1px solid ${C.goldDim}`, borderRadius:6, padding:"1px 6px"} }, "ACCONTO")
+                    )
                     , React.createElement('div', { style: {fontSize:11,color:C.textMuted}, __self: this }, s.categoria||"—")
                   )
-                  , React.createElement('div', { style: {textAlign:"right",fontSize:13,fontWeight:600,color:C.green}, __self: this }, "€", (Number(s.importo)||0).toLocaleString("it-IT"))
+                  , React.createElement('div', { style: {textAlign:"right",fontSize:13,fontWeight:600,color:s.isAcconto?C.red:C.green}, __self: this }, s.isAcconto?"-":"", "€", (Number(s.importo)||0).toLocaleString("it-IT"))
                 )
               ))
             )
@@ -1041,8 +1044,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:14,fontWeight:600,color:isF?C.textDim:n>0?C.green:C.textDim}}
                         , isF?"—":n>0?`€${c.toLocaleString("it-IT")}`:"—"
                       )
-                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:extra>0?600:400,color:isF?C.textDim:extra>0?C.gold:C.textDim}}
-                        , isF?"—":extra>0?`€${extra.toLocaleString("it-IT")}`:"—"
+                      , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:extra!==0?600:400,color:isF?C.textDim:extra>0?C.gold:extra<0?C.red:C.textDim}}
+                        , isF?"—":extra!==0?`${extra<0?"-":""}€${Math.abs(extra).toLocaleString("it-IT")}`:"—"
                       )
                       , React.createElement('td', { style: {padding:"11px 18px"}}
                         , !isF && np>0 && (
@@ -1066,9 +1069,11 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   , React.createElement('td', { style: {padding:"11px 18px",fontSize:14,fontWeight:600,color:C.green}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10535}}, "€"
                     , MESI_AS.reduce((t,x)=>t+lezioniMese(selected,x.m,x.y).length*selected.tariffaOra,0).toLocaleString("it-IT")
                   )
-                  , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:600,color:C.gold}, __self: this }, "€"
-                    , MESI_AS.reduce((t,x)=>t+totaleAltreCompetenzeMese(selected,x.m,x.y),0).toLocaleString("it-IT")
-                  )
+                  , (() => { const totExtraAnno = MESI_AS.reduce((t,x)=>t+totaleAltreCompetenzeMese(selected,x.m,x.y),0);
+                    return React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:600,color:totExtraAnno<0?C.red:C.gold}, __self: this }
+                      , totExtraAnno<0?"-":"", "€", Math.abs(totExtraAnno).toLocaleString("it-IT")
+                    );
+                  })()
                   , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10538}})
                 )
               )
