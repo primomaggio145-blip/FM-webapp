@@ -1897,7 +1897,107 @@ const NAV_EMOJI = {
   showCalendario:"📅", showRecuperi:"⏰", showElenco:"📋", showSalaProve:"🥁",
 };
 
-const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction, config, temaAttivo }) => {
+// ─── RICERCA GLOBALE ────────────────────────────────────────────────────────
+// Ricerca client-side (tutti i dati sono già in memoria) su lezioni, allievi,
+// contabilità, utenti, manuali, allegati, concerti, repertorio. I risultati
+// rispettano i permessi del ruolo loggato (stessa logica di ROLE_PERMS già
+// usata per il menu) — un docente non vede risultati di Contabilità/Utenti, ecc.
+const _normalizzaTesto = (s) => String(s||'')
+  .toLowerCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // rimuove accenti
+
+const GlobalSearchModal = ({ ruolo, onClose, onNavigate, students, docenti, lessons, entrate, spese, utenti, manuali, allegati, concerti, brani }) => {
+  const [query, setQuery] = useState('');
+  const inputRef = React.useRef(null);
+  React.useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
+
+  const _perms = ROLE_PERMS[ruolo] || ROLE_PERMS.admin;
+  const _isAdmin = ruolo === 'admin';
+
+  // Ogni categoria: id, etichetta, permesso richiesto, vista di destinazione,
+  // lista dati, funzione che estrae i campi testuali da controllare, funzione
+  // che genera l'etichetta del risultato (titolo + sottotitolo).
+  const CATEGORIE = [
+    { id:'lezioni', label:'Lezioni', emoji:'📅', view:'calendario', abilitato: _perms.calendario !== false,
+      dati: lessons||[], campi: l => [l.student, l.contactName, l.teacher, l.instrument, l.topic, l.room],
+      etichetta: l => ({ titolo: l.student || l.contactName || 'Lezione', sotto: [l.instrument, l.teacher, l.date].filter(Boolean).join(' · ') }) },
+    { id:'allievi', label:'Allievi', emoji:'🧑‍🎓', view:'allievi', abilitato: _perms.allievi !== false,
+      dati: students||[], campi: s => [s.name||s.nome, s.phone||s.telefono, s.email, s.instrument],
+      etichetta: s => ({ titolo: s.name||s.nome||'Allievo', sotto: [s.instrument, s.phone||s.telefono].filter(Boolean).join(' · ') }) },
+    { id:'contabilita', label:'Contabilità', emoji:'💶', view:'contabilita', abilitato: _perms.contabilita !== false,
+      dati: [...(entrate||[]).map(e=>({...e,_tipo:'entrata'})), ...(spese||[]).map(s=>({...s,_tipo:'spesa'}))],
+      campi: r => [r.studentName, r.desc, r.categoria, r.note],
+      etichetta: r => ({ titolo: r._tipo==='entrata' ? (r.studentName||'Quota') : (r.desc||r.categoria||'Spesa'), sotto: `€${(r.importo||0).toFixed(2)}${r.mese?' · '+r.mese+'/'+r.anno:''}` }) },
+    { id:'utenti', label:'Utenti', emoji:'👥', view:'utenti', abilitato: _isAdmin,
+      dati: utenti||[], campi: u => [u.nome, u.email, u.ruolo],
+      etichetta: u => ({ titolo: u.nome||'Utente', sotto: [u.email, u.ruolo].filter(Boolean).join(' · ') }) },
+    { id:'manuali', label:'Manuali & Libri', emoji:'📚', view:'biblioteca', abilitato: _perms.biblioteca !== false,
+      dati: manuali||[], campi: m => [m.titolo, m.corso, m.categoria],
+      etichetta: m => ({ titolo: m.titolo||'Manuale', sotto: [m.corso, m.categoria].filter(Boolean).join(' · ') }) },
+    { id:'allegati', label:'Allegati', emoji:'📎', view:'allegati', abilitato: _perms.allegati !== false,
+      dati: allegati||[], campi: a => [a.fileName, a.descrizione, a.allievoNome, a.corso],
+      etichetta: a => ({ titolo: a.fileName||a.descrizione||'Allegato', sotto: [a.allievoNome, a.corso].filter(Boolean).join(' · ') }) },
+    { id:'concerti', label:'Concerti', emoji:'🎤', view:'concerti', abilitato: _perms.concerti !== false,
+      dati: concerti||[], campi: c => [c.titolo, c.luogo, c.descrizione],
+      etichetta: c => ({ titolo: c.titolo||'Evento', sotto: [c.luogo, c.data].filter(Boolean).join(' · ') }) },
+    { id:'repertorio', label:'Repertorio', emoji:'🎼', view:'repertorio', abilitato: _perms.repertorio !== false,
+      dati: brani||[], campi: b => [b.title||b.titolo, b.artista, b.autore],
+      etichetta: b => ({ titolo: b.title||b.titolo||'Brano', sotto: b.artista||b.autore||'' }) },
+  ];
+
+  const qNorm = _normalizzaTesto(query.trim());
+  const risultatiPerCategoria = qNorm.length < 2 ? [] : CATEGORIE
+    .filter(cat => cat.abilitato)
+    .map(cat => ({
+      ...cat,
+      match: cat.dati.filter(item => cat.campi(item).some(campo => _normalizzaTesto(campo).includes(qNorm))).slice(0, 6),
+    }))
+    .filter(cat => cat.match.length > 0);
+
+  const totaleRisultati = risultatiPerCategoria.reduce((n,c)=>n+c.match.length, 0);
+
+  return (
+    React.createElement('div', { style:{position:'fixed',inset:0,zIndex:9999,background:'rgba(0,0,0,0.5)',
+        display:'flex',alignItems:'flex-start',justifyContent:'center',padding:'10vh 16px'}, onClick:onClose }
+      , React.createElement('div', { style:{background:C.surface,borderRadius:14,maxWidth:560,width:'100%',
+          maxHeight:'70vh',display:'flex',flexDirection:'column',overflow:'hidden'}, onClick:e=>e.stopPropagation() }
+        , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,padding:'14px 16px',borderBottom:`1px solid ${C.border}`}}
+          , React.createElement('span', {style:{fontSize:16}}, '🔍')
+          , React.createElement('input', {
+              ref: inputRef, value: query, onChange: e=>setQuery(e.target.value),
+              placeholder: 'Cerca lezioni, allievi, contabilità, utenti, manuali, allegati, concerti, repertorio…',
+              style:{flex:1,border:'none',outline:'none',fontSize:14,background:'transparent',color:C.text,fontFamily:"'Open Sans',sans-serif"}
+            })
+          , React.createElement('button', {onClick:onClose, style:{border:'none',background:'none',cursor:'pointer',color:C.textMuted,fontSize:18,lineHeight:1}}, '×')
+        )
+        , React.createElement('div', {style:{overflowY:'auto',padding:qNorm.length<2?24:8}}
+          , qNorm.length < 2
+            ? React.createElement('div', {style:{textAlign:'center',color:C.textDim,fontSize:13,padding:'20px 0'}}, 'Scrivi almeno 2 caratteri per cercare')
+            : totaleRisultati === 0
+            ? React.createElement('div', {style:{textAlign:'center',color:C.textDim,fontSize:13,padding:'20px 0'}}, 'Nessun risultato per "'+query+'"')
+            : risultatiPerCategoria.map(cat => React.createElement('div', {key:cat.id, style:{marginBottom:6}}
+                , React.createElement('div', {style:{fontSize:10,fontWeight:700,letterSpacing:'.05em',textTransform:'uppercase',color:C.textDim,padding:'8px 10px 4px'}}
+                  , cat.emoji + ' ' + cat.label)
+                , cat.match.map((item,i) => {
+                    const et = cat.etichetta(item);
+                    return React.createElement('div', {key:cat.id+'-'+i,
+                        onClick:()=>onNavigate(cat.view),
+                        style:{padding:'8px 10px',borderRadius:8,cursor:'pointer',display:'flex',flexDirection:'column'},
+                        onMouseEnter:e=>{e.currentTarget.style.background=C.bg;},
+                        onMouseLeave:e=>{e.currentTarget.style.background='transparent';}
+                      }
+                      , React.createElement('span', {style:{fontSize:13.5,fontWeight:500,color:C.text}}, et.titolo)
+                      , et.sotto && React.createElement('span', {style:{fontSize:11.5,color:C.textMuted}}, et.sotto)
+                    );
+                  })
+              ))
+        )
+      )
+    )
+  );
+};
+
+const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settingsDrawerOpen, onSettingsOpen, currentRuolo, onQuickAction, config, temaAttivo, onApriRicerca }) => {
   const [sidebarLogoOk, setSidebarLogoOk] = useState(true);
   const sidebarNomeScuola = (config && config.nomeScuola) || "Futuro Musica";
   const ruoloHex = {admin:C.gold, docente:C.teal, allievo:C.blue}[_optionalChain([user, 'optionalAccess', _89 => _89.ruolo])] || C.gold;
@@ -1984,6 +2084,21 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
 
               )
             )
+          )
+        )
+        /* Ricerca globale */
+        , React.createElement('div', { style: {padding:"10px 12px 4px", flexShrink:0} }
+          , React.createElement('button', {
+              onClick: onApriRicerca,
+              style: {width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 10px",
+                borderRadius:8,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.06)",
+                color:"rgba(255,255,255,0.7)",cursor:"pointer",fontFamily:"'Open Sans',sans-serif",fontSize:12.5},
+              onMouseEnter:e=>{e.currentTarget.style.background="rgba(255,255,255,0.12)";},
+              onMouseLeave:e=>{e.currentTarget.style.background="rgba(255,255,255,0.06)";}
+            }
+            , React.createElement('span', {style:{fontSize:13}}, "🔍")
+            , React.createElement('span', {style:{flex:1,textAlign:"left"}}, "Cerca ovunque")
+            , React.createElement('span', {style:{fontSize:10,opacity:0.6,border:"1px solid rgba(255,255,255,0.25)",borderRadius:4,padding:"1px 5px"}}, "⌘K")
           )
         )
         /* Navigation */

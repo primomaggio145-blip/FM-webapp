@@ -1052,6 +1052,15 @@
         allievi:    Array.isArray(r.allievi) ? r.allievi : (() => { try { return JSON.parse(r.allievi||'[]'); } catch(e){ return []; } })(),
       }));
 
+      // Utenti (profili) e Manuali & Libri (biblioteca): usati SOLO dalla ricerca
+      // globale. Query separate dal blocco sopra e NON soggette a retry: 'profili'
+      // può essere ristretto via RLS per ruoli non-admin — in quel caso restituisce
+      // semplicemente un array vuoto, senza bloccare il boot per tutti gli altri.
+      const [{ data: sUT }, { data: sBIB }] = await Promise.all([
+        sb.from('profili').select('*').order('nome').then(r=>r, ()=>({data:[]})),
+        sb.from('biblioteca').select('*').order('titolo').then(r=>r, ()=>({data:[]})),
+      ]);
+
       const data = {
         config: Object.keys(configFromDB).length > 0 ? configFromDB : null,
         anniScolastici: anniScolasticiDB, // sempre passato, anche se []
@@ -1079,13 +1088,23 @@
           createdAt: r.created_at || null,
         })),
         prenotazioni_sala: (sSALA || []).map(adaptPrenotazioneSala),
+        utenti: (sUT || []).map(r => ({
+          id: r.id, nome: r.nome || '', email: r.email || '', ruolo: r.ruolo || '',
+          stato: r.stato || 'attivo', docenteId: r.docente_id||null, allievoId: r.allievo_id||null,
+        })),
+        manuali: (sBIB || []).map(r => ({
+          id: r.id, titolo: r.titolo || '', corso: r.corso || '', categoria: r.categoria || '',
+          fileUrl: r.file_url || null, fileName: r.file_name || null, createdAt: r.created_at || null,
+        })),
       };
 
       log('Caricati →',
         `studenti:${data.students.length}`,
         `docenti:${data.docenti.length}`,
         `corsi:${data.courses.length}`,
-        `lezioni:${data.lessons.length}`
+        `lezioni:${data.lessons.length}`,
+        `utenti:${data.utenti.length}`,
+        `manuali:${data.manuali.length}`
       );
       data._hasErrors = hasErrors;
       return data;

@@ -92,6 +92,25 @@ function App() {
   const [sharedAnniScolastici, setSharedAnniScolastici] = useState(_d.anniScolastici || INIT_ANNI_SCOLASTICI);
   const [sharedIscrizioniAnno, setSharedIscrizioniAnno] = useState(_d.iscrizioniAnno || []);
   const [sharedGruppi,         setSharedGruppi]         = useState(_d.gruppi || []);
+  // Utenti (profili) e Manuali & Libri (biblioteca): caricati al boot SOLO per
+  // alimentare la ricerca globale (vedi GlobalSearchModal) — non hanno un proprio
+  // ciclo di sync generico, quelle sezioni continuano a gestire i propri dati come già facevano.
+  const [sharedUtenti,         setSharedUtenti]         = useState(_d.utenti || []);
+  const [sharedManuali,        setSharedManuali]        = useState(_d.manuali || []);
+  // ── Ricerca globale: apertura via icona in sidebar o scorciatoia Ctrl/Cmd+K ──
+  const [ricercaGlobaleAperta, setRicercaGlobaleAperta] = useState(false);
+  React.useEffect(() => {
+    const onKeyDown = (e) => {
+      const k = (e.key||'').toLowerCase();
+      if ((e.ctrlKey || e.metaKey) && k === 'k') {
+        e.preventDefault();
+        setRicercaGlobaleAperta(p => !p);
+      }
+      if (e.key === 'Escape') setRicercaGlobaleAperta(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
   React.useEffect(() => {
     window.__FM_DATA__ = {...(window.__FM_DATA__||{}), iscrizioniAnno: sharedIscrizioniAnno, anniScolastici: sharedAnniScolastici};
   }, [sharedIscrizioniAnno, sharedAnniScolastici]);
@@ -899,12 +918,21 @@ function App() {
                     : TEMA_SFONDO_PRESET[0].css,
         }})
       , React.createElement('div', { style: {display:"flex",height:"100dvh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
-        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), config: sharedConfig, temaAttivo: temaAttivo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
+        , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), config: sharedConfig, temaAttivo: temaAttivo, onApriRicerca: ()=>setRicercaGlobaleAperta(true), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
         , React.createElement('div', { key: view, className: "main-scroll", style: {flex:1,overflow:"auto",background:temaAttivo==='teen'?'transparent':C.bg,animation:"fadeIn 0.25s ease",
           paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 4px)",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10788}}
           , renderCurrentView()
         )
       )
+      , ricercaGlobaleAperta && React.createElement(GlobalSearchModal, {
+          ruolo: user?.ruolo||"admin",
+          onClose: ()=>setRicercaGlobaleAperta(false),
+          onNavigate: (v)=>{ setView(v); setRicercaGlobaleAperta(false); },
+          students: sharedStudents, docenti: sharedDocenti, lessons: sharedLessons,
+          entrate: sharedEntrate, spese: sharedSpese, utenti: sharedUtenti,
+          manuali: sharedManuali, allegati: sharedAllegati, concerti: sharedConcerti,
+          brani: sharedRepertorio,
+        })
       /* ─── Global Modal Slot ───────────────────────────────────────────────────
          Renderizzato come fratello del div principale, FUORI da main-scroll.
          main-scroll ha animation:"fadeIn" che crea un compositing layer:
