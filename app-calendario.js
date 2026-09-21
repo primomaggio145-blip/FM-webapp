@@ -11483,9 +11483,9 @@ const ReportView = ({ spese, entrate }) => {
   const primaNota = meseSel===0 ? [] : (() => {
     const righe = [
       ...entrateView.map(e=>({ id:`e-${e.id}`, data: e.dataPagamento||e.data||'', tipo:'entrata',
-        desc: e.desc||'', categoria: e.categoria||'', metodo: e.metodo||'', importo: Number(e.importo)||0 })),
+        desc: e.desc||'', categoria: e.categoria||'', metodo: e.metodo||'', chi: e.studentName||'', importo: Number(e.importo)||0 })),
       ...speseView.map(s=>({ id:`s-${s.id}`, data: s.data||s.dataPagamento||'', tipo:'uscita',
-        desc: s.desc||'', categoria: s.categoria||'', metodo: s.metodo||'', importo: -(Number(s.importo)||0) })),
+        desc: s.desc||'', categoria: s.categoria||'', metodo: s.metodo||'', chi: '', importo: -(Number(s.importo)||0) })),
     ].sort((a,b)=> (a.data||'').localeCompare(b.data||'') || (a.tipo==='entrata'?-1:1));
     let prog = 0;
     return righe.map(r => { prog += r.importo; return { ...r, progressivo: Math.round(prog*100)/100 }; });
@@ -11644,7 +11644,7 @@ const ReportView = ({ spese, entrate }) => {
             , React.createElement('table', { style: {width:"100%",minWidth:640,borderCollapse:"collapse",fontSize:12.5} }
               , React.createElement('thead', null
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`} }
-                  , ["Data","Tipo","Descrizione","Categoria","Metodo","Importo","Progressivo"].map(h=>(
+                  , ["Data","Tipo","Allievo","Descrizione","Categoria","Metodo","Importo","Progressivo"].map(h=>(
                     React.createElement('th', { key: h, style: {textAlign:h==="Importo"||h==="Progressivo"?"right":"left",
                       padding:"9px 14px",fontSize:10,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted,fontWeight:600} }, h)
                   ))
@@ -11662,6 +11662,7 @@ const ReportView = ({ spese, entrate }) => {
                         , r.tipo==="entrata"?"Entrata":"Uscita"
                       )
                     )
+                    , React.createElement('td', { style: {padding:"9px 14px",fontWeight:600,whiteSpace:"nowrap"} }, r.chi||"—")
                     , React.createElement('td', { style: {padding:"9px 14px"} }, r.desc||"—")
                     , React.createElement('td', { style: {padding:"9px 14px",color:C.textMuted} }, r.categoria||"—")
                     , React.createElement('td', { style: {padding:"9px 14px",color:C.textMuted,whiteSpace:"nowrap"} }, r.metodo||"—")
@@ -12492,7 +12493,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7181}}
                           , React.createElement('div', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7182}}, e.desc||e.studentName||"—")
                           , e.numRicevuta&&React.createElement('div', { style: {fontSize:11,color:C.gold,marginTop:1,fontFamily:"'Oswald',sans-serif",letterSpacing:"0.05em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7183}}, "Ric. n° "  , e.numRicevuta)
-                          , e.studentName&&e.categoria!=="quota"&&React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7184}}, e.studentName)
+                          , e.studentName&&React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7184}}, e.studentName)
                           , e.note&&React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7185}}, e.note)
                         )
                         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7187}}
