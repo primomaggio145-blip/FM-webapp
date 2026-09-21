@@ -12750,7 +12750,7 @@ const INIT_BRANI = [
 
 // ─── FORM BRANO ──────────────────────────────────────────────────────────────
 const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_concertiBranoIn,courses:_coursesBranoIn})=>{
-  const empty={title:"",composer:"",strumento:"",eventiIds:[],note:"",versioni:[{tonalita:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
+  const empty={title:"",composer:"",strumento:"",eventiIds:[],note:"",versioni:[{tonalita:"",strumento:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
   const [f,setF]=useState(initial ? {...empty,...initial,versioni:(initial.versioni&&initial.versioni.length>0)?initial.versioni:empty.versioni} : empty);
   const [err,setErr]=useState({});
   const [openVersione, setOpenVersione] = useState(0); // indice versione espansa
@@ -12770,7 +12770,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
     setF(p => ({...p, versioni: p.versioni.map((v,i)=>i===idx?{...v,...patch}:v)}));
   };
   const addVersione = () => {
-    setF(p => ({...p, versioni: [...p.versioni, {tonalita:"",link:[],spartiti:[],allegati:[],allievi:[]}]}));
+    setF(p => ({...p, versioni: [...p.versioni, {tonalita:"",strumento:"",link:[],spartiti:[],allegati:[],allievi:[]}]}));
     setOpenVersione(f.versioni.length);
   };
   const delVersione = (idx) => {
@@ -12886,15 +12886,21 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
                     style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:C.bg,cursor:'pointer'}}
                   , React.createElement('div',{style:{transform:isOpen?'rotate(0deg)':'rotate(-90deg)',transition:'transform .15s',display:'flex'}},React.createElement(Ic,{n:'chevron-down',size:14,stroke:C.textMuted}))
                   , React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600}}
-                      , [f.title, f.strumento||'Ensemble', v.tonalita].filter(Boolean).join(' - ') || `Versione ${idx+1}`)
+                      , [f.title, (v.strumento!==undefined?v.strumento:f.strumento)||'Ensemble', v.tonalita].filter(Boolean).join(' - ') || `Versione ${idx+1}`)
                   , React.createElement('span',{style:{fontSize:11,color:C.textDim}}, `${(v.allievi||[]).length} allievi · ${(v.spartiti||[]).length+(v.allegati||[]).length} file`)
                   , f.versioni.length>1 && React.createElement('button',{onClick:(e)=>{e.stopPropagation();delVersione(idx);},
                       style:{background:'none',border:'none',cursor:'pointer',color:C.red,padding:2}}, React.createElement(Ic,{n:'trash',size:13,stroke:C.red}))
                 )
                 , isOpen && React.createElement('div', {style:{padding:'14px',display:'flex',flexDirection:'column',gap:12}}
 
-                  /* Tonalità */
-                  , React.createElement(Sel, { label: "Tonalità / Scala", value: v.tonalita, onChange: e=>setVersione(idx,{tonalita:e.target.value}), options: TONALITY_OPTS })
+                  /* Corso/Strumento e Tonalità — ogni versione può avere un corso diverso
+                     (es. una versione "Pianoforte" e una "Ensemble/Collettivo" dello stesso brano) */
+                  , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12} }
+                    , React.createElement(Sel, { label: "Corso/Strumento versione", value: v.strumento||"",
+                        onChange: e=>setVersione(idx,{strumento:e.target.value}),
+                        options: [{value:"",label:"🎭 Ensemble/Collettivo"},...strumentiDisp.map(i=>({value:i,label:i}))] })
+                    , React.createElement(Sel, { label: "Tonalità / Scala", value: v.tonalita, onChange: e=>setVersione(idx,{tonalita:e.target.value}), options: TONALITY_OPTS })
+                  )
 
                   /* Link */
                   , React.createElement('div', null

@@ -246,24 +246,40 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       } catch(e) { console.warn('[FM] aggiornaVersioni exception:', e?.message); }
     };
   
+    // Strumento "effettivo" di una versione: se la versione ha un proprio corso/strumento
+    // impostato esplicitamente (anche vuoto = ensemble) lo usa, altrimenti eredita quello
+    // del brano (dati vecchi, creati prima che le versioni avessero un corso proprio).
+    const versionStrumento = (b, v) => (v && v.strumento !== undefined) ? v.strumento : (b.strumento||'');
+    // Elenco di tutti gli strumenti "coperti" da un brano, considerando OGNI versione
+    // (un brano può avere una versione per pianoforte e una ensemble contemporaneamente)
+    const strumentiDelBrano = (b) => {
+      const vs = (b.versioni&&b.versioni.length>0) ? b.versioni : [{}];
+      return vs.map(v => versionStrumento(b, v));
+    };
+
     // ── VISIBILITÀ per ruolo ──
     // Admin → tutto
-    // Docente → solo brani con strumento in uno dei corsi assegnati (+ ensemble)
-    // Allievo → solo brani del suo strumento + ensemble
+    // Docente → solo brani con ALMENO UNA versione nel proprio strumento/corso (+ ensemble)
+    // Allievo → solo brani con ALMENO UNA versione del suo strumento + ensemble
     const braniVisibili = useMemo(() => {
       if (ruoloRep === "admin") return brani;
       if (ruoloRep === "docente") {
         if (_myCorsiDocente.length === 0) return brani; // nessun corso assegnato → vede tutto (docente senza profilo)
-        return brani.filter(b => !b.strumento || _myCorsiDocente.includes(b.strumento));
+        return brani.filter(b => strumentiDelBrano(b).some(s => !s || _myCorsiDocente.includes(s)));
       }
       if (ruoloRep === "allievo" && _myStrumento) {
-        return brani.filter(b => !b.strumento || b.strumento === _myStrumento);
+        return brani.filter(b => strumentiDelBrano(b).some(s => !s || s === _myStrumento));
       }
       return brani;
     }, [brani, ruoloRep, _myCorsiDocente, _myStrumento]);
 
     // ── FILTRI ──
-    const tuttiStrumenti = useMemo(() => [...new Set(braniVisibili.map(b=>b.strumento).filter(Boolean))].sort(), [braniVisibili]);
+    // Include lo strumento di TUTTE le versioni del brano, non solo quello (legacy) a
+    // livello di brano — altrimenti un brano con una versione Pianoforte + una Ensemble
+    // comparirebbe solo sotto "Pianoforte" e il filtro Ensemble darebbe 0 risultati.
+    const tuttiStrumenti = useMemo(() => [...new Set(
+      braniVisibili.flatMap(b => strumentiDelBrano(b)).filter(Boolean)
+    )].sort(), [braniVisibili]);
     const tutteTonalita  = useMemo(() => {
       const set = new Set();
       braniVisibili.forEach(b => (b.versioni||[]).forEach(v => { if (v.tonalita) set.add(v.tonalita); }));
@@ -273,8 +289,9 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     const filtrati = useMemo(()=>braniVisibili.filter(b=>{
       const q=search.toLowerCase();
       const matchTonalita = (b.versioni||[]).some(v=>(v.tonalita||'').toLowerCase().includes(q));
+      const strumentiBrano = strumentiDelBrano(b);
       return(!q||b.title.toLowerCase().includes(q)||b.composer.toLowerCase().includes(q)||matchTonalita)
-        &&(!fStrumento||b.strumento===fStrumento||(fStrumento==='__ensemble__'&&!b.strumento))
+        &&(!fStrumento||strumentiBrano.includes(fStrumento)||(fStrumento==='__ensemble__'&&strumentiBrano.some(s=>!s)))
         &&(!fTipo||b.tipo===fTipo)
         &&(!fTonalita||(b.versioni||[]).some(v=>v.tonalita===fTonalita))
         &&(!fStato||(b.versioni||[]).some(v=>v.stato===fStato));
@@ -292,8 +309,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         || suoiBrani.some(b=>b.title.toLowerCase().includes(q)||b.composer.toLowerCase().includes(q)
             ||(b.versioni||[]).some(v=>(v.tonalita||'').toLowerCase().includes(q)));
       const matchStrumento = !fStrumento || (fStrumento==='__ensemble__'
-        ? suoiBrani.some(b=>!b.strumento)
-        : ((a.instrument||'')===fStrumento || suoiBrani.some(b=>b.strumento===fStrumento)));
+        ? suoiBrani.some(b=>strumentiDelBrano(b).some(s=>!s))
+        : ((a.instrument||'')===fStrumento || suoiBrani.some(b=>strumentiDelBrano(b).includes(fStrumento))));
       const matchTonalita = !fTonalita || suoiBrani.some(b=>(b.versioni||[]).some(v=>v.tonalita===fTonalita));
       const matchStato = !fStato || suoiBrani.some(b=>(b.versioni||[]).some(v=>v.stato===fStato));
       return matchQ && matchStrumento && matchTonalita && matchStato;
