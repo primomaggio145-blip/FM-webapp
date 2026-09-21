@@ -1408,7 +1408,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
       importo: student.monthlyFee, mese:m, anno:y,
       data: new Date().toISOString().split("T")[0],
       metodo:"Contanti",
-      desc:`Quota mensile ${MESI_ALL[m-1]} ${y} — ${student.name}`,
+      desc:`Quota mensile ${MESI_ALL[m-1]} ${y}`,
       stato:"pagato",
       numRicevuta,
       dataPagamento: new Date().toISOString().split("T")[0],
@@ -11126,7 +11126,7 @@ const INIT_SPESE = [
 const mkQ = (id, sid, sname, importo, mese, anno, data, metodo="Bonifico bancario") => ({
   id, studentId:sid, studentName:sname, importo, mese, anno, data, metodo,
   categoria:"quota",
-  desc:`Quota mensile ${["","Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"][mese]} ${anno} — ${sname}`
+  desc:`Quota mensile ${["","Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"][mese]} ${anno}`
 });
 const AS = annoScolasticoAttivo; // anno inizio a.s. corrente (es. 2025)
 const INIT_ENTRATE_QUOTE = (()=>{
@@ -11825,14 +11825,14 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
     const s = needStudent ? students.find(st=>st.id===Number(f.studentId)) : null;
     const nomeMese = MESI_ALL[f.mese-1];
     const autoDesc = f.categoria==="quota"
-      ? `Quota mensile ${nomeMese} ${f.anno}${s?` — ${s.name}`:""}`
+      ? `Quota mensile ${nomeMese} ${f.anno}`
       : f.categoria==="iscrizione"
-      ? `Iscrizione ${f.anno}/${Number(f.anno)+1}${s?` — ${s.name}`:""}`
+      ? `Iscrizione ${f.anno}/${Number(f.anno)+1}`
       : f.desc;
     const descPerCategoria = (cat, mese, anno) => cat==="quota"
-      ? `Quota mensile ${MESI_ALL[mese-1]} ${anno}${s?` — ${s.name}`:""}`
+      ? `Quota mensile ${MESI_ALL[mese-1]} ${anno}`
       : cat==="iscrizione"
-      ? `Iscrizione ${anno}/${Number(anno)+1}${s?` — ${s.name}`:""}`
+      ? `Iscrizione ${anno}/${Number(anno)+1}`
       : (CAT_ENTRATE_USE.find(c=>c.id===cat)||{}).label || "";
     onSave({
       ...f,
