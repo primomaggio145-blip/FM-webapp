@@ -175,6 +175,27 @@
       return json;
     },
 
+    // Admin: rinvia l'email di invito a un utente che non ha ancora impostato la password.
+    // Riusa la stessa Edge Function di approvaRichiesta (già configurata con service role),
+    // con action:'reinvia' — richiede che l'Edge Function gestisca questo case (vedi nota
+    // separata data all'amministratore per l'aggiunta lato server).
+    async reinviaInvito({ email }) {
+      const session = await window.FM_AUTH.getSession();
+      const token = (session && session.access_token) ? session.access_token : SUPABASE_ANON;
+      const res = await fetch(window.SUPABASE_EDGE_APPROVE, {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+          'apikey':        SUPABASE_ANON,
+        },
+        body: JSON.stringify({ action: 'reinvia', email }),
+      });
+      const json = await res.json().catch(()=>({}));
+      if (!res.ok || json.error) throw new Error(json.error || `Errore HTTP ${res.status}`);
+      return json;
+    },
+
     // Admin: rifiuta richiesta — aggiorna direttamente il DB (non serve Edge Function)
     async rifiutaRichiesta({ richiestaId }) {
       const { error } = await sb.from("richieste_accesso")

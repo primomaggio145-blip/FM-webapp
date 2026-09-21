@@ -2293,6 +2293,19 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
   const [testMsg,setTestMsg]=useState(`🧪 Messaggio di prova per ${utente.nome}. Se lo ricevi, le notifiche funzionano correttamente.`);
   const [testState,setTestState]=useState({}); // {push:{loading,ok,msg}, whatsapp:{...}}
 
+  // ── Rinvia invito (utente non ha ancora impostato la password) ───────────
+  const [inviteState,setInviteState]=useState(null); // {loading,ok,msg}
+  const rinviaInvito = async () => {
+    setInviteState({loading:true});
+    try {
+      if(!window.FM_AUTH || !window.FM_AUTH.reinviaInvito) throw new Error('Funzione non disponibile');
+      await window.FM_AUTH.reinviaInvito({email:utente.email});
+      setInviteState({loading:false, ok:true, msg:'Invito reinviato ✓'});
+    } catch(e) {
+      setInviteState({loading:false, ok:false, msg:e.message});
+    }
+  };
+
   const inviaTest = async (canale) => {
     setTestState(p=>({...p,[canale]:{loading:true}}));
     try {
@@ -2369,6 +2382,27 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
                 , React.createElement(Field, { label: "Nome socio (chi si iscrive)", value: draft.nomeSocio,
                     onChange: e=>setD("nomeSocio",e.target.value), placeholder: "Es. Anna Rossi" })
               )
+
+              /* Rinvia invito — solo se l'utente non ha ancora impostato la password */
+              , utente.stato==="invitato" && React.createElement('div', { style: {background:C.blueBg,border:`1px solid ${C.blueBorder}`,
+                  borderRadius:10,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"} }
+                , React.createElement('div', { style: {fontSize:12,color:C.text,lineHeight:1.5} }
+                  , '✉️ ', React.createElement('strong',null,'Invito in sospeso'), ' — l\'utente non ha ancora impostato la password. '
+                  , 'Se non ha ricevuto la mail, puoi rinviarla.'
+                )
+                , React.createElement('button', {
+                    onClick: rinviaInvito,
+                    disabled: inviteState&&inviteState.loading,
+                    style: {padding:"8px 16px",borderRadius:8,border:"none",background:C.blue,color:"#fff",
+                      cursor:(inviteState&&inviteState.loading)?"wait":"pointer",fontSize:12,fontWeight:600,
+                      fontFamily:"'Open Sans',sans-serif",flexShrink:0,whiteSpace:"nowrap",
+                      opacity:(inviteState&&inviteState.loading)?0.6:1}
+                  }, (inviteState&&inviteState.loading)?"⏳ Invio...":"📧 Rinvia invito")
+              )
+              , inviteState && !inviteState.loading && React.createElement('div', {
+                  style: {fontSize:12,padding:"8px 12px",borderRadius:8,background:inviteState.ok?C.tealBg:C.redBg,
+                    color:inviteState.ok?C.teal:C.red,border:`1px solid ${inviteState.ok?C.tealBorder:C.redBorder}`}
+                }, (inviteState.ok?"✅ ":"❌ ")+inviteState.msg)
 
               /* Ruolo */
               , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 9206}}
