@@ -279,6 +279,25 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         &&(!fTonalita||(b.versioni||[]).some(v=>v.tonalita===fTonalita))
         &&(!fStato||(b.versioni||[]).some(v=>v.stato===fStato));
     }),[braniVisibili,search,fStrumento,fTonalita,fStato]);
+
+    // Stessi filtri della tab Catalogo, applicati alla lista allievi (tab "Per allievo"):
+    // ricerca su nome allievo + titolo/compositore/tonalità dei suoi brani, Strumento/Corso
+    // sul proprio strumento (o su un brano ensemble in repertorio), Tonalità/Stato su
+    // almeno un brano del proprio repertorio che corrisponda.
+    const allieviFiltrati = useMemo(()=>_studBranoRep.filter(a=>{
+      const stuName=(a.name||a.nome||"");
+      const suoiBrani=brani.filter(b=>(a.repertorio||[]).some(r=>r.id===b.id));
+      const q=search.toLowerCase();
+      const matchQ = !q || stuName.toLowerCase().includes(q)
+        || suoiBrani.some(b=>b.title.toLowerCase().includes(q)||b.composer.toLowerCase().includes(q)
+            ||(b.versioni||[]).some(v=>(v.tonalita||'').toLowerCase().includes(q)));
+      const matchStrumento = !fStrumento || (fStrumento==='__ensemble__'
+        ? suoiBrani.some(b=>!b.strumento)
+        : ((a.instrument||'')===fStrumento || suoiBrani.some(b=>b.strumento===fStrumento)));
+      const matchTonalita = !fTonalita || suoiBrani.some(b=>(b.versioni||[]).some(v=>v.tonalita===fTonalita));
+      const matchStato = !fStato || suoiBrani.some(b=>(b.versioni||[]).some(v=>v.stato===fStato));
+      return matchQ && matchStrumento && matchTonalita && matchStato;
+    }),[_studBranoRep,brani,search,fStrumento,fTonalita,fStato]);
   
 
     // ── STATS ──
@@ -519,8 +538,40 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
 
                 /* ── TAB ALLIEVI ── */
                 , tab==="allievi"&&(
-                  React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7994}}
-                    , _studBranoRep.map((a,i)=>{
+                  React.createElement(React.Fragment, null
+                    /* Filtri — stessi della tab Catalogo, applicati agli allievi e al loro repertorio */
+                    , React.createElement('div', { style: {display:"flex",gap:10,flexWrap:"nowrap",alignItems:"center",overflowX:"auto",WebkitOverflowScrolling:"touch",marginBottom:16}}
+                      , React.createElement('div', { style: {position:"relative",flex:"1 1 220px",flexShrink:0}}
+                        , React.createElement('span', { style: {position:"absolute",left:11,top:"50%",transform:"translateY(-50%)"}}
+                          , React.createElement(Ic, { n: "search", size: 14, stroke: C.textDim})
+                        )
+                        , React.createElement('input', { value: search, onChange: e=>setSearch(e.target.value),
+                          placeholder: "Cerca allievo, titolo, compositore, tonalità..."   ,
+                          style: {width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,
+                            color:C.text,fontSize:13,padding:"9px 12px 9px 34px",fontFamily:"'Open Sans',sans-serif"}})
+                      )
+                      , [
+                        {val:fStrumento,set:setFStrumento,opts:[{id:'__ensemble__',label:'🎭 Ensemble/Collettivo'},...tuttiStrumenti.map(s=>({id:s,label:s}))],ph:"Strumento/Corso"},
+                        {val:fTonalita,set:setFTonalita,opts:tutteTonalita.map(t=>({id:t,label:t})),ph:"Tonalità"},
+                        {val:fStato,set:setFStato,opts:Object.entries(STATO_BRANO_CONFIG).map(([id,cfg])=>({id,label:cfg.icon+' '+cfg.label})),ph:"Stato"},
+                      ].map((f,i)=>(
+                        React.createElement('select', { key: i, value: f.val, onChange: e=>f.set(e.target.value),
+                          style: {background:C.surface,border:`1px solid ${f.val?C.goldDim:C.border}`,
+                            borderRadius:8,color:f.val?C.gold:C.textMuted,fontSize:13,flexShrink:0,
+                            padding:"9px 12px",fontFamily:"'Open Sans',sans-serif",appearance:"none",cursor:"pointer"}}
+                          , React.createElement('option', { value: "" }, f.ph)
+                          , f.opts.map(o=>React.createElement('option', { key: o.id, value: o.id }, o.label))
+                        )
+                      ))
+                      , (search||fStrumento||fTonalita||fStato)&&(
+                        React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setSearch("");setFStrumento("");setFTonalita("");setFStato("");}, style:{flexShrink:0}}
+                          , React.createElement(Ic, { n: "x", size: 12, stroke: C.textMuted}), "Azzera"
+                        )
+                      )
+                      , React.createElement('span', { style: {fontSize:12,color:C.textDim,marginLeft:"auto",flexShrink:0,whiteSpace:"nowrap"}}, allieviFiltrati.length, " alliev", allieviFiltrati.length===1?'o':'i' )
+                    )
+                  , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7994}}
+                    , allieviFiltrati.map((a,i)=>{
                       const stuName=a.name||a.nome||"";
                       const suoiBrani=brani.filter(b=>(a.repertorio||[]).some(r=>r.id===b.id));
                       const totLez=suoiBrani.reduce((acc,b)=>acc+_lessonsRep.filter(l=>(l.repertorioIds||[]).includes(b.id)).length,0);
@@ -554,6 +605,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                         )
                       );
                     })
+                  )
                   )
                 )
               )
