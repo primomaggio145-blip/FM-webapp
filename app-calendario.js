@@ -5469,8 +5469,14 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
         /* Manuali/libri allegati (dalla Biblioteca) — interattivo per chi può modificare */
         , React.createElement('div', {}
           , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8}}, "Manuali allegati")
-          , canEdit && (
-            React.createElement('select', {
+          , canEdit && (() => {
+              // Filtra per il corso della lezione (collettivo → courseName, individuale →
+              // instrument): mostra i manuali di quel corso + quelli "generali" (senza
+              // corso assegnato, validi per tutti) — altrimenti con una libreria grande
+              // il menu diventa lunghissimo e inutile da scorrere.
+              const corsoLezione = lesson.courseName || lesson.instrument || '';
+              const bibliotecaFiltrata = (_bibliotecaLDM||[]).filter(b => !b.corso || b.corso === corsoLezione);
+              return React.createElement('select', {
               value: "",
               onChange: e => {
                 const id = e.target.value;
@@ -5481,14 +5487,15 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
               style: {background:C.bg, border:`1px solid ${C.border}`, borderRadius:8,
                 color:C.textMuted, fontSize:13, padding:"10px 14px", width:"100%",
                 fontFamily:"'Open Sans',sans-serif", appearance:"none", cursor:"pointer", marginBottom:8}}
-              , React.createElement('option', { value: "" }, (_bibliotecaLDM||[]).length === 0 ? "Nessun manuale in Biblioteca" : "+ Allega manuale dalla Biblioteca...")
-              , (_bibliotecaLDM||[]).filter(b=>!(lesson.manualiIds||[]).includes(b.id)).map(b => (
+              , React.createElement('option', { value: "" }, bibliotecaFiltrata.length === 0 ? "Nessun manuale per questo corso in Biblioteca" : "+ Allega manuale dalla Biblioteca...")
+              , bibliotecaFiltrata.filter(b=>!(lesson.manualiIds||[]).includes(b.id)).map(b => (
                   React.createElement('option', { key: b.id, value: b.id }
                     , b.titolo, b.autore ? ` — ${b.autore}` : "", b.categoria ? ` (${b.categoria})` : ""
                   )
                 ))
-            )
-          )
+              );
+            })()
+          
           , (lesson.manualiIds||[]).length > 0 ? (
             React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:6} }
               , (lesson.manualiIds||[]).map(id => {
