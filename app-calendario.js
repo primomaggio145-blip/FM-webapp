@@ -5449,18 +5449,37 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                 const typeHex = (b.tipo||b.type)==="collettivo"?C.purple:C.gold;
                 const typeBg  = (b.tipo||b.type)==="collettivo"?C.purpleBg:"#e8edf5";
                 const typeBd  = (b.tipo||b.type)==="collettivo"?C.purpleBorder:C.goldDim;
+                // Appiattisce spartiti/allegati di tutte le versioni del brano (stesso
+                // criterio già usato nella vista Repertorio) — un brano può avere più
+                // versioni (es. tonalità diverse), ciascuna con i propri file.
+                const _file = [];
+                (b.versioni||[]).forEach(v => {
+                  (v.spartiti||[]).forEach(fi => _file.push(fi));
+                  (v.allegati||[]).forEach(fi => _file.push(fi));
+                });
+                const tonalitaPrima = b.versioni && b.versioni[0] && b.versioni[0].tonalita;
                 return (
-                  React.createElement('div', { key: id, style: {display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
+                  React.createElement('div', { key: id, style: {padding:"10px 12px",
                     background:typeBg, border:`1px solid ${typeBd}`, borderRadius:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4622}}
-                    , React.createElement(Ic, { n: "note", size: 14, stroke: typeHex, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4624}})
-                    , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4625}}
-                      , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4626}}, b.title)
-                      , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4627}}, b.composer, b.tonality ? ` · ${b.tonality}` : "")
-                    )
-                    , canEdit && React.createElement('button', { onClick: () => onUpdateLesson({ id: lesson.id, repertorioIds: (lesson.repertorioIds||[]).filter(i=>i!==id) }),
-                        style: {background:"none", border:"none", cursor:"pointer", padding:4, display:"flex", borderRadius:4, flexShrink:0, color:C.textMuted}}
-                        , React.createElement(Ic, { n: "x", size: 14, stroke: "currentColor" })
+                    , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:10} }
+                      , React.createElement(Ic, { n: "note", size: 14, stroke: typeHex, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4624}})
+                      , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4625}}
+                        , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4626}}, b.title)
+                        , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4627}}, b.composer, tonalitaPrima ? ` · ${tonalitaPrima}` : "")
                       )
+                      , canEdit && React.createElement('button', { onClick: () => onUpdateLesson({ id: lesson.id, repertorioIds: (lesson.repertorioIds||[]).filter(i=>i!==id) }),
+                          style: {background:"none", border:"none", cursor:"pointer", padding:4, display:"flex", borderRadius:4, flexShrink:0, color:C.textMuted}}
+                          , React.createElement(Ic, { n: "x", size: 14, stroke: "currentColor" })
+                        )
+                    )
+                    , _file.length > 0 && React.createElement('div', { style: {display:"flex", flexWrap:"wrap", gap:6, marginTop:8, paddingTop:8, borderTop:`1px solid ${typeBd}`} }
+                      , _file.map((fi,fii) => React.createElement('a', { key: fi.id||fii, href: fi.fileUrl, target: "_blank", rel: "noopener noreferrer",
+                          style: {fontSize:12, color:C.text, display:"flex", alignItems:"center", gap:6, padding:"5px 8px",
+                            background:C.bg, borderRadius:6, border:`1px solid ${C.border}`, textDecoration:"none"} }
+                          , React.createElement(Ic, { n: "paperclip", size: 11, stroke: C.textMuted })
+                          , fi.fileName || "Allegato"
+                        ))
+                    )
                   )
                 );
               })
