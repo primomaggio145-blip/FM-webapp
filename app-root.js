@@ -856,10 +856,10 @@ function App() {
       case 'calendario':  return React.createElement(CalendarioView, { lessons: sharedLessons, setLessons: setSharedLessons, courses: sharedCourses, students: sharedStudents, setStudents: setSharedStudents, docenti: sharedDocenti, repertorio: sharedRepertorio, setRepertorio: setSharedRepertorio, allegati: sharedAllegati, setAllegati: setSharedAllegati, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user, config: sharedConfig, onNavigate: setView, onQuickAction: (action)=>setSharedQuickAction(action), gruppi: sharedGruppi, iscrizioniAnno: sharedIscrizioniAnno});
       case 'contabilita': return React.createElement(ContabilitaView, { students: sharedStudents, entrate: sharedEntrate, setEntrate: setSharedEntrate, spese: sharedSpese, setSpese: setSharedSpese, config: sharedConfig, setConfig: setSharedConfig, docenti: sharedDocenti, lessons: sharedLessons, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
       case 'repertorio':  return React.createElement(RepertorioView, { brani: sharedRepertorio, setBrani: setSharedRepertorio, students: sharedStudents, lessons: sharedLessons, docenti: sharedDocenti, concerti: sharedConcerti, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", appUser: user});
-      case 'allegati':    return React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user});
-      case 'biblioteca':  return React.createElement(BibliotecaView, { userRuolo: user?.ruolo||"admin", appUser: user});
+      case 'allegati':    return React.createElement(AllegatiView, { allegati: sharedAllegati, setAllegati: setSharedAllegati, lessons: sharedLessons, students: sharedStudents, courses: sharedCourses, brani: sharedRepertorio, setBrani: setSharedRepertorio, userRuolo: user?.ruolo||'admin', appUser: user, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null)});
+      case 'biblioteca':  return React.createElement(BibliotecaView, { userRuolo: user?.ruolo||"admin", appUser: user, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null)});
       case 'concerti':    return React.createElement(ConcertiView, { students: sharedStudents, brani: sharedRepertorio, quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null), userRuolo: user?.ruolo||"admin", concerti: sharedConcerti, setConcerti: setSharedConcerti, docenti: sharedDocenti});
-      case 'utenti':      return (user?.ruolo||"admin")==="admin" ? React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno, students: sharedStudents, docenti: sharedDocenti, initialTab:'utenti'}) : null;
+      case 'utenti':      return (user?.ruolo||"admin")==="admin" ? React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno, students: sharedStudents, docenti: sharedDocenti, initialTab:'utenti', quickAction: sharedQuickAction, clearQuickAction: ()=>setSharedQuickAction(null)}) : null;
       case 'impostazioni':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno, students: sharedStudents, docenti: sharedDocenti, initialTab:'generale'});
       case 'schedaScuola':return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno, students: sharedStudents, docenti: sharedDocenti, initialTab:'scuola'});
       case 'modulistica': return React.createElement(ImpostazioniView, { config: sharedConfig, setConfig: setSharedConfig, panels: sharedPanels, setPanels: setSharedPanels, ruolo: sharedRuolo, setRuolo: setSharedRuolo, anniScolastici: sharedAnniScolastici, setAnniScolastici: setSharedAnniScolastici, setIscrizioniAnno: setSharedIscrizioniAnno, students: sharedStudents, docenti: sharedDocenti, initialTab:'scuola'});
@@ -927,7 +927,7 @@ function App() {
       , ricercaGlobaleAperta && React.createElement(GlobalSearchModal, {
           ruolo: user?.ruolo||"admin",
           onClose: ()=>setRicercaGlobaleAperta(false),
-          onNavigate: (v)=>{ setView(v); setRicercaGlobaleAperta(false); },
+          onNavigate: (v, qa)=>{ setView(v); if (qa) setSharedQuickAction(qa); setRicercaGlobaleAperta(false); },
           students: sharedStudents, docenti: sharedDocenti, lessons: sharedLessons,
           entrate: sharedEntrate, spese: sharedSpese, utenti: sharedUtenti,
           manuali: sharedManuali, allegati: sharedAllegati, concerti: sharedConcerti,
@@ -4256,7 +4256,7 @@ const RecordScollegatiSection = () => {
   );
 };
 
-const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: propSetPanels, ruolo: propRuolo, setRuolo: propSetRuolo, anniScolastici: propAnni, setAnniScolastici: propSetAnni, setIscrizioniAnno: propSetIscrizioniAnno, students: propStudents, docenti: propDocenti, initialTab: propInitialTab }) => {
+const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: propSetPanels, ruolo: propRuolo, setRuolo: propSetRuolo, anniScolastici: propAnni, setAnniScolastici: propSetAnni, setIscrizioniAnno: propSetIscrizioniAnno, students: propStudents, docenti: propDocenti, initialTab: propInitialTab, quickAction, clearQuickAction }) => {
   const [draft, setDraft] = useState(config||CONFIG_DEFAULT);
   // NON aggiornare draft quando config cambia dall'esterno — altrimenti handleSave viene interrotto
   // Il draft viene aggiornato solo dall'utente che modifica i campi
@@ -5112,7 +5112,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
 
     /* ── Utenti (embed, solo admin) ────────────────────────────────────────── */
     , activeTab==="utenti" && isAdminImp && React.createElement('div', {style:{margin:"0 0 20px",padding:0}}
-      , React.createElement(UtentiView, {students: propStudents, docenti: propDocenti})
+      , React.createElement(UtentiView, {students: propStudents, docenti: propDocenti, quickAction: quickAction, clearQuickAction: clearQuickAction})
     )
 
   );

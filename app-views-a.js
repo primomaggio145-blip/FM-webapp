@@ -43,7 +43,15 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     : [];
   const isMobile = useIsMobile();
   const [_braniLocal, _setBraniLocal] = useState(INIT_BRANI);
-  React.useEffect(()=>{ if(quickAction==="addBrano"){ setModal("add"); if(clearQuickAction)clearQuickAction(); } },[quickAction]);
+  React.useEffect(()=>{
+    if(quickAction==="addBrano"){ setModal("add"); if(clearQuickAction)clearQuickAction(); }
+    else if(typeof quickAction==="string" && quickAction.startsWith("openBrano:")) {
+      const bid = quickAction.slice("openBrano:".length);
+      const found = (propBrani||[]).find(b=>String(b.id)===bid);
+      if (found) { setSelBrano(found); setModal('view'); }
+      if(clearQuickAction)clearQuickAction();
+    }
+  },[quickAction]);
   const brani    = propBrani    || _braniLocal;
   const setBrani = propSetBrani || _setBraniLocal;
   const _studBranoRepAll = (_propStudentsRep||[]).filter(s=>s.status==="attivo"||!s.status);
@@ -1892,7 +1900,15 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
   // ───────────────────────────────────────────────────────────────
   const [selected, setSelected] = useState(null);
   const [modal,    setModal]    = useState(null);
-  React.useEffect(()=>{ if(quickAction==="addEvento"){ setModal("new"); if(clearQuickAction)clearQuickAction(); } },[quickAction]);
+  React.useEffect(()=>{
+    if(quickAction==="addEvento"){ setModal("new"); if(clearQuickAction)clearQuickAction(); }
+    else if(typeof quickAction==="string" && quickAction.startsWith("openConcerto:")) {
+      const cid = quickAction.slice("openConcerto:".length);
+      const found = (concerti||[]).find(c=>String(c.id)===cid);
+      if (found) setSelected(found);
+      if(clearQuickAction)clearQuickAction();
+    }
+  },[quickAction]);
   const [fTipo,    setFTipo]    = useState("");
   const [fStato,   setFStato]   = useState("");
   const [search,   setSearch]   = useState("");
@@ -2817,7 +2833,7 @@ const _Portal = ({ children }) => {
 };
 
 // ─── ALLEGATI VIEW ────────────────────────────────────────────────────────────
-const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani, setBrani:propSetBrani, userRuolo:_avRuolo, appUser:_avUser }) => {
+const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, lessons:propLessons, students:propStudents, courses:propCourses, brani:propBrani, setBrani:propSetBrani, userRuolo:_avRuolo, appUser:_avUser, quickAction, clearQuickAction }) => {
   const lessons   = propLessons   || [];
   const students  = propStudents  || [];
   const courses   = propCourses   || [];
@@ -2890,6 +2906,14 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   const [editAllegato, setEditAllegato] = useState(null);
   const [editAllegatoDesc, setEditAllegatoDesc] = useState('');
   const [editAllegatoName, setEditAllegatoName] = useState('');
+  React.useEffect(()=>{
+    if(typeof quickAction==="string" && quickAction.startsWith("openAllegato:")) {
+      const aid = quickAction.slice("openAllegato:".length);
+      const found = (propAllegati||[]).find(a=>String(a.id)===aid);
+      if (found) setSearch(found.fileName || found.descrizione || '');
+      if(clearQuickAction) clearQuickAction();
+    }
+  },[quickAction]);
   const [confirmDelAll, setConfirmDelAll] = useState(null);
 
   // Sync modali verso lo slot globale di App (fuori da main-scroll animato)
@@ -3325,7 +3349,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     ) // close Fragment
 };
 
-const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
+const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, clearQuickAction }) => {
   const isMobile = useIsMobile();
   const allStudents = propStudents || [];
   const allDocenti  = propDocenti  || [];
@@ -3341,6 +3365,15 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti }) => {
     const [selUtente, setSelUtente] = useState(null);
     const [toast,     setToast]     = useState(null);
     const [saving,    setSaving]    = useState(false);
+
+    React.useEffect(()=>{
+      if(typeof quickAction==="string" && quickAction.startsWith("openUtente:")) {
+        const uid_ = quickAction.slice("openUtente:".length);
+        const found = (utenti||[]).find(u=>String(u.id)===uid_);
+        if (found) { setTab("utenti"); setDrawer(found); }
+        if(clearQuickAction) clearQuickAction();
+      }
+    },[quickAction, utenti]);
 
     // Carica dati reali da Supabase al mount
     useEffect(()=>{

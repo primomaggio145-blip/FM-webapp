@@ -3110,6 +3110,12 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       if(window.__FM_OPEN_RECUPERO_MODAL__) { window.__FM_OPEN_RECUPERO_MODAL__(); }
       if(clearQaAV)clearQaAV();
     }
+    else if(typeof qaAV==="string" && qaAV.startsWith("openStudent:")) {
+      const sid = qaAV.slice("openStudent:".length);
+      const found = (students||[]).find(s=>String(s.id)===sid);
+      if (found) { setSelected(found); setView("detail"); }
+      if(clearQaAV)clearQaAV();
+    }
   },[qaAV]);
 
   const handleAddStudent = async (d) => {
@@ -8931,7 +8937,7 @@ const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role
 // BIBLIOTECA — Manuali & Libri
 // Accessibile a tutti i profili; upload solo admin/docente
 // ════════════════════════════════════════════════════════════════════════════════
-const BibliotecaView = ({ userRuolo, appUser }) => {
+const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) => {
   const ruolo = userRuolo || "allievo";
   const canUpload = ruolo === "admin" || ruolo === "docente";
 
@@ -8982,6 +8988,14 @@ const BibliotecaView = ({ userRuolo, appUser }) => {
   const [uploading,  setUploading]  = useState(false);
   const [modal,      setModal]      = useState(null); // "add"
   const [delTarget,  setDelTarget]  = useState(null);
+  React.useEffect(()=>{
+    if(typeof quickAction==="string" && quickAction.startsWith("openManuale:")) {
+      const mid = quickAction.slice("openManuale:".length);
+      const found = (libri||[]).find(m=>String(m.id)===mid);
+      if (found) { setSearch(found.titolo || ''); setFilterCat(""); setFilterCorso(""); }
+      if(clearQuickAction) clearQuickAction();
+    }
+  },[quickAction, libri]);
   const [rinominaTarget, setRinominaTarget] = useState(null);
 
   // ── Carica da Supabase Storage bucket "biblioteca" ──────────────────────────
@@ -12103,6 +12117,18 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       });
       setExtraLessonIdPendente(quickAction.lessonId || null);
       setModal("addq");
+      if(clearQuickAction) clearQuickAction();
+    }
+    else if(quickAction && quickAction.type === "apriRecordContabile"){
+      if (quickAction.tipoRecord === "entrata") {
+        setTab("entrate");
+        const found = (propEntrate||[]).find(e=>String(e.id)===String(quickAction.id));
+        if (found) { setSelQuota(found); setModal("editq"); }
+      } else {
+        setTab("spese");
+        const found = (propSpese||[]).find(s=>String(s.id)===String(quickAction.id));
+        if (found) { setSelSpesa(found); setModal("edit"); }
+      }
       if(clearQuickAction) clearQuickAction();
     }
   },[quickAction]);

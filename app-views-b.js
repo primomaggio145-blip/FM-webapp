@@ -1920,29 +1920,37 @@ const GlobalSearchModal = ({ ruolo, onClose, onNavigate, students, docenti, less
   const CATEGORIE = [
     { id:'lezioni', label:'Lezioni', emoji:'📅', view:'calendario', abilitato: _perms.calendario !== false,
       dati: lessons||[], campi: l => [l.student, l.contactName, l.teacher, l.instrument, l.topic, l.room],
-      etichetta: l => ({ titolo: l.student || l.contactName || 'Lezione', sotto: [l.instrument, l.teacher, l.date].filter(Boolean).join(' · ') }) },
+      etichetta: l => ({ titolo: l.student || l.contactName || 'Lezione', sotto: [l.instrument, l.teacher, l.date].filter(Boolean).join(' · ') }),
+      quickAction: l => 'openLesson:'+l.id },
     { id:'allievi', label:'Allievi', emoji:'🧑‍🎓', view:'allievi', abilitato: _perms.allievi !== false,
       dati: students||[], campi: s => [s.name||s.nome, s.phone||s.telefono, s.email, s.instrument],
-      etichetta: s => ({ titolo: s.name||s.nome||'Allievo', sotto: [s.instrument, s.phone||s.telefono].filter(Boolean).join(' · ') }) },
+      etichetta: s => ({ titolo: s.name||s.nome||'Allievo', sotto: [s.instrument, s.phone||s.telefono].filter(Boolean).join(' · ') }),
+      quickAction: s => 'openStudent:'+s.id },
     { id:'contabilita', label:'Contabilità', emoji:'💶', view:'contabilita', abilitato: _perms.contabilita !== false,
       dati: [...(entrate||[]).map(e=>({...e,_tipo:'entrata'})), ...(spese||[]).map(s=>({...s,_tipo:'spesa'}))],
       campi: r => [r.studentName, r.desc, r.categoria, r.note],
-      etichetta: r => ({ titolo: r._tipo==='entrata' ? (r.studentName||'Quota') : (r.desc||r.categoria||'Spesa'), sotto: `€${(r.importo||0).toFixed(2)}${r.mese?' · '+r.mese+'/'+r.anno:''}` }) },
+      etichetta: r => ({ titolo: r._tipo==='entrata' ? (r.studentName||'Quota') : (r.desc||r.categoria||'Spesa'), sotto: `€${(r.importo||0).toFixed(2)}${r.mese?' · '+r.mese+'/'+r.anno:''}` }),
+      quickAction: r => ({ type:'apriRecordContabile', tipoRecord:r._tipo==='entrata'?'entrata':'spesa', id:r.id }) },
     { id:'utenti', label:'Utenti', emoji:'👥', view:'utenti', abilitato: _isAdmin,
       dati: utenti||[], campi: u => [u.nome, u.email, u.ruolo],
-      etichetta: u => ({ titolo: u.nome||'Utente', sotto: [u.email, u.ruolo].filter(Boolean).join(' · ') }) },
+      etichetta: u => ({ titolo: u.nome||'Utente', sotto: [u.email, u.ruolo].filter(Boolean).join(' · ') }),
+      quickAction: u => 'openUtente:'+u.id },
     { id:'manuali', label:'Manuali & Libri', emoji:'📚', view:'biblioteca', abilitato: _perms.biblioteca !== false,
       dati: manuali||[], campi: m => [m.titolo, m.corso, m.categoria],
-      etichetta: m => ({ titolo: m.titolo||'Manuale', sotto: [m.corso, m.categoria].filter(Boolean).join(' · ') }) },
+      etichetta: m => ({ titolo: m.titolo||'Manuale', sotto: [m.corso, m.categoria].filter(Boolean).join(' · ') }),
+      quickAction: m => 'openManuale:'+m.id },
     { id:'allegati', label:'Allegati', emoji:'📎', view:'allegati', abilitato: _perms.allegati !== false,
       dati: allegati||[], campi: a => [a.fileName, a.descrizione, a.allievoNome, a.corso],
-      etichetta: a => ({ titolo: a.fileName||a.descrizione||'Allegato', sotto: [a.allievoNome, a.corso].filter(Boolean).join(' · ') }) },
+      etichetta: a => ({ titolo: a.fileName||a.descrizione||'Allegato', sotto: [a.allievoNome, a.corso].filter(Boolean).join(' · ') }),
+      quickAction: a => 'openAllegato:'+a.id },
     { id:'concerti', label:'Concerti', emoji:'🎤', view:'concerti', abilitato: _perms.concerti !== false,
       dati: concerti||[], campi: c => [c.titolo, c.luogo, c.descrizione],
-      etichetta: c => ({ titolo: c.titolo||'Evento', sotto: [c.luogo, c.data].filter(Boolean).join(' · ') }) },
+      etichetta: c => ({ titolo: c.titolo||'Evento', sotto: [c.luogo, c.data].filter(Boolean).join(' · ') }),
+      quickAction: c => 'openConcerto:'+c.id },
     { id:'repertorio', label:'Repertorio', emoji:'🎼', view:'repertorio', abilitato: _perms.repertorio !== false,
       dati: brani||[], campi: b => [b.title||b.titolo, b.artista, b.autore],
-      etichetta: b => ({ titolo: b.title||b.titolo||'Brano', sotto: b.artista||b.autore||'' }) },
+      etichetta: b => ({ titolo: b.title||b.titolo||'Brano', sotto: b.artista||b.autore||'' }),
+      quickAction: b => 'openBrano:'+b.id },
   ];
 
   const qNorm = _normalizzaTesto(query.trim());
@@ -1981,7 +1989,7 @@ const GlobalSearchModal = ({ ruolo, onClose, onNavigate, students, docenti, less
                 , cat.match.map((item,i) => {
                     const et = cat.etichetta(item);
                     return React.createElement('div', {key:cat.id+'-'+i,
-                        onClick:()=>onNavigate(cat.view),
+                        onClick:()=>onNavigate(cat.view, cat.quickAction(item)),
                         style:{padding:'8px 10px',borderRadius:8,cursor:'pointer',display:'flex',flexDirection:'column'},
                         onMouseEnter:e=>{e.currentTarget.style.background=C.bg;},
                         onMouseLeave:e=>{e.currentTarget.style.background='transparent';}
@@ -2469,16 +2477,15 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
           );
         })
         /* "Altro" button for remaining items */
-        , React.createElement(MobileMoreMenu, { current: current, setView: setView, extraItems: FILTERED_ITEMS.slice(5), onLogout: onLogout, onEsciSenzaLogout: onEsciSenzaLogout, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10669}})
+        , React.createElement(MobileMoreMenu, { current: current, setView: setView, extraItems: FILTERED_ITEMS.slice(5), onLogout: onLogout, onEsciSenzaLogout: onEsciSenzaLogout, onApriRicerca: onApriRicerca, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10669}})
       )
     )
   );
 };
 
-const MobileMoreMenu = ({ current, setView, extraItems, onLogout, onEsciSenzaLogout }) => {
+const MobileMoreMenu = ({ current, setView, extraItems, onLogout, onEsciSenzaLogout, onApriRicerca }) => {
   const [open, setOpen] = useState(false);
-  const activeExtra = extraItems.some(i => i.id === current);
-  if (!extraItems || extraItems.length === 0) return null;
+  const activeExtra = (extraItems||[]).some(i => i.id === current);
   const btnColor  = activeExtra ? '#ffffff' : C.sidebarText;
   const iconColor = activeExtra ? '#ffffff' : C.sidebarText;
   return (
@@ -2501,7 +2508,16 @@ const MobileMoreMenu = ({ current, setView, extraItems, onLogout, onEsciSenzaLog
           left:0,right:0,zIndex:400,
           background:C.surface,borderTop:`1px solid ${C.border}`,borderRadius:"16px 16px 0 0",
           padding:"8px 0",boxShadow:"0 -4px 20px rgba(0,0,0,0.5)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10690}}
-          , extraItems.map(item => {
+          /* Ricerca globale — sempre presente, indipendentemente dalle voci extra */
+          , React.createElement('button', { onClick: ()=>{ setOpen(false); onApriRicerca && onApriRicerca(); },
+              style: {width:"100%",display:"flex",alignItems:"center",gap:14,
+                padding:"14px 20px",border:"none",background:"transparent",
+                cursor:"pointer",color:C.text,
+                fontFamily:"'Open Sans',sans-serif",fontSize:14,fontWeight:600,textAlign:"left"} }
+            , React.createElement('span',{style:{fontSize:16,width:18,textAlign:"center"}}, "🔍"), "Cerca ovunque"
+          )
+          , (extraItems||[]).length > 0 && React.createElement('div', { style: {height:1,background:C.border,margin:"4px 0"} })
+          , (extraItems||[]).map(item => {
             const active = current === item.id;
             return (
               React.createElement('button', { key: item.id, onClick: ()=>{setView(item.id);setOpen(false);},
