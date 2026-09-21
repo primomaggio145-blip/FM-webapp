@@ -1416,7 +1416,7 @@ const FormLogin = ({onSuccess,onRegistrazione,onRecupero,onBand})=>{
           if(!profilo){ setErr({form:"Profilo non trovato. Contatta l'amministratore."}); setLoading(false); return; }
           if(profilo.stato==='sospeso'){ setErr({form:"Il tuo account è stato sospeso. Contatta l'amministratore."}); setLoading(false); return; }
           if(profilo.stato==='invitato'){ setErr({form:"Account non ancora attivato. Imposta la password dal link nell'email di invito."}); setLoading(false); return; }
-          onSuccess({email:user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null});
+          onSuccess({email:user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null, bellPrefs:profilo.bell_prefs||{}});
         } else {
           // Fallback DEMO (sviluppo locale senza Supabase)
           const DEMO={"admin@accademia.it":{password:"admin123",nome:"Marco Bianchi",ruolo:"admin"},"rossi@accademia.it":{password:"musica2024",nome:"Prof. Rossi",ruolo:"docente"},"sofia@accademia.it":{password:"sofia2024",nome:"Sofia Marchetti",ruolo:"allievo"}};

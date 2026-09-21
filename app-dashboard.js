@@ -1349,6 +1349,37 @@ const CONFIG_DEFAULT = {
 
 
 // ─── NOTIFICATION BELL ────────────────────────────────────────────────────────
+// Elenco completo delle categorie di notifiche bell, per il pannello di attivazione/
+// disattivazione per categoria (preferenza personale, salvata per account su Supabase
+// in profili.bell_prefs — non va confusa con "Impostazioni Notifiche", che decide se una
+// notifica viene creata/inviata come push: questa filtra solo cosa VEDI in campanella).
+// "gruppo" è solo per organizzare visivamente il pannello: ogni categoria resta un
+// interruttore indipendente, nessuna viene davvero unita a un'altra.
+const BELL_CATEGORIE = [
+  { id:'richieste',               label:'Richieste di accesso',            gruppo:'Amministrazione' },
+  { id:'sala_prove',               label:'Richieste sala prove',            gruppo:'Amministrazione' },
+  { id:'morosi',                   label:'Allievi con rate scadute',        gruppo:'Allievi' },
+  { id:'sospesi',                  label:'Allievi sospesi',                 gruppo:'Allievi' },
+  { id:'nuovo_iscritto_scaduto',   label:'Nuovo iscritto con quota scaduta',gruppo:'Allievi' },
+  { id:'lezioni_extra_mese',       label:'Allievi oltre soglia lezioni',    gruppo:'Allievi' },
+  { id:'lezione_creata',           label:'Lezione aggiunta',                gruppo:'Lezioni' },
+  { id:'lezione_eliminata',        label:'Lezione eliminata',               gruppo:'Lezioni' },
+  { id:'presenza_variata',         label:'Variazione presenza',             gruppo:'Lezioni' },
+  { id:'presenze',                 label:'Lezioni senza presenza',          gruppo:'Lezioni' },
+  { id:'assenze_ieri',             label:'Assenze registrate ieri',         gruppo:'Lezioni' },
+  { id:'recupero_richiesto',       label:'Recupero richiesto',              gruppo:'Recuperi' },
+  { id:'recupero_in_attesa',       label:'Recupero in attesa',              gruppo:'Recuperi' },
+  { id:'recupero_approvato_docente', label:'Recupero approvato dal docente',gruppo:'Recuperi' },
+  { id:'recupero_confermato_docente',label:'Recupero confermato dal docente',gruppo:'Recuperi' },
+  { id:'recupero_ufficiale',       label:'Recupero ufficializzato',         gruppo:'Recuperi' },
+  { id:'recupero_rifiutato',       label:'Recupero rifiutato',              gruppo:'Recuperi' },
+  { id:'recupero',                 label:'Recupero (altro)',                gruppo:'Recuperi' },
+  { id:'recuperi_scaduti',         label:'Recuperi scaduti',                gruppo:'Recuperi' },
+  { id:'recuperi_in_scadenza',     label:'Recuperi in scadenza',            gruppo:'Recuperi' },
+  { id:'repertorio_aggiunto',      label:'Brani in repertorio',             gruppo:'Repertorio' },
+  { id:'concerto_evento',          label:'Concerti ed eventi',              gruppo:'Eventi' },
+];
+
 const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruoloNB, appUser:_appUserNB, notifiche:_notificheNB, setNotifiche:_setNotificheNB, onQuickAction:_onQANB, config:_configNB }) => {
   const ruoloNB = _ruoloNB || "admin";
   const [open, setOpen] = useState(false);
@@ -1371,6 +1402,24 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     });
   };
   const ref = React.useRef(null);
+
+  // Preferenze "categorie notifiche visibili in campanella" — per account, salvate su
+  // Supabase (profili.bell_prefs) così seguono l'utente su ogni dispositivo. Assente/true
+  // = categoria visibile (default); false = nascosta. Inizializzate dal profilo utente
+  // già caricato al login (appUser.bellPrefs), poi gestite localmente qui.
+  const [bellPrefs, setBellPrefs] = useState(function(){ return (_appUserNB && _appUserNB.bellPrefs) || {}; });
+  const [catPanelOpen, setCatPanelOpen] = useState(false);
+
+  const toggleCategoria = function(catId, valore) {
+    const next = { ...bellPrefs, [catId]: valore };
+    setBellPrefs(next);
+    const sb = window.supabaseClient;
+    const userId = _appUserNB && _appUserNB.userId;
+    if (sb && userId) {
+      sb.from('profili').update({ bell_prefs: next }).eq('id', userId)
+        .then(function(r){ if (r && r.error) console.warn('[FM] errore salvataggio bell_prefs:', r.error.message); });
+    }
+  };
 
   // Elimina una notifica (disponibile per tutti i ruoli). Le notifiche "vive"
   // (calcolate al volo da dati esistenti, non salvate su DB) vengono solo
@@ -1462,7 +1511,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     const richiesteAttesa = (richieste||[]).filter(r=>r.stato==='in_attesa'||!r.stato);
     if (richiesteAttesa.length > 0) {
       notifs.push({
-        id: mkKey('richieste', richiesteAttesa.map(r=>r.id||r.nome)), tipo:'info',
+        id: mkKey('richieste', richiesteAttesa.map(r=>r.id||r.nome)), categoria:'richieste', tipo:'info',
         icon:'users', color: C.blue,
         titolo: `${richiesteAttesa.length} ${richiesteAttesa.length===1?'richiesta':'richieste'} di accesso in attesa`,
         desc: richiesteAttesa.map(r=>r.nome).join(', '),
@@ -1477,7 +1526,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     const morosi = (students||[]).filter(s=>s.status==='scaduto'||s.stato==='scaduto');
     if (morosi.length > 0) {
       notifs.push({
-        id: mkKey('morosi', morosi.map(s=>s.id||s.name||s.nome)), tipo:'warning',
+        id: mkKey('morosi', morosi.map(s=>s.id||s.name||s.nome)), categoria:'morosi', tipo:'warning',
         icon:'euro', color: C.orange,
         titolo: `${morosi.length} ${morosi.length===1?'allievo ha':'allievi hanno'} rate scadute`,
         desc: morosi.slice(0,3).map(s=>s.name||s.nome||'').join(', ') + (morosi.length>3?' e altri...':''),
@@ -1495,7 +1544,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     });
     if (lezioniOggiSenzaPresenza.length > 0) {
       notifs.push({
-        id: mkKey('presenze', lezioniOggiSenzaPresenza.map(l=>l.id)), tipo:'warning',
+        id: mkKey('presenze', lezioniOggiSenzaPresenza.map(l=>l.id)), categoria:'presenze', tipo:'warning',
         icon:'check', color: C.gold,
         titolo: `${lezioniOggiSenzaPresenza.length} ${lezioniOggiSenzaPresenza.length===1?'lezione oggi senza':'lezioni oggi senza'} presenza`,
         desc: lezioniOggiSenzaPresenza.slice(0,3).map(l => {
@@ -1521,7 +1570,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
       const assenze = presenzeIeri.filter(l=>l.attendance==='assente'||l.attendance==='giustificato');
       if (assenze.length > 0) {
         notifs.push({
-          id: mkKey('assenze_ieri', assenze.map(l=>l.id)), tipo:'info',
+          id: mkKey('assenze_ieri', assenze.map(l=>l.id)), categoria:'assenze_ieri', tipo:'info',
           icon:'alert', color: C.red,
           titolo: `${assenze.length} ${assenze.length===1?'assenza':'assenze'} registrate ieri`,
           desc: assenze.slice(0,3).map(l=>l.student||l.allievo||'—').join(', '),
@@ -1544,7 +1593,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
   });
   if (recuperiScaduti.length > 0) {
     notifs.push({
-      id: mkKey('recuperi_scaduti', recuperiScaduti.map(l=>l.id)), tipo:'warning',
+      id: mkKey('recuperi_scaduti', recuperiScaduti.map(l=>l.id)), categoria:'recuperi_scaduti', tipo:'warning',
       icon:'alert', color: C.red,
       titolo: `${recuperiScaduti.length} ${recuperiScaduti.length===1?'lezione in recupero scaduta':'lezioni in recupero scadute'}`,
       desc: ruoloNB === "allievo" ? 'Contatta il tuo docente' : 'Verranno segnate come ASSENTE e pagate al docente',
@@ -1553,7 +1602,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     });
   } else if (recuperiInScadenza.length > 0) {
     notifs.push({
-      id: mkKey('recuperi_in_scadenza', recuperiInScadenza.map(l=>l.id)), tipo:'warning',
+      id: mkKey('recuperi_in_scadenza', recuperiInScadenza.map(l=>l.id)), categoria:'recuperi_in_scadenza', tipo:'warning',
       icon:'clock', color: C.orange,
       titolo: `${recuperiInScadenza.length} ${recuperiInScadenza.length===1?'lezione in recupero':'lezioni in recupero'} in scadenza`,
       desc: recuperiInScadenza.slice(0,3).map(l=>l.student||'—').join(', '),
@@ -1567,7 +1616,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     const sospesi = (students||[]).filter(s=>s.status==='sospeso'||s.stato==='sospeso');
     if (sospesi.length > 0) {
       notifs.push({
-        id: mkKey('sospesi', sospesi.map(s=>s.id||s.name||s.nome)), tipo:'info',
+        id: mkKey('sospesi', sospesi.map(s=>s.id||s.name||s.nome)), categoria:'sospesi', tipo:'info',
         icon:'user', color: C.textMuted,
         titolo: `${sospesi.length} ${sospesi.length===1?'abbonamento sospeso':'abbonamenti sospesi'}`,
         desc: sospesi.slice(0,3).map(s=>s.name||s.nome||'').join(', '),
@@ -1637,6 +1686,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     if (superanoSoglia.length > 0) {
       notifs.push({
         id: mkKey('lezioni_extra_mese', superanoSoglia.map(a=>a.nome+':'+a.count)),
+        categoria: 'lezioni_extra_mese',
         tipo: 'warning',
         icon: 'alert',
         color: C.orange,
@@ -1756,6 +1806,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
 
     notifs.push({
       id: 'notifica_' + n.id,
+      categoria: n.tipo || 'altro',
       tipo: (n.tipo === 'recupero_richiesto' || n.tipo === 'recupero_approvato_docente') ? 'warning' : 'info',
       icon: iconTipo,
       color: colorTipo,
@@ -1766,7 +1817,12 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     });
   });
 
-  const count = notifs.filter(function(n){ return !dismissedIds.has(n.id); }).length;
+  // Filtra le categorie che l'utente ha disattivato dal pannello (preferenza personale
+  // di visualizzazione — non impedisce che la notifica venga creata/pushata, solo che
+  // compaia qui in campanella)
+  const notifsVisibili = notifs.filter(function(n){ return bellPrefs[n.categoria] !== false; });
+
+  const count = notifsVisibili.filter(function(n){ return !dismissedIds.has(n.id); }).length;
   // Esponi il conteggio globalmente così handleLogout può leggerlo
   window.__FM_NOTIF_COUNT__ = count;
 
@@ -1815,14 +1871,53 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
           , React.createElement('div', {style:{padding:'14px 16px',borderBottom:`1px solid ${C.border}`,
               display:'flex',alignItems:'center',justifyContent:'space-between'}}
             , React.createElement('span', {style:{fontFamily:"'Oswald',sans-serif",fontSize:14,fontWeight:600,letterSpacing:'.04em'}}, 'NOTIFICHE')
-            , count > 0 && React.createElement('span', {style:{fontSize:10,color:C.textMuted}}, `${count} attive`)
+            , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10}}
+                , count > 0 && !catPanelOpen && React.createElement('span', {style:{fontSize:10,color:C.textMuted}}, `${count} attive`)
+                , React.createElement('button', {
+                    title: 'Categorie da mostrare',
+                    onClick: ()=>setCatPanelOpen(p=>!p),
+                    style:{background:'none',border:'none',cursor:'pointer',padding:2,display:'flex',
+                      color: catPanelOpen ? C.gold : C.textMuted},
+                  }
+                  , React.createElement(Ic, {n:'settings', size:15, stroke:'currentColor'})
+                )
+              )
           )
-          , count === 0
+          , catPanelOpen
+            ? React.createElement('div', {style:{padding:'12px 16px'}}
+                , React.createElement('p', {style:{fontSize:11,color:C.textMuted,marginBottom:10,lineHeight:1.5}},
+                    'Scegli quali categorie mostrare in campanella. Non influisce su cosa viene creato o inviato come push.')
+                , (function(){
+                    const gruppi = [];
+                    BELL_CATEGORIE.forEach(function(c){
+                      let g = gruppi.find(function(x){ return x.nome===c.gruppo; });
+                      if (!g) { g = { nome:c.gruppo, voci:[] }; gruppi.push(g); }
+                      g.voci.push(c);
+                    });
+                    return gruppi.map(function(g){
+                      return React.createElement('div', {key:g.nome, style:{marginBottom:14}}
+                        , React.createElement('div', {style:{fontSize:10,fontWeight:700,color:C.textDim,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}, g.nome)
+                        , g.voci.map(function(c){
+                            const attivo = bellPrefs[c.id] !== false;
+                            return React.createElement('label', {key:c.id, style:{display:'flex',alignItems:'center',gap:8,padding:'5px 0',cursor:'pointer'}}
+                              , React.createElement('input', {
+                                  type:'checkbox', checked:attivo,
+                                  onChange: e => toggleCategoria(c.id, e.target.checked),
+                                  style:{width:15,height:15,cursor:'pointer',accentColor:C.gold},
+                                })
+                              , React.createElement('span', {style:{fontSize:12,color: attivo ? C.text : C.textMuted}}, c.label)
+                            );
+                          })
+                      );
+                    });
+                  })()
+              )
+            : count === 0
             ? React.createElement('div', {style:{padding:'32px 16px',textAlign:'center'}}
                 , React.createElement(Ic, {n:'check',size:28,stroke:C.green})
                 , React.createElement('p', {style:{fontSize:13,color:C.textMuted,marginTop:10}}, 'Nessuna notifica attiva')
               )
-            : notifs.filter(function(n){ return !dismissedIds.has(n.id); }).map(n => {
+            : notifsVisibili.filter(function(n){ return !dismissedIds.has(n.id); }).map(n => {
                 const tc = TIPO_COLORS[n.tipo] || TIPO_COLORS.info;
                 return React.createElement('div', {key:n.id, style:{
                     padding:'12px 16px',

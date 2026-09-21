@@ -153,7 +153,7 @@ function App() {
         if(session?.user){
           const profilo = await window.FM_AUTH.getProfilo(session.user.id);
           if(profilo && profilo.stato!=='sospeso'){
-            const _userObj0 = {email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null};
+            const _userObj0 = {email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null, bellPrefs:profilo.bell_prefs||{}};
             setUser(_userObj0);
             try{ window.__currentUser__ = _userObj0; }catch(e){}
             setSharedRuolo(profilo.ruolo||"admin");
@@ -825,7 +825,7 @@ function App() {
                         if (profilo) {
                           // Aggiorna profilo da invitato ad attivo
                           await sb.from('profili').update({ stato: 'attivo' }).eq('id', session.user.id);
-                          const _userObj1 = {email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null};
+                          const _userObj1 = {email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null, bellPrefs:profilo.bell_prefs||{}};
                           setUser(_userObj1);
                           try{ window.__currentUser__ = _userObj1; }catch(e){}
                           setSharedRuolo(profilo.ruolo||"admin");
