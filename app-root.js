@@ -2524,10 +2524,13 @@ const RemindersView = ({ ruolo, onNavigate }) => {
 
   const alterJobSQL = (cfg, tipoId) => {
     const cron = cronExpr(cfg, tipoId);
+    // Convenzione reale osservata su Supabase: "reminder-<tipo>", eccetto compleanno
+    // che è stato creato come "whatsapp-reminder-compleanno" (nome irregolare)
+    const jobName = tipoId === 'compleanno' ? 'whatsapp-reminder-compleanno' : `reminder-${tipoId}`;
     return `-- Verifica prima il nome esatto del job:\n` +
       `-- select jobid, jobname, schedule from cron.job order by jobname;\n` +
       `select cron.alter_job(\n` +
-      `  (select jobid from cron.job where jobname = '${tipoId}-reminder'),\n` +
+      `  (select jobid from cron.job where jobname = '${jobName}'),\n` +
       `  schedule => '${cron}'\n` +
       `); -- ${cfg.ora_invio || '09:00'} ora italiana → ${cron} UTC`;
   };
