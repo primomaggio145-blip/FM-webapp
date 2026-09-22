@@ -3880,12 +3880,24 @@ const GAP_PER_RICORRENZA       = { "Ogni settimana": 7, "Ogni 2 settimane": 14, 
 // ricorrenza (7/14/30 giorni, o alternato 3/4 per "2 volte a settimana") — NON conta i giorni
 // della settimana nel mese, perché per una ricorrenza non settimanale non ogni occorrenza di
 // quel giorno è davvero una lezione.
-function calcolaInfoExtra(lesson) {
+// Calcola se questa lezione è "al limite del pacchetto mensile" e se esiste già un'occorrenza
+// successiva nello stesso mese (in tal caso è "extra", da far decidere all'admin).
+//
+// `dataMinima` (opzionale, tipicamente la data d'iscrizione dell'allievo): il conteggio
+// all'indietro NON deve mai superare questa data. Senza questo limite, il conteggio si basava
+// solo sul confine del mese di calendario, assumendo che esistessero lezioni reali anche nelle
+// settimane precedenti — falso per un allievo appena iscritto. Es.: iscritto il 22 settembre
+// (martedì), la PRIMA lezione in assoluto cade il 22; contare all'indietro di 7 giorni alla
+// volta (15, 8, 1 settembre) senza sapere che l'allievo non era ancora iscritto porta a un
+// "ordinale" di 4 già alla prima lezione — scambiandola per l'ultima del pacchetto mensile e
+// bloccando la creazione automatica della vera lezione successiva (29 settembre) come "extra".
+function calcolaInfoExtra(lesson, dataMinima) {
   const recurrence = _optionalChain([lesson, 'optionalAccess', _47 => _47.recurrence]);
   const N = PACCHETTO_PER_RICORRENZA[recurrence];
   if (!N || !lesson.date) return { isSoglia: false, haExtraPotenziale: false, N: null };
   const d = new Date(lesson.date + "T00:00:00");
   const month = d.getMonth(), year = d.getFullYear();
+  const minDate = dataMinima ? new Date(dataMinima) : null;
 
   if (recurrence === "2 volte a settimana") {
     const gapAvanti = lesson.gapGiorni === 4 ? 4 : 3; // default 3 se non impostato
@@ -3896,6 +3908,7 @@ function calcolaInfoExtra(lesson) {
       const gapIndietro = 7 - cursorForwardGap;
       const prev = new Date(cursor); prev.setDate(prev.getDate() - gapIndietro);
       if (prev.getMonth() !== month || prev.getFullYear() !== year) break;
+      if (minDate && prev < minDate) break; // non risalire oltre l'iscrizione dell'allievo
       ordinale++;
       cursor = prev;
       cursorForwardGap = gapIndietro;
@@ -3914,6 +3927,7 @@ function calcolaInfoExtra(lesson) {
   while (true) {
     const prev = new Date(cursor); prev.setDate(prev.getDate() - gap);
     if (prev.getMonth() !== month || prev.getFullYear() !== year) break;
+    if (minDate && prev < minDate) break; // non risalire oltre l'iscrizione dell'allievo
     ordinale++;
     cursor = prev;
   }
@@ -10328,7 +10342,14 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           const nextDate = yyyymmdd(addDays(new Date((dataNormFull.date||"")+"T00:00:00"), gap));
 
           // Lezione extra: non creare automaticamente, metti in pausa per decisione admin.
-          const infoExtra = calcolaInfoExtra(dataNormFull);
+          // dataMinima = data d'iscrizione dell'allievo: il conteggio del pacchetto mensile
+          // non deve mai risalire a prima che l'allievo fosse iscritto (vedi commento in
+          // calcolaInfoExtra).
+          const studenteEI = (propStudents||[]).find(st =>
+            (dataNormFull.studentId!=null && String(st.id)===String(dataNormFull.studentId)) ||
+            (dataNormFull.student && (st.name||st.nome||'').toLowerCase().trim()===dataNormFull.student.toLowerCase().trim())
+          );
+          const infoExtra = calcolaInfoExtra(dataNormFull, studenteEI && studenteEI.enrollDate);
           if (infoExtra.haExtraPotenziale && !dataNormFull.extraDecisione) {
             setLessons(prev => prev.map(l => l.id === dataNormFull.id
               ? { ...l, extraDaDecidere: true, extraDataPotenziale: nextDate }
@@ -10481,7 +10502,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
           // Lezione extra (5a/3a/2a occorrenza mensile): non creare automaticamente,
           // metti in pausa e lascia decidere l'admin dalla tab "Extra".
-          const infoExtra = calcolaInfoExtra(lesson);
+          // dataMinima = data d'iscrizione dell'allievo (vedi commento in calcolaInfoExtra).
+          const studenteEI2 = (propStudents||[]).find(st =>
+            (lesson.studentId!=null && String(st.id)===String(lesson.studentId)) ||
+            (lesson.student && (st.name||st.nome||'').toLowerCase().trim()===lesson.student.toLowerCase().trim())
+          );
+          const infoExtra = calcolaInfoExtra(lesson, studenteEI2 && studenteEI2.enrollDate);
           if (!isCambioOra && infoExtra.haExtraPotenziale && !lesson.extraDecisione) {
             const sbExtra = window.supabaseClient;
             if (sbExtra) {
