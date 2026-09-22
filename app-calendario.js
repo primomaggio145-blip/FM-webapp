@@ -2506,16 +2506,20 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
     const settimane = Math.max(giorni,1)/7;
 
-    // Individuale: conteggio ESATTO dalle serie ricorrenti reali già a calendario. Fallback
+    // Individuale: conteggio ESATTO dalle lezioni ricorrenti reali già a calendario. Fallback
     // alla stima solo se l'allievo non ha ancora nessuna lezione individuale registrata.
     const nome = s.name||s.nome||'';
     const individualeReale = contaLezioniIndividualiReali(nome, s.id, lessons, dataInizio, dataFine);
     const individuale = individualeReale != null ? individualeReale : Math.floor(settimane) * nCorsiIndividuali;
 
-    return {
-      individuale,
-      collettiva:  Math.floor(settimane/2) * nCorsiCollettivi,
-    };
+    // Collettiva: conteggio ESATTO dalle lezioni collettive reali già a calendario (cadenza
+    // spesso variabile — non si può assumere "ogni 2 settimane" con certezza). Fallback alla
+    // stima solo se l'allievo non ha ancora nessuna lezione collettiva registrata. Si applica
+    // solo se l'allievo ha effettivamente un corso collettivo assegnato.
+    const collettivaReale = nCorsiCollettivi > 0 ? contaLezioniCollettiveReali(nome, s.id, lessons, dataInizio, dataFine) : null;
+    const collettiva = collettivaReale != null ? collettivaReale : Math.floor(settimane/2) * nCorsiCollettivi;
+
+    return { individuale, collettiva };
   };
 
   // Lezioni del mese selezionato, deduplicate per id
@@ -3987,10 +3991,16 @@ function contaOccorrenzeInFinestra(lessonAncora, dataInizio, dataFine) {
 }
 
 // Calcola il numero ESATTO di lezioni individuali attese per un allievo nella finestra
-// [dataInizio, dataFine], leggendo le sue serie ricorrenti REALI già a calendario (raggruppate
-// per orario, che distingue automaticamente corsi/giorni diversi) invece di stimare "settimane
-// disponibili ÷ 7". Ritorna null se l'allievo non ha ancora nessuna lezione individuale a
-// calendario (fallback al vecchio calcolo approssimato in quel caso).
+// [dataInizio, dataFine], leggendo le sue lezioni ricorrenti REALI già a calendario. Ritorna
+// null se l'allievo non ha ancora nessuna lezione individuale a calendario (fallback al vecchio
+// calcolo approssimato in quel caso).
+//
+// IMPORTANTE: non raggruppa più le lezioni per orario esatto. Un raggruppamento per orario
+// si romperebbe ogni volta che una singola occorrenza viene spostata manualmente (anche di
+// pochi minuti, es. 19:00→19:15): quello spostamento creava una "serie fantasma" separata che
+// veniva scambiata per un secondo giorno fisso della settimana, gonfiando il conteggio. Invece:
+// si guardano TUTTE le lezioni individuali dell'allievo insieme, e si deduce il pattern
+// settimanale reale (uno o due giorni fissi) dall'insieme.
 function contaLezioniIndividualiReali(nome, studentId, lessons, dataInizio, dataFine) {
   const lezIndividuali = (lessons || []).filter(l =>
     !isColl(l) && !isProva(l) && !isSalaProve(l) && l.tipo !== 'recupero' &&
@@ -3998,47 +4008,65 @@ function contaLezioniIndividualiReali(nome, studentId, lessons, dataInizio, data
   );
   if (lezIndividuali.length === 0) return null; // nessun dato: fallback al vecchio calcolo
 
-  // Raggruppa per orario: stesso orario = stessa serie (stesso giorno/i della settimana)
-  const serie = {};
-  lezIndividuali.forEach(l => {
-    const key = l.hour || '—';
-    if (!serie[key]) serie[key] = [];
-    serie[key].push(l);
-  });
+  const has2xSettimana = lezIndividuali.some(l => l.recurrence === "2 volte a settimana");
+  let giorniPattern; // Set di giorni della settimana (0-6, getDay()) del pattern ricorrente
 
-  let totale = 0;
-  Object.values(serie).forEach(lezSerie => {
-    // Usa la prima lezione della serie come ancora
-    const ancora = lezSerie[0];
-    if (ancora.recurrence === "2 volte a settimana") {
-      // Se in calendario esistono già lezioni reali su ENTRAMBI i giorni della coppia,
-      // contiamo direttamente le occorrenze dei giorni della settimana osservati — non ci
-      // affidiamo al campo gapGiorni, che potrebbe non essere impostato correttamente se le
-      // due lezioni sono state create manualmente/indipendentemente (non tramite la catena
-      // automatica) e quindi non riflette la vera alternanza.
-      const giorniOsservati = new Set(lezSerie.map(l => new Date(l.date + "T00:00:00").getDay()));
-      if (giorniOsservati.size >= 2) {
-        let count = 0;
-        for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) {
-          if (giorniOsservati.has(d.getDay())) count++;
-        }
-        totale += count;
-        return;
-      }
-      // Un solo giorno osservato finora (es. allievo appena iscritto, seconda lezione non
-      // ancora creata): deduciamo il secondo giorno dal gapGiorni, come best-effort.
-      const n = contaOccorrenzeInFinestra(ancora, dataInizio, dataFine);
-      if (n != null) { totale += n; return; }
-    } else if (ancora.recurrence && ancora.recurrence !== "Nessuna") {
-      const n = contaOccorrenzeInFinestra(ancora, dataInizio, dataFine);
-      if (n != null) { totale += n; return; }
-    }
-    // Ricorrenza "Nessuna" o non gestita: conta le occorrenze reali di quella serie
-    // che cadono effettivamente nella finestra (una per una, senza dedurre schema).
-    lezSerie.forEach(l => {
-      const d = new Date(l.date + "T00:00:00");
-      if (d >= dataInizio && d <= dataFine) totale++;
+  if (has2xSettimana) {
+    // "2 volte a settimana": il pattern è l'unione dei giorni osservati su TUTTE le lezioni
+    // con questa ricorrenza (non solo quelle allo stesso orario) — così un'occorrenza spostata
+    // di orario resta comunque riconosciuta come parte della stessa coppia di giorni fissi.
+    giorniPattern = new Set(
+      lezIndividuali.filter(l => l.recurrence === "2 volte a settimana")
+        .map(l => new Date(l.date + "T00:00:00").getDay())
+    );
+  } else {
+    // Pattern settimanale singolo: il giorno più frequente tra tutte le lezioni dell'allievo.
+    // In caso di parità (es. solo 2 lezioni registrate, una su un giorno diverso perché
+    // spostata manualmente), si usa il giorno della lezione con la data più recente/futura —
+    // più affidabile di un'occorrenza isolata nel passato, che è verosimilmente proprio uno
+    // spostamento manuale una tantum, non il giorno fisso reale.
+    const conteggioGiorni = {};
+    lezIndividuali.forEach(l => {
+      const g = new Date(l.date + "T00:00:00").getDay();
+      conteggioGiorni[g] = (conteggioGiorni[g]||0) + 1;
     });
+    const maxCount = Math.max(...Object.values(conteggioGiorni));
+    const candidati = Object.keys(conteggioGiorni).filter(g => conteggioGiorni[g] === maxCount).map(Number);
+    if (candidati.length === 1) {
+      giorniPattern = new Set(candidati);
+    } else {
+      const piuRecente = lezIndividuali.slice().sort((a,b) => (b.date||'').localeCompare(a.date||''))[0];
+      giorniPattern = new Set([new Date(piuRecente.date + "T00:00:00").getDay()]);
+    }
+  }
+
+  // Conta ogni occorrenza dei giorni del pattern nella finestra — anche per date future non
+  // ancora generate a calendario, che vanno comunque conteggiate nella soglia attesa del mese.
+  // Le occorrenze "fuori pattern" (es. lo spostamento manuale stesso) NON vengono aggiunte come
+  // lezione extra: rappresentano lo spostamento di un'occorrenza già conteggiata nel pattern,
+  // non una lezione aggiuntiva.
+  let totale = 0;
+  for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) {
+    if (giorniPattern.has(d.getDay())) totale++;
+  }
+  return totale;
+}
+
+// Calcola il numero di lezioni COLLETTIVE reali a calendario per un allievo nella finestra
+// [dataInizio, dataFine]. A differenza dell'individuale, non si estrapola un giorno fisso
+// della settimana: le collettive hanno spesso cadenza variabile (ogni 2 settimane, mensile...),
+// quindi si contano solo le occorrenze GIÀ effettivamente presenti a calendario per
+// quell'allievo. Ritorna null se l'allievo non ha ancora nessuna lezione collettiva registrata
+// (fallback alla stima per settimane in quel caso).
+function contaLezioniCollettiveReali(nome, studentId, lessons, dataInizio, dataFine) {
+  const lezColl = (lessons || []).filter(l =>
+    isColl(l) && l.tipo !== 'recupero' && studentInLesson(l, nome, studentId)
+  );
+  if (lezColl.length === 0) return null; // nessun dato: fallback alla stima
+  let totale = 0;
+  lezColl.forEach(l => {
+    const d = new Date(l.date + "T00:00:00");
+    if (d >= dataInizio && d <= dataFine) totale++;
   });
   return totale;
 }
