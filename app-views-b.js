@@ -484,10 +484,37 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
 
   const all   = allievi(selected);
   const lez   = lezioniD(selected);
+  const [allievoEspanso, setAllievoEspanso] = useState(null);
+
+  // Lezioni collettive frequentate dagli allievi individuali di questo docente, ANCHE SE
+  // condotte da un altro docente — per dare visibilità sul lavoro fatto nelle collettive
+  // (prima non compariva mai, perché la tab "Lezioni" filtra solo per docente registrato
+  // sulla lezione stessa). Una lezione può comparire più volte se più "miei" allievi vi
+  // hanno partecipato: ogni riga elenca tutti quelli coinvolti.
+  const collettiveConMieiAllievi = React.useMemo(() => {
+    const mappa = new Map(); // id lezione -> { lezione, mieiAllievi:[] }
+    (lessons||[]).forEach(l => {
+      if (!isColl(l)) return;
+      const mieiInLezione = all.filter(s =>
+        studentInLesson(l, s.name, s.id) && studAttendance(l, s.name, s.id) !== 'recuperata'
+      );
+      if (mieiInLezione.length === 0) return;
+      mappa.set(l.id, { lezione: l, mieiAllievi: mieiInLezione });
+    });
+    return [...mappa.values()].sort((a,b) => (b.lezione.date||'').localeCompare(a.lezione.date||'') || (b.lezione.hour||'').localeCompare(a.lezione.hour||''));
+  }, [lessons, all]);
+
+  // Lezioni collettive frequentate da UN singolo allievo (per il pannello espandibile nella
+  // tab Allievi) — stessa logica di sopra ma per un solo allievo, non filtrata sui "miei".
+  const collettiveDiAllievo = (s) => (lessons||[])
+    .filter(l => isColl(l) && studentInLesson(l, s.name, s.id) && studAttendance(l, s.name, s.id) !== 'recuperata')
+    .sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.hour||'').localeCompare(a.hour||''));
+
   const TABS  = [
     {id:"profilo",  label:"Profilo",  icon:"user"},
     {id:"allievi",  label:"Allievi",  icon:"users"},
     {id:"lezioni",  label:"Lezioni",  icon:"calendar"},
+    {id:"collettive", label:"Collettive", icon:"group"},
     {id:"compenso", label:"Compenso", icon:"euro"},
     // Tab Impostazioni: solo per il docente loggato (visibile anche in PWA/mobile)
     ...(ruoloDocView==="docente" ? [{id:"impostazioni", label:"Impostazioni", icon:"settings"}] : []),
@@ -717,18 +744,93 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             )
             , all.length===0
               ? React.createElement('div', {style:{textAlign:"center",padding:"48px 0",color:C.textMuted,fontSize:14}}, "Nessun allievo assegnato")
-              : all.map((s,i)=>
-                  React.createElement('div', {key:s.id, style:{display:"flex",alignItems:"center",gap:14,
-                    padding:"14px 18px",borderBottom:i<all.length-1?`1px solid ${C.border}`:"none"}}
-                    , React.createElement(Avatar, {initials:s.name.split(" ").map(p=>p[0]).join("").slice(0,2), hex:selected.colore, size:36})
-                    , React.createElement('div', {style:{flex:1}}
-                      , React.createElement('div', {style:{fontSize:14,fontWeight:500}}, s.name)
-                      , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}, (s._corsiConDocente||[]).join(" · ")||s.instrument, s.level?" · "+s.level:"")
+              : all.map((s,i)=>{
+                  const espanso = allievoEspanso === s.id;
+                  const collettiveAllievo = espanso ? collettiveDiAllievo(s) : [];
+                  const repertorioAllievo = espanso ? (s.repertorio||[]) : [];
+                  return React.createElement('div', {key:s.id, style:{borderBottom:i<all.length-1?`1px solid ${C.border}`:"none"}}
+                    , React.createElement('div', {onClick:()=>setAllievoEspanso(espanso?null:s.id),
+                        style:{display:"flex",alignItems:"center",gap:14,padding:"14px 18px",cursor:"pointer"}}
+                      , React.createElement(Avatar, {initials:s.name.split(" ").map(p=>p[0]).join("").slice(0,2), hex:selected.colore, size:36})
+                      , React.createElement('div', {style:{flex:1}}
+                        , React.createElement('div', {style:{fontSize:14,fontWeight:500}}, s.name)
+                        , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}, (s._corsiConDocente||[]).join(" · ")||s.instrument, s.level?" · "+s.level:"")
+                      )
+                      , React.createElement(Badge, {stato:s.status})
+                      , React.createElement(Ic,{n:espanso?"chevron-up":"chevron-down",size:14,stroke:C.textDim})
                     )
-                    , React.createElement(Badge, {stato:s.status})
+                    , espanso && React.createElement('div', {style:{padding:"0 18px 18px 18px",display:"flex",flexDirection:"column",gap:14}}
+                      /* Attività nei corsi collettivi — anche se condotti da un altro docente */
+                      , React.createElement('div', {style:{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px"}}
+                        , React.createElement('div', {style:{fontSize:11,letterSpacing:"0.06em",textTransform:"uppercase",color:C.purple,marginBottom:8,display:"flex",alignItems:"center",gap:6}}
+                          , React.createElement(Ic,{n:"group",size:12,stroke:C.purple}), "Attività nei corsi collettivi"
+                        )
+                        , collettiveAllievo.length===0
+                          ? React.createElement('div', {style:{fontSize:12,color:C.textDim}}, "Nessuna lezione collettiva registrata")
+                          : collettiveAllievo.map(l =>
+                              React.createElement('div', {key:l.id, style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}
+                                , React.createElement('span', null, new Date(l.date+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"}), " · ", l.courseName||"Collettiva")
+                                , React.createElement('span', {style:{color: (l.teacher||'')===(selected.nome||'') ? C.green : C.textMuted}}, l.teacher||"—", (l.teacher||'')!==(selected.nome||'') ? " (altro docente)" : "")
+                              )
+                            )
+                      )
+                      /* Repertorio dell'allievo — include i brani studiati anche nelle collettive */
+                      , React.createElement('div', {style:{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"12px 14px"}}
+                        , React.createElement('div', {style:{fontSize:11,letterSpacing:"0.06em",textTransform:"uppercase",color:C.gold,marginBottom:8,display:"flex",alignItems:"center",gap:6}}
+                          , React.createElement(Ic,{n:"music",size:12,stroke:C.gold}), "Repertorio"
+                        )
+                        , repertorioAllievo.length===0
+                          ? React.createElement('div', {style:{fontSize:12,color:C.textDim}}, "Nessun brano in repertorio")
+                          : repertorioAllievo.map(r =>
+                              React.createElement('div', {key:r.id, style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}
+                                , React.createElement('span', null, r.titolo, r.compositore?` — ${r.compositore}`:"")
+                                , React.createElement(Badge, {label:r.stato, accentHex: r.stato==='completato'?'green':'gold'})
+                              )
+                            )
+                      )
+                    )
+                  );
+                })
+          )
+        )
+      )
+
+      /* ── COLLETTIVE ── lezioni collettive frequentate dagli allievi individuali di questo
+         docente, anche se condotte da un altro docente — prima non c'era alcuna visibilità
+         su questa attività. */
+      , tab==="collettive" && (
+        React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}
+          , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}
+            , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+              , React.createElement(Ic,{n:"group",size:14,stroke:C.purple})
+              , React.createElement('span', {style:{fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}}, "Lezioni collettive dei tuoi allievi")
+            )
+            , React.createElement('span', {style:{fontSize:12,color:C.textDim}}, collettiveConMieiAllievi.length, " lezioni")
+          )
+          , React.createElement('div', {style:{padding:"10px 20px",fontSize:11,color:C.textDim,borderBottom:`1px solid ${C.border}`}}
+            , "Include le lezioni collettive frequentate dai tuoi allievi individuali, anche se condotte da un altro docente."
+          )
+          , collettiveConMieiAllievi.length===0
+            ? React.createElement('div', {style:{textAlign:"center",padding:"48px 0",color:C.textMuted,fontSize:14}}, "Nessuna lezione collettiva registrata per i tuoi allievi")
+            : collettiveConMieiAllievi.map(({lezione:l, mieiAllievi}, i) =>
+                React.createElement('div', {key:l.id, style:{display:"grid",gridTemplateColumns:"90px 1fr 1fr",gap:12,alignItems:"center",
+                  padding:"12px 20px",borderBottom:i<collettiveConMieiAllievi.length-1?`1px solid ${C.border}`:"none",
+                  borderLeft:`3px solid ${C.purple}`, background:`${C.purple}06`}}
+                  , React.createElement('div', null
+                    , React.createElement('div', {style:{fontSize:11,color:C.textDim}}, new Date(l.date+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"}))
+                    , React.createElement('div', {style:{fontSize:13,fontWeight:600,color:C.purple}}, l.hour)
+                  )
+                  , React.createElement('div', null
+                    , React.createElement('div', {style:{fontSize:13,fontWeight:500}}, l.courseName||"Collettiva")
+                    , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:2}}
+                      , "Docente: ", React.createElement('span',{style:{color:(l.teacher||'')===(selected.nome||'')?C.green:C.textMuted,fontWeight:600}}, l.teacher||"—")
+                    )
+                  )
+                  , React.createElement('div', {style:{fontSize:12,color:C.textMuted}}
+                    , "Tuoi allievi presenti: ", mieiAllievi.map(s=>s.name).join(", ")
                   )
                 )
-          )
+              )
         )
       )
 
