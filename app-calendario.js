@@ -8360,6 +8360,7 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
 
 
 // ── Adatta riga Supabase prenotazioni_sala → oggetto React ───────────────────
+const _pjSala = (v) => { if(!v) return []; if(Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p)?p:[]; } catch(e) { return []; } };
 const adaptPrenotazioneSala = (r) => ({
   id:          r.id,
   userId:      r.user_id     || null,
@@ -8372,12 +8373,50 @@ const adaptPrenotazioneSala = (r) => ({
   telefono:    r.telefono    || '',
   stato:       r.stato       || 'in_attesa',
   noteAdmin:   r.note_admin  || '',
+  // Allievi/docenti selezionati dall'admin per segnare lo slot sui LORO calendari
+  // (prove collettive per spettacoli/saggi): non richiedenti diretti, ma partecipanti
+  // da notificare/avvisare.
+  allieviIds:  _pjSala(r.allievi_ids),
+  docentiIds:  _pjSala(r.docenti_ids),
   createdAt:   r.created_at  || '',
   updatedAt:   r.updated_at  || '',
 });
 
 // ── Form prenotazione sala prove ──────────────────────────────────────────────
-const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
+// Notifica ogni allievo/docente selezionato dall'admin che uno slot di sala prove è stato
+// fissato per lui (prova collettiva/spettacolo) — indipendentemente dal fatto che sia lui
+// il richiedente. Best-effort: un errore di notifica non deve mai bloccare il salvataggio.
+const notificaPartecipantiSala = async (sb, allieviIds, docentiIds, students, docenti, data, oraInizio, oraFine, motivo) => {
+  try {
+    const messaggio = `È stata fissata una sala prove per te il ${data} dalle ${oraInizio} alle ${oraFine}${motivo ? ' — ' + motivo : ''}`;
+    const inserimenti = [];
+    (allieviIds||[]).forEach(id => {
+      const s = (students||[]).find(x => String(x.id) === String(id));
+      if (!s) return;
+      inserimenti.push({
+        destinatario_ruolo: 'allievo', destinatario_id: String(s.id),
+        tipo: 'sala_prove_convocazione', titolo: '🥁 Prova sala fissata per te',
+        messaggio, letto: false, created_at: new Date().toISOString(),
+        meta: JSON.stringify({ data, ora_inizio: oraInizio, ora_fine: oraFine, motivo: motivo||'' }),
+      });
+    });
+    (docentiIds||[]).forEach(id => {
+      const d = (docenti||[]).find(x => String(x.id) === String(id));
+      if (!d) return;
+      inserimenti.push({
+        destinatario_ruolo: 'docente', destinatario_id: String(d.id),
+        tipo: 'sala_prove_convocazione', titolo: '🥁 Prova sala fissata',
+        messaggio, letto: false, created_at: new Date().toISOString(),
+        meta: JSON.stringify({ data, ora_inizio: oraInizio, ora_fine: oraFine, motivo: motivo||'' }),
+      });
+    });
+    for (const n of inserimenti) {
+      await sb.from('notifiche').insert(n);
+    }
+  } catch(e) { console.warn('[FM] notifica partecipanti sala prove:', e?.message); }
+};
+
+const SalaProveForm = ({ initial, onSave, onClose, appUser, role, students, docenti }) => {
   const todaySP = yyyymmdd(new Date());
   const [spData,        setSpData]        = useState((initial && initial.data)        || todaySP);
   const [spOraInizio,   setSpOraInizio]   = useState((initial && initial.oraInizio)   || "09:00");
@@ -8385,6 +8424,8 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
   const [spMotivo,      setSpMotivo]      = useState((initial && initial.motivo)      || "");
   const [spTelefono,    setSpTelefono]    = useState((initial && initial.telefono)    || (appUser && appUser.phone) || "");
   const [spRichiedente, setSpRichiedente] = useState((initial && initial.richiedente) || (appUser && appUser.nome) || "");
+  const [spAllieviIds,  setSpAllieviIds]  = useState((initial && initial.allieviIds) || []);
+  const [spDocentiIds,  setSpDocentiIds]  = useState((initial && initial.docentiIds) || []);
   const [spSaving,      setSpSaving]      = useState(false);
   const [spErr,         setSpErr]         = useState("");
 
@@ -8415,15 +8456,49 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
         user_id: userId || null, richiedente, ruolo: ruoloR,
         data: spData, ora_inizio: spOraInizio, ora_fine: spOraFine,
         motivo: spMotivo || null, telefono: spTelefono || null, stato,
+        allievi_ids: spAllieviIds.length > 0 ? JSON.stringify(spAllieviIds) : null,
+        docenti_ids: spDocentiIds.length > 0 ? JSON.stringify(spDocentiIds) : null,
       };
       if (initial && initial.id) {
-        const { error } = await sb.from("prenotazioni_sala").update({...row, updated_at: new Date().toISOString()}).eq("id", initial.id);
-        if (error) throw error;
-        const updated = adaptPrenotazioneSala({ ...row, id: initial.id, created_at: initial.createdAt, updated_at: new Date().toISOString() });
+        // UPDATE: nessun rischio di duplicati anche ripetendo — può riprovare senza una colonna mancante.
+        let rowUpd = {...row, updated_at: new Date().toISOString()};
+        let updError;
+        for (let tentativi = 0; tentativi < 4; tentativi++) {
+          const r = await sb.from("prenotazioni_sala").update(rowUpd).eq("id", initial.id);
+          updError = r.error;
+          if (!updError) break;
+          const m = /Could not find the '([^']+)' column/.exec(updError.message||'');
+          if (m && Object.prototype.hasOwnProperty.call(rowUpd, m[1])) {
+            console.warn(`[FM] Colonna '${m[1]}' non presente su prenotazioni_sala — salvata senza questo campo.`);
+            const r2 = {...rowUpd}; delete r2[m[1]]; rowUpd = r2; continue;
+          }
+          break;
+        }
+        if (updError) throw updError;
+        const updated = adaptPrenotazioneSala({ ...rowUpd, id: initial.id, created_at: initial.createdAt });
         onSave(updated);
         gcalSyncSalaProve(updated);
+        if (spAllieviIds.length > 0 || spDocentiIds.length > 0) {
+          notificaPartecipantiSala(sb, spAllieviIds, spDocentiIds, students, docenti, spData, spOraInizio, spOraFine, spMotivo);
+        }
       } else {
-        const { data: ins, error } = await sb.from("prenotazioni_sala").insert(row).select().single();
+        // INSERT: un SOLO tentativo, mai ripetuto (evita di creare doppioni come già successo
+        // in passato con altre tabelle); se manca una colonna, un solo secondo insert senza quel
+        // campo, poi un update separato per recuperarlo — mai un secondo insert.
+        let ins, error;
+        {
+          const primo = await sb.from("prenotazioni_sala").insert(row).select().single();
+          if (!primo.error) { ins = primo.data; }
+          else {
+            const m = /Could not find the '([^']+)' column/.exec(primo.error.message||'');
+            if (m && Object.prototype.hasOwnProperty.call(row, m[1])) {
+              console.warn(`[FM] Colonna '${m[1]}' non presente su prenotazioni_sala — prenotazione creata senza questo campo.`);
+              const rowSenza = {...row}; delete rowSenza[m[1]];
+              const secondo = await sb.from("prenotazioni_sala").insert(rowSenza).select().single();
+              if (secondo.error) error = secondo.error; else ins = secondo.data;
+            } else error = primo.error;
+          }
+        }
         if (error) throw error;
         // Notifica per nuove prenotazioni non-admin
         if (ruoloR !== "admin") {
@@ -8467,6 +8542,11 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
               }
             }
           } catch(ne) { console.warn("[FM] notifica sala prove:", ne?.message); }
+        }
+        // Notifica gli allievi/docenti selezionati dall'admin (prova collettiva/spettacolo):
+        // devono sapere che questo slot è stato fissato per loro, anche se non sono i richiedenti.
+        if (spAllieviIds.length > 0 || spDocentiIds.length > 0) {
+          notificaPartecipantiSala(sb, spAllieviIds, spDocentiIds, students, docenti, spData, spOraInizio, spOraFine, spMotivo);
         }
         const inserted = adaptPrenotazioneSala(ins);
         onSave(inserted);
@@ -8526,6 +8606,43 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
             rows:3, placeholder:"Es. Prove per il saggio, band, ensemble…",
             style:{...inpS, resize:"vertical"} })
       )
+      /* Selezione allievi/docenti da convocare — solo admin. Serve per le prove collettive
+         di spettacoli: segna lo slot sul calendario di ciascun selezionato e li notifica,
+         anche se non sono loro i richiedenti della sala. */
+      , role === "admin" && React.createElement('div', { style:{background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,borderRadius:10,padding:"12px 14px"} }
+        , React.createElement('div', { style:{fontSize:12,fontWeight:600,color:C.purple,marginBottom:8,display:"flex",alignItems:"center",gap:6} }
+          , React.createElement(Ic,{n:"group",size:13,stroke:C.purple}), "Convoca allievi/docenti (opzionale)"
+        )
+        , React.createElement('div', { style:{fontSize:11,color:C.textMuted,marginBottom:10} }
+          , "Segna questo slot sul calendario di ciascun selezionato e invia una notifica — utile per prove collettive di spettacoli."
+        )
+        , React.createElement('div', { style:lblS }, "Allievi")
+        , React.createElement('div', { style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12,maxHeight:140,overflowY:"auto"} }
+          , (students||[]).map(s => {
+              const sel = spAllieviIds.map(String).includes(String(s.id));
+              return React.createElement('button', { key:s.id, type:"button",
+                onClick: ()=>setSpAllieviIds(prev => sel ? prev.filter(x=>String(x)!==String(s.id)) : [...prev, s.id]),
+                style:{padding:"5px 12px",borderRadius:20,border:`1px solid ${sel?C.purple:C.border}`,
+                  background:sel?C.purple:C.bg,color:sel?"#fff":C.textMuted,cursor:"pointer",fontSize:12,
+                  fontFamily:"'Open Sans',sans-serif"} }
+                , s.name||s.nome
+              );
+            })
+        )
+        , React.createElement('div', { style:lblS }, "Docenti")
+        , React.createElement('div', { style:{display:"flex",flexWrap:"wrap",gap:6,maxHeight:140,overflowY:"auto"} }
+          , (docenti||[]).map(d => {
+              const sel = spDocentiIds.map(String).includes(String(d.id));
+              return React.createElement('button', { key:d.id, type:"button",
+                onClick: ()=>setSpDocentiIds(prev => sel ? prev.filter(x=>String(x)!==String(d.id)) : [...prev, d.id]),
+                style:{padding:"5px 12px",borderRadius:20,border:`1px solid ${sel?C.purple:C.border}`,
+                  background:sel?C.purple:C.bg,color:sel?"#fff":C.textMuted,cursor:"pointer",fontSize:12,
+                  fontFamily:"'Open Sans',sans-serif"} }
+                , d.name||d.nome
+              );
+            })
+        )
+      )
       , spErr && React.createElement('div', { style:{color:C.red,fontSize:12,background:C.redBg,
           border:`1px solid ${C.redBorder}`,borderRadius:8,padding:"10px 14px"} }, spErr)
       , React.createElement('div', { style:{display:"flex",gap:10,justifyContent:"flex-end"} }
@@ -8539,12 +8656,16 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role }) => {
 };
 
 // ── Vista admin: gestione richieste sala prove ────────────────────────────────
-const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role, appUser, lessons }) => {
-  // Gli allievi non devono vedere le prenotazioni sala prove altrui — solo le proprie (se presenti).
+const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role, appUser, lessons, students, docenti }) => {
+  // Gli allievi non devono vedere le prenotazioni sala prove altrui — solo le proprie (se presenti)
+  // o quelle in cui l'admin li ha esplicitamente convocati (prova collettiva/spettacolo).
   // Admin e docente continuano a vedere tutte le prenotazioni (necessario per gestirle/per sapere
   // quando la sala è occupata), come già avviene nel calendario principale.
   const prenotazioni = role === 'allievo'
-    ? (_prenotazioniRaw||[]).filter(p => p.userId === (appUser && appUser.userId))
+    ? (_prenotazioniRaw||[]).filter(p =>
+        p.userId === (appUser && appUser.userId) ||
+        (appUser && appUser.allievoId && (p.allieviIds||[]).map(String).includes(String(appUser.allievoId)))
+      )
     : (_prenotazioniRaw||[]);
   const isMobile = useIsMobile();
   const [svPanel,      setSvPanel]      = useState("calendario");
@@ -8934,6 +9055,8 @@ const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role
             onClose:()=>setSvModal(null),
             appUser:appUser,
             role:role,
+            students:students,
+            docenti:docenti,
           })
       )
 
@@ -8945,6 +9068,8 @@ const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role
             onClose:()=>{setSvModal(null);setSvSelPren(null);},
             appUser:appUser,
             role:role,
+            students:students,
+            docenti:docenti,
           })
       )
     )
@@ -10537,6 +10662,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           const myUserId = _appUserCV && _appUserCV.userId;
           // Admin vede tutto
           if (role === "admin") return true;
+          // Convocazione esplicita: l'admin ha selezionato questo allievo/docente per una
+          // prova collettiva (spettacolo) — deve vedere lo slot sul proprio calendario anche
+          // se non è lui il richiedente della sala.
+          const convocatoAllievo = role === "allievo" && _cvAllievoId && (p.allieviIds||[]).map(String).includes(String(_cvAllievoId));
+          const convocatoDocente = role === "docente" && _cvDocenteId && (p.docentiIds||[]).map(String).includes(String(_cvDocenteId));
+          if (convocatoAllievo || convocatoDocente) return true;
           // Docente vede TUTTE le prenotazioni approvate (per sapere quando la sala è occupata)
           // e le proprie in attesa
           if (role === "docente") return p.stato === "approvata" || p.userId === myUserId;
@@ -10730,6 +10861,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               onDelete: (id) => setPrenotazioniSala(p => p.filter(x => x.id !== id)),
               role: role,
               appUser: _appUserCV,
+              students: propStudents,
+              docenti: propDocenti,
             })
 
           /* Toolbar */
@@ -11034,6 +11167,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                 onClose: closeModal,
                 appUser: _appUserCV,
                 role: role,
+                students: propStudents,
+                docenti: propDocenti,
               })
           )
         )

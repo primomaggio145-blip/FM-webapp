@@ -2818,7 +2818,7 @@ const BandWeekCalendar = ({ lessons, prenotazioni, gcalBusy }) => {
 
 // SALA PROVE — VISTA STANDALONE (ruolo band + admin dedicato)
 // ═══════════════════════════════════════════════════════════════════════════════
-const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
+const SalaProveStandaloneView = ({ appUser, userRuolo, lessons, students, docenti }) => {
   const [prenotazioni,   setPrenotazioni]   = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [showForm,       setShowForm]       = useState(false);
@@ -2901,12 +2901,13 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
   // Chi vede cosa nell'elenco prenotazioni sala prove:
   // - admin: tutte (deve poterle gestire/approvare)
   // - docente: tutte le approvate (per sapere quando la sala è occupata) + le proprie in attesa
-  // - allievo/band: SOLO le proprie — mai le prenotazioni altrui
+  // - allievo/band: SOLO le proprie, o quelle in cui l'admin li ha esplicitamente convocati
+  //   (prova collettiva/spettacolo) — mai le prenotazioni altrui
   const miePrenotazioni = isAdmin
     ? prenotazioni
     : userRuolo === 'docente'
-    ? prenotazioni.filter(p => p.stato === 'approvata' || p.userId === (appUser?.userId || appUser?.id))
-    : prenotazioni.filter(p => p.userId === (appUser?.userId || appUser?.id));
+    ? prenotazioni.filter(p => p.stato === 'approvata' || p.userId === (appUser?.userId || appUser?.id) || (appUser?.docenteId && (p.docentiIds||[]).map(String).includes(String(appUser.docenteId))))
+    : prenotazioni.filter(p => p.userId === (appUser?.userId || appUser?.id) || (appUser?.allievoId && (p.allieviIds||[]).map(String).includes(String(appUser.allievoId))));
 
   const MESI = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
   const GIORNI = ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
@@ -3022,7 +3023,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
         , '🎸 Compila la richiesta e attendi la conferma dell\'admin. Per domande usa il pulsante "Contatta admin".'
       )
 
-      , isBand && React.createElement(BandWeekCalendar, { lessons, prenotazioni, gcalBusy })
+      , isBand && React.createElement(BandWeekCalendar, { lessons, prenotazioni: miePrenotazioni, gcalBusy })
 
       /* Lista mie prenotazioni (band) */
       , isBand && React.createElement('div', { style: { marginTop: 20 } }
@@ -3090,6 +3091,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons }) => {
       , React.createElement(SalaProveForm, {
           initial: editTarget, role: userRuolo, appUser: appUser,
           onClose: ()=>{ setShowForm(false); setEditTarget(null); },
+          students: students, docenti: docenti,
           onSave: (nuova) => {
             setPrenotazioni(prev => editTarget ? prev.map(x=>x.id===nuova.id?nuova:x) : [...prev,nuova]);
             setShowForm(false); setEditTarget(null);
