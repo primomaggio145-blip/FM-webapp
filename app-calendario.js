@@ -10099,6 +10099,46 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         notifyRepertorioAggiunto(data.student, data.teacher, _titoliNuovi2);
       }
 
+      // ── 2b. Stessa propagazione di cui sopra, ma per le lezioni COLLETTIVE modificate ──
+      // Il blocco precedente propaga i brani al repertorio solo per le lezioni individuali
+      // (controlla data.student, singolare). Le lezioni collettive usano data.students
+      // (un array): senza questo blocco, un brano aggiunto MODIFICANDO una lezione collettiva
+      // già esistente restava collegato alla lezione ma non compariva mai nel repertorio
+      // personale degli allievi del gruppo (funzionava solo alla CREAZIONE, in handleAddCollective).
+      if (dataNormFull.repertorioIds && dataNormFull.repertorioIds.length > 0 && mergedStudents && mergedStudents.length > 0) {
+        const idsAllieviColl = mergedStudents.map(s => s.id);
+        let _titoliNuoviColl = [];
+        propSetStudents && propSetStudents(allStudents =>
+          allStudents.map(stu => {
+            if (!idsAllieviColl.includes(stu.id)) return stu;
+            const existing = (stu.repertorio || []).map(r => r.id);
+            const toAdd = dataNormFull.repertorioIds
+              .filter(id => !existing.includes(id))
+              .map(id => {
+                const fresh = dataNormFull._newBrani && dataNormFull._newBrani[id];
+                const b = fresh || (window.__repertorio__ || []).find(r => r.id === id);
+                if (!b) return null;
+                if (!_titoliNuoviColl.includes(b.title||b.titolo||'')) _titoliNuoviColl.push(b.title||b.titolo||'');
+                return {
+                  id,
+                  titolo:      b.title      || b.titolo      || '',
+                  compositore: b.composer   || b.compositore || '',
+                  periodo:     b.period     || b.periodo     || '',
+                  tonalita:    b.tonality   || b.tonalita    || '',
+                  stato:       'in studio',
+                  note:        ''
+                };
+              })
+              .filter(Boolean);
+            if (toAdd.length === 0) return stu;
+            return { ...stu, repertorio: [...(stu.repertorio || []), ...toAdd] };
+          })
+        );
+        if (_titoliNuoviColl.length > 0) {
+          notifyRepertorioAggiunto(mergedStudents.map(s => s.name).filter(Boolean), dataNormFull.teacher, _titoliNuoviColl.filter(Boolean));
+        }
+      }
+
       // ── Crea lezione successiva se ricorrente e viene segnata presenza ──
       const originalLesson = (lessons||[]).find(l => l.id === data.id);
       const attendanceNow = data.attendance && data.attendance !== '';
