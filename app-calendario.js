@@ -4722,9 +4722,11 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
     (initial?.repertorioIds||[]).forEach(id => {
       const b = repertorio.find(r=>r.id===id);
       if (!b) return;
-      // Prendi lo stato della prima versione come default
-      const v0 = (b.versioni||[])[0];
-      init[id] = { versioneIdx: 0, stato: v0?.stato||'in_studio' };
+      // Se la lezione ha già una versione salvata per questo brano, riparti da quella
+      const versioneSalvata = (initial?.repertorioVersioni||{})[id];
+      const vIdx = versioneSalvata != null ? versioneSalvata : 0;
+      const vSel = (b.versioni||[])[vIdx];
+      init[id] = { versioneIdx: vIdx, stato: vSel?.stato||'in_studio' };
     });
     return init;
   });
@@ -5549,7 +5551,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                 const id = e.target.value;
                 if (!id) return;
                 const ids = lesson.repertorioIds || [];
-                if (!ids.includes(id)) onUpdateLesson({ id: lesson.id, repertorioIds: [...ids, id] });
+                if (!ids.includes(id)) onUpdateLesson({ ...lesson, repertorioIds: [...ids, id] });
               },
               style: {background:C.bg, border:`1px solid ${C.border}`, borderRadius:8,
                 color:C.textMuted, fontSize:13, padding:"10px 14px", width:"100%",
@@ -5570,15 +5572,26 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                 const typeHex = (b.tipo||b.type)==="collettivo"?C.purple:C.gold;
                 const typeBg  = (b.tipo||b.type)==="collettivo"?C.purpleBg:"#e8edf5";
                 const typeBd  = (b.tipo||b.type)==="collettivo"?C.purpleBorder:C.goldDim;
-                // Appiattisce spartiti/allegati di tutte le versioni del brano (stesso
-                // criterio già usato nella vista Repertorio) — un brano può avere più
-                // versioni (es. tonalità diverse), ciascuna con i propri file.
+                const versioni = b.versioni||[];
+                const versioneSel = (lesson.repertorioVersioni||{})[id];
+                // Se è stata scelta una versione specifica per questa lezione, mostra solo
+                // quella (tonalità + suoi spartiti/allegati); altrimenti (nessuna scelta
+                // fatta, es. brano appena aggiunto o con una sola versione) mostra tutte
+                // le versioni appiattite insieme, come prima.
                 const _file = [];
-                (b.versioni||[]).forEach(v => {
+                let tonalitaMostrata = null;
+                if (versioneSel != null && versioni[versioneSel]) {
+                  const v = versioni[versioneSel];
                   (v.spartiti||[]).forEach(fi => _file.push(fi));
                   (v.allegati||[]).forEach(fi => _file.push(fi));
-                });
-                const tonalitaPrima = b.versioni && b.versioni[0] && b.versioni[0].tonalita;
+                  tonalitaMostrata = v.tonalita;
+                } else {
+                  versioni.forEach(v => {
+                    (v.spartiti||[]).forEach(fi => _file.push(fi));
+                    (v.allegati||[]).forEach(fi => _file.push(fi));
+                  });
+                  tonalitaMostrata = versioni[0] && versioni[0].tonalita;
+                }
                 return (
                   React.createElement('div', { key: id, style: {padding:"10px 12px",
                     background:typeBg, border:`1px solid ${typeBd}`, borderRadius:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4622}}
@@ -5586,12 +5599,29 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                       , React.createElement(Ic, { n: "note", size: 14, stroke: typeHex, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4624}})
                       , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4625}}
                         , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4626}}, b.title)
-                        , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4627}}, b.composer, tonalitaPrima ? ` · ${tonalitaPrima}` : "")
+                        , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4627}}, b.composer, tonalitaMostrata ? ` · ${tonalitaMostrata}` : "")
                       )
-                      , canEdit && React.createElement('button', { onClick: () => onUpdateLesson({ id: lesson.id, repertorioIds: (lesson.repertorioIds||[]).filter(i=>i!==id) }),
+                      , canEdit && React.createElement('button', { onClick: () => onUpdateLesson({ ...lesson, repertorioIds: (lesson.repertorioIds||[]).filter(i=>i!==id) }),
                           style: {background:"none", border:"none", cursor:"pointer", padding:4, display:"flex", borderRadius:4, flexShrink:0, color:C.textMuted}}
                           , React.createElement(Ic, { n: "x", size: 14, stroke: "currentColor" })
                         )
+                    )
+                    , canEdit && versioni.length > 1 && (
+                      React.createElement('select', {
+                        value: versioneSel != null ? versioneSel : "",
+                        onChange: e => {
+                          const vi = e.target.value === "" ? null : parseInt(e.target.value);
+                          const rv = { ...(lesson.repertorioVersioni||{}) };
+                          if (vi == null) delete rv[id]; else rv[id] = vi;
+                          onUpdateLesson({ ...lesson, repertorioVersioni: rv });
+                        },
+                        style: {marginTop:8, fontSize:11, padding:"5px 8px", borderRadius:6,
+                          border:`1px solid ${typeBd}`, background:C.surface, color:C.text, width:"100%"} }
+                        , React.createElement('option', { value: "" }, "Tutte le versioni")
+                        , versioni.map((v,vi) => React.createElement('option', { key: vi, value: vi }
+                            , [v.strumento||b.strumento, v.tonalita].filter(Boolean).join(" - ") || `Versione ${vi+1}`
+                          ))
+                      )
                     )
                     , _file.length > 0 && React.createElement('div', { style: {display:"flex", flexWrap:"wrap", gap:6, marginTop:8, paddingTop:8, borderTop:`1px solid ${typeBd}`} }
                       , _file.map((fi,fii) => React.createElement('a', { key: fi.id||fii, href: fi.fileUrl, target: "_blank", rel: "noopener noreferrer",
@@ -5628,7 +5658,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                 const id = e.target.value;
                 if (!id) return;
                 const ids = lesson.manualiIds || [];
-                if (!ids.includes(id)) onUpdateLesson({ id: lesson.id, manualiIds: [...ids, id] });
+                if (!ids.includes(id)) onUpdateLesson({ ...lesson, manualiIds: [...ids, id] });
               },
               style: {background:C.bg, border:`1px solid ${C.border}`, borderRadius:8,
                 color:C.textMuted, fontSize:13, padding:"10px 14px", width:"100%",
@@ -5656,7 +5686,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                       , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:C.teal} }, m.titolo)
                       , React.createElement('div', { style: {fontSize:11, color:C.textMuted} }, m.autore, m.categoria ? ` · ${m.categoria}` : "")
                     )
-                    , canEdit && React.createElement('button', { onClick: () => onUpdateLesson({ id: lesson.id, manualiIds: (lesson.manualiIds||[]).filter(i=>i!==id) }),
+                    , canEdit && React.createElement('button', { onClick: () => onUpdateLesson({ ...lesson, manualiIds: (lesson.manualiIds||[]).filter(i=>i!==id) }),
                         style: {background:"none", border:"none", cursor:"pointer", padding:4, display:"flex", borderRadius:4, flexShrink:0, color:C.textMuted}}
                         , React.createElement(Ic, { n: "x", size: 14, stroke: "currentColor" })
                       )
@@ -9864,6 +9894,16 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       const lessonId = uid();
       let dataFinal = { ...rawData, id: lessonId };
 
+      // La scelta di versione per ciascun brano (fatta nel form tramite il selettore
+      // "versione") va salvata sulla lezione stessa, non solo usata per aggiornare lo
+      // stato generale del brano — altrimenti la lezione non saprebbe quale versione
+      // mostrare (torna a mostrare tutte le versioni appiattite).
+      if (dataFinal._statiBrani && Object.keys(dataFinal._statiBrani).length > 0) {
+        const rv = {};
+        Object.entries(dataFinal._statiBrani).forEach(([branoId, s]) => { rv[branoId] = s.versioneIdx || 0; });
+        dataFinal.repertorioVersioni = rv;
+      }
+
       // Mese/anno di competenza per il pacchetto/soglia mensile: per una lezione appena creata
       // coincide con la propria data (non è ancora mai stata spostata). Resterà fisso da qui in
       // avanti anche se in futuro la lezione viene spostata con "Cambio ora" oltre il confine
@@ -10126,6 +10166,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
       let dataNormFull = { ...dataNorm, students: mergedStudents, courseId: mergedCourseId, courseName: mergedCourseName };
 
+      if (data._statiBrani && Object.keys(data._statiBrani).length > 0) {
+        const rv = { ...(existingLesson && existingLesson.repertorioVersioni) };
+        Object.entries(data._statiBrani).forEach(([branoId, s]) => { rv[branoId] = s.versioneIdx || 0; });
+        dataNormFull.repertorioVersioni = rv;
+      }
+
       // Stesso fix di handleAdd: il form salva l'allievo come nome, mai come ID —
       // risolvilo qui prima di scrivere su Supabase (vedi campo studente_id sotto).
       // Ricalcolato sempre dal nome corrente per evitare un ID vecchio disallineato
@@ -10206,6 +10252,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           recupero_scadenza:scadNorm,
           repertorio_ids:   dataNormFull.repertorioIds && dataNormFull.repertorioIds.length > 0
                               ? JSON.stringify(dataNormFull.repertorioIds) : null,
+          repertorio_versioni: dataNormFull.repertorioVersioni && Object.keys(dataNormFull.repertorioVersioni).length > 0
+                              ? JSON.stringify(dataNormFull.repertorioVersioni) : null,
           corso_id:         mergedCourseId,
           corso_nome:       mergedCourseName,
           students:         mergedStudents.length > 0 ? JSON.stringify(mergedStudents) : null,
@@ -11253,6 +11301,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   notes:          updated.notes        || null,
                   repertorio_ids: updated.repertorioIds && updated.repertorioIds.length > 0
                                     ? JSON.stringify(updated.repertorioIds) : null,
+                  repertorio_versioni: updated.repertorioVersioni && Object.keys(updated.repertorioVersioni).length > 0
+                                    ? JSON.stringify(updated.repertorioVersioni) : null,
                   manuali_ids:    updated.manualiIds && updated.manualiIds.length > 0
                                     ? JSON.stringify(updated.manualiIds) : null,
                   students:       updated.students && updated.students.length > 0

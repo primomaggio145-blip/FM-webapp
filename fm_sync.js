@@ -124,6 +124,10 @@
         if (!r.repertorio_ids) return [];
         try { return JSON.parse(r.repertorio_ids); } catch(e) { return []; }
       })(),
+      repertorioVersioni: (() => {
+        if (!r.repertorio_versioni) return {};
+        try { return JSON.parse(r.repertorio_versioni); } catch(e) { return {}; }
+      })(),
       // Campi collettive
       courseId:   r.corso_id   || null,
       courseName: r.corso_nome || null,
@@ -336,6 +340,9 @@
         exercises: l.exercises || null,
         repertorio_ids: l.repertorioIds && l.repertorioIds.length > 0
           ? JSON.stringify(l.repertorioIds)
+          : null,
+        repertorio_versioni: l.repertorioVersioni && Object.keys(l.repertorioVersioni).length > 0
+          ? JSON.stringify(l.repertorioVersioni)
           : null,
         manuali_ids: l.manualiIds && l.manualiIds.length > 0
           ? JSON.stringify(l.manualiIds)
