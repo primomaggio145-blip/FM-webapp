@@ -231,29 +231,6 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   };
   const lezioniD = (d) => lessons.filter(l => l.date && matchTeacher(d, l.teacher) && l.attendance !== 'recuperata');
 
-  // Lezioni collettive frequentate dagli allievi individuali del docente selezionato, ANCHE SE
-  // condotte da un altro docente — per dare visibilità sul lavoro fatto nelle collettive
-  // (prima non compariva mai, perché la tab "Lezioni" filtra solo per docente registrato
-  // sulla lezione stessa). Una lezione può comparire più volte se più "miei" allievi vi
-  // hanno partecipato: ogni riga elenca tutti quelli coinvolti.
-  // Dichiarato qui (sempre, incondizionatamente) e non più in basso dopo l'eventuale return
-  // della vista lista, per rispettare le Rules of Hooks di React (causava il crash del
-  // pannello dettaglio docente).
-  const collettiveConMieiAllievi = React.useMemo(() => {
-    if (!selected) return [];
-    const mieiAllievi = allievi(selected);
-    const mappa = new Map(); // id lezione -> { lezione, mieiAllievi:[] }
-    (lessons||[]).forEach(l => {
-      if (!isColl(l)) return;
-      const mieiInLezione = mieiAllievi.filter(s =>
-        studentInLesson(l, s.name, s.id) && studAttendance(l, s.name, s.id) !== 'recuperata'
-      );
-      if (mieiInLezione.length === 0) return;
-      mappa.set(l.id, { lezione: l, mieiAllievi: mieiInLezione });
-    });
-    return [...mappa.values()].sort((a,b) => (b.lezione.date||'').localeCompare(a.lezione.date||'') || (b.lezione.hour||'').localeCompare(a.lezione.hour||''));
-  }, [lessons, selected]);
-
   // Calcoli mensili basati su lezioni effettive
   const nowDate   = new Date(today);
   const curYear   = nowDate.getFullYear();
@@ -351,6 +328,30 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     showDisp: false,
     newSlot: { giorno:"lunedi", oraInizio:"15:00", oraFine:"18:00" },
   });
+
+  // Lezioni collettive frequentate dagli allievi individuali del docente selezionato, ANCHE SE
+  // condotte da un altro docente — per dare visibilità sul lavoro fatto nelle collettive
+  // (prima non compariva mai, perché la tab "Lezioni" filtra solo per docente registrato
+  // sulla lezione stessa). Una lezione può comparire più volte se più "miei" allievi vi
+  // hanno partecipato: ogni riga elenca tutti quelli coinvolti.
+  // Dichiarato qui — sempre, incondizionatamente, e DOPO tutte le useState (in particolare
+  // annoSelDoc, che allievi() legge internamente: dichiararlo prima causava un
+  // "Cannot access before initialization" ogni volta che si apriva un docente) — per
+  // rispettare le Rules of Hooks di React senza incorrere in un riferimento prematuro.
+  const collettiveConMieiAllievi = React.useMemo(() => {
+    if (!selected) return [];
+    const mieiAllievi = allievi(selected);
+    const mappa = new Map(); // id lezione -> { lezione, mieiAllievi:[] }
+    (lessons||[]).forEach(l => {
+      if (!isColl(l)) return;
+      const mieiInLezione = mieiAllievi.filter(s =>
+        studentInLesson(l, s.name, s.id) && studAttendance(l, s.name, s.id) !== 'recuperata'
+      );
+      if (mieiInLezione.length === 0) return;
+      mappa.set(l.id, { lezione: l, mieiAllievi: mieiInLezione });
+    });
+    return [...mappa.values()].sort((a,b) => (b.lezione.date||'').localeCompare(a.lezione.date||'') || (b.lezione.hour||'').localeCompare(a.lezione.hour||''));
+  }, [lessons, selected, annoSelDoc]);
 
   // FormModal inline JSX (evita re-mount su ogni keystroke)
   const formModalJSX = (modal && modal !== "del") ? (
