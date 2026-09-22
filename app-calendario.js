@@ -2541,7 +2541,16 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
   const lezioniGiaContate = new Set();
   (lessons||[]).forEach(l => {
     if (!l.date) return;
-    const [ly,lm] = l.date.split('-').map(Number);
+    // Mese/anno di competenza: usa pacchetto_mese/anno se impostato (lezione spostata con
+    // "Cambio ora" oltre il confine del mese resta di competenza del mese originale — es.
+    // martedì 29/09 spostato a giovedì 01/10 conta ancora per settembre), altrimenti il
+    // mese/anno della sua data (comportamento invariato per le lezioni mai spostate).
+    let lm, ly;
+    if (l.pacchettoMese != null && l.pacchettoAnno != null) {
+      lm = l.pacchettoMese; ly = l.pacchettoAnno;
+    } else {
+      [ly, lm] = l.date.split('-').map(Number);
+    }
     if (ly!==anno||lm!==mese) return;
     if (l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
     const lid = l.id!=null ? String(l.id) : `${l.date}|${l.hour}|${l.student||l.studentId||l.courseId||''}`;
@@ -2598,7 +2607,6 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
   const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
 
-  const [reportOpen, setReportOpen] = useState(false);
   const [reportMese, setReportMese] = useState(meseCurr);
   const [reportAnno, setReportAnno] = useState(annoCurr);
   const [reportFiltro, setReportFiltro] = useState('tutti');
@@ -2613,18 +2621,16 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
 
   return React.createElement('div', {style:{marginBottom:20}}
     , React.createElement('div', {
-        onClick:()=>setReportOpen(p=>!p),
-        style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:reportOpen?'12px 12px 0 0':12,
-          padding:'12px 18px',cursor:'pointer',display:'flex',justifyContent:'space-between',alignItems:'center'}}
+        style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:'12px 12px 0 0',
+          padding:'12px 18px',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}
       , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10}}
         , React.createElement(Ic,{n:'chart',size:15,stroke:C.gold})
         , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}}, `Report lezioni individuali · ${MESI_FULL[reportMese-1]} ${reportAnno}`)
         , superano.length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px solid ${C.orangeBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${superano.length} oltre`)
         , sottosoglia.length>0&&React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${sottosoglia.length} sotto`)
       )
-      , React.createElement(Ic,{n:reportOpen?'chevron-up':'chevron-down',size:16,stroke:C.textMuted})
     )
-    , reportOpen && React.createElement('div',{style:{background:C.surface,border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 12px 12px'}}
+    , React.createElement('div',{style:{background:C.surface,border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 12px 12px'}}
       , React.createElement('div',{style:{padding:'12px 18px',borderBottom:`1px solid ${C.border}`,display:'flex',gap:10,flexWrap:'wrap',alignItems:'center'}}
         , React.createElement('select',{value:reportMese,onChange:e=>setReportMese(Number(e.target.value)),
             style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
@@ -3445,9 +3451,9 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
     React.createElement(React.Fragment, null
       , React.createElement('div', { style: {maxWidth:1200,margin:"0 auto",padding:"clamp(12px, 3vw, 32px)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3882}}
 
-        /* ── Tab: Elenco allievi / Report pagamenti (solo admin) ── */
-        , (view==="list"||view==="report") && _ruoloAV==="admin" && React.createElement('div', {style:{display:'flex',gap:6,marginBottom:16,borderBottom:`1px solid ${C.border}`}}
-          , [{k:'list',lbl:'Elenco allievi'},{k:'report',lbl:'Report pagamenti'}].map(t=>(
+        /* ── Tab: Elenco allievi / Report pagamenti / Report lezioni (solo admin) ── */
+        , (view==="list"||view==="report"||view==="lezioni") && _ruoloAV==="admin" && React.createElement('div', {style:{display:'flex',gap:6,marginBottom:16,borderBottom:`1px solid ${C.border}`}}
+          , [{k:'list',lbl:'Elenco allievi'},{k:'report',lbl:'Report pagamenti'},{k:'lezioni',lbl:'Report lezioni'}].map(t=>(
             React.createElement('button', {key:t.k, onClick:()=>setView(t.k),
               style:{padding:'9px 16px',border:'none',borderBottom:`2px solid ${view===t.k?C.gold:'transparent'}`,
                 background:'transparent',color:view===t.k?C.gold:C.textMuted,cursor:'pointer',
@@ -3461,8 +3467,8 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             students: studentsAnno, entrate, anniDisp, annoSel, setAnnoSel,
           })
 
-        /* ── Report Lezioni Mensile (solo admin, solo in vista lista) ── */
-        , view==="list" && _ruoloAV==="admin" && React.createElement(ReportLezioniMensile, {
+        /* ── Report Lezioni Mensile (solo admin, tab dedicata) ── */
+        , view==="lezioni" && _ruoloAV==="admin" && React.createElement(ReportLezioniMensile, {
             lessons, students, config: propConfig, anniScolastici: propAnniScolasticiAV,
             onSelectAllievo: (s) => { setSelected(s); setView('detail'); },
           })
@@ -3891,49 +3897,82 @@ const GAP_PER_RICORRENZA       = { "Ogni settimana": 7, "Ogni 2 settimane": 14, 
 // volta (15, 8, 1 settembre) senza sapere che l'allievo non era ancora iscritto porta a un
 // "ordinale" di 4 già alla prima lezione — scambiandola per l'ultima del pacchetto mensile e
 // bloccando la creazione automatica della vera lezione successiva (29 settembre) come "extra".
-function calcolaInfoExtra(lesson, dataMinima) {
+// Calcola se questa lezione è "al limite del pacchetto mensile" e se la prossima occorrenza
+// regolare (se creata) cadrebbe già nel mese successivo di competenza — in tal caso NON è
+// extra; se cadrebbe ancora nello stesso mese di competenza, è "extra" e va fatta decidere
+// all'admin invece di crearla automaticamente.
+//
+// `opts.lessons` (tutte le lezioni esistenti) è ora OBBLIGATORIO per un conteggio corretto:
+// l'ordinale (posizione di questa lezione nel pacchetto del mese) si conta sui RECORD REALI
+// dello stesso allievo+corso che appartengono allo stesso mese di competenza (pacchetto_mese/
+// anno, o mese/anno della data se non impostato) — mai più "alla cieca" sommando `gap` giorni
+// alla data, il che assumeva erroneamente che esistesse una lezione reale su ogni data
+// ipotetica. Questo risolve due casi distinti:
+//  1) Allievo appena iscritto (es. 22 settembre, martedì): contare all'indietro di 7 giorni
+//     alla volta senza sapere che non era ancora iscritto portava a un ordinale gonfiato già
+//     alla prima lezione. Ora si contano solo le lezioni REALI esistenti.
+//  2) Lezione spostata con "Cambio ora" oltre il confine del mese (es. martedì 29/09 spostato
+//     a giovedì 01/10): quella lezione mantiene pacchetto_mese=settembre, quindi NON viene mai
+//     conteggiata come una vera lezione di ottobre — il pacchetto di ottobre resta a 4 lezioni
+//     reali (non 5), niente falso "extra" sul 29/10.
+//
+// `opts.dataMinima` (tipicamente la data d'iscrizione dell'allievo) resta un filtro aggiuntivo
+// di sicurezza: nessuna lezione precedente a questa data viene mai conteggiata nell'ordinale.
+function calcolaInfoExtra(lesson, opts) {
   const recurrence = _optionalChain([lesson, 'optionalAccess', _47 => _47.recurrence]);
   const N = PACCHETTO_PER_RICORRENZA[recurrence];
   if (!N || !lesson.date) return { isSoglia: false, haExtraPotenziale: false, N: null };
-  const d = new Date(lesson.date + "T00:00:00");
-  const month = d.getMonth(), year = d.getFullYear();
-  const minDate = dataMinima ? new Date(dataMinima) : null;
 
+  const allLessons = (opts && opts.lessons) || [];
+  const dataMinima = opts && opts.dataMinima ? new Date(opts.dataMinima) : null;
+
+  const d = new Date(lesson.date + "T00:00:00");
+  // Mese/anno di competenza di QUESTA lezione: pacchetto_mese/anno se impostato, altrimenti
+  // il mese/anno della sua data (comportamento invariato per lezioni mai spostate).
+  const pMese = lesson.pacchettoMese != null ? lesson.pacchettoMese : (d.getMonth() + 1);
+  const pAnno = lesson.pacchettoAnno != null ? lesson.pacchettoAnno : d.getFullYear();
+
+  // Tutte le lezioni REALI dello stesso allievo e dello stesso corso (individuale: stesso
+  // strumento; collettiva: stesso corso_id) che appartengono allo stesso mese di competenza.
+  const stessoCorso = allLessons.filter(l => {
+    if (!l.date) return false;
+    if (isColl(lesson)) {
+      if (!isColl(l)) return false;
+      if (String(l.courseId||'') !== String(lesson.courseId||'')) return false;
+    } else {
+      if (isColl(l)) return false;
+      if ((l.instrument||l.strumento||'') !== (lesson.instrument||lesson.strumento||'')) return false;
+      const stessoAllievo = lesson.studentId != null
+        ? String(l.studentId) === String(lesson.studentId)
+        : (l.student||'').toLowerCase().trim() === (lesson.student||'').toLowerCase().trim();
+      if (!stessoAllievo) return false;
+    }
+    const ld = new Date(l.date + "T00:00:00");
+    const lMese = l.pacchettoMese != null ? l.pacchettoMese : (ld.getMonth() + 1);
+    const lAnno = l.pacchettoAnno != null ? l.pacchettoAnno : ld.getFullYear();
+    if (lMese !== pMese || lAnno !== pAnno) return false;
+    if (dataMinima && ld < dataMinima) return false; // non risalire oltre l'iscrizione dell'allievo
+    return true;
+  });
+
+  const ordinale = stessoCorso.filter(l => l.date <= lesson.date).length;
+  const isSoglia = ordinale === N;
+
+  // "Ci sarebbe già un'occorrenza successiva nello stesso mese di competenza?" — qui resta un
+  // calcolo ipotetico (la prossima lezione non esiste ancora: stiamo decidendo se crearla),
+  // basato sulla vera cadenza (gap) di questa lezione. Una nuova lezione MAI SPOSTATA prende
+  // come mese di competenza il mese della propria data — quindi confrontare la data ipotetica
+  // della prossima occorrenza con il mese di competenza di QUESTA lezione è corretto.
+  let next;
   if (recurrence === "2 volte a settimana") {
     const gapAvanti = lesson.gapGiorni === 4 ? 4 : 3; // default 3 se non impostato
-    let ordinale = 1;
-    let cursor = new Date(d);
-    let cursorForwardGap = gapAvanti;
-    while (true) {
-      const gapIndietro = 7 - cursorForwardGap;
-      const prev = new Date(cursor); prev.setDate(prev.getDate() - gapIndietro);
-      if (prev.getMonth() !== month || prev.getFullYear() !== year) break;
-      if (minDate && prev < minDate) break; // non risalire oltre l'iscrizione dell'allievo
-      ordinale++;
-      cursor = prev;
-      cursorForwardGap = gapIndietro;
-    }
-    const next = new Date(d); next.setDate(next.getDate() + gapAvanti);
-    const haOccorrenzaSuccessivaStessoMese = next.getMonth() === month && next.getFullYear() === year;
-    const isSoglia = ordinale === N;
-    const haExtraPotenziale = isSoglia && haOccorrenzaSuccessivaStessoMese;
-    return { isSoglia, haExtraPotenziale, N };
+    next = new Date(d); next.setDate(next.getDate() + gapAvanti);
+  } else {
+    const gap = GAP_PER_RICORRENZA[recurrence];
+    if (!gap) return { isSoglia, haExtraPotenziale: false, N };
+    next = new Date(d); next.setDate(next.getDate() + gap);
   }
-
-  const gap = GAP_PER_RICORRENZA[recurrence];
-  if (!gap) return { isSoglia: false, haExtraPotenziale: false, N: null };
-  let ordinale = 1;
-  let cursor = new Date(d);
-  while (true) {
-    const prev = new Date(cursor); prev.setDate(prev.getDate() - gap);
-    if (prev.getMonth() !== month || prev.getFullYear() !== year) break;
-    if (minDate && prev < minDate) break; // non risalire oltre l'iscrizione dell'allievo
-    ordinale++;
-    cursor = prev;
-  }
-  const next = new Date(d); next.setDate(next.getDate() + gap);
-  const haOccorrenzaSuccessivaStessoMese = next.getMonth() === month && next.getFullYear() === year;
-  const isSoglia = ordinale === N;
+  const haOccorrenzaSuccessivaStessoMese = (next.getMonth() + 1) === pMese && next.getFullYear() === pAnno;
   const haExtraPotenziale = isSoglia && haOccorrenzaSuccessivaStessoMese;
   return { isSoglia, haExtraPotenziale, N };
 }
@@ -4193,10 +4232,24 @@ const safeInsertRecurringLesson = async (lesson, setLessons) => {
     contact_name:     lesson.contactName || null,
     phone:            lesson.phone       || null,
     nuovo_iscritto:   lesson.nuovoIscritto || false,
+    pacchetto_mese:   lesson.pacchettoMese != null ? lesson.pacchettoMese : null,
+    pacchetto_anno:   lesson.pacchettoAnno != null ? lesson.pacchettoAnno : null,
   };
 
   try {
-    const { error } = await sb.from('lezioni').insert(row);
+    let { error } = await sb.from('lezioni').insert(row);
+    if (error) {
+      // Tollera una colonna non ancora esistente (es. pacchetto_mese/anno prima della migrazione
+      // SQL): un solo retry senza quel campo, mai ripetuto oltre — questa è la creazione della
+      // PROSSIMA lezione ricorrente, un fallimento silenzioso qui farebbe sparire l'appuntamento
+      // al primo refresh pur restando visibile in questa sessione.
+      const m = /Could not find the '([^']+)' column/.exec(error.message||'');
+      if (m && Object.prototype.hasOwnProperty.call(row, m[1])) {
+        console.warn(`[FM] Colonna '${m[1]}' non presente su lezioni — lezione ricorrente creata senza questo campo. Aggiungila al DB con ALTER TABLE.`);
+        const rowSenzaColonna = {...row}; delete rowSenzaColonna[m[1]];
+        ({ error } = await sb.from('lezioni').insert(rowSenzaColonna));
+      }
+    }
     if (error) {
       if (error.code === '23505' || error.message?.includes('conflict') || error.message?.includes('duplicate')) {
         console.log('[FM] safeInsert: 409 ignorato (duplicato già gestito)', guardKey);
@@ -9811,6 +9864,16 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       const lessonId = uid();
       let dataFinal = { ...rawData, id: lessonId };
 
+      // Mese/anno di competenza per il pacchetto/soglia mensile: per una lezione appena creata
+      // coincide con la propria data (non è ancora mai stata spostata). Resterà fisso da qui in
+      // avanti anche se in futuro la lezione viene spostata con "Cambio ora" oltre il confine
+      // del mese — vedi commento in calcolaInfoExtra.
+      if (dataFinal.date && dataFinal.pacchettoMese == null) {
+        const _dIniz = new Date(dataFinal.date + "T00:00:00");
+        dataFinal.pacchettoMese = _dIniz.getMonth() + 1;
+        dataFinal.pacchettoAnno = _dIniz.getFullYear();
+      }
+
       // Il form lezione salva l'allievo come nome (select a testo), mai come ID —
       // risolvi qui l'ID reale dal record studente corrispondente, altrimenti la
       // lezione resta orfana e l'allievo collegato via profilo non la vedrà mai.
@@ -10349,7 +10412,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             (dataNormFull.studentId!=null && String(st.id)===String(dataNormFull.studentId)) ||
             (dataNormFull.student && (st.name||st.nome||'').toLowerCase().trim()===dataNormFull.student.toLowerCase().trim())
           );
-          const infoExtra = calcolaInfoExtra(dataNormFull, studenteEI && studenteEI.enrollDate);
+          const infoExtra = calcolaInfoExtra(dataNormFull, { lessons, dataMinima: studenteEI && studenteEI.enrollDate });
           if (infoExtra.haExtraPotenziale && !dataNormFull.extraDecisione) {
             setLessons(prev => prev.map(l => l.id === dataNormFull.id
               ? { ...l, extraDaDecidere: true, extraDataPotenziale: nextDate }
@@ -10371,6 +10434,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               : stessaSerieIndividuale(l, dataNormFull))
           );
           if (!alreadyInState) {
+            const _dNext = new Date(nextDate + "T00:00:00");
             const nextLesson = {
               ...dataNormFull,
               id:               uid(),
@@ -10383,6 +10447,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               recuperoScadenza: null,
               tipo:             dataNormFull.tipo === 'recupero' ? 'individuale' : (dataNormFull.tipo || 'individuale'),
               gapGiorni:        prossimoGapGiorni(dataNormFull),
+              // Mese/anno di competenza = il mese della sua data PREVISTA (nextDate), fissato
+              // qui e mai più ricalcolato — anche se in futuro questa stessa lezione viene
+              // spostata con "Cambio ora" oltre il confine del mese (vedi calcolaInfoExtra).
+              pacchettoMese:    _dNext.getMonth() + 1,
+              pacchettoAnno:    _dNext.getFullYear(),
             };
             // Aggiorna React state
             setLessons(prev => {
@@ -10507,7 +10576,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             (lesson.studentId!=null && String(st.id)===String(lesson.studentId)) ||
             (lesson.student && (st.name||st.nome||'').toLowerCase().trim()===lesson.student.toLowerCase().trim())
           );
-          const infoExtra = calcolaInfoExtra(lesson, studenteEI2 && studenteEI2.enrollDate);
+          const infoExtra = calcolaInfoExtra(lesson, { lessons, dataMinima: studenteEI2 && studenteEI2.enrollDate });
           if (!isCambioOra && infoExtra.haExtraPotenziale && !lesson.extraDecisione) {
             const sbExtra = window.supabaseClient;
             if (sbExtra) {

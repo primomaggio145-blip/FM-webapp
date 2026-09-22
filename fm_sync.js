@@ -132,6 +132,9 @@
         if (Array.isArray(r.students)) return r.students;
         try { return JSON.parse(r.students); } catch(e) { return []; }
       })(),
+      // Mese/anno di competenza per il pacchetto/soglia mensile — vedi commento in toDB.lezioni()
+      pacchettoMese: r.pacchetto_mese != null ? Number(r.pacchetto_mese) : null,
+      pacchettoAnno: r.pacchetto_anno != null ? Number(r.pacchetto_anno) : null,
       allegati,
     };
   }
@@ -343,6 +346,12 @@
         students: l.students && l.students.length > 0
           ? JSON.stringify(l.students)
           : null,
+        // Mese/anno di COMPETENZA per il pacchetto/soglia mensile — impostato una volta sola
+        // alla creazione e MAI ricalcolato quando la lezione viene spostata con "Cambio ora"
+        // oltre il confine del mese (es. martedì 29/09 spostato a giovedì 01/10 resta di
+        // competenza di settembre). Se non impostato, chi legge usa il mese/anno della data.
+        pacchetto_mese: l.pacchettoMese != null ? l.pacchettoMese : null,
+        pacchetto_anno: l.pacchettoAnno != null ? l.pacchettoAnno : null,
       };
     },
     quote(q) {

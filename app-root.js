@@ -331,6 +331,8 @@ function App() {
             allegati,
             courseId: r.corso_id||null, courseName: r.corso_nome||null,
             students: (() => { try { return r.students ? JSON.parse(r.students) : []; } catch(e) { return []; } })(),
+            pacchettoMese: r.pacchetto_mese != null ? Number(r.pacchetto_mese) : null,
+            pacchettoAnno: r.pacchetto_anno != null ? Number(r.pacchetto_anno) : null,
           };
         };
         // Preferisce l'adapter condiviso di fm_sync.js (fonte unica di verità, sempre
@@ -525,6 +527,8 @@ function App() {
               students: (function(){ try{return r.students?JSON.parse(r.students):[];}catch(e){return [];} })(),
               courseId: r.corso_id||null, courseName: r.corso_nome||null,
               notesRecupero: r.notes_recupero||'',
+              pacchettoMese: r.pacchetto_mese != null ? Number(r.pacchetto_mese) : null,
+              pacchettoAnno: r.pacchetto_anno != null ? Number(r.pacchetto_anno) : null,
             };
           };
           // Preferisce l'adapter condiviso di fm_sync.js (fonte unica di verità,
