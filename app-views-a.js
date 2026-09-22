@@ -115,6 +115,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     const toDbRow = (f, includeId=false) => ({
       ...(includeId ? {id: f.id||uid()} : {}),
       titolo: f.title||'', compositore: f.composer||'',
+      genere: f.genere||'',
       strumento: f.strumento||null,
       eventi_ids: f.eventiIds||[], versioni: f.versioni||[],
       note: f.note||'',

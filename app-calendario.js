@@ -4443,9 +4443,90 @@ function trovaConflittiOrario(lezione, tutteLeLezioni) {
     return stessoStrumento || stessoInsegnante;
   });
 }
-// Due lezioni individuali sono della "stessa serie" se hanno lo stesso allievo reale, OPPURE
-// (quando l'allievo non è ancora assegnato) sono entrambe placeholder "nuovo iscritto" con lo
-// stesso nome provvisorio. Senza questo secondo caso, il controllo anti-duplicato non funziona
+// Salva (aggiunge o modifica) una versione di un brano, scrivendo direttamente su Supabase
+// (la tabella "brani" non passa dal motore di sync generico) e aggiornando lo stato
+// condiviso del repertorio così il cambiamento è visibile ovunque immediatamente.
+function salvaVersioneBrano(branoId, versioneIdx, versioneDati, repertorio, setRepertorio) {
+  const b = (repertorio||[]).find(r => r.id === branoId);
+  if (!b) return;
+  const versioniAttuali = b.versioni || [];
+  const nuoveVersioni = versioneIdx == null
+    ? [...versioniAttuali, versioneDati]
+    : versioniAttuali.map((v,i) => i === versioneIdx ? versioneDati : v);
+  if (setRepertorio) setRepertorio(p => p.map(r => r.id === branoId ? {...r, versioni: nuoveVersioni} : r));
+  const sb = window.supabaseClient;
+  if (sb) {
+    sb.from('brani').update({ versioni: nuoveVersioni }).eq('id', branoId).then(({ error }) => {
+      if (error) console.warn('[FM] salvaVersioneBrano error:', error.message);
+    });
+  }
+  return versioneIdx == null ? nuoveVersioni.length - 1 : versioneIdx;
+}
+// Editor inline per aggiungere/modificare una versione di un brano, riusato sia nel modal
+// di dettaglio sia nel form di modifica lezione — evita di dover uscire dalla lezione e
+// andare in Repertorio solo per aggiungere una tonalità o caricare uno spartito.
+const VersioneQuickEditor = ({ versione, onSave, onCancel }) => {
+  const [v, setV] = useState(versione || { tonalita:"", strumento:"", spartiti:[], allegati:[], link:[], allievi:[] });
+  const setVal = (k,val) => setV(p=>({...p,[k]:val}));
+  const uploadFile = async (file, campo) => {
+    const sb = window.supabaseClient;
+    const path = `spartiti/${Date.now()}_${file.name.replace(/\s+/g,'_')}`;
+    let fileUrl = null;
+    if (sb) {
+      try {
+        await sb.storage.from('allegati').upload(path, file, {upsert:true});
+        const {data:u} = sb.storage.from('allegati').getPublicUrl(path);
+        fileUrl = u?.publicUrl||null;
+      } catch(er) {}
+    }
+    const item = {id:'sp_'+Date.now()+'_'+Math.random().toString(36).slice(2,5), fileName:file.name, fileUrl, fileType:file.type};
+    setV(p => ({...p, [campo]: [...(p[campo]||[]), item]}));
+  };
+  return (
+    React.createElement('div', { style: {padding:12, border:`1px solid ${C.border}`, borderRadius:8, background:C.surface, display:"flex", flexDirection:"column", gap:8, marginTop:8} }
+      , React.createElement('div', { style: {display:"flex", gap:8} }
+        , React.createElement('input', { value: v.tonalita||"", onChange: e=>setVal("tonalita", e.target.value), placeholder: "Tonalità (es. Do maggiore)",
+            style: {flex:1, fontSize:12, padding:"7px 10px", borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, color:C.text} })
+        , React.createElement('input', { value: v.strumento||"", onChange: e=>setVal("strumento", e.target.value), placeholder: "Strumento (facoltativo)",
+            style: {flex:1, fontSize:12, padding:"7px 10px", borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, color:C.text} })
+      )
+      , React.createElement('div', null
+        , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4} }
+          , React.createElement('span', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.06em", textTransform:"uppercase"} }, "Spartiti")
+          , React.createElement('label', { style: {fontSize:11, color:C.blue, cursor:"pointer"} }
+            , "📎 Carica"
+            , React.createElement('input', { type:"file", accept:".pdf,image/*", multiple:true, style:{display:"none"},
+                onChange: async e => { for (const f of Array.from(e.target.files||[])) await uploadFile(f, "spartiti"); e.target.value=""; } })
+          )
+        )
+        , (v.spartiti||[]).map((s,i) => React.createElement('div', { key:s.id||i, style:{display:"flex", alignItems:"center", gap:6, padding:"5px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, marginBottom:4} }
+            , React.createElement(Ic,{n:"paperclip",size:11,stroke:C.textMuted})
+            , React.createElement('span', {style:{flex:1, fontSize:11, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}, s.fileName)
+            , React.createElement('button', { onClick:()=>setV(p=>({...p, spartiti:(p.spartiti||[]).filter((_,j)=>j!==i)})), style:{background:"none",border:"none",cursor:"pointer",color:C.textMuted} }, "✕")
+          ))
+      )
+      , React.createElement('div', null
+        , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4} }
+          , React.createElement('span', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.06em", textTransform:"uppercase"} }, "Allegati")
+          , React.createElement('label', { style: {fontSize:11, color:C.blue, cursor:"pointer"} }
+            , "📎 Carica"
+            , React.createElement('input', { type:"file", multiple:true, style:{display:"none"},
+                onChange: async e => { for (const f of Array.from(e.target.files||[])) await uploadFile(f, "allegati"); e.target.value=""; } })
+          )
+        )
+        , (v.allegati||[]).map((s,i) => React.createElement('div', { key:s.id||i, style:{display:"flex", alignItems:"center", gap:6, padding:"5px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, marginBottom:4} }
+            , React.createElement(Ic,{n:"paperclip",size:11,stroke:C.textMuted})
+            , React.createElement('span', {style:{flex:1, fontSize:11, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}, s.fileName)
+            , React.createElement('button', { onClick:()=>setV(p=>({...p, allegati:(p.allegati||[]).filter((_,j)=>j!==i)})), style:{background:"none",border:"none",cursor:"pointer",color:C.textMuted} }, "✕")
+          ))
+      )
+      , React.createElement('div', { style: {display:"flex", justifyContent:"flex-end", gap:8} }
+        , React.createElement('button', { onClick: onCancel, style:{fontSize:12, padding:"6px 12px", borderRadius:6, border:`1px solid ${C.border}`, background:"none", color:C.textMuted, cursor:"pointer"} }, "Annulla")
+        , React.createElement('button', { onClick: ()=>onSave(v), style:{fontSize:12, padding:"6px 12px", borderRadius:6, border:"none", background:C.gold, color:"#fff", fontWeight:600, cursor:"pointer"} }, "Salva versione")
+      )
+    )
+  );
+};
 // mai per le lezioni "nuovo iscritto" (perché richiede uno "student" valorizzato su entrambe),
 // e la catena placeholder continua a propagarsi in parallelo anche dopo aver assegnato l'allievo.
 function stessaSerieIndividuale(l, lesson) {
@@ -4653,7 +4734,7 @@ const ATT_STYLES = {
   cambio_ora:  { bg:'rgba(139,92,246,0.10)', fg:'#7c3aed', bd:'rgba(139,92,246,0.4)', label:'Cambio ora'  },
 };
 
-const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, courses:_coursesRaw, role:_roleLF, lessons:_lessonsLF }) => {
+const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRepertorio:_setRepertorioLF, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, courses:_coursesRaw, role:_roleLF, lessons:_lessonsLF }) => {
   const roleLF = _roleLF || "admin"; // admin = può modificare data; docente = data readOnly
   const _teacherOptsLes = (_docentiFLes||[]).map(d=>({value:d.nome||d.name||"",label:d.nome||d.name||""}));
   const repertorio = _repertorioRaw || [];
@@ -4733,6 +4814,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
   const setStatoBrano = (branoId, campo, valore) => {
     setStatiBrani(p => ({...p, [branoId]: {...(p[branoId]||{versioneIdx:0,stato:'in_studio'}), [campo]:valore}}));
   };
+  const [editingVersioneFor, setEditingVersioneFor] = useState(null); // { branoId, versioneIdx } | null (versioneIdx null = nuova)
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
 
   const hours = Array.from({length:56}, (_, i) => {
@@ -4957,6 +5039,29 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, onAdd
                                 style:{fontSize:11,padding:'4px 8px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,color:C.text,flex:'1 1 140px'}}
                               , STATI_BRANO.map(s=>React.createElement('option',{key:s.id,value:s.id},s.label))
                             )
+                          )
+                          , React.createElement('div',{style:{display:'flex',gap:10,marginTop:6}}
+                            , React.createElement('button',{
+                                onClick:()=>setEditingVersioneFor({branoId:id, versioneIdx:null}),
+                                style:{fontSize:11,color:C.blue,background:'none',border:'none',cursor:'pointer',padding:0}}
+                                , '+ Nuova versione'
+                              )
+                            , React.createElement('button',{
+                                onClick:()=>setEditingVersioneFor({branoId:id, versioneIdx:statoB.versioneIdx||0}),
+                                style:{fontSize:11,color:C.blue,background:'none',border:'none',cursor:'pointer',padding:0}}
+                                , '✏️ Modifica versione'
+                              )
+                          )
+                          , editingVersioneFor && editingVersioneFor.branoId===id && (
+                            React.createElement(VersioneQuickEditor, {
+                              versione: editingVersioneFor.versioneIdx!=null ? versioni[editingVersioneFor.versioneIdx] : null,
+                              onCancel: ()=>setEditingVersioneFor(null),
+                              onSave: (nuovaVersione) => {
+                                const nuovoIdx = salvaVersioneBrano(id, editingVersioneFor.versioneIdx, nuovaVersione, repertorio, _setRepertorioLF);
+                                setStatoBrano(id, 'versioneIdx', nuovoIdx);
+                                setEditingVersioneFor(null);
+                              },
+                            })
                           )
                         )
                       );
@@ -5230,7 +5335,7 @@ const LessonPill = ({ lesson, onClick, compact=false, courses }) => {
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses, repertorio:_repertorioLDM, biblioteca:_bibliotecaLDM }) => {
+const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses, repertorio:_repertorioLDM, setRepertorio:_setRepertorioLDM, biblioteca:_bibliotecaLDM }) => {
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
   // Per l'allievo: risolve il proprio id/nome per filtrare la presenza individuale
@@ -5253,6 +5358,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
 
   // Stato locale per editing inline
   const [localTopic,     setLocalTopic]     = useState(lesson.topic     || "");
+  const [editingVersioneFor, setEditingVersioneFor] = useState(null); // { branoId, versioneIdx } | null (versioneIdx null = nuova)
   const [localExercises, setLocalExercises] = useState(lesson.exercises || "");
   const [localLinkUrl,   setLocalLinkUrl]   = useState(lesson.linkUrl   || "");
   // Allegati: usa prima quelli da allegatiGlobali (da Supabase), poi lesson.allegati
@@ -5622,6 +5728,34 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                             , [v.strumento||b.strumento, v.tonalita].filter(Boolean).join(" - ") || `Versione ${vi+1}`
                           ))
                       )
+                    )
+                    , canEdit && (
+                      React.createElement('div', { style: {display:"flex", gap:10, marginTop:8} }
+                        , React.createElement('button', {
+                            onClick: () => setEditingVersioneFor({ branoId: id, versioneIdx: null }),
+                            style: {fontSize:11, color:C.blue, background:"none", border:"none", cursor:"pointer", padding:0} }
+                            , "+ Nuova versione"
+                          )
+                        , versioneSel != null && (
+                          React.createElement('button', {
+                              onClick: () => setEditingVersioneFor({ branoId: id, versioneIdx: versioneSel }),
+                              style: {fontSize:11, color:C.blue, background:"none", border:"none", cursor:"pointer", padding:0} }
+                              , "✏️ Modifica versione"
+                            )
+                        )
+                      )
+                    )
+                    , editingVersioneFor && editingVersioneFor.branoId === id && (
+                      React.createElement(VersioneQuickEditor, {
+                        versione: editingVersioneFor.versioneIdx != null ? versioni[editingVersioneFor.versioneIdx] : null,
+                        onCancel: () => setEditingVersioneFor(null),
+                        onSave: (nuovaVersione) => {
+                          const nuovoIdx = salvaVersioneBrano(id, editingVersioneFor.versioneIdx, nuovaVersione, _repertorioLDM, _setRepertorioLDM);
+                          const rv = { ...(lesson.repertorioVersioni||{}), [id]: nuovoIdx };
+                          onUpdateLesson({ ...lesson, repertorioVersioni: rv });
+                          setEditingVersioneFor(null);
+                        },
+                      })
                     )
                     , _file.length > 0 && React.createElement('div', { style: {display:"flex", flexWrap:"wrap", gap:6, marginTop:8, paddingTop:8, borderTop:`1px solid ${typeBd}`} }
                       , _file.map((fi,fii) => React.createElement('a', { key: fi.id||fii, href: fi.fileUrl, target: "_blank", rel: "noopener noreferrer",
@@ -6774,7 +6908,7 @@ const MonthView = ({ year, month, lessons, onSelect, onDayClick, config, courses
 // ════════════════════════════════════════════════════════════════════════════════
 // REPERTORIO
 // ════════════════════════════════════════════════════════════════════════════════
-const emptyBrano = { title:"", composer:"", tonality:"", difficulty:"Intermedio", tipo:"individuale", note:"", linkBacking:"", files:[], spartiti:[] };
+const emptyBrano = { title:"", composer:"", genere:"", tonality:"", difficulty:"Intermedio", tipo:"individuale", note:"", linkBacking:"", files:[], spartiti:[] };
 
 const BranoFormInline = ({ initial, onSave, onClose, compact=false }) => {
   const [f, setF] = useState(initial || emptyBrano);
@@ -6784,6 +6918,7 @@ const BranoFormInline = ({ initial, onSave, onClose, compact=false }) => {
   const handleSave = () => {
     const e = {};
     if(!f.title.trim())    e.title    = "Titolo obbligatorio";
+    if(!f.genere || !f.genere.trim()) e.genere = "Genere obbligatorio";
     // compositore facoltativo
     if(Object.keys(e).length){ setErr(e); return; }
     onSave(f);
@@ -6794,6 +6929,7 @@ const BranoFormInline = ({ initial, onSave, onClose, compact=false }) => {
       , React.createElement('div', { style: {padding:compact?10:22, display:"flex", flexDirection:"column", gap:compact?8:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5013}}
         , React.createElement(Input, { label: "Titolo *" , value: f.title, onChange: e=>set("title",e.target.value), error: err.title, placeholder: "Es. Notturno Op.9 n.2"   , __self: this, __source: {fileName: _jsxFileName, lineNumber: 5014}})
         , React.createElement(Input, { label: "Compositore *" , value: f.composer, onChange: e=>set("composer",e.target.value), error: err.composer, placeholder: "Es. Frédéric Chopin"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 5015}})
+        , React.createElement(Input, { label: "Genere *" , value: f.genere||"", onChange: e=>set("genere",e.target.value), error: err.genere, placeholder: "Es. Classica, Jazz, Pop..."  })
         , React.createElement(Sel, { label: "Tonalità / Scala"  , value: f.tonality, onChange: e=>set("tonality",e.target.value), options: TONALITY_OPTS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5016}})
         , React.createElement(Sel, { label: "Livello di difficoltà"  , value: f.difficulty, onChange: e=>set("difficulty",e.target.value), options: DIFFICULTY_OPTS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5017}})
         
@@ -9972,8 +10108,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               titolo: b.title || '',
               compositore: b.composer || '',
               strumento: data.instrument || null,
+              genere: b.genere || '',
               eventi_ids: [],
-              versioni: [],
+              versioni: (b.tonality || (b.spartiti||[]).length > 0 || (b.files||[]).length > 0 || b.linkBacking)
+                ? [{ tonalita: b.tonality||'', strumento: data.instrument||'', spartiti: b.spartiti||[], allegati: b.files||[],
+                     link: b.linkBacking ? [{url:b.linkBacking, label:'Backing track'}] : [], allievi: [] }]
+                : [],
               note: b.note || '',
             }).then(({ error }) => {
               if (error) console.warn('[FM] nuovo brano (handleAdd) DB error:', error.message);
@@ -10346,8 +10486,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               titolo: b.title || '',
               compositore: b.composer || '',
               strumento: data.instrument || null,
+              genere: b.genere || '',
               eventi_ids: [],
-              versioni: [],
+              versioni: (b.tonality || (b.spartiti||[]).length > 0 || (b.files||[]).length > 0 || b.linkBacking)
+                ? [{ tonalita: b.tonality||'', strumento: data.instrument||'', spartiti: b.spartiti||[], allegati: b.files||[],
+                     link: b.linkBacking ? [{url:b.linkBacking, label:'Backing track'}] : [], allievi: [] }]
+                : [],
               note: b.note || '',
             }).then(({ error }) => {
               if (error) console.warn('[FM] nuovo brano (handleEdit) DB error:', error.message);
@@ -11242,7 +11386,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
         , modal === "add" && (
           React.createElement(Modal, { title: "Nuova lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6136}}
-            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, lessons: lessons, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
+            , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, setRepertorio: setRepertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, lessons: lessons, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
           )
         )
         , modal === "edit" && selLesson && (
@@ -11275,7 +11419,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   })
               )
             : React.createElement(Modal, { title: "Modifica lezione" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6141}}
-                , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, lessons: lessons, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
+                , React.createElement(LessonForm, { initial: selLesson, onSave: handleEdit, onClose: closeModal, repertorio: repertorio, setRepertorio: setRepertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, lessons: lessons, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6142}})
               )
         )
         , modal === "detail" && selLesson && (
@@ -11284,6 +11428,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             prevLesson: trovaLezionePrecedente(lessons.find(l => l.id === selLesson.id) || selLesson, lessons),
             courses: propCourses,
             repertorio: repertorio,
+            setRepertorio: setRepertorio,
             biblioteca: biblioteca,
             onEdit: () => setModal("edit"),
             onDelete: () => setModal("delete"),
@@ -13124,7 +13269,7 @@ const INIT_BRANI = [
 
 // ─── FORM BRANO ──────────────────────────────────────────────────────────────
 const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_concertiBranoIn,courses:_coursesBranoIn})=>{
-  const empty={title:"",composer:"",strumento:"",eventiIds:[],note:"",versioni:[{tonalita:"",strumento:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
+  const empty={title:"",composer:"",genere:"",strumento:"",eventiIds:[],note:"",versioni:[{tonalita:"",strumento:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
   const [f,setF]=useState(initial ? {...empty,...initial,versioni:(initial.versioni&&initial.versioni.length>0)?initial.versioni:empty.versioni} : empty);
   const [err,setErr]=useState({});
   const [openVersione, setOpenVersione] = useState(0); // indice versione espansa
@@ -13182,6 +13327,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
   const validate=()=>{
     const e={};
     if(!f.title.trim())    e.title="Titolo obbligatorio";
+    if(!f.genere||!f.genere.trim()) e.genere="Genere obbligatorio";
     return e;
   };
   const handleSave=()=>{
@@ -13203,6 +13349,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
             , React.createElement(Input, { label: "Titolo *" , value: f.title, onChange: e=>set("title",e.target.value), error: err.title, placeholder: "Es. Jingle Bells" })
           )
           , React.createElement(Input, { label: "Compositore" , value: f.composer, onChange: e=>set("composer",e.target.value), placeholder: "Es. James Pierpont" })
+          , React.createElement(Input, { label: "Genere *" , value: f.genere||"", onChange: e=>set("genere",e.target.value), error: err.genere, placeholder: "Es. Classica, Jazz, Pop..." })
           , React.createElement(Sel, { label: "Corso individuale", value: f.strumento, onChange: e=>set("strumento",e.target.value),
             options: strumentiDisp.map(i=>({value:i,label:i})) })
         )

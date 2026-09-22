@@ -192,6 +192,7 @@
       composer: r.compositore || r.composer || '',
       tipo: r.tipo || 'individuale',
       strumento: r.strumento || '',           // '' = ensemble/tutti gli strumenti
+      genere: r.genere || '',
       eventiIds: parseJson(r.eventi_ids, []),
       versioni: versioni,
       note: r.note || '', dataPrima: r.data_prima || '',
