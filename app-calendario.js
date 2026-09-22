@@ -4465,8 +4465,8 @@ function salvaVersioneBrano(branoId, versioneIdx, versioneDati, repertorio, setR
 // Editor inline per aggiungere/modificare una versione di un brano, riusato sia nel modal
 // di dettaglio sia nel form di modifica lezione — evita di dover uscire dalla lezione e
 // andare in Repertorio solo per aggiungere una tonalità o caricare uno spartito.
-const VersioneQuickEditor = ({ versione, onSave, onCancel }) => {
-  const [v, setV] = useState(versione || { tonalita:"", strumento:"", spartiti:[], allegati:[], link:[], allievi:[] });
+const VersioneQuickEditor = ({ versione, strumentoDefault, onSave, onCancel }) => {
+  const [v, setV] = useState(versione || { tonalita:"", strumento:strumentoDefault||"", spartiti:[], allegati:[], link:[], allievi:[] });
   const setVal = (k,val) => setV(p=>({...p,[k]:val}));
   const uploadFile = async (file, campo) => {
     const sb = window.supabaseClient;
@@ -4484,11 +4484,11 @@ const VersioneQuickEditor = ({ versione, onSave, onCancel }) => {
   };
   return (
     React.createElement('div', { style: {padding:12, border:`1px solid ${C.border}`, borderRadius:8, background:C.surface, display:"flex", flexDirection:"column", gap:8, marginTop:8} }
-      , React.createElement('div', { style: {display:"flex", gap:8} }
+      , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:8} }
         , React.createElement('input', { value: v.tonalita||"", onChange: e=>setVal("tonalita", e.target.value), placeholder: "Tonalità (es. Do maggiore)",
-            style: {flex:1, fontSize:12, padding:"7px 10px", borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, color:C.text} })
+            style: {width:"100%", boxSizing:"border-box", fontSize:12, padding:"7px 10px", borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, color:C.text} })
         , React.createElement('input', { value: v.strumento||"", onChange: e=>setVal("strumento", e.target.value), placeholder: "Strumento (facoltativo)",
-            style: {flex:1, fontSize:12, padding:"7px 10px", borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, color:C.text} })
+            style: {width:"100%", boxSizing:"border-box", fontSize:12, padding:"7px 10px", borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, color:C.text} })
       )
       , React.createElement('div', null
         , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4} }
@@ -5055,6 +5055,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
                           , editingVersioneFor && editingVersioneFor.branoId===id && (
                             React.createElement(VersioneQuickEditor, {
                               versione: editingVersioneFor.versioneIdx!=null ? versioni[editingVersioneFor.versioneIdx] : null,
+                              strumentoDefault: f.instrument || "",
                               onCancel: ()=>setEditingVersioneFor(null),
                               onSave: (nuovaVersione) => {
                                 const nuovoIdx = salvaVersioneBrano(id, editingVersioneFor.versioneIdx, nuovaVersione, repertorio, _setRepertorioLF);
@@ -5748,6 +5749,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                     , editingVersioneFor && editingVersioneFor.branoId === id && (
                       React.createElement(VersioneQuickEditor, {
                         versione: editingVersioneFor.versioneIdx != null ? versioni[editingVersioneFor.versioneIdx] : null,
+                        strumentoDefault: isColl(lesson) ? (lesson.courseName||"") : (lesson.instrument||""),
                         onCancel: () => setEditingVersioneFor(null),
                         onSave: (nuovaVersione) => {
                           const nuovoIdx = salvaVersioneBrano(id, editingVersioneFor.versioneIdx, nuovaVersione, _repertorioLDM, _setRepertorioLDM);
