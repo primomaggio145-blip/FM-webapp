@@ -8705,7 +8705,7 @@ const notificaPartecipantiSala = async (sb, allieviIds, docentiIds, students, do
   } catch(e) { console.warn('[FM] notifica partecipanti sala prove:', e?.message); }
 };
 
-const SalaProveForm = ({ initial, onSave, onClose, appUser, role, students, docenti }) => {
+const SalaProveForm = ({ initial, onSave, onClose, appUser, role, students, docenti, prenotazioni }) => {
   const todaySP = yyyymmdd(new Date());
   const [spData,        setSpData]        = useState((initial && initial.data)        || todaySP);
   const [spOraInizio,   setSpOraInizio]   = useState((initial && initial.oraInizio)   || "09:00");
@@ -8717,6 +8717,29 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role, students, doce
   const [spDocentiIds,  setSpDocentiIds]  = useState((initial && initial.docentiIds) || []);
   const [spSaving,      setSpSaving]      = useState(false);
   const [spErr,         setSpErr]         = useState("");
+
+  // Orari già occupati nella data selezionata — prenotazioni app (approvate/in attesa,
+  // esclusa quella che si sta eventualmente modificando) + slot sincronizzati da Google
+  // Calendar. Mostrati SOLO come fascia oraria, senza nome/motivo: serve solo a scegliere
+  // un orario libero, non a rivelare chi ha prenotato cosa (stessa logica di anonimizzazione
+  // già usata per i blocchi Google Calendar nel calendario principale).
+  const orariOccupati = React.useMemo(() => {
+    const slots = [];
+    (prenotazioni || []).forEach(p => {
+      if (initial && p.id === initial.id) return;
+      if (p.data !== spData) return;
+      if (p.stato !== "approvata" && p.stato !== "in_attesa") return;
+      slots.push({ start: p.oraInizio, end: p.oraFine, pending: p.stato === "in_attesa" });
+    });
+    const busyCache = window.__gcalSalaBusyCache__ && window.__gcalSalaBusyCache__.data;
+    if (Array.isArray(busyCache)) {
+      busyCache.forEach(ev => {
+        if (ev.date !== spData || ev.allDay || !ev.start || !ev.end) return;
+        slots.push({ start: ev.start, end: ev.end, pending: false });
+      });
+    }
+    return slots.sort((a,b) => (a.start||"").localeCompare(b.start||""));
+  }, [prenotazioni, spData, initial]);
 
   const handleSaveSP = async () => {
     if (!spData || !spOraInizio || !spOraFine) { setSpErr("Compila tutti i campi obbligatori."); return; }
@@ -8878,6 +8901,21 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role, students, doce
               min:todaySP, style:inpS })
         )
         , React.createElement('div', null)
+      )
+      /* Orari già occupati in questa data — prenotazioni app + sync Google Calendar,
+         mostrati solo come fascia oraria (nessun nome/motivo), per aiutare a scegliere
+         un orario libero senza esporre chi ha prenotato cosa. */
+      , orariOccupati.length > 0 && React.createElement('div', { style:{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 14px"} }
+        , React.createElement('div', { style:{fontSize:11,fontWeight:600,color:C.textMuted,marginBottom:6,display:"flex",alignItems:"center",gap:6} }
+          , React.createElement(Ic,{n:"clock",size:12,stroke:C.textMuted}), "Orari già occupati in questa data"
+        )
+        , React.createElement('div', { style:{display:"flex",flexWrap:"wrap",gap:6} }
+          , orariOccupati.map((s,i) => React.createElement('span', { key:i, style:{fontSize:12,padding:"3px 10px",borderRadius:20,
+              background:s.pending?"rgba(245,158,11,0.1)":C.orange2Bg, color:s.pending?"#92400e":C.orange2,
+              border:`1px solid ${s.pending?"rgba(245,158,11,0.3)":C.orange2Border}`} }
+              , (s.start||"").slice(0,5), "–", (s.end||"").slice(0,5), s.pending?" (in attesa)":""
+            ))
+        )
       )
       , React.createElement('div', { className:"form-2col" }
         , React.createElement('div', null
@@ -9346,6 +9384,7 @@ const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role
             role:role,
             students:students,
             docenti:docenti,
+            prenotazioni:prenotazioni,
           })
       )
 
@@ -9359,6 +9398,7 @@ const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role
             role:role,
             students:students,
             docenti:docenti,
+            prenotazioni:prenotazioni,
           })
       )
     )
@@ -11037,7 +11077,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         }));
       // Blocchi di sola lettura per prenotazioni fatte direttamente su Google Calendar
       // (bypass app) — niente titolo/dettaglio per privacy, solo l'orario occupato.
-      const gcalBusyEvents = !_cvShowSalaProve ? [] : (gcalSalaBusy || []).map(ev => ({
+      // L'ALLIEVO non li vede nel calendario Oggi/Settimana (venivano scambiati per
+      // "prenotazioni altrui" pur essendo anonimi): restano visibili solo dentro il
+      // form "Richiedi prenotazione" della Sala Prove, per scegliere un orario libero.
+      const gcalBusyEvents = (!_cvShowSalaProve || role === "allievo") ? [] : (gcalSalaBusy || []).map(ev => ({
         id: "gcalbusy_" + ev.id,
         _isSalaProve: true,
         _isGcalExternal: true,
