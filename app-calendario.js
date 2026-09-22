@@ -2507,10 +2507,24 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     const settimane = Math.max(giorni,1)/7;
 
     // Individuale: conteggio ESATTO dalle lezioni ricorrenti reali già a calendario. Fallback
-    // alla stima solo se l'allievo non ha ancora nessuna lezione individuale registrata.
+    // alla stima solo se l'allievo non ha ancora nessuna lezione individuale registrata (es.
+    // le sue prime lezioni di prova non sono ancora collegate al suo nome/id anagrafico).
+    // La stima non usa più floor(settimane) — troppo grezza: in una finestra di soli 9 giorni
+    // che inizia esattamente nel giorno della settimana della data d'iscrizione, quel giorno
+    // può ricorrere 2 volte (es. iscritto un martedì, la finestra contiene 2 martedì), ma
+    // floor(9÷7)=1 lo perderebbe. Si contano invece le occorrenze REALI del giorno della
+    // settimana della data d'iscrizione nella finestra — molto più preciso.
     const nome = s.name||s.nome||'';
     const individualeReale = contaLezioniIndividualiReali(nome, s.id, lessons, dataInizio, dataFine);
-    const individuale = individualeReale != null ? individualeReale : Math.floor(settimane) * nCorsiIndividuali;
+    let individualeStimato = Math.floor(settimane) * nCorsiIndividuali;
+    if (enroll) {
+      let occorrenzeGiornoIscrizione = 0;
+      for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) {
+        if (d.getDay() === enroll.getDay()) occorrenzeGiornoIscrizione++;
+      }
+      individualeStimato = occorrenzeGiornoIscrizione * nCorsiIndividuali;
+    }
+    const individuale = individualeReale != null ? individualeReale : individualeStimato;
 
     // Collettiva: conteggio ESATTO dalle lezioni collettive reali già a calendario (cadenza
     // spesso variabile — non si può assumere "ogni 2 settimane" con certezza). Fallback alla
@@ -3998,9 +4012,11 @@ function contaOccorrenzeInFinestra(lessonAncora, dataInizio, dataFine) {
 // IMPORTANTE: non raggruppa più le lezioni per orario esatto. Un raggruppamento per orario
 // si romperebbe ogni volta che una singola occorrenza viene spostata manualmente (anche di
 // pochi minuti, es. 19:00→19:15): quello spostamento creava una "serie fantasma" separata che
-// veniva scambiata per un secondo giorno fisso della settimana, gonfiando il conteggio. Invece:
-// si guardano TUTTE le lezioni individuali dell'allievo insieme, e si deduce il pattern
-// settimanale reale (uno o due giorni fissi) dall'insieme.
+// veniva scambiata per un secondo giorno fisso della settimana, gonfiando il conteggio.
+// Si raggruppano le lezioni per CORSO/STRUMENTO (non per orario): così un cambio d'orario di
+// UNO stesso corso resta unito in un solo pattern, ma DUE corsi diversi dell'allievo che per
+// coincidenza cadono lo stesso giorno (es. pianoforte e batteria entrambi di mercoledì) restano
+// correttamente separati e contati ciascuno per la propria soglia.
 function contaLezioniIndividualiReali(nome, studentId, lessons, dataInizio, dataFine) {
   const lezIndividuali = (lessons || []).filter(l =>
     !isColl(l) && !isProva(l) && !isSalaProve(l) && l.tipo !== 'recupero' &&
@@ -4008,47 +4024,57 @@ function contaLezioniIndividualiReali(nome, studentId, lessons, dataInizio, data
   );
   if (lezIndividuali.length === 0) return null; // nessun dato: fallback al vecchio calcolo
 
-  const has2xSettimana = lezIndividuali.some(l => l.recurrence === "2 volte a settimana");
-  let giorniPattern; // Set di giorni della settimana (0-6, getDay()) del pattern ricorrente
+  const perCorso = {};
+  lezIndividuali.forEach(l => {
+    const key = l.instrument || l.strumento || '—';
+    if (!perCorso[key]) perCorso[key] = [];
+    perCorso[key].push(l);
+  });
 
-  if (has2xSettimana) {
-    // "2 volte a settimana": il pattern è l'unione dei giorni osservati su TUTTE le lezioni
-    // con questa ricorrenza (non solo quelle allo stesso orario) — così un'occorrenza spostata
-    // di orario resta comunque riconosciuta come parte della stessa coppia di giorni fissi.
-    giorniPattern = new Set(
-      lezIndividuali.filter(l => l.recurrence === "2 volte a settimana")
-        .map(l => new Date(l.date + "T00:00:00").getDay())
-    );
-  } else {
-    // Pattern settimanale singolo: il giorno più frequente tra tutte le lezioni dell'allievo.
-    // In caso di parità (es. solo 2 lezioni registrate, una su un giorno diverso perché
-    // spostata manualmente), si usa il giorno della lezione con la data più recente/futura —
-    // più affidabile di un'occorrenza isolata nel passato, che è verosimilmente proprio uno
-    // spostamento manuale una tantum, non il giorno fisso reale.
-    const conteggioGiorni = {};
-    lezIndividuali.forEach(l => {
-      const g = new Date(l.date + "T00:00:00").getDay();
-      conteggioGiorni[g] = (conteggioGiorni[g]||0) + 1;
-    });
-    const maxCount = Math.max(...Object.values(conteggioGiorni));
-    const candidati = Object.keys(conteggioGiorni).filter(g => conteggioGiorni[g] === maxCount).map(Number);
-    if (candidati.length === 1) {
-      giorniPattern = new Set(candidati);
-    } else {
-      const piuRecente = lezIndividuali.slice().sort((a,b) => (b.date||'').localeCompare(a.date||''))[0];
-      giorniPattern = new Set([new Date(piuRecente.date + "T00:00:00").getDay()]);
-    }
-  }
-
-  // Conta ogni occorrenza dei giorni del pattern nella finestra — anche per date future non
-  // ancora generate a calendario, che vanno comunque conteggiate nella soglia attesa del mese.
-  // Le occorrenze "fuori pattern" (es. lo spostamento manuale stesso) NON vengono aggiunte come
-  // lezione extra: rappresentano lo spostamento di un'occorrenza già conteggiata nel pattern,
-  // non una lezione aggiuntiva.
   let totale = 0;
-  for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) {
-    if (giorniPattern.has(d.getDay())) totale++;
-  }
+  Object.values(perCorso).forEach(lezCorso => {
+    const has2xSettimana = lezCorso.some(l => l.recurrence === "2 volte a settimana");
+    let giorniPattern; // Set di giorni della settimana (0-6, getDay()) del pattern ricorrente
+
+    if (has2xSettimana) {
+      // "2 volte a settimana": il pattern è l'unione dei giorni osservati su TUTTE le lezioni
+      // di QUESTO corso con questa ricorrenza (non solo quelle allo stesso orario) — così
+      // un'occorrenza spostata di orario resta comunque riconosciuta come parte della stessa
+      // coppia di giorni fissi.
+      giorniPattern = new Set(
+        lezCorso.filter(l => l.recurrence === "2 volte a settimana")
+          .map(l => new Date(l.date + "T00:00:00").getDay())
+      );
+    } else {
+      // Pattern settimanale singolo: il giorno più frequente tra le lezioni di QUESTO corso.
+      // In caso di parità (es. solo 2 lezioni registrate, una su un giorno diverso perché
+      // spostata manualmente), si usa il giorno della lezione con la data più recente/futura —
+      // più affidabile di un'occorrenza isolata nel passato, che è verosimilmente proprio uno
+      // spostamento manuale una tantum, non il giorno fisso reale.
+      const conteggioGiorni = {};
+      lezCorso.forEach(l => {
+        const g = new Date(l.date + "T00:00:00").getDay();
+        conteggioGiorni[g] = (conteggioGiorni[g]||0) + 1;
+      });
+      const maxCount = Math.max(...Object.values(conteggioGiorni));
+      const candidati = Object.keys(conteggioGiorni).filter(g => conteggioGiorni[g] === maxCount).map(Number);
+      if (candidati.length === 1) {
+        giorniPattern = new Set(candidati);
+      } else {
+        const piuRecente = lezCorso.slice().sort((a,b) => (b.date||'').localeCompare(a.date||''))[0];
+        giorniPattern = new Set([new Date(piuRecente.date + "T00:00:00").getDay()]);
+      }
+    }
+
+    // Conta ogni occorrenza dei giorni del pattern di QUESTO corso nella finestra — anche per
+    // date future non ancora generate a calendario, che vanno comunque conteggiate nella soglia
+    // attesa del mese. Le occorrenze "fuori pattern" (es. lo spostamento manuale stesso) NON
+    // vengono aggiunte come lezione extra: rappresentano lo spostamento di un'occorrenza già
+    // conteggiata nel pattern, non una lezione aggiuntiva.
+    for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) {
+      if (giorniPattern.has(d.getDay())) totale++;
+    }
+  });
   return totale;
 }
 
