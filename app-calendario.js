@@ -915,7 +915,12 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
         , React.createElement(SectionDivider, { label: "Dati anagrafici" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 2944}})
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}, React.createElement(Input, { label: roleSF==="docente"?"Nome (sola lettura)":"Nome completo *", value: f.name, onChange: roleSF==="docente"?undefined:e=>set("name",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.name, placeholder: "Es. Sofia Marchetti", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}))
         , React.createElement(Input, { label: "Email *", type: "email", value: f.email, onChange: roleSF==="docente"?undefined:e=>set("email",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.email, placeholder: "email@esempio.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2946}})
-        , React.createElement(Input, { label: "Telefono *", value: f.phone, onChange: roleSF==="docente"?undefined:e=>set("phone",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.phone, placeholder: "333 1234567", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2947}})
+        , React.createElement('div', { style: {gridColumn:"1/-1"} }
+          , React.createElement(Input, { label: "Telefono *", value: f.phone, onChange: roleSF==="docente"?undefined:e=>set("phone",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.phone, placeholder: "393331234567", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2947}})
+          , React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:4} }
+            , "Formato consigliato: solo cifre, con prefisso internazionale e senza spazi/simboli — es. ", React.createElement('b',null,"393331234567"), " (39 = Italia). Necessario perché i promemoria WhatsApp vengano inviati correttamente e collegati alla scheda dell'allievo."
+          )
+        )
         , React.createElement(Input, { label: "Data di nascita *", type: "date", value: f.birthdate, onChange: roleSF==="docente"?undefined:e=>set("birthdate",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.birthdate, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2948}})
         , React.createElement(Input, { label: "Data iscrizione *", type: "date", value: f.enrollDate, onChange: roleSF==="docente"?undefined:e=>set("enrollDate",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.enrollDate, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2949}})
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2950}}
@@ -1195,6 +1200,35 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const [ricevutaEnt, setRicevutaEnt] = useState(null);
   const [showRecuperoModal, setShowRecuperoModal] = useState(false);
   const [recuperoForm, setRecuperoForm] = useState({ date:"", note:"", lezId:null, lezInfo:null, slotSel:null, ora:"" });
+  // Log promemoria WhatsApp per questo allievo (tab "Reminders WA", solo admin)
+  const [waLog, setWaLog] = useState([]);
+  const [waLoading, setWaLoading] = useState(false);
+  const [waError, setWaError] = useState(null);
+  // Normalizza un numero di telefono per il confronto: solo cifre, niente '+', spazi,
+  // trattini o caratteri Unicode invisibili (visti in alcuni numeri salvati in anagrafica) —
+  // così un numero salvato come "+39 333 271 3187" combacia comunque con "393332713187"
+  // nel log whatsapp_log, anche se non è stato inserito nel formato consigliato.
+  const normalizzaTelefono = (tel) => (tel||'').replace(/[^\d]/g, '');
+  React.useEffect(() => {
+    if (tab !== 'reminders' || sdRuolo !== 'admin') return;
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    const mioTel = normalizzaTelefono(student.phone);
+    if (!mioTel) { setWaLog([]); setWaError('Questo allievo non ha un numero di telefono in anagrafica.'); return; }
+    setWaLoading(true);
+    setWaError(null);
+    sb.from('whatsapp_log').select('*').order('created_at', { ascending:false }).limit(500)
+      .then(({ data, error }) => {
+        if (error) {
+          setWaError(error.code === '42P01' ? 'Tabella whatsapp_log non trovata.' : (error.message||'Errore di caricamento.'));
+          setWaLog([]);
+        } else {
+          setWaLog((data||[]).filter(r => normalizzaTelefono(r.telefono) === mioTel));
+        }
+        setWaLoading(false);
+      })
+      .catch(e => { setWaError(e?.message||'Errore di caricamento.'); setWaLoading(false); });
+  }, [tab, student.id, student.phone, sdRuolo]);
 
   // Espone hook per aprire il modal dall'esterno (dashboard → AllieviView → StudentDetail)
   React.useEffect(() => {
@@ -1430,6 +1464,8 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
     ...(IS_PWA ? [] : [{id:"repertorio", label:"Repertorio", icon:"music"}]),
     // Quote: visibile solo ad admin e allievo (non al docente)
     ...(sdRuolo !== "docente" ? [{id:"quote", label:"Quote", icon:"euro"}] : []),
+    // Reminders WhatsApp: solo admin — log dei promemoria inviati a questo allievo
+    ...(sdRuolo === "admin" ? [{id:"reminders", label:"Reminders WA", icon:"phone"}] : []),
   ];
 
   return (
@@ -2046,6 +2082,48 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                 )
               )
             )
+          )
+        )
+      )
+      /* ── REMINDERS WHATSAPP (solo admin) ── */
+      , tab==="reminders" && (
+        React.createElement('div', null
+          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}}
+            , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:8}}
+              , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+                , React.createElement(Ic,{n:"phone",size:14,stroke:C.textMuted})
+                , React.createElement('span', {style:{fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}}, "Promemoria WhatsApp inviati a questo allievo")
+              )
+              , React.createElement('span', {style:{fontSize:12,color:C.textDim}}, "Numero: ", student.phone||"—")
+            )
+            , waLoading
+              ? React.createElement('div', {style:{textAlign:"center",padding:"48px 0",color:C.textMuted,fontSize:14}}, "⏳ Caricamento…")
+              : waError
+              ? React.createElement('div', {style:{textAlign:"center",padding:"32px 20px",color:C.textMuted}}
+                  , React.createElement('div', {style:{fontSize:14,color:C.red,fontWeight:600,marginBottom:6}}, "⚠️ ", waError)
+                  , !student.phone && React.createElement('div', {style:{fontSize:12}}, "Aggiungi un numero di telefono nella scheda dell'allievo per vedere qui i suoi promemoria.")
+                )
+              : waLog.length===0
+              ? React.createElement('div', {style:{textAlign:"center",padding:"48px 0",color:C.textMuted,fontSize:14}}, "📭 Nessun promemoria trovato per questo allievo")
+              : React.createElement('table', {style:{width:"100%",borderCollapse:"collapse"}}
+                  , React.createElement('thead', null
+                    , React.createElement('tr', {style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
+                      , ["Data/Ora","Numero","Tipo","Stato","Dettaglio"].map(h=>
+                          React.createElement('th', {key:h, style:{padding:"10px 14px",textAlign:"left",fontSize:10,textTransform:"uppercase",letterSpacing:"0.08em",color:C.textMuted,fontWeight:600}}, h))
+                    )
+                  )
+                  , React.createElement('tbody', null
+                    , waLog.map((r,i)=>
+                        React.createElement('tr', {key:r.id||i, style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg}}
+                          , React.createElement('td', {style:{padding:"9px 14px",fontSize:12,color:C.textMuted,whiteSpace:"nowrap"}}, r.created_at ? new Date(r.created_at).toLocaleString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—")
+                          , React.createElement('td', {style:{padding:"9px 14px",fontSize:12,fontFamily:"monospace",color:C.text}}, r.telefono||"—")
+                          , React.createElement('td', {style:{padding:"9px 14px",fontSize:11,color:C.textMuted}}, r.tipo||"—")
+                          , React.createElement('td', {style:{padding:"9px 14px"}}, React.createElement('span', {style:{fontSize:11,fontWeight:600,background:r.stato==='inviato'?C.greenBg:C.redBg,color:r.stato==='inviato'?C.green:C.red,border:`1px solid ${r.stato==='inviato'?C.greenBorder:C.redBorder}`,borderRadius:20,padding:"3px 10px"}}, r.stato==='inviato'?"✅ Inviato":"❌ Errore"))
+                          , React.createElement('td', {style:{padding:"9px 14px",fontSize:11,color:C.textMuted,maxWidth:260,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}, r.dettaglio||"—")
+                        )
+                      )
+                  )
+                )
           )
         )
       )
