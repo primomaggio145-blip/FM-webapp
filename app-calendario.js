@@ -10023,7 +10023,7 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
             const fileIcon = isPdf ? "report" : isImg ? "eye" : "paperclip";
             return React.createElement('div', { key:item.id,
               style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
-                padding:"14px 18px",display:"flex",alignItems:"flex-start",gap:14,
+                padding:"14px 18px",display:"flex",alignItems:"flex-start",gap:14,flexWrap:"wrap",
                 transition:"box-shadow 0.15s"},
               onMouseEnter:e=>e.currentTarget.style.boxShadow=`0 2px 12px rgba(0,0,0,0.07)`,
               onMouseLeave:e=>e.currentTarget.style.boxShadow="none"}
@@ -10034,7 +10034,7 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
                 , React.createElement(Ic,{n:fileIcon,size:20,stroke:cc.tx})
               )
               /* Info */
-              , React.createElement('div', {style:{flex:1,minWidth:0}}
+              , React.createElement('div', {style:{flex:"1 1 180px",minWidth:180}}
                 , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}
                   , React.createElement('span',{style:{fontSize:14,fontWeight:600,color:C.text}},item.titolo)
                   , React.createElement('span',{style:{fontSize:10,background:cc.bg,color:cc.tx,
@@ -10055,22 +10055,26 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
                 )
               )
               /* Azioni */
-              , React.createElement('div', {style:{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}
+              , React.createElement('div', {style:{display:"flex",gap:6,flexShrink:0,alignItems:"center",flexWrap:"wrap"}}
                 , item.file_url && React.createElement('button', {
                     onClick:()=>setPreviewFile({url:item.file_url,name:item.file_name||item.titolo,type:item.file_type}),
-                    style:{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",
+                    title:"Visualizza",
+                    style:{display:"flex",alignItems:"center",padding:"7px 10px",
                       background:"none",border:`1px solid ${C.border}`,borderRadius:8,
-                      color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",
-                      fontFamily:"'Open Sans',sans-serif"}}
-                  , React.createElement(Ic,{n:"eye",size:13,stroke:"currentColor"}), " Visualizza"
+                      color:C.textDim,cursor:"pointer"},
+                    onMouseEnter:e=>{e.currentTarget.style.borderColor=C.text;e.currentTarget.style.color=C.text;},
+                    onMouseLeave:e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textDim;}}
+                  , React.createElement(Ic,{n:"eye",size:13,stroke:"currentColor"})
                 )
                 , item.file_url && React.createElement('a', {
                     href:item.file_url, target:"_blank", rel:"noopener noreferrer",
-                    style:{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",
-                      background:C.goldBg,border:`1px solid ${C.goldDim}`,borderRadius:8,
-                      color:C.gold,fontSize:12,fontWeight:600,textDecoration:"none",
-                      fontFamily:"'Open Sans',sans-serif",cursor:"pointer"}}
-                  , React.createElement(Ic,{n:"download",size:13,stroke:C.gold}), " Scarica"
+                    title:"Scarica",
+                    style:{display:"flex",alignItems:"center",padding:"7px 10px",
+                      background:"none",border:`1px solid ${C.goldDim}`,borderRadius:8,
+                      color:C.gold,textDecoration:"none",cursor:"pointer"},
+                    onMouseEnter:e=>{e.currentTarget.style.background=C.goldBg;},
+                    onMouseLeave:e=>{e.currentTarget.style.background="none";}}
+                  , React.createElement(Ic,{n:"download",size:13,stroke:"currentColor"})
                 )
                 , canUpload && React.createElement('button', {
                     onClick:()=>setRinominaTarget(item),
