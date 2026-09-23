@@ -4660,7 +4660,7 @@ const VersioneQuickEditor = ({ versione, strumentoDefault, onSave, onCancel }) =
         , (v.spartiti||[]).map((s,i) => React.createElement('div', { key:s.id||i, style:{display:"flex", alignItems:"center", gap:6, padding:"5px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, marginBottom:4} }
             , React.createElement(Ic,{n:"paperclip",size:11,stroke:C.textMuted})
             , React.createElement('span', {style:{flex:1, fontSize:11, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}, s.fileName)
-            , React.createElement('button', { onClick:()=>setV(p=>({...p, spartiti:(p.spartiti||[]).filter((_,j)=>j!==i)})), style:{background:"none",border:"none",cursor:"pointer",color:C.textMuted} }, "✕")
+            , React.createElement('button', { onClick:()=>setV(p=>({...p, spartiti:(p.spartiti||[]).filter((_,j)=>j!==i)})), style:{background:"none",border:"none",cursor:"pointer",color:C.textMuted,fontSize:16,padding:"2px 6px"} }, "✕")
           ))
       )
       , React.createElement('div', null
@@ -4675,7 +4675,7 @@ const VersioneQuickEditor = ({ versione, strumentoDefault, onSave, onCancel }) =
         , (v.allegati||[]).map((s,i) => React.createElement('div', { key:s.id||i, style:{display:"flex", alignItems:"center", gap:6, padding:"5px 8px", borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, marginBottom:4} }
             , React.createElement(Ic,{n:"paperclip",size:11,stroke:C.textMuted})
             , React.createElement('span', {style:{flex:1, fontSize:11, color:C.text, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}, s.fileName)
-            , React.createElement('button', { onClick:()=>setV(p=>({...p, allegati:(p.allegati||[]).filter((_,j)=>j!==i)})), style:{background:"none",border:"none",cursor:"pointer",color:C.textMuted} }, "✕")
+            , React.createElement('button', { onClick:()=>setV(p=>({...p, allegati:(p.allegati||[]).filter((_,j)=>j!==i)})), style:{background:"none",border:"none",cursor:"pointer",color:C.textMuted,fontSize:16,padding:"2px 6px"} }, "✕")
           ))
       )
       , React.createElement('div', { style: {display:"flex", justifyContent:"flex-end", gap:8} }
@@ -5176,8 +5176,8 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
                                           if (sbG) sbG.from('brani').update({genere: editingCampoFor.valore}).eq('id', id).then(()=>{});
                                           if (_setRepertorioLF) _setRepertorioLF(p => p.map(r => r.id===id ? {...r, genere: editingCampoFor.valore} : r));
                                           setEditingCampoFor(null);
-                                        }, style:{fontSize:11, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700} }, "✓")
-                                      , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:11, color:C.textMuted, background:"none", border:"none", cursor:"pointer"} }, "✕")
+                                        }, style:{fontSize:18, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700, padding:"4px 8px", lineHeight:1} }, "✓")
+                                      , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:18, color:C.textMuted, background:"none", border:"none", cursor:"pointer", padding:"4px 8px", lineHeight:1} }, "✕")
                                     )
                                   ) : b.genere ? (
                                     React.createElement('span', null, "Genere: ", b.genere)
@@ -5198,8 +5198,8 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
                                           const nuovoIdx = salvaVersioneBrano(id, versioni[idxTarget] ? idxTarget : null, {...versioneEsistente, tonalita: editingCampoFor.valore}, repertorio, _setRepertorioLF);
                                           setStatoBrano(id, 'versioneIdx', nuovoIdx);
                                           setEditingCampoFor(null);
-                                        }, style:{fontSize:11, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700} }, "✓")
-                                      , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:11, color:C.textMuted, background:"none", border:"none", cursor:"pointer"} }, "✕")
+                                        }, style:{fontSize:18, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700, padding:"4px 8px", lineHeight:1} }, "✓")
+                                      , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:18, color:C.textMuted, background:"none", border:"none", cursor:"pointer", padding:"4px 8px", lineHeight:1} }, "✕")
                                     )
                                   ) : tonalitaMostrata ? (
                                     React.createElement('span', null, "Tonalità: ", tonalitaMostrata)
@@ -5554,6 +5554,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
   const [localTopic,     setLocalTopic]     = useState(lesson.topic     || "");
   const [editingVersioneFor, setEditingVersioneFor] = useState(null); // { branoId, versioneIdx } | null (versioneIdx null = nuova)
   const [editingCampoFor, setEditingCampoFor] = useState(null); // { branoId, campo: 'genere'|'tonalita', valore } | null
+  const [showBranoForm, setShowBranoForm] = useState(false);
   const [localExercises, setLocalExercises] = useState(lesson.exercises || "");
   const [localLinkUrl,   setLocalLinkUrl]   = useState(lesson.linkUrl   || "");
   // Allegati: usa prima quelli da allegatiGlobali (da Supabase), poi lesson.allegati
@@ -5860,6 +5861,58 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                 })
             )
           )
+          , canEdit && !showBranoForm && (
+            React.createElement('button', { onClick: () => setShowBranoForm(true),
+              style: {display:"flex", alignItems:"center", gap:7, padding:"8px 12px", marginBottom:8,
+                background:"none", border:`1px dashed ${C.goldDim}`, borderRadius:8,
+                cursor:"pointer", color:C.goldDim, fontSize:12, fontFamily:"'Open Sans',sans-serif", width:"fit-content"} }
+              , React.createElement(Ic, { n: "plus", size: 13, stroke: "currentColor" }), "Crea nuovo brano e aggiungilo"
+            )
+          )
+          , canEdit && showBranoForm && (
+            React.createElement('div', { style: {border:`1px solid ${C.goldDim}`, borderRadius:10, overflow:"hidden", marginBottom:8} }
+              , React.createElement('div', { style: {display:"flex", justifyContent:"space-between", alignItems:"center",
+                  padding:"10px 14px", background:"#e8edf5", borderBottom:`1px solid ${C.goldDim}`} }
+                , React.createElement('span', { style: {fontSize:12, color:C.gold, fontWeight:500, display:"flex", alignItems:"center", gap:6} }
+                  , React.createElement(Ic, { n: "plus", size: 13, stroke: C.gold }), "Nuovo brano nel catalogo"
+                )
+                , React.createElement('button', { onClick: () => setShowBranoForm(false),
+                    style: {background:"none", border:"none", cursor:"pointer", color:C.textMuted, display:"flex", padding:2} }
+                    , React.createElement(Ic, { n: "x", size: 15, stroke: C.textMuted })
+                  )
+              )
+              , React.createElement('div', { style: {padding:14, display:"flex", flexDirection:"column", gap:10, background:C.surface} }
+                , React.createElement(BranoFormInline, {
+                    onSave: b => {
+                      const newId = uid();
+                      const newBrano = {...b, id:newId, tipo: b.tipo||b.type||"individuale", note: b.note||b.notes||""};
+                      if (_setRepertorioLDM) _setRepertorioLDM(prev => [...prev, newBrano]);
+                      const sbBr = window.supabaseClient;
+                      if (sbBr) {
+                        sbBr.from('brani').insert({
+                          id: newId,
+                          titolo: b.title || '',
+                          compositore: b.composer || '',
+                          strumento: isColl(lesson) ? null : (lesson.instrument || null),
+                          genere: b.genere || '',
+                          eventi_ids: [],
+                          versioni: (b.tonality || (b.spartiti||[]).length > 0 || (b.files||[]).length > 0 || b.linkBacking)
+                            ? [{ tonalita: b.tonality||'', strumento: lesson.instrument||'', spartiti: b.spartiti||[], allegati: b.files||[],
+                                 link: b.linkBacking ? [{url:b.linkBacking, label:'Backing track'}] : [], allievi: [] }]
+                            : [],
+                          note: b.note || '',
+                        }).then(({ error }) => { if (error) console.warn('[FM] nuovo brano DB error:', error.message); });
+                      }
+                      const ids = lesson.repertorioIds || [];
+                      onUpdateLesson({ ...lesson, repertorioIds: [...ids, newId] });
+                      setShowBranoForm(false);
+                    },
+                    onClose: () => setShowBranoForm(false),
+                    compact: true,
+                  })
+              )
+            )
+          )
           , (lesson.repertorioIds||[]).length > 0 ? (
             React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4614}}
               , (lesson.repertorioIds||[]).map(id => {
@@ -5906,8 +5959,8 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                                     if (sbG) sbG.from('brani').update({genere: editingCampoFor.valore}).eq('id', id).then(()=>{});
                                     if (_setRepertorioLDM) _setRepertorioLDM(p => p.map(r => r.id===id ? {...r, genere: editingCampoFor.valore} : r));
                                     setEditingCampoFor(null);
-                                  }, style:{fontSize:11, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700} }, "✓")
-                                , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:11, color:C.textMuted, background:"none", border:"none", cursor:"pointer"} }, "✕")
+                                  }, style:{fontSize:18, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700, padding:"4px 8px", lineHeight:1} }, "✓")
+                                , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:18, color:C.textMuted, background:"none", border:"none", cursor:"pointer", padding:"4px 8px", lineHeight:1} }, "✕")
                               )
                             ) : b.genere ? (
                               React.createElement('span', null, "Genere: ", b.genere)
@@ -5929,8 +5982,8 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                                     const rv = { ...(lesson.repertorioVersioni||{}), [id]: nuovoIdx };
                                     onUpdateLesson({ ...lesson, repertorioVersioni: rv });
                                     setEditingCampoFor(null);
-                                  }, style:{fontSize:11, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700} }, "✓")
-                                , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:11, color:C.textMuted, background:"none", border:"none", cursor:"pointer"} }, "✕")
+                                  }, style:{fontSize:18, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700, padding:"4px 8px", lineHeight:1} }, "✓")
+                                , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:18, color:C.textMuted, background:"none", border:"none", cursor:"pointer", padding:"4px 8px", lineHeight:1} }, "✕")
                               )
                             ) : tonalitaMostrata ? (
                               React.createElement('span', null, "Tonalità: ", tonalitaMostrata)
