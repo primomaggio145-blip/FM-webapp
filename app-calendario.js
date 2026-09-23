@@ -5065,8 +5065,11 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
                                   )
                                 , editingCampoFor && editingCampoFor.branoId===id && editingCampoFor.campo==='tonalita' ? (
                                     React.createElement('span', { style:{display:"flex", alignItems:"center", gap:4} }
-                                      , React.createElement('input', { autoFocus:true, value: editingCampoFor.valore, onChange: e=>setEditingCampoFor(p=>({...p, valore:e.target.value})),
-                                          placeholder: "Tonalità", style:{fontSize:11, padding:"3px 6px", borderRadius:4, border:`1px solid ${typeBd}`, width:110} })
+                                      , React.createElement('select', { autoFocus:true, value: editingCampoFor.valore, onChange: e=>setEditingCampoFor(p=>({...p, valore:e.target.value})),
+                                          style:{fontSize:11, padding:"3px 6px", borderRadius:4, border:`1px solid ${typeBd}`, background:C.bg, color:C.text, maxWidth:150} }
+                                          , React.createElement('option', { value: "" }, "— seleziona —")
+                                          , TONALITY_OPTS.map(t => React.createElement('option', { key: t, value: t }, t))
+                                        )
                                       , React.createElement('button', { onClick: () => {
                                           const idxTarget = statoB.versioneIdx || 0;
                                           const versioneEsistente = versioni[idxTarget] || {tonalita:"", strumento:f.instrument||"", spartiti:[], allegati:[], link:[], allievi:[]};
@@ -5792,8 +5795,11 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                             )
                           , editingCampoFor && editingCampoFor.branoId===id && editingCampoFor.campo==='tonalita' ? (
                               React.createElement('span', { style:{display:"flex", alignItems:"center", gap:4} }
-                                , React.createElement('input', { autoFocus:true, value: editingCampoFor.valore, onChange: e=>setEditingCampoFor(p=>({...p, valore:e.target.value})),
-                                    placeholder: "Tonalità", style:{fontSize:11, padding:"3px 6px", borderRadius:4, border:`1px solid ${typeBd}`, width:110} })
+                                , React.createElement('select', { autoFocus:true, value: editingCampoFor.valore, onChange: e=>setEditingCampoFor(p=>({...p, valore:e.target.value})),
+                                    style:{fontSize:11, padding:"3px 6px", borderRadius:4, border:`1px solid ${typeBd}`, background:C.bg, color:C.text, maxWidth:150} }
+                                    , React.createElement('option', { value: "" }, "— seleziona —")
+                                    , TONALITY_OPTS.map(t => React.createElement('option', { key: t, value: t }, t))
+                                  )
                                 , React.createElement('button', { onClick: () => {
                                     const idxTarget = versioneSel != null ? versioneSel : 0;
                                     const versioneEsistente = versioni[idxTarget] || {tonalita:"", strumento:isColl(lesson)?(lesson.courseName||""):(lesson.instrument||""), spartiti:[], allegati:[], link:[], allievi:[]};
