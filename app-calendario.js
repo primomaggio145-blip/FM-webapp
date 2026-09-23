@@ -9709,6 +9709,7 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
     }
   },[quickAction, libri]);
   const [rinominaTarget, setRinominaTarget] = useState(null);
+  const [previewFile, setPreviewFile] = useState(null);
 
   // ── Carica da Supabase Storage bucket "biblioteca" ──────────────────────────
   const carica = React.useCallback(async () => {
@@ -10002,6 +10003,14 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
               )
               /* Azioni */
               , React.createElement('div', {style:{display:"flex",gap:6,flexShrink:0,alignItems:"center"}}
+                , item.file_url && React.createElement('button', {
+                    onClick:()=>setPreviewFile({url:item.file_url,name:item.file_name||item.titolo,type:item.file_type}),
+                    style:{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",
+                      background:"none",border:`1px solid ${C.border}`,borderRadius:8,
+                      color:C.text,fontSize:12,fontWeight:600,cursor:"pointer",
+                      fontFamily:"'Open Sans',sans-serif"}}
+                  , React.createElement(Ic,{n:"eye",size:13,stroke:"currentColor"}), " Visualizza"
+                )
                 , item.file_url && React.createElement('a', {
                     href:item.file_url, target:"_blank", rel:"noopener noreferrer",
                     style:{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",
@@ -10050,6 +10059,7 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
           )
         )
       )
+      , previewFile && React.createElement(FilePreviewModal, { file: previewFile, onClose: ()=>setPreviewFile(null) })
     )
   );
 };

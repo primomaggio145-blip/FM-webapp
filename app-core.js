@@ -515,6 +515,61 @@ const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// FILE PREVIEW MODAL — anteprima inline di un file (Allegati, Manuali/Biblioteca)
+// Uso: <FilePreviewModal file={{url,name,type}} onClose={...}/>. Immagini e PDF
+// vengono mostrati inline; audio/video con player nativo; per tutto il resto (zip,
+// doc, xls...) mostra un messaggio con link per aprire/scaricare il file.
+// ═══════════════════════════════════════════════════════════════════════════════
+const FilePreviewModal = ({ file, onClose }) => {
+  if (!file || !file.url) return null;
+  const url = file.url, name = file.name || 'File', mime = (file.type||'').toLowerCase();
+  const ext = (name.includes('.') ? name.slice(name.lastIndexOf('.')+1) : '').toLowerCase();
+  const isImage = mime.startsWith('image/') || ['png','jpg','jpeg','gif','webp','svg','bmp'].includes(ext);
+  const isPdf   = mime === 'application/pdf' || ext === 'pdf';
+  const isAudio = mime.startsWith('audio/') || ['mp3','wav','ogg','m4a','aac'].includes(ext);
+  const isVideo = mime.startsWith('video/') || ['mp4','webm','mov','m4v'].includes(ext);
+  const wide = isImage || isVideo || isPdf;
+  return React.createElement('div', {
+      style:{position:'fixed',inset:0,zIndex:9600,background:'rgba(0,0,0,0.85)',backdropFilter:'blur(4px)',
+        display:'flex',alignItems:'center',justifyContent:'center',padding:20},
+      onClick:onClose}
+    , React.createElement('div', {
+        style:{background:C.surface,borderRadius:14,width:'100%',maxWidth:wide?900:480,maxHeight:'92vh',
+          display:'flex',flexDirection:'column',border:`1px solid ${C.border}`,
+          boxShadow:'0 24px 80px rgba(0,0,0,0.6)',overflow:'hidden'},
+        onClick:e=>e.stopPropagation()}
+      , React.createElement('div', {style:{display:'flex',alignItems:'center',justifyContent:'space-between',
+          padding:'14px 18px',borderBottom:`1px solid ${C.border}`,flexShrink:0,gap:12}}
+        , React.createElement('div', {style:{fontSize:14,fontWeight:600,color:C.text,overflow:'hidden',
+            textOverflow:'ellipsis',whiteSpace:'nowrap'}}, name)
+        , React.createElement('div', {style:{display:'flex',gap:8,flexShrink:0}}
+          , React.createElement('a', {href:url, target:'_blank', rel:'noopener noreferrer',
+              style:{display:'flex',alignItems:'center',gap:5,fontSize:12,color:C.gold,textDecoration:'none',
+                padding:'6px 10px',borderRadius:7,border:`1px solid ${C.goldDim}`,background:C.goldBg,whiteSpace:'nowrap'}}
+            , React.createElement(Ic,{n:'download',size:12,stroke:C.gold}), 'Apri/Scarica')
+          , React.createElement('button', {onClick:onClose,
+              style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted,padding:6,display:'flex'}}
+            , React.createElement(Ic,{n:'x',size:16,stroke:'currentColor'}))
+        )
+      )
+      , React.createElement('div', {style:{flex:1,overflow:'auto',display:'flex',alignItems:'center',
+          justifyContent:'center',background:C.bg,minHeight:220}}
+        , isImage ? React.createElement('img', {src:url, style:{maxWidth:'100%',maxHeight:'82vh',objectFit:'contain'}})
+        : isPdf   ? React.createElement('iframe', {src:url, title:name, style:{width:'100%',height:'78vh',border:'none'}})
+        : isAudio ? React.createElement('audio', {src:url, controls:true, style:{width:'92%',margin:'40px 0'}})
+        : isVideo ? React.createElement('video', {src:url, controls:true, style:{maxWidth:'100%',maxHeight:'78vh'}})
+        : React.createElement('div', {style:{padding:'44px 30px',textAlign:'center',color:C.textMuted}}
+            , React.createElement(Ic,{n:'report',size:38,stroke:C.textDim})
+            , React.createElement('div', {style:{marginTop:14,fontSize:13,lineHeight:1.5}},
+                "Anteprima non disponibile per questo tipo di file.", React.createElement('br'),
+                "Usa \"Apri/Scarica\" per visualizzarlo.")
+          )
+      )
+    )
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // PRIMITIVI CONDIVISI
 // ═══════════════════════════════════════════════════════════════════════════════
 const uid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {

@@ -2976,6 +2976,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
   const [editAllegato, setEditAllegato] = useState(null);
   const [editAllegatoDesc, setEditAllegatoDesc] = useState('');
   const [editAllegatoName, setEditAllegatoName] = useState('');
+  const [previewFile, setPreviewFile] = useState(null);
   React.useEffect(()=>{
     if(typeof quickAction==="string" && quickAction.startsWith("openAllegato:")) {
       const aid = quickAction.slice("openAllegato:".length);
@@ -3349,6 +3350,12 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
                   , React.createElement('td', { style: {padding:"12px 16px", fontSize:13, color:C.text}}, a.allievoNome||a.allievoId||"—")
                   , React.createElement('td', { style: {padding:"12px 16px"}}
                     , React.createElement('div',{style:{display:'flex',gap:6,alignItems:'center'}}
+                      , a.fileUrl && React.createElement('button',{onClick:()=>setPreviewFile({url:a.fileUrl,name:a.fileName,type:a.fileType}),
+                          style:{display:"flex", alignItems:"center", gap:5, fontSize:12, color:C.text, cursor:"pointer",
+                            padding:"5px 9px", borderRadius:7, border:`1px solid ${C.border}`, background:C.bg,
+                            fontFamily:"'Open Sans',sans-serif"}}
+                          , React.createElement(Ic, {n:"eye", size:12, stroke:"currentColor"}), "Visualizza"
+                        )
                       , a.fileUrl && React.createElement('a', { href:a.fileUrl, target:"_blank", rel:"noopener noreferrer",
                           style:{display:"flex", alignItems:"center", gap:5, fontSize:12, color:C.blue, textDecoration:"none",
                             padding:"5px 9px", borderRadius:7, border:`1px solid ${C.blueBorder}`, background:C.blueBg}}
@@ -3416,6 +3423,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
         )
     )
     )
+    , previewFile && React.createElement(FilePreviewModal, { file: previewFile, onClose: ()=>setPreviewFile(null) })
     ) // close Fragment
 };
 
