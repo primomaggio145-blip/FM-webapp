@@ -4851,6 +4851,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
     setStatiBrani(p => ({...p, [branoId]: {...(p[branoId]||{versioneIdx:0,stato:'in_studio'}), [campo]:valore}}));
   };
   const [editingVersioneFor, setEditingVersioneFor] = useState(null); // { branoId, versioneIdx } | null (versioneIdx null = nuova)
+  const [editingCampoFor, setEditingCampoFor] = useState(null); // { branoId, campo: 'genere'|'tonalita', valore } | null
   const set = (k, v) => setF(p => ({ ...p, [k]:v }));
 
   const hours = Array.from({length:56}, (_, i) => {
@@ -5032,6 +5033,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
                       ];
                       const statoB = statiBrani[id] || {versioneIdx:0, stato:'in_studio'};
                       const versioni = b.versioni||[];
+                      const tonalitaMostrata = versioni[statoB.versioneIdx] ? versioni[statoB.versioneIdx].tonalita : (versioni[0] && versioni[0].tonalita);
                       return (
                         React.createElement('div', { key: id, style: {display:"flex", flexDirection:"column", gap:6,
                           padding:"10px 12px", borderRadius:8,
@@ -5041,8 +5043,45 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
                             , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4305}}
                               , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex,
                                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4306}}, b.title)
-                              , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4308}}
-                                , b.composer, b.tonality ? ` · ${b.tonality}` : ""
+                              , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4308}}, b.composer)
+                              , React.createElement('div', { style: {fontSize:11, color:C.textMuted, marginTop:2, display:"flex", gap:12, flexWrap:"wrap"} }
+                                , editingCampoFor && editingCampoFor.branoId===id && editingCampoFor.campo==='genere' ? (
+                                    React.createElement('span', { style:{display:"flex", alignItems:"center", gap:4} }
+                                      , React.createElement('input', { autoFocus:true, value: editingCampoFor.valore, onChange: e=>setEditingCampoFor(p=>({...p, valore:e.target.value})),
+                                          placeholder: "Genere", style:{fontSize:11, padding:"3px 6px", borderRadius:4, border:`1px solid ${typeBd}`, width:100} })
+                                      , React.createElement('button', { onClick: () => {
+                                          const sbG = window.supabaseClient;
+                                          if (sbG) sbG.from('brani').update({genere: editingCampoFor.valore}).eq('id', id).then(()=>{});
+                                          if (_setRepertorioLF) _setRepertorioLF(p => p.map(r => r.id===id ? {...r, genere: editingCampoFor.valore} : r));
+                                          setEditingCampoFor(null);
+                                        }, style:{fontSize:11, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700} }, "✓")
+                                      , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:11, color:C.textMuted, background:"none", border:"none", cursor:"pointer"} }, "✕")
+                                    )
+                                  ) : b.genere ? (
+                                    React.createElement('span', null, "Genere: ", b.genere)
+                                  ) : (
+                                    React.createElement('span', { onClick: () => setEditingCampoFor({branoId:id, campo:'genere', valore:''}),
+                                      style:{color:C.blue, cursor:"pointer", fontStyle:"italic"} }, "+ aggiungi genere")
+                                  )
+                                , editingCampoFor && editingCampoFor.branoId===id && editingCampoFor.campo==='tonalita' ? (
+                                    React.createElement('span', { style:{display:"flex", alignItems:"center", gap:4} }
+                                      , React.createElement('input', { autoFocus:true, value: editingCampoFor.valore, onChange: e=>setEditingCampoFor(p=>({...p, valore:e.target.value})),
+                                          placeholder: "Tonalità", style:{fontSize:11, padding:"3px 6px", borderRadius:4, border:`1px solid ${typeBd}`, width:110} })
+                                      , React.createElement('button', { onClick: () => {
+                                          const idxTarget = statoB.versioneIdx || 0;
+                                          const versioneEsistente = versioni[idxTarget] || {tonalita:"", strumento:f.instrument||"", spartiti:[], allegati:[], link:[], allievi:[]};
+                                          const nuovoIdx = salvaVersioneBrano(id, versioni[idxTarget] ? idxTarget : null, {...versioneEsistente, tonalita: editingCampoFor.valore}, repertorio, _setRepertorioLF);
+                                          setStatoBrano(id, 'versioneIdx', nuovoIdx);
+                                          setEditingCampoFor(null);
+                                        }, style:{fontSize:11, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700} }, "✓")
+                                      , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:11, color:C.textMuted, background:"none", border:"none", cursor:"pointer"} }, "✕")
+                                    )
+                                  ) : tonalitaMostrata ? (
+                                    React.createElement('span', null, "Tonalità: ", tonalitaMostrata)
+                                  ) : (
+                                    React.createElement('span', { onClick: () => setEditingCampoFor({branoId:id, campo:'tonalita', valore:''}),
+                                      style:{color:C.blue, cursor:"pointer", fontStyle:"italic"} }, "+ aggiungi tonalità")
+                                  )
                               )
                             )
                             , React.createElement('button', { onClick: () => set("repertorioIds", (f.repertorioIds||[]).filter(i=>i!==id)),
@@ -5389,6 +5428,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
   // Stato locale per editing inline
   const [localTopic,     setLocalTopic]     = useState(lesson.topic     || "");
   const [editingVersioneFor, setEditingVersioneFor] = useState(null); // { branoId, versioneIdx } | null (versioneIdx null = nuova)
+  const [editingCampoFor, setEditingCampoFor] = useState(null); // { branoId, campo: 'genere'|'tonalita', valore } | null
   const [localExercises, setLocalExercises] = useState(lesson.exercises || "");
   const [localLinkUrl,   setLocalLinkUrl]   = useState(lesson.linkUrl   || "");
   // Allegati: usa prima quelli da allegatiGlobali (da Supabase), poi lesson.allegati
@@ -5730,7 +5770,47 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                       , React.createElement(Ic, { n: "note", size: 14, stroke: typeHex, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4624}})
                       , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4625}}
                         , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4626}}, b.title)
-                        , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4627}}, b.composer, tonalitaMostrata ? ` · ${tonalitaMostrata}` : "")
+                        , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4627}}, b.composer)
+                        , React.createElement('div', { style: {fontSize:11, color:C.textMuted, marginTop:2, display:"flex", gap:12, flexWrap:"wrap"} }
+                          , editingCampoFor && editingCampoFor.branoId===id && editingCampoFor.campo==='genere' ? (
+                              React.createElement('span', { style:{display:"flex", alignItems:"center", gap:4} }
+                                , React.createElement('input', { autoFocus:true, value: editingCampoFor.valore, onChange: e=>setEditingCampoFor(p=>({...p, valore:e.target.value})),
+                                    placeholder: "Genere", style:{fontSize:11, padding:"3px 6px", borderRadius:4, border:`1px solid ${typeBd}`, width:100} })
+                                , React.createElement('button', { onClick: () => {
+                                    const sbG = window.supabaseClient;
+                                    if (sbG) sbG.from('brani').update({genere: editingCampoFor.valore}).eq('id', id).then(()=>{});
+                                    if (_setRepertorioLDM) _setRepertorioLDM(p => p.map(r => r.id===id ? {...r, genere: editingCampoFor.valore} : r));
+                                    setEditingCampoFor(null);
+                                  }, style:{fontSize:11, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700} }, "✓")
+                                , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:11, color:C.textMuted, background:"none", border:"none", cursor:"pointer"} }, "✕")
+                              )
+                            ) : b.genere ? (
+                              React.createElement('span', null, "Genere: ", b.genere)
+                            ) : canEdit && (
+                              React.createElement('span', { onClick: () => setEditingCampoFor({branoId:id, campo:'genere', valore:''}),
+                                style:{color:C.blue, cursor:"pointer", fontStyle:"italic"} }, "+ aggiungi genere")
+                            )
+                          , editingCampoFor && editingCampoFor.branoId===id && editingCampoFor.campo==='tonalita' ? (
+                              React.createElement('span', { style:{display:"flex", alignItems:"center", gap:4} }
+                                , React.createElement('input', { autoFocus:true, value: editingCampoFor.valore, onChange: e=>setEditingCampoFor(p=>({...p, valore:e.target.value})),
+                                    placeholder: "Tonalità", style:{fontSize:11, padding:"3px 6px", borderRadius:4, border:`1px solid ${typeBd}`, width:110} })
+                                , React.createElement('button', { onClick: () => {
+                                    const idxTarget = versioneSel != null ? versioneSel : 0;
+                                    const versioneEsistente = versioni[idxTarget] || {tonalita:"", strumento:isColl(lesson)?(lesson.courseName||""):(lesson.instrument||""), spartiti:[], allegati:[], link:[], allievi:[]};
+                                    const nuovoIdx = salvaVersioneBrano(id, versioni[idxTarget] ? idxTarget : null, {...versioneEsistente, tonalita: editingCampoFor.valore}, _repertorioLDM, _setRepertorioLDM);
+                                    const rv = { ...(lesson.repertorioVersioni||{}), [id]: nuovoIdx };
+                                    onUpdateLesson({ ...lesson, repertorioVersioni: rv });
+                                    setEditingCampoFor(null);
+                                  }, style:{fontSize:11, color:C.gold, background:"none", border:"none", cursor:"pointer", fontWeight:700} }, "✓")
+                                , React.createElement('button', { onClick: () => setEditingCampoFor(null), style:{fontSize:11, color:C.textMuted, background:"none", border:"none", cursor:"pointer"} }, "✕")
+                              )
+                            ) : tonalitaMostrata ? (
+                              React.createElement('span', null, "Tonalità: ", tonalitaMostrata)
+                            ) : canEdit && (
+                              React.createElement('span', { onClick: () => setEditingCampoFor({branoId:id, campo:'tonalita', valore:''}),
+                                style:{color:C.blue, cursor:"pointer", fontStyle:"italic"} }, "+ aggiungi tonalità")
+                            )
+                        )
                       )
                       , canEdit && React.createElement('button', { onClick: () => onUpdateLesson({ ...lesson, repertorioIds: (lesson.repertorioIds||[]).filter(i=>i!==id) }),
                           style: {background:"none", border:"none", cursor:"pointer", padding:4, display:"flex", borderRadius:4, flexShrink:0, color:C.textMuted}}
