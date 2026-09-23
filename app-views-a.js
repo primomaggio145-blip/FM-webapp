@@ -3435,13 +3435,30 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, c
     const [selUtente, setSelUtente] = useState(null);
     const [toast,     setToast]     = useState(null);
     const [saving,    setSaving]    = useState(false);
+    // Riferimento al timeout di sicurezza per il salto "apri utente" dalla ricerca
+    // globale — vedi il commento nell'useEffect sotto.
+    const _qaUtenteTimer = React.useRef(null);
 
     React.useEffect(()=>{
       if(typeof quickAction==="string" && quickAction.startsWith("openUtente:")) {
         const uid_ = quickAction.slice("openUtente:".length);
         const found = (utenti||[]).find(u=>String(u.id)===uid_);
-        if (found) { setTab("utenti"); setDrawer(found); }
-        if(clearQuickAction) clearQuickAction();
+        if (found) {
+          setTab("utenti"); setDrawer(found);
+          if (_qaUtenteTimer.current) { clearTimeout(_qaUtenteTimer.current); _qaUtenteTimer.current = null; }
+          if(clearQuickAction) clearQuickAction();
+        } else if (!_qaUtenteTimer.current) {
+          // La lista utenti (caricata da Supabase al mount di questa vista) potrebbe
+          // non essere ancora arrivata: NON annulliamo subito il comando, altrimenti
+          // si perde per sempre appena i dati arrivano un istante dopo. Riproviamo
+          // automaticamente ad ogni aggiornamento di 'utenti' (dipendenza sotto);
+          // questo timeout è solo una rete di sicurezza nel caso l'utente cercato
+          // non esista più, per non restare in attesa all'infinito.
+          _qaUtenteTimer.current = setTimeout(() => {
+            if(clearQuickAction) clearQuickAction();
+            _qaUtenteTimer.current = null;
+          }, 8000);
+        }
       }
     },[quickAction, utenti]);
 

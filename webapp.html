@@ -235,14 +235,21 @@
         }
       }
 
-      // Prima lettura subito (registra la baseline), poi un controllo ogni 3 minuti
+      // Prima lettura subito (registra la baseline), poi un controllo ogni 2 minuti.
+      // Intervallo più stretto rispetto a prima: la PWA è la modalità più usata e,
+      // restando aperta a lungo senza mai essere "ricaricata" dall'utente, è quella
+      // più esposta al rischio di restare bloccata su una versione vecchia.
       controllaAggiornamenti();
-      setInterval(controllaAggiornamenti, 3 * 60 * 1000);
-      // Controlla anche quando l'utente torna sulla scheda dopo averla lasciata in
-      // background (scenario tipico: tablet/telefono lasciato aperto per giorni)
+      setInterval(controllaAggiornamenti, 2 * 60 * 1000);
+      // Più punti di ripresa coperti, non solo 'visibilitychange': in modalità PWA
+      // (soprattutto iOS) l'app può tornare in primo piano senza che tutti questi
+      // eventi scattino allo stesso modo — controllarli tutti riduce il rischio che
+      // una ripresa dal background sfugga al rilevamento.
       document.addEventListener('visibilitychange', function() {
         if (document.visibilityState === 'visible') controllaAggiornamenti();
       });
+      window.addEventListener('focus', controllaAggiornamenti);
+      window.addEventListener('pageshow', controllaAggiornamenti);
     })();
   </script>
 
@@ -260,6 +267,17 @@
           scope: '/'
         }).then(function(reg) {
           console.log('[FM PWA] Service Worker registrato:', reg.scope);
+          // Il browser controlla da solo se service-worker.js è cambiato, ma solo
+          // in certi momenti (navigazione, ogni 24h circa) — su una PWA che resta
+          // aperta a lungo questo può non bastare. Forziamo noi il controllo agli
+          // stessi ritmi/eventi con cui controlliamo gli altri file dell'app.
+          const forzaControlloSW = () => reg.update().catch(()=>{});
+          setInterval(forzaControlloSW, 2 * 60 * 1000);
+          document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') forzaControlloSW();
+          });
+          window.addEventListener('focus', forzaControlloSW);
+          window.addEventListener('pageshow', forzaControlloSW);
         }).catch(function(err) {
           console.log('[FM PWA] Service Worker non disponibile:', err.message);
         });

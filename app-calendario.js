@@ -9686,12 +9686,26 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
   const [uploading,  setUploading]  = useState(false);
   const [modal,      setModal]      = useState(null); // "add"
   const [delTarget,  setDelTarget]  = useState(null);
+  const _qaManualeTimer = React.useRef(null);
   React.useEffect(()=>{
     if(typeof quickAction==="string" && quickAction.startsWith("openManuale:")) {
       const mid = quickAction.slice("openManuale:".length);
       const found = (libri||[]).find(m=>String(m.id)===mid);
-      if (found) { setSearch(found.titolo || ''); setFilterCat(""); setFilterCorso(""); }
-      if(clearQuickAction) clearQuickAction();
+      if (found) {
+        setSearch(found.titolo || ''); setFilterCat(""); setFilterCorso("");
+        if (_qaManualeTimer.current) { clearTimeout(_qaManualeTimer.current); _qaManualeTimer.current = null; }
+        if(clearQuickAction) clearQuickAction();
+      } else if (!_qaManualeTimer.current) {
+        // Stesso principio di UtentiView: 'libri' arriva da un fetch separato che
+        // parte al mount di questa vista e può richiedere un istante — non
+        // annulliamo subito il comando, riproviamo automaticamente quando 'libri'
+        // si aggiorna (dipendenza sotto). Timeout di sicurezza se il manuale non
+        // viene mai trovato (es. eliminato nel frattempo).
+        _qaManualeTimer.current = setTimeout(() => {
+          if(clearQuickAction) clearQuickAction();
+          _qaManualeTimer.current = null;
+        }, 8000);
+      }
     }
   },[quickAction, libri]);
   const [rinominaTarget, setRinominaTarget] = useState(null);
