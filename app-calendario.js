@@ -1205,16 +1205,29 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const [waLoading, setWaLoading] = useState(false);
   const [waError, setWaError] = useState(null);
   // Normalizza un numero di telefono per il confronto: solo cifre, niente '+', spazi,
-  // trattini o caratteri Unicode invisibili (visti in alcuni numeri salvati in anagrafica) —
-  // così un numero salvato come "+39 333 271 3187" combacia comunque con "393332713187"
-  // nel log whatsapp_log, anche se non è stato inserito nel formato consigliato.
+  // trattini o caratteri Unicode invisibili (visti in alcuni numeri salvati in anagrafica).
   const normalizzaTelefono = (tel) => (tel||'').replace(/[^\d]/g, '');
+  // Confronta due numeri tollerando un prefisso internazionale presente su un lato e
+  // mancante sull'altro — caso reale e frequente: in anagrafica i numeri sono spesso salvati
+  // "locali" (es. "3279828645"), mentre whatsapp_log registra il numero con cui è stato
+  // davvero inviato il messaggio all'API Meta, che RICHIEDE il prefisso internazionale
+  // (es. "393279828645"). Un confronto esatto perderebbe questi casi anche se si tratta
+  // proprio della stessa persona — si confrontano invece le ultime cifre in comune (almeno 8),
+  // ignorando l'eventuale prefisso di paese in più su uno dei due numeri.
+  const telefoniCombaciano = (a, b) => {
+    const na = normalizzaTelefono(a);
+    const nb = normalizzaTelefono(b);
+    if (!na || !nb) return false;
+    if (na === nb) return true;
+    const corto = na.length <= nb.length ? na : nb;
+    const lungo = na.length <= nb.length ? nb : na;
+    return corto.length >= 8 && lungo.endsWith(corto);
+  };
   React.useEffect(() => {
     if (tab !== 'reminders' || sdRuolo !== 'admin') return;
     const sb = window.supabaseClient;
     if (!sb) return;
-    const mioTel = normalizzaTelefono(student.phone);
-    if (!mioTel) { setWaLog([]); setWaError('Questo allievo non ha un numero di telefono in anagrafica.'); return; }
+    if (!normalizzaTelefono(student.phone)) { setWaLog([]); setWaError('Questo allievo non ha un numero di telefono in anagrafica.'); return; }
     setWaLoading(true);
     setWaError(null);
     sb.from('whatsapp_log').select('*').order('created_at', { ascending:false }).limit(500)
@@ -1223,7 +1236,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
           setWaError(error.code === '42P01' ? 'Tabella whatsapp_log non trovata.' : (error.message||'Errore di caricamento.'));
           setWaLog([]);
         } else {
-          setWaLog((data||[]).filter(r => normalizzaTelefono(r.telefono) === mioTel));
+          setWaLog((data||[]).filter(r => telefoniCombaciano(r.telefono, student.phone)));
         }
         setWaLoading(false);
       })
