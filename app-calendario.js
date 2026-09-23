@@ -1230,18 +1230,43 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
     if (!normalizzaTelefono(student.phone)) { setWaLog([]); setWaError('Questo allievo non ha un numero di telefono in anagrafica.'); return; }
     setWaLoading(true);
     setWaError(null);
-    sb.from('whatsapp_log').select('*').order('created_at', { ascending:false }).limit(500)
-      .then(({ data, error }) => {
+    Promise.all([
+      sb.from('whatsapp_log').select('*').order('created_at', { ascending:false }).limit(500),
+      // "messaggi" non ha un campo telefono diretto: le risposte ricevute su WhatsApp sono
+      // collegate tramite mittente_nome (valorizzato dal webhook che riceve la risposta).
+      sb.from('messaggi').select('*').eq('canale', 'whatsapp').order('created_at', { ascending:true }).limit(500),
+    ])
+      .then(([{ data, error }, { data: dataMsg, error: errMsg }]) => {
         if (error) {
           setWaError(error.code === '42P01' ? 'Tabella whatsapp_log non trovata.' : (error.message||'Errore di caricamento.'));
           setWaLog([]);
-        } else {
-          setWaLog((data||[]).filter(r => telefoniCombaciano(r.telefono, student.phone)));
+          setWaLoading(false);
+          return;
         }
+        if (errMsg) console.warn('[FM] caricamento risposte WhatsApp:', errMsg.message);
+        const nomeAllievo = (student.name||student.nome||'').toLowerCase().trim();
+        // Risposte di QUESTO allievo, in ordine cronologico crescente (serve per l'abbinamento).
+        const risposteAllievo = (dataMsg||[])
+          .filter(m => (m.mittente_nome||'').toLowerCase().trim() === nomeAllievo)
+          .map(m => m.created_at)
+          .sort();
+        const mieiReminder = (data||[]).filter(r => telefoniCombaciano(r.telefono, student.phone));
+        // Ordina cronologicamente crescente per abbinare correttamente ogni reminder alla
+        // risposta più vicina arrivata DOPO di esso (e prima del reminder successivo) — così
+        // una risposta non risulta erroneamente collegata a un reminder più vecchio di settimane.
+        const cronologico = [...mieiReminder].sort((a,b) => new Date(a.created_at) - new Date(b.created_at));
+        const conRisposta = cronologico.map((r, i) => {
+          const inizio = new Date(r.created_at).getTime();
+          const fine = i+1 < cronologico.length ? new Date(cronologico[i+1].created_at).getTime() : Infinity;
+          const haRisposto = risposteAllievo.some(dt => { const t = new Date(dt).getTime(); return t > inizio && t < fine; });
+          return { ...r, _haRisposto: haRisposto };
+        });
+        // Ripristina l'ordine di visualizzazione (più recente in cima).
+        setWaLog(conRisposta.sort((a,b) => new Date(b.created_at) - new Date(a.created_at)));
         setWaLoading(false);
       })
       .catch(e => { setWaError(e?.message||'Errore di caricamento.'); setWaLoading(false); });
-  }, [tab, student.id, student.phone, sdRuolo]);
+  }, [tab, student.id, student.phone, student.name, sdRuolo]);
 
   // Espone hook per aprire il modal dall'esterno (dashboard → AllieviView → StudentDetail)
   React.useEffect(() => {
@@ -2121,7 +2146,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
               : React.createElement('table', {style:{width:"100%",borderCollapse:"collapse"}}
                   , React.createElement('thead', null
                     , React.createElement('tr', {style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
-                      , ["Data/Ora","Numero","Tipo","Stato","Dettaglio"].map(h=>
+                      , ["Data/Ora","Numero","Tipo","Stato","Risposta","Dettaglio"].map(h=>
                           React.createElement('th', {key:h, style:{padding:"10px 14px",textAlign:"left",fontSize:10,textTransform:"uppercase",letterSpacing:"0.08em",color:C.textMuted,fontWeight:600}}, h))
                     )
                   )
@@ -2132,6 +2157,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                           , React.createElement('td', {style:{padding:"9px 14px",fontSize:12,fontFamily:"monospace",color:C.text}}, r.telefono||"—")
                           , React.createElement('td', {style:{padding:"9px 14px",fontSize:11,color:C.textMuted}}, r.tipo||"—")
                           , React.createElement('td', {style:{padding:"9px 14px"}}, React.createElement('span', {style:{fontSize:11,fontWeight:600,background:r.stato==='inviato'?C.greenBg:C.redBg,color:r.stato==='inviato'?C.green:C.red,border:`1px solid ${r.stato==='inviato'?C.greenBorder:C.redBorder}`,borderRadius:20,padding:"3px 10px"}}, r.stato==='inviato'?"✅ Inviato":"❌ Errore"))
+                          , React.createElement('td', {style:{padding:"9px 14px"}}, r.stato!=='inviato' ? React.createElement('span',{style:{fontSize:11,color:C.textDim}},"—") : React.createElement('span', {style:{fontSize:11,fontWeight:600,background:r._haRisposto?C.greenBg:C.bg,color:r._haRisposto?C.green:C.textDim,border:`1px solid ${r._haRisposto?C.greenBorder:C.border}`,borderRadius:20,padding:"3px 10px"}}, r._haRisposto?"💬 Ha risposto":"Nessuna risposta"))
                           , React.createElement('td', {style:{padding:"9px 14px",fontSize:11,color:C.textMuted,maxWidth:260,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}, r.dettaglio||"—")
                         )
                       )
