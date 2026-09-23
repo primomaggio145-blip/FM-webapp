@@ -1232,8 +1232,9 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
     setWaError(null);
     Promise.all([
       sb.from('whatsapp_log').select('*').order('created_at', { ascending:false }).limit(500),
-      // "messaggi" non ha un campo telefono diretto: le risposte ricevute su WhatsApp sono
-      // collegate tramite mittente_nome (valorizzato dal webhook che riceve la risposta).
+      // "messaggi.telefono": nuovo campo, valorizzato dal webhook che riceve la risposta —
+      // abbinamento primario e affidabile. Il vecchio abbinamento per mittente_nome resta come
+      // fallback SOLO per righe già esistenti create prima dell'aggiunta di questo campo.
       sb.from('messaggi').select('*').eq('canale', 'whatsapp').order('created_at', { ascending:true }).limit(500),
     ])
       .then(([{ data, error }, { data: dataMsg, error: errMsg }]) => {
@@ -1246,8 +1247,12 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
         if (errMsg) console.warn('[FM] caricamento risposte WhatsApp:', errMsg.message);
         const nomeAllievo = (student.name||student.nome||'').toLowerCase().trim();
         // Risposte di QUESTO allievo, in ordine cronologico crescente (serve per l'abbinamento).
+        // Preferisce il confronto per telefono (affidabile); ricade sul nome solo per le righe
+        // più vecchie che non hanno ancora il campo telefono valorizzato.
         const risposteAllievo = (dataMsg||[])
-          .filter(m => (m.mittente_nome||'').toLowerCase().trim() === nomeAllievo)
+          .filter(m => m.telefono
+            ? telefoniCombaciano(m.telefono, student.phone)
+            : (m.mittente_nome||'').toLowerCase().trim() === nomeAllievo)
           .map(m => m.created_at)
           .sort();
         const mieiReminder = (data||[]).filter(r => telefoniCombaciano(r.telefono, student.phone));
