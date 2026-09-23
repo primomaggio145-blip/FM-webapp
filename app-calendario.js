@@ -4465,6 +4465,42 @@ function salvaVersioneBrano(branoId, versioneIdx, versioneDati, repertorio, setR
 // Editor inline per aggiungere/modificare una versione di un brano, riusato sia nel modal
 // di dettaglio sia nel form di modifica lezione — evita di dover uscire dalla lezione e
 // andare in Repertorio solo per aggiungere una tonalità o caricare uno spartito.
+// Campo "cerca e seleziona": sostituisce un <select> semplice quando l'elenco può crescere
+// molto (brani, manuali) — a riposo mostra solo un invito a digitare, filtra man mano che si
+// scrive, e si richiude da solo (torna a riposo) subito dopo aver scelto un risultato.
+const RicercaESeleziona = ({ items, getSearchText, renderOption, placeholder, onSelect, emptyLabel }) => {
+  const [query, setQuery] = useState("");
+  const [focused, setFocused] = useState(false);
+  const q = query.trim().toLowerCase();
+  const risultati = q === "" ? [] : items.filter(it => getSearchText(it).toLowerCase().includes(q)).slice(0, 30);
+  return (
+    React.createElement('div', { style: {position:"relative"} }
+      , React.createElement('input', {
+          value: query,
+          onChange: e => setQuery(e.target.value),
+          onFocus: () => setFocused(true),
+          onBlur: () => setTimeout(() => setFocused(false), 150), // ritardo per permettere il click su un risultato
+          placeholder: placeholder,
+          style: {background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:13,
+            padding:"10px 14px", width:"100%", boxSizing:"border-box", fontFamily:"'Open Sans',sans-serif", outline:"none"}
+        })
+      , focused && (
+        React.createElement('div', { style: {maxHeight:200, overflowY:"auto", border:`1px solid ${C.border}`,
+          borderRadius:8, marginTop:4, background:C.surface, boxShadow:"0 4px 12px rgba(0,0,0,0.08)"} }
+          , q === ""
+            ? React.createElement('div', { style: {padding:"10px 14px", fontSize:12, color:C.textDim, fontStyle:"italic"} }, "Digita per cercare...")
+            : risultati.length === 0
+              ? React.createElement('div', { style: {padding:"10px 14px", fontSize:12, color:C.textDim, fontStyle:"italic"} }, emptyLabel || "Nessun risultato")
+              : risultati.map(it => React.createElement('div', {
+                  key: it.id,
+                  onClick: () => { onSelect(it); setQuery(""); setFocused(false); },
+                  style: {padding:"9px 14px", fontSize:13, color:C.text, cursor:"pointer", borderBottom:`1px solid ${C.border}`}
+                }, renderOption(it)))
+        )
+      )
+    )
+  );
+};
 const VersioneQuickEditor = ({ versione, strumentoDefault, onSave, onCancel }) => {
   const [v, setV] = useState(versione || { tonalita:"", strumento:strumentoDefault||"", spartiti:[], allegati:[], link:[], allievi:[] });
   const setVal = (k,val) => setV(p=>({...p,[k]:val}));
@@ -4966,25 +5002,18 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
         , React.createElement(SDiv, { label: "Repertorio studiato" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 4260}})
         , React.createElement('div', { style: {gridColumn:"1/-1", display:"flex", flexDirection:"column", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4261}}
           , React.createElement(React.Fragment, null
-                /* Tendina di selezione */
-                , React.createElement('select', {
-                  value: "",
-                  onChange: e => {
-                    const id = e.target.value;
-                    if(!id) return;
-                    const ids = f.repertorioIds||[];
-                    if(!ids.includes(id)) set("repertorioIds", [...ids, id]);
-                  },
-                  style: {background:C.bg, border:`1px solid ${C.border}`, borderRadius:8,
-                    color:C.textMuted, fontSize:13, padding:"10px 14px", width:"100%",
-                    fontFamily:"'Open Sans',sans-serif", appearance:"none", cursor:"pointer"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4264}}
-                  , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4275}}, repertorio.length === 0 ? "Nessun brano nel catalogo" : "+ Aggiungi brano al repertorio...")
-                  , repertorio.filter(b=>!(f.repertorioIds||[]).includes(b.id)).map(b => (
-                    React.createElement('option', { key: b.id, value: b.id }
-                      , b.title, b.composer ? ` — ${b.composer}` : "", b.tonality ? ` (${b.tonality})` : ""
-                    )
-                  ))
-                )
+                /* Ricerca e selezione brano */
+                , React.createElement(RicercaESeleziona, {
+                    items: repertorio.filter(b=>!(f.repertorioIds||[]).includes(b.id)),
+                    getSearchText: b => [b.title, b.composer, b.genere, b.tonality].filter(Boolean).join(" "),
+                    renderOption: b => `${b.title}${b.composer?` — ${b.composer}`:""}${b.tonality?` (${b.tonality})`:""}`,
+                    placeholder: "Cerca brano per titolo, compositore o genere...",
+                    emptyLabel: "Nessun brano trovato",
+                    onSelect: b => {
+                      const ids = f.repertorioIds||[];
+                      if(!ids.includes(b.id)) set("repertorioIds", [...ids, b.id]);
+                    },
+                  })
 
                 /* Pills dei brani selezionati */
                 , (f.repertorioIds||[]).length > 0 && (
@@ -5652,23 +5681,18 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
         , React.createElement('div', {}
           , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8}}, "Brano in repertorio")
           , canEdit && (
-            React.createElement('select', {
-              value: "",
-              onChange: e => {
-                const id = e.target.value;
-                if (!id) return;
-                const ids = lesson.repertorioIds || [];
-                if (!ids.includes(id)) onUpdateLesson({ ...lesson, repertorioIds: [...ids, id] });
-              },
-              style: {background:C.bg, border:`1px solid ${C.border}`, borderRadius:8,
-                color:C.textMuted, fontSize:13, padding:"10px 14px", width:"100%",
-                fontFamily:"'Open Sans',sans-serif", appearance:"none", cursor:"pointer", marginBottom:8}}
-              , React.createElement('option', { value: "" }, (_repertorioLDM||[]).length === 0 ? "Nessun brano nel catalogo" : "+ Aggiungi brano al repertorio...")
-              , (_repertorioLDM||[]).filter(b=>!(lesson.repertorioIds||[]).includes(b.id)).map(b => (
-                  React.createElement('option', { key: b.id, value: b.id }
-                    , b.title, b.composer ? ` — ${b.composer}` : "", b.tonality ? ` (${b.tonality})` : ""
-                  )
-                ))
+            React.createElement('div', { style: {marginBottom:8} }
+              , React.createElement(RicercaESeleziona, {
+                  items: (_repertorioLDM||[]).filter(b=>!(lesson.repertorioIds||[]).includes(b.id)),
+                  getSearchText: b => [b.title, b.composer, b.genere, b.tonality].filter(Boolean).join(" "),
+                  renderOption: b => `${b.title}${b.composer?` — ${b.composer}`:""}${b.tonality?` (${b.tonality})`:""}`,
+                  placeholder: "Cerca brano per titolo, compositore o genere...",
+                  emptyLabel: "Nessun brano trovato",
+                  onSelect: b => {
+                    const ids = lesson.repertorioIds || [];
+                    if (!ids.includes(b.id)) onUpdateLesson({ ...lesson, repertorioIds: [...ids, b.id] });
+                  },
+                })
             )
           )
           , (lesson.repertorioIds||[]).length > 0 ? (
@@ -5788,24 +5812,17 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
               // il menu diventa lunghissimo e inutile da scorrere.
               const corsoLezione = lesson.courseName || lesson.instrument || '';
               const bibliotecaFiltrata = (_bibliotecaLDM||[]).filter(b => !b.corso || b.corso === corsoLezione);
-              return React.createElement('select', {
-              value: "",
-              onChange: e => {
-                const id = e.target.value;
-                if (!id) return;
-                const ids = lesson.manualiIds || [];
-                if (!ids.includes(id)) onUpdateLesson({ ...lesson, manualiIds: [...ids, id] });
-              },
-              style: {background:C.bg, border:`1px solid ${C.border}`, borderRadius:8,
-                color:C.textMuted, fontSize:13, padding:"10px 14px", width:"100%",
-                fontFamily:"'Open Sans',sans-serif", appearance:"none", cursor:"pointer", marginBottom:8}}
-              , React.createElement('option', { value: "" }, bibliotecaFiltrata.length === 0 ? "Nessun manuale per questo corso in Biblioteca" : "+ Allega manuale dalla Biblioteca...")
-              , bibliotecaFiltrata.filter(b=>!(lesson.manualiIds||[]).includes(b.id)).map(b => (
-                  React.createElement('option', { key: b.id, value: b.id }
-                    , b.titolo, b.autore ? ` — ${b.autore}` : "", b.categoria ? ` (${b.categoria})` : ""
-                  )
-                ))
-              );
+              return React.createElement(RicercaESeleziona, {
+                items: bibliotecaFiltrata.filter(b=>!(lesson.manualiIds||[]).includes(b.id)),
+                getSearchText: b => [b.titolo, b.autore, b.categoria].filter(Boolean).join(" "),
+                renderOption: b => `${b.titolo}${b.autore?` — ${b.autore}`:""}${b.categoria?` (${b.categoria})`:""}`,
+                placeholder: "Cerca manuale per titolo, autore o categoria...",
+                emptyLabel: "Nessun manuale trovato",
+                onSelect: b => {
+                  const ids = lesson.manualiIds || [];
+                  if (!ids.includes(b.id)) onUpdateLesson({ ...lesson, manualiIds: [...ids, b.id] });
+                },
+              });
             })()
           
           , (lesson.manualiIds||[]).length > 0 ? (
