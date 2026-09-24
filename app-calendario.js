@@ -1161,7 +1161,7 @@ const LessonLog = ({ lessons:_lessonsRaw, studentId, onAddLesson }) => {
 // ════════════════════════════════════════════════════════════════════════════════
 // SCHEDA DETTAGLIO
 // ════════════════════════════════════════════════════════════════════════════════
-const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntrateRaw, setEntrate, annoInizioAttivo, onEdit, onDelete, onBack, onAddLesson, onUpdateStudent, config:propConfig, setConfig:propSetConfig, userRuolo:_sdRuolo, gruppi:_gruppiSD }) => {
+const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntrateRaw, setEntrate, annoInizioAttivo, onEdit, onDelete, onBack, onAddLesson, onUpdateStudent, config:propConfig, setConfig:propSetConfig, userRuolo:_sdRuolo, gruppi:_gruppiSD, setLessons:_setLessonsSD, iscrizioniAnno:_iscrizioniSD }) => {
   const isMobile = useIsMobile();
   const sdRuolo = _sdRuolo || "admin"; // admin | docente | allievo
   const lessons = _lessonsRaw || [];
@@ -1291,7 +1291,34 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
     if (l.attendance === 'recuperata') return false;
     return studentInLesson(l, student.name, student.id);
   });
-  const lezMese     = (m, y) => lezStudente.filter(l => { const [ly,lm] = (l.date||'').split("-").map(Number); return ly===y && lm===m; });
+  // Raggruppamento per MESE DI RIFERIMENTO (competenza: pacchetto_mese/anno se impostato,
+  // altrimenti il mese della data) — stessa regola di calcolaReportLezioni, così la tab
+  // Lezioni e il Report lezioni contano le stesse lezioni nello stesso mese.
+  const lezMese     = (m, y) => lezStudente.filter(l => { const r = meseRiferimentoLezione(l); return r && r.y===y && r.m===m; });
+  // [FM-MESE-RIF] Modifica del mese di riferimento di UNA lezione (solo admin).
+  // m/y = null → torna automatico (mese della data). Scrittura diretta su Supabase perché
+  // le lezioni NON sono nel MAP del diff-sync (fm_sync.js); aggiornamento ottimistico
+  // dello stato condiviso con rollback in caso di errore.
+  const [meseRifSaving, setMeseRifSaving] = useState(null);
+  const aggiornaMeseRif = async (l, m, y) => {
+    const sb = window.supabaseClient;
+    if (!sb || !l || l.id == null) return;
+    const prevM = l.pacchettoMese != null ? l.pacchettoMese : null;
+    const prevY = l.pacchettoAnno != null ? l.pacchettoAnno : null;
+    const patch = (pm, py) => { if (_setLessonsSD) _setLessonsSD(prev => (prev||[]).map(x => String(x.id)===String(l.id) ? {...x, pacchettoMese:pm, pacchettoAnno:py} : x)); };
+    patch(m, y);
+    setMeseRifSaving(String(l.id));
+    const { error } = await sb.from('lezioni').update({ pacchetto_mese: m, pacchetto_anno: y }).eq('id', l.id);
+    setMeseRifSaving(null);
+    if (error) {
+      console.warn('[FM] aggiornaMeseRif error:', error.message);
+      patch(prevM, prevY);
+      alert("Impossibile salvare il mese di riferimento: " + error.message + (/pacchetto_/.test(error.message) ? "\n\nEsegui prima la migrazione SQL (colonne pacchetto_mese / pacchetto_anno)." : ""));
+      return;
+    }
+    window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+    window.__FM_RECENTLY_WRITTEN__.set(`lezioni:${l.id}`, Date.now());
+  };
   const lezSel      = lezMese(selMese.m, selMese.y);
 
   // Lezioni da recuperare (inRecupero=true oppure attendance='in_recupero')
@@ -1724,6 +1751,46 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                         ? `${(l.students||[]).length} allievi · ${l.room||"—"} · ${l.teacher||"—"}`
                         : `${l.instrument||"—"} · ${l.room||"—"} · ${l.teacher||"—"}`
                     )
+                    /* [FM-MESE-RIF] Mese di riferimento (competenza) della lezione */
+                    , (() => {
+                        const rif = meseRiferimentoLezione(l);
+                        const [dy, dm] = (l.date||'').split('-').map(Number);
+                        const manuale = l.pacchettoMese != null && l.pacchettoAnno != null;
+                        const diverso = rif && (rif.m !== dm || rif.y !== dy);
+                        const clr = diverso ? C.gold : C.textDim;
+                        const lbl = rif ? `${MESI_LABEL_L[rif.m-1]} ${rif.y}` : '—';
+                        if (sdRuolo !== 'admin') {
+                          return React.createElement('div', {style:{fontSize:11,color:clr,marginTop:3}},
+                            'Mese di riferimento: ', React.createElement('strong', null, lbl));
+                        }
+                        // Opzioni: mesi dell'anno scolastico + mese della data + mese attuale di riferimento
+                        const opts = MESI_AS.slice();
+                        const addOpt = (m, y) => { if (m && y && !opts.some(o => o.m===m && o.y===y)) opts.push({m, y}); };
+                        addOpt(dm, dy); if (rif) addOpt(rif.m, rif.y);
+                        opts.sort((a,b) => (a.y*12+a.m) - (b.y*12+b.m));
+                        const val = manuale ? `${l.pacchettoAnno}-${l.pacchettoMese}` : 'auto';
+                        return React.createElement('div', {style:{display:'flex',alignItems:'center',gap:6,marginTop:4,flexWrap:'wrap'}}
+                          , React.createElement('span', {style:{fontSize:10,color:C.textDim,textTransform:'uppercase',letterSpacing:'.06em'}}, 'Mese rif.')
+                          , React.createElement('select', {
+                              value: val,
+                              disabled: meseRifSaving === String(l.id),
+                              onClick: e => e.stopPropagation(),
+                              onChange: e => {
+                                const v = e.target.value;
+                                if (v === 'auto') { aggiornaMeseRif(l, null, null); return; }
+                                const [yy, mm] = v.split('-').map(Number);
+                                aggiornaMeseRif(l, mm, yy);
+                              },
+                              title: 'Mese in cui questa lezione viene conteggiata (report lezioni / soglia mensile)',
+                              style:{fontSize:11,padding:'2px 6px',borderRadius:6,border:`1px solid ${diverso?C.gold:C.border}`,
+                                background:diverso?C.goldBg:C.bg,color:diverso?C.gold:C.text,fontFamily:"'Open Sans',sans-serif",cursor:'pointer'}}
+                            , React.createElement('option', {value:'auto'}, `Automatico (${dm?MESI_LABEL_L[dm-1]:'—'} ${dy||''})`)
+                            , opts.map(o => React.createElement('option', {key:`${o.y}-${o.m}`, value:`${o.y}-${o.m}`}, `${MESI_LABEL_L[o.m-1]} ${o.y}`))
+                          )
+                          , diverso && React.createElement('span', {style:{fontSize:10,color:C.gold}}, `conta per ${lbl}`)
+                          , meseRifSaving === String(l.id) && React.createElement('span', {style:{fontSize:10,color:C.textDim}}, 'salvataggio…')
+                        );
+                      })()
                   )
                   , (() => {
                       const eff = studAttendance(l, student.name, student.id);
@@ -1772,6 +1839,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                   return 0;
                 }).map(({x,i,lm,pres,ass,rec,att,tasso,haExtra}) => {
                   const isF  = isFuture(x);
+                  const nonIscr = !allievoIscrittoNelMese(student, x.m, x.y, _iscrizioniSD) && lm.length === 0;
                   const isS  = x.m===selMese.m && x.y===selMese.y;
                   return (
                     React.createElement('tr', { key: `${x.y}-${x.m}`, onClick: ()=>!isF&&setSelMese(x),
@@ -1784,7 +1852,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                         , MESI_LABEL_L[x.m-1], " " , x.y
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:isF?C.textDim:lm.length>0?accentHex:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3391}}
-                        , isF?"—":lm.length
+                        , nonIscr ? React.createElement('span', {style:{fontFamily:"'Open Sans',sans-serif",fontSize:10,fontWeight:700,color:C.textDim,border:`1px solid ${C.border}`,borderRadius:4,padding:'2px 6px',letterSpacing:'.05em'}}, 'NON ISCRITTO') : isF?"—":lm.length
                         , !isF && haExtra && React.createElement('span', { title:'Include una lezione extra concordata', style:{fontSize:12, marginLeft:5}}, '🔶')
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}}, isF?"—":pres||"—")
@@ -2572,7 +2640,37 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 // così le due viste mostrano SEMPRE esattamente gli stessi numeri — questa funzione condivisa
 // esiste apposta per evitare la duplicazione della logica, che in passato ha causato
 // disallineamenti tra le due schede (formule diverse, conteggi diversi).
-function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese, anno }) {
+// [FM-MESE-RIF] Mese/anno di RIFERIMENTO (competenza) di una lezione: pacchetto_mese/anno se
+// impostati, altrimenti il mese della data. Unica regola usata da Report lezioni e tab Lezioni.
+function meseRiferimentoLezione(l) {
+  if (!l) return null;
+  if (l.pacchettoMese != null && l.pacchettoAnno != null) return { m: Number(l.pacchettoMese), y: Number(l.pacchettoAnno) };
+  if (!l.date) return null;
+  const [y, m] = String(l.date).split('-').map(Number);
+  return (y && m) ? { m, y } : null;
+}
+// [FM-NON-ISCRITTO] L'allievo risulta iscritto nel mese/anno dato?
+//  - NO se la data d'iscrizione è successiva al mese (mesi precedenti all'iscrizione);
+//  - NO se per l'anno scolastico del mese esistono righe iscrizioni_anno ma nessuna è sua.
+// Se per quell'anno scolastico non esiste alcuna iscrizione registrata, non si esclude nessuno
+// (evita di marcare tutti "non iscritti" per un anno mai importato).
+function allievoIscrittoNelMese(s, mese, anno, iscrizioniAnno) {
+  if (!s) return false;
+  if (s.enrollDate) {
+    const e = new Date(s.enrollDate + "T00:00:00");
+    if (!isNaN(e) && (e.getFullYear()*12 + e.getMonth()+1) > (anno*12 + mese)) return false;
+  }
+  const isc = Array.isArray(iscrizioniAnno) ? iscrizioniAnno
+    : ((window.__FM_DATA__ && window.__FM_DATA__.iscrizioniAnno) || null);
+  if (isc && isc.length) {
+    const annoRif = mese >= 9 ? anno : anno - 1;
+    const righe = isc.filter(i => String(i.annoInizio) === String(annoRif));
+    if (righe.length > 0 && !righe.some(i => String(i.studentId) === String(s.id))) return false;
+  }
+  return true;
+}
+
+function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese, anno, iscrizioniAnno }) {
   const now3 = new Date();
   const cfg = config || {};
   const PUNTI_CORSO_INDIVIDUALE = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
@@ -2607,7 +2705,7 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
   // mese d'iscrizione, per il mese in corso e per il mese di fine anno scolastico):
   //   corso individuale (cadenza 1/settimana):  floor(settimane_disponibili)      × nr. corsi
   //   corso collettivo  (cadenza 1/2 settimane): floor(settimane_disponibili ÷ 2) × nr. corsi
-  const sogliaAllievo = (s) => {
+  const sogliaAllievo = (s, corsiInd, corsiReport, lezIndAllievo) => {
     const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
     const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
 
@@ -2637,16 +2735,25 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     // floor(9÷7)=1 lo perderebbe. Si contano invece le occorrenze REALI del giorno della
     // settimana della data d'iscrizione nella finestra — molto più preciso.
     const nome = s.name||s.nome||'';
-    const individualeReale = contaLezioniIndividualiReali(nome, s.id, lessons, dataInizio, dataFine);
-    let individualeStimato = Math.floor(settimane) * nCorsiIndividuali;
+    // [FM-REPORT-CORSI] Soglia calcolata PER CORSO: stessa logica di prima (pattern reale del
+    // corso, fallback alla stima sul giorno d'iscrizione), applicata alle sole lezioni di
+    // ciascun corso. Il totale individuale = somma dei corsi (compatibile con la Dashboard).
+    let stimaPerCorso = Math.floor(settimane);
     if (enroll) {
       let occorrenzeGiornoIscrizione = 0;
       for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) {
         if (d.getDay() === enroll.getDay()) occorrenzeGiornoIscrizione++;
       }
-      individualeStimato = occorrenzeGiornoIscrizione * nCorsiIndividuali;
+      stimaPerCorso = occorrenzeGiornoIscrizione;
     }
-    const individuale = individualeReale != null ? individualeReale : individualeStimato;
+    const perCorso = {};
+    corsiReport.forEach(corso => {
+      const lezCorso = lezIndAllievo.filter(l => l.__corsoRep === corso);
+      const reale = lezCorso.length ? contaLezioniIndividualiReali(nome, s.id, lezCorso, dataInizio, dataFine) : null;
+      // Corso "fuori anagrafica" (lezioni con strumento non tra i corsi dell'allievo): nessuna stima
+      perCorso[corso] = reale != null ? reale : (corsiInd.includes(corso) ? stimaPerCorso : 0);
+    });
+    const individuale = Object.values(perCorso).reduce((t,n)=>t+n, 0);
 
     // Collettiva: conteggio ESATTO dalle lezioni collettive reali già a calendario (cadenza
     // spesso variabile — non si può assumere "ogni 2 settimane" con certezza). Fallback alla
@@ -2655,7 +2762,7 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     const collettivaReale = nCorsiCollettivi > 0 ? contaLezioniCollettiveReali(nome, s.id, lessons, dataInizio, dataFine) : null;
     const collettiva = collettivaReale != null ? collettivaReale : Math.floor(settimane/2) * nCorsiCollettivi;
 
-    return { individuale, collettiva };
+    return { individuale, collettiva, perCorso };
   };
 
   // Lezioni del mese selezionato, deduplicate per id
@@ -2667,13 +2774,8 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     // "Cambio ora" oltre il confine del mese resta di competenza del mese originale — es.
     // martedì 29/09 spostato a giovedì 01/10 conta ancora per settembre), altrimenti il
     // mese/anno della sua data (comportamento invariato per le lezioni mai spostate).
-    let lm, ly;
-    if (l.pacchettoMese != null && l.pacchettoAnno != null) {
-      lm = l.pacchettoMese; ly = l.pacchettoAnno;
-    } else {
-      [ly, lm] = l.date.split('-').map(Number);
-    }
-    if (ly!==anno||lm!==mese) return;
+    const rif = meseRiferimentoLezione(l);
+    if (!rif || rif.y!==anno || rif.m!==mese) return;
     if (l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
     const lid = l.id!=null ? String(l.id) : `${l.date}|${l.hour}|${l.student||l.studentId||l.courseId||''}`;
     if (lezioniGiaContate.has(lid)) return; // record duplicato: già conteggiato
@@ -2688,16 +2790,40 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     if (!nome) return;
     // Conteggio per allievo: usa studentInLesson/studAttendance (stesso match ID+nome usato
     // ovunque nell'app) invece di un dizionario indicizzato solo per nome.
-    let countIndReale = 0, countCollReale = 0;
+    // [FM-REPORT-CORSI] Corsi individuali dell'allievo (anagrafica) e assegnazione di ogni sua
+    // lezione individuale a un corso: match per strumento; se l'allievo ha un solo corso le
+    // lezioni con strumento diverso/mancante vanno a quello; altrimenti colonna a parte.
+    const normK = x => String(x||'').trim().toLowerCase();
+    const corsiInd = [];
+    [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).forEach(c => {
+      if (!corsiInd.some(x => normK(x)===normK(c))) corsiInd.push(c);
+    });
+    const corsoDiLezione = (l) => {
+      const k = normK(l.instrument || l.strumento);
+      const match = corsiInd.find(c => normK(c)===k);
+      if (match) return match;
+      if (corsiInd.length === 1) return corsiInd[0];
+      return (l.instrument || l.strumento || 'Altro');
+    };
+    const lezIndAllievo = (lessons||[])
+      .filter(l => l.date && !isColl(l) && !isProva(l) && !isSalaProve(l) && l.tipo!=='recupero' && studentInLesson(l, nome, s.id))
+      .map(l => Object.assign({}, l, { __corsoRep: corsoDiLezione(l) }));
+    const countPerCorso = {};
+    corsiInd.forEach(c => { countPerCorso[c] = 0; });
+    let countCollReale = 0;
     lezioniMese.forEach(l => {
       if (!studentInLesson(l, nome, s.id)) return;
       if (studAttendance(l, nome, s.id)==='recuperata') return;
       if (l.isLezioneExtra) return; // lezione extra concordata: non conta ai fini della soglia
-      if (isColl(l)) countCollReale++; else countIndReale++;
+      if (isColl(l)) { countCollReale++; return; }
+      const c = corsoDiLezione(l);
+      countPerCorso[c] = (countPerCorso[c]||0) + 1;
     });
-    const countInd  = countIndReale;
+    const corsiReport = Object.keys(countPerCorso);
+    const countInd  = Object.values(countPerCorso).reduce((t,n)=>t+n, 0);
     const countColl = countCollReale;
-    const soglie = sogliaAllievo(s);
+    const iscritto = allievoIscrittoNelMese(s, mese, anno, iscrizioniAnno);
+    const soglie = sogliaAllievo(s, corsiInd, corsiReport, lezIndAllievo);
     // Un'eccezione è "impostata" solo se contiene un numero valido.
     const isEccInd  = s.sogliaIndividualeEcc!=null && s.sogliaIndividualeEcc!=='' && !isNaN(Number(s.sogliaIndividualeEcc));
     const isEccColl = s.sogliaCollettivaEcc!=null  && s.sogliaCollettivaEcc!==''  && !isNaN(Number(s.sogliaCollettivaEcc));
@@ -2705,24 +2831,34 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
     const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
     const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
-    // Stato complessivo dell'allievo: la carenza (sotto soglia) ha priorità, poi l'eccedenza.
-    const deltaPeggiore = Math.min(individuale.delta, collettiva.delta) < 0
-      ? Math.min(individuale.delta, collettiva.delta)
-      : Math.max(individuale.delta, collettiva.delta);
-    report.push({ id:s.id, nome, individuale, collettiva, deltaPeggiore });
+    const haCollettivo = !!s.complementaryCourse || countColl > 0;
+    // Dettaglio per corso individuale (colonne "Corso 1", "Corso 2"… nel Report lezioni)
+    const corsi = corsiReport.map(c => {
+      const cnt = countPerCorso[c]||0;
+      const sog = Math.round((soglie.perCorso||{})[c]||0);
+      return { corso:c, count:cnt, soglia:sog, delta:cnt-sog, isEccezione:isEccInd, fuoriAnagrafica: !corsiInd.includes(c) };
+    });
+    // Stato complessivo: la carenza (sotto soglia) di QUALSIASI corso ha priorità, poi l'eccedenza.
+    const deltas = corsi.map(c=>c.delta).concat(haCollettivo ? [collettiva.delta] : []);
+    if (deltas.length === 0) deltas.push(0);
+    const deltaPeggiore = Math.min(...deltas) < 0 ? Math.min(...deltas) : Math.max(...deltas);
+    report.push({ id:s.id, nome, individuale, collettiva, corsi, haCollettivo, nonIscritto: !iscritto, deltaPeggiore: iscritto ? deltaPeggiore : 0 });
   });
-  report.sort((a,b)=>a.deltaPeggiore-b.deltaPeggiore);
+  // Non iscritti in fondo, gli altri per delta crescente
+  report.sort((a,b)=> (a.nonIscritto===b.nonIscritto) ? a.deltaPeggiore-b.deltaPeggiore : (a.nonIscritto?1:-1));
+  const iscrittiRep = report.filter(r=>!r.nonIscritto);
 
   return {
     report,
-    superano:    report.filter(r=>r.deltaPeggiore>0),
-    inLinea:     report.filter(r=>r.deltaPeggiore===0),
-    sottosoglia: report.filter(r=>r.deltaPeggiore<0),
+    superano:    iscrittiRep.filter(r=>r.deltaPeggiore>0),
+    inLinea:     iscrittiRep.filter(r=>r.deltaPeggiore===0),
+    sottosoglia: iscrittiRep.filter(r=>r.deltaPeggiore<0),
+    nonIscritti: report.filter(r=>r.nonIscritto),
     PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO,
   };
 }
 
-const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSelectAllievo }) => {
+const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscrizioniAnno, onSelectAllievo }) => {
   const now3 = new Date();
   const meseCurr = now3.getMonth() + 1;
   const annoCurr = now3.getFullYear();
@@ -2733,13 +2869,18 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
   const [reportAnno, setReportAnno] = useState(annoCurr);
   const [reportFiltro, setReportFiltro] = useState('tutti');
 
-  const { report, superano, inLinea, sottosoglia, PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO } =
-    calcolaReportLezioni({ lessons, students, config, anniScolastici, mese: reportMese, anno: reportAnno });
+  const { report, superano, inLinea, sottosoglia, nonIscritti, PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO } =
+    calcolaReportLezioni({ lessons, students, config, anniScolastici, iscrizioniAnno, mese: reportMese, anno: reportAnno });
   const allieviAttiviCount = (students||[]).filter(s=>s.status==='attivo'||!s.status).length;
 
   const filtrato = reportFiltro==='oltre' ? superano
     : reportFiltro==='sotto' ? sottosoglia
-    : reportFiltro==='inlinea' ? inLinea : report;
+    : reportFiltro==='inlinea' ? inLinea
+    : reportFiltro==='noniscr' ? nonIscritti : report;
+  // [FM-REPORT-CORSI] Numero di colonne "Corso N" = massimo numero di corsi individuali
+  // tra gli allievi visualizzati (min. 1).
+  const nColCorsi = Math.max(1, ...filtrato.map(r => (r.corsi||[]).length));
+  const nColTot = 1 + nColCorsi + 1 + 1;
 
   return React.createElement('div', {style:{marginBottom:20}}
     , React.createElement('div', {
@@ -2747,7 +2888,7 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
           padding:'12px 18px',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:8}}
       , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10}}
         , React.createElement(Ic,{n:'chart',size:15,stroke:C.gold})
-        , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}}, `Report lezioni individuali · ${MESI_FULL[reportMese-1]} ${reportAnno}`)
+        , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}}, `Report lezioni · ${MESI_FULL[reportMese-1]} ${reportAnno}`)
         , superano.length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px solid ${C.orangeBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${superano.length} oltre`)
         , sottosoglia.length>0&&React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${sottosoglia.length} sotto`)
       )
@@ -2761,17 +2902,18 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
             style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
           , [annoCurr-1,annoCurr,annoCurr+1].map(y=>React.createElement('option',{key:y,value:y},y)))
         , React.createElement('div',{style:{display:'flex',gap:4,marginLeft:'auto'}}
-          , [{id:'tutti',label:`Tutti (${report.length})`},{id:'oltre',label:`🔴 Oltre (${superano.length})`},{id:'inlinea',label:`🟢 In linea (${inLinea.length})`},{id:'sotto',label:`🔵 Sotto (${sottosoglia.length})`}]
+          , [{id:'tutti',label:`Tutti (${report.length})`},{id:'oltre',label:`🔴 Oltre (${superano.length})`},{id:'inlinea',label:`🟢 In linea (${inLinea.length})`},{id:'sotto',label:`🔵 Sotto (${sottosoglia.length})`},{id:'noniscr',label:`⚪ Non iscritti (${nonIscritti.length})`}]
             .map(f=>React.createElement('button',{key:f.id,onClick:()=>setReportFiltro(f.id),
                 style:{padding:'5px 12px',borderRadius:20,border:`1px solid ${reportFiltro===f.id?C.gold:C.border}`,
                   background:reportFiltro===f.id?C.goldBg:'none',color:reportFiltro===f.id?C.gold:C.textMuted,
                   cursor:'pointer',fontSize:11,fontWeight:reportFiltro===f.id?700:400,fontFamily:"'Open Sans',sans-serif"}},f.label))
         )
       )
+      , React.createElement('div',{style:{overflowX:'auto'}}
       , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
         , React.createElement('thead',null
           , React.createElement('tr',{style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
-            , ['Allievo','Individuali','Collettive','Stato'].map(h=>
+            , ['Allievo', ...Array.from({length:nColCorsi},(_,k)=>`Corso ${k+1}`), 'Collettive','Stato'].map(h=>
                 React.createElement('th',{key:h,style:{padding:'9px 16px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.07em',color:C.textMuted,fontWeight:600}},h))
           )
         )
@@ -2780,7 +2922,7 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
               const cella = (stat) => {
                 const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
                 const lbl = stat.delta>0?`+${stat.delta}`:stat.delta<0?`${stat.delta}`:'0';
-                return React.createElement('div',{style:{display:'flex',alignItems:'baseline',gap:6}}
+                return React.createElement('div',{style:{display:'flex',alignItems:'baseline',gap:6,whiteSpace:'nowrap'}}
                   , React.createElement('span',{style:{fontSize:13,fontWeight:700,color:C.text}}, stat.count)
                   , React.createElement('span',{style:{fontSize:11,color:C.textMuted}}, `/ ${stat.soglia}`)
                   , React.createElement('span',{style:{fontSize:11,fontWeight:700,color:clr}}, `(${lbl})`)
@@ -2790,20 +2932,35 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, onSel
               const clrStato = r.deltaPeggiore>0?C.orange : r.deltaPeggiore<0?C.blue : C.green;
               const bgStato  = r.deltaPeggiore>0?C.orangeBg : r.deltaPeggiore<0?C.blueBg : C.greenBg;
               const bdStato  = r.deltaPeggiore>0?C.orangeBorder : r.deltaPeggiore<0?C.blueBorder : C.greenBorder;
-              const lblStato = r.deltaPeggiore>0?'Oltre soglia' : r.deltaPeggiore<0?'Sotto soglia':'✓ In linea';
+              const lblStato = r.nonIscritto ? 'Non iscritto' : r.deltaPeggiore>0?'Oltre soglia' : r.deltaPeggiore<0?'Sotto soglia':'✓ In linea';
+              const tdS = {padding:'10px 16px',verticalAlign:'top'};
+              const cellaCorso = (c) => c
+                ? React.createElement('div',null
+                    , React.createElement('div',{style:{fontSize:10,color:c.fuoriAnagrafica?C.orange:C.textMuted,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:2,whiteSpace:'nowrap'},
+                        title: c.fuoriAnagrafica ? 'Strumento delle lezioni non presente tra i corsi in anagrafica' : undefined}, c.corso, c.fuoriAnagrafica ? ' ⚠' : '')
+                    , cella(c))
+                : React.createElement('span',{style:{color:C.textDim,fontSize:12}},'—');
+              const nonIscrCell = React.createElement('td',{colSpan:nColCorsi+1,style:{...tdS,textAlign:'center'}}
+                , React.createElement('span',{style:{fontSize:11,fontWeight:700,letterSpacing:'.08em',color:C.textDim,border:`1px dashed ${C.border}`,borderRadius:6,padding:'3px 12px'}},'NON ISCRITTO'));
               return React.createElement('tr',{key:r.id||r.nome,
                   style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg,cursor:'pointer',transition:'background .1s'},
                   onMouseEnter:e=>e.currentTarget.style.background=C.bg,
                   onMouseLeave:e=>e.currentTarget.style.background=i%2===0?C.surface:C.bg,
                   onClick:()=>{ const s=(students||[]).find(st=>(st.name||st.nome||'')===r.nome); if(s&&onSelectAllievo) onSelectAllievo(s); }}
-                , React.createElement('td',{style:{padding:'10px 16px',fontSize:13,fontWeight:600,color:C.text}}, r.nome)
-                , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.individuale))
-                , React.createElement('td',{style:{padding:'10px 16px'}}, cella(r.collettiva))
-                , React.createElement('td',{style:{padding:'10px 16px'}}, React.createElement('span',{style:{fontSize:11,fontWeight:600,background:bgStato,color:clrStato,border:`1px solid ${bdStato}`,borderRadius:20,padding:'3px 10px'}},lblStato))
+                , React.createElement('td',{style:{...tdS,fontSize:13,fontWeight:600,color:C.text}}, r.nome)
+                , ...(r.nonIscritto
+                    ? [nonIscrCell]
+                    : [
+                        ...Array.from({length:nColCorsi},(_,k)=>React.createElement('td',{key:'c'+k,style:tdS}, cellaCorso((r.corsi||[])[k]))),
+                        React.createElement('td',{key:'coll',style:tdS}, r.haCollettivo ? cella(r.collettiva) : React.createElement('span',{style:{color:C.textDim,fontSize:12}},'—')),
+                      ])
+                , React.createElement('td',{style:tdS}, React.createElement('span',{style:{fontSize:11,fontWeight:600,whiteSpace:'nowrap',
+                    background:r.nonIscritto?C.bg:bgStato,color:r.nonIscritto?C.textDim:clrStato,border:`1px solid ${r.nonIscritto?C.border:bdStato}`,borderRadius:20,padding:'3px 10px'}},lblStato))
               );
             })
-          , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:4,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
+          , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:nColTot,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))
         )
+      )
       )
       , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:6}}
         , `Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · mese d'iscrizione e mese in corso calcolati in proporzione alle settimane trascorse · ${allieviAttiviCount} allievi attivi`
@@ -3591,7 +3748,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
 
         /* ── Report Lezioni Mensile (solo admin, tab dedicata) ── */
         , view==="lezioni" && _ruoloAV==="admin" && React.createElement(ReportLezioniMensile, {
-            lessons, students, config: propConfig, anniScolastici: propAnniScolasticiAV,
+            lessons, students, config: propConfig, anniScolastici: propAnniScolasticiAV, iscrizioniAnno,
             onSelectAllievo: (s) => { setSelected(s); setView('detail'); },
           })
 
@@ -3641,6 +3798,8 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             onBack: _ruoloAV!=="allievo" ? ()=>setView("list") : undefined,
             onAddLesson: handleAddLesson,
             gruppi: propGruppiAV || [],
+            setLessons: setLessons,
+            iscrizioniAnno: iscrizioniAnno,
             onUpdateStudent: d=>setStudents(p=>p.map(s=>s.id===d.id?d:s)), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3893}}
           )
         )
