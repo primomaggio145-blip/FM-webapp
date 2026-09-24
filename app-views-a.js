@@ -2973,6 +2973,48 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     });
   });
   const allegatiLezioni = [...fromDB, ...fromLessons];
+  // [FM-ALL-FIX] Verifica diretta sulla tabella 'allegati' all'apertura della scheda.
+  // Prima la vista mostrava SOLO lo stato caricato al boot: se quella lettura falliva
+  // (errore di rete/RLS, tentativi esauriti) o lo stato veniva svuotato da un refresh
+  // parziale, la scheda restava vuota senza nessun avviso. Ora: 1) completa eventuali
+  // scritture in sospeso, 2) rilegge la tabella, 3) mostra l'errore se la lettura fallisce,
+  // 4) riallinea stato React + baseline del sync se i dati differiscono.
+  const [_avDbErr, _setAvDbErr] = useState("");
+  const [_avStorageErr, _setAvStorageErr] = useState("");
+  const [_avCheckTick, _setAvCheckTick] = useState(0);
+  React.useEffect(() => {
+    const sb = window.supabaseClient;
+    if (!sb) { _setAvDbErr("Connessione a Supabase non disponibile"); return; }
+    let vivo = true;
+    (async () => {
+      try { if (window.__FM_FLUSH__) await window.__FM_FLUSH__(); } catch(e) {}
+      const { data, error } = await sb.from('allegati').select('*').order('created_at', { ascending: false });
+      if (!vivo) return;
+      if (error) {
+        console.error('[FM] Allegati: lettura tabella allegati fallita:', error);
+        _setAvDbErr('Impossibile leggere la tabella "allegati": ' + error.message);
+        return;
+      }
+      _setAvDbErr("");
+      const fresh = (data || []).map(r => ({
+        id: r.id, lezioneId: r.lezione_id || null, allievoId: r.allievo_id || null,
+        allievoNome: r.allievo_nome || null, corso: r.corso || null, descrizione: r.descrizione || null,
+        fileUrl: r.file_url || null, fileName: r.file_name || null, fileType: r.file_type || null,
+        createdAt: r.created_at || null,
+      }));
+      const cur = propAllegati || [];
+      const curIds = new Set(cur.map(a => String(a.id)));
+      const diversi = fresh.length !== cur.length || fresh.some(a => !curIds.has(String(a.id)));
+      console.log(`[FM] Allegati: DB=${fresh.length} · stato app=${cur.length}${diversi ? ' → riallineo' : ''}`);
+      if (diversi && propSetAllegati) {
+        // Baseline del diff-sync PRIMA dello stato: evita che il sync veda i record
+        // riletti come "nuovi" (INSERT duplicati) o quelli mancanti come "eliminati".
+        if (window.__FM_UPDATE_PREV__) window.__FM_UPDATE_PREV__({ allegati: fresh });
+        propSetAllegati(fresh);
+      }
+    })().catch(e => { if (vivo) _setAvDbErr('Errore lettura allegati: ' + (e && e.message || e)); });
+    return () => { vivo = false; };
+  }, [_avCheckTick]);
   const [search,  setSearch]  = useState("");
   const [fCorso,  setFCorso]  = useState("");
   const [fAllievo,setFAllievo]= useState("");
@@ -3203,7 +3245,8 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
 
     // Funzione ricorsiva per listare tutti i file incluse sottocartelle
     async function listAll(prefix) {
-      const { data: items } = await sb.storage.from('allegati').list(prefix, { limit: 500 });
+      const { data: items, error: listErr } = await sb.storage.from('allegati').list(prefix, { limit: 500 });
+      if (listErr) throw listErr;
       if (!items) return [];
       const files = [];
       for (const item of items) {
@@ -3234,9 +3277,14 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     }
 
     listAll('').then(function(orphans) {
+      _setAvStorageErr("");
       setStorageOrphans(orphans);
       setScanningStorage(false);
-    }).catch(function() { setScanningStorage(false); });
+    }).catch(function(e) {
+      console.error('[FM] Allegati: scansione storage fallita:', e);
+      _setAvStorageErr('Scansione storage "allegati" non riuscita: ' + (e && e.message || e));
+      setScanningStorage(false);
+    });
   }, [allegatiLezioni.length, _avRuolo, _rescanTick]);
 
   const allegatiAll = [...allegati, ...storageOrphans];
@@ -3280,6 +3328,13 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
         )
         , React.createElement(RefreshBtn)
       )
+      , (_avDbErr || _avStorageErr) && React.createElement('div', { style: {color:C.red, fontSize:12, background:C.redBg,
+          border:`1px solid ${C.redBorder}`, borderRadius:8, padding:"10px 14px", marginBottom:16,
+          display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}}
+        , React.createElement('div', null
+          , _avDbErr && React.createElement('div', null, "⚠️ ", _avDbErr)
+          , _avStorageErr && React.createElement('div', null, "⚠️ ", _avStorageErr))
+        , React.createElement(Btn, {variant:"secondary", onClick:()=>{ _setAvCheckTick(t=>t+1); _rescanStorage(); }}, "Riprova"))
       , React.createElement('div', { style: {display:"flex", gap:12, marginBottom:20, flexWrap:"nowrap", overflowX:"auto", WebkitOverflowScrolling:"touch"}}
         , React.createElement('input', { value: search, onChange: e=>setSearch(e.target.value),
           placeholder: "Cerca per nome file o descrizione...",

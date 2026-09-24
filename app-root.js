@@ -242,6 +242,7 @@ function App() {
       if (data.anniScolastici !== undefined) setSharedAnniScolastici(data.anniScolastici || []);
       if (data.iscrizioniAnno !== undefined) setSharedIscrizioniAnno(data.iscrizioniAnno || []);
       if (data.gruppi !== undefined) setSharedGruppi(data.gruppi || []);
+      if (data.manuali)        setSharedManuali(data.manuali); // [FM-BIB-FIX] ricerca globale aggiornata dopo upload manuale
       if (data.dashboardPanels) setSharedPanels(p => ({...p, ...data.dashboardPanels}));
     };
 

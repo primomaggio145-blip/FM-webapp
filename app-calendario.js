@@ -10136,6 +10136,157 @@ const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role
 // BIBLIOTECA — Manuali & Libri
 // Accessibile a tutti i profili; upload solo admin/docente
 // ════════════════════════════════════════════════════════════════════════════════
+// Rimuove dalla riga la colonna segnalata come mancante da PostgREST (stesso principio
+// di stripMissingColumn in fm_sync.js) — es. 'corso' se la migrazione non è stata eseguita.
+function stripMissingColumnBib(row, msg) {
+  const m = /Could not find the '([^']+)' column/.exec(msg || '');
+  if (m && m[1] in row) { delete row[m[1]]; return m[1]; }
+  return null;
+}
+// ── [FM-BIB-FIX] Form upload manuale — componente top-level (identità stabile) ──
+const BibliotecaAddModal = ({ CORSI, CATEGORIE, appUser, defaultCorso, onClose, onSaved }) => {
+  const [titolo,    setTitolo]    = useState("");
+  const [autore,    setAutore]    = useState("");
+  const [categoria, setCategoria] = useState("Manuale");
+  const [corso,     setCorso]     = useState(defaultCorso || "");
+  const [desc,      setDesc]      = useState("");
+  const [file,      setFile]      = useState(null);
+  const [err,       setErr]       = useState("");
+  const [uploading, setUploading] = useState(false);
+
+  const handleSubmit = async () => {
+    if (!titolo.trim()) { setErr("Titolo obbligatorio"); return; }
+    if (!file)          { setErr("Seleziona un file"); return; }
+    setUploading(true); setErr("");
+    const sb = window.supabaseClient;
+    let storagePath = null, fileCaricato = false;
+    try {
+      if (!sb) throw new Error("Connessione a Supabase non disponibile");
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      storagePath = `${Date.now()}_${safeName}`;
+      // 1) Upload file nello Storage
+      const { error: upErr } = await sb.storage.from("biblioteca").upload(storagePath, file, { upsert: true });
+      if (upErr) throw new Error("Upload file fallito: " + upErr.message);
+      fileCaricato = true;
+      const { data: urlData } = sb.storage.from("biblioteca").getPublicUrl(storagePath);
+      const fileUrl = urlData?.publicUrl || null;
+      // 2) Record DB — id generato lato client (nessuna dipendenza da default DB)
+      const newId = (typeof uid === 'function') ? uid()
+        : ((typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID()
+          : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+              const r = Math.random()*16|0, v = c==='x' ? r : (r&0x3|0x8);
+              return v.toString(16);
+            }));
+      const row = {
+        id: newId,
+        titolo: titolo.trim(),
+        autore: autore.trim() || null,
+        categoria,
+        corso: corso || null,
+        descrizione: desc.trim() || null,
+        file_url: fileUrl,
+        file_name: file.name,
+        file_type: file.type || null,
+        file_size: file.size || null,
+        storage_path: storagePath,
+        caricato_da: (appUser && appUser.nome) || null,
+      };
+      // NB: niente .single() — se la policy di lettura nasconde la riga, .single()
+      // generava un errore ambiguo; qui distinguiamo i due casi esplicitamente.
+      let { data: ins, error: dbErr } = await sb.from("biblioteca").insert(row).select();
+      if (dbErr && typeof stripMissingColumnBib === 'function') {
+        const col = stripMissingColumnBib(row, dbErr.message);
+        if (col) {
+          console.warn(`[FM] biblioteca: colonna '${col}' mancante sul DB — riprovo senza`);
+          ({ data: ins, error: dbErr } = await sb.from("biblioteca").insert(row).select());
+        }
+      }
+      if (dbErr) throw new Error("Salvataggio nel database fallito: " + dbErr.message);
+      // 3) Verifica reale: la riga deve essere rileggibile dal DB
+      let salvato = (ins && ins[0]) || null;
+      if (!salvato) {
+        const { data: chk, error: chkErr } = await sb.from("biblioteca").select("*").eq("id", newId);
+        if (chkErr) throw new Error("Verifica salvataggio fallita: " + chkErr.message);
+        salvato = (chk && chk[0]) || null;
+      }
+      if (!salvato) throw new Error("Il manuale non risulta nel database dopo il salvataggio (probabile policy RLS di lettura/scrittura sulla tabella 'biblioteca').");
+      fileCaricato = false; // tutto ok: il file resta nello storage
+      onSaved(salvato);
+    } catch(e) {
+      console.error("[FM] biblioteca upload:", e);
+      setErr(e.message || "Errore upload");
+      // Evita file orfani nello storage se il record DB non è stato salvato
+      if (fileCaricato && storagePath && sb) {
+        try { await sb.storage.from("biblioteca").remove([storagePath]); } catch(_) {}
+      }
+    } finally { setUploading(false); }
+  };
+
+  const inpS = { width:"100%", padding:"9px 12px", border:`1px solid ${C.border}`,
+    borderRadius:8, fontSize:13, color:C.text, background:C.bg,
+    fontFamily:"'Open Sans',sans-serif", boxSizing:"border-box" };
+  const lblS = { fontSize:11, color:C.textMuted, fontWeight:600,
+    letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:4, display:"block" };
+
+  return React.createElement(Modal, { title:"Aggiungi libro / manuale", onClose:onClose, wide:true }
+    , React.createElement('div', { style:{padding:"16px 22px", display:"flex", flexDirection:"column", gap:14} }
+      , React.createElement('div', { className:"form-2col" }
+        , React.createElement('div', null
+          , React.createElement('label', {style:lblS}, "Titolo *")
+          , React.createElement('input', { value:titolo, onChange:e=>setTitolo(e.target.value),
+              placeholder:"Es. Metodo Beyer, Scale Hanon…", style:inpS })
+        )
+        , React.createElement('div', null
+          , React.createElement('label', {style:lblS}, "Autore")
+          , React.createElement('input', { value:autore, onChange:e=>setAutore(e.target.value),
+              placeholder:"Es. Czerny, Hanon…", style:inpS })
+        )
+      )
+      , React.createElement('div', { className:"form-2col" }
+        , React.createElement('div', null
+          , React.createElement('label', {style:lblS}, "Categoria")
+          , React.createElement('select', { value:categoria, onChange:e=>setCategoria(e.target.value),
+              style:{...inpS, appearance:"none", cursor:"pointer"} }
+            , CATEGORIE.map(c => React.createElement('option', {key:c, value:c}, c))
+          )
+        )
+        , React.createElement('div', null
+          , React.createElement('label', {style:lblS}, "Corso / Strumento")
+          , React.createElement('select', { value:corso, onChange:e=>setCorso(e.target.value),
+              style:{...inpS, appearance:"none", cursor:"pointer"} }
+            , React.createElement('option', {value:""}, "Generale (tutti i corsi)")
+            , CORSI.map(c => React.createElement('option', {key:c, value:c}, c))
+          )
+        )
+      )
+      , React.createElement('div', { className:"form-2col" }
+        , React.createElement('div', null
+          , React.createElement('label', {style:lblS}, "Descrizione breve")
+          , React.createElement('input', { value:desc, onChange:e=>setDesc(e.target.value),
+              placeholder:"Note opzionali…", style:inpS })
+        )
+      )
+      , React.createElement('div', null
+        , React.createElement('label', {style:lblS}, "File (PDF, immagine, zip…) *")
+        , React.createElement('input', { type:"file",
+            accept:".pdf,.doc,.docx,.xls,.xlsx,.zip,.png,.jpg,.jpeg,.mp3,.mp4",
+            onChange:e=>setFile(e.target.files[0]||null),
+            style:{...inpS, padding:"7px 10px", cursor:"pointer"} })
+        , file && React.createElement('div', {style:{fontSize:11,color:C.green,marginTop:4}},
+            `✓ ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`)
+      )
+      , err && React.createElement('div', {style:{color:C.red,fontSize:12,background:C.redBg,
+          border:`1px solid ${C.redBorder}`,borderRadius:8,padding:"10px 14px"}}, err)
+      , React.createElement('div', {style:{display:"flex",gap:10,justifyContent:"flex-end"}}
+        , React.createElement(Btn, {variant:"secondary", onClick:onClose}, "Annulla")
+        , React.createElement(Btn, {onClick:handleSubmit, disabled:uploading}
+          , uploading ? "Caricamento…" : "Carica"
+        )
+      )
+    )
+  );
+};
+
 const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) => {
   const ruolo = userRuolo || "allievo";
   const canUpload = ruolo === "admin" || ruolo === "docente";
@@ -10213,19 +10364,63 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
   const [previewFile, setPreviewFile] = useState(null);
 
   // ── Carica da Supabase Storage bucket "biblioteca" ──────────────────────────
-  const carica = React.useCallback(async () => {
-    setLoading(true);
+  // [FM-BIB-FIX] errori di lettura resi VISIBILI (prima un errore, es. policy RLS,
+  // lasciava la lista vuota senza alcun avviso) + verifica che un manuale appena
+  // salvato sia davvero rileggibile dal DB.
+  const [loadErr, setLoadErr] = useState("");
+  const [justAdded, setJustAdded] = useState(null);
+  const carica = React.useCallback(async (verificaId, silenzioso) => {
+    if (!silenzioso) setLoading(true);
     try {
       const sb = window.supabaseClient;
-      if (!sb) { setLoading(false); return; }
+      if (!sb) { setLoadErr("Connessione a Supabase non disponibile"); return; }
       const { data, error } = await sb
         .from("biblioteca")
         .select("*")
         .order("created_at", { ascending: false });
-      if (!error && data) setLibri(data);
-    } catch(e) { console.warn("[FM] biblioteca load:", e); }
-    finally { setLoading(false); }
+      if (error) {
+        console.error("[FM] biblioteca load:", error);
+        setLoadErr("Impossibile leggere i manuali dal database: " + error.message);
+        return;
+      }
+      let lista = data || [];
+      if (verificaId && !lista.some(x => String(x.id) === String(verificaId))) {
+        // La riga è stata confermata dall'insert ma non compare nella lettura completa:
+        // la manteniamo in lista (così non "sparisce") e segnaliamo il problema.
+        setLibri(p => {
+          const nuovo = p.find(x => String(x.id) === String(verificaId));
+          return nuovo ? [nuovo, ...lista] : lista;
+        });
+        setLoadErr("Il manuale appena caricato non compare nella lettura della tabella 'biblioteca' (controlla le policy RLS di SELECT).");
+        return;
+      }
+      setLoadErr("");
+      setLibri(lista);
+      // Aggiorna anche i manuali condivisi (ricerca globale) senza ricaricare l'app
+      if (window.__FM_RELOAD__) {
+        window.__FM_RELOAD__({ manuali: lista.map(r => ({
+          id: r.id, titolo: r.titolo || '', corso: r.corso || '', categoria: r.categoria || '',
+          fileUrl: r.file_url || null, fileName: r.file_name || null, createdAt: r.created_at || null,
+        })) });
+      }
+    } catch(e) {
+      console.error("[FM] biblioteca load:", e);
+      setLoadErr("Errore di caricamento manuali: " + (e && e.message || e));
+    }
+    finally { if (!silenzioso) setLoading(false); }
   }, []);
+
+  // Dopo un salvataggio riuscito: mostra subito il manuale, rimuove i filtri che lo
+  // nasconderebbero e rilegge dal DB per confermare che sia davvero persistito.
+  const onManualeSalvato = (row) => {
+    setLibri(p => [row, ...p.filter(x => String(x.id) !== String(row.id))]);
+    if (filterCorso && row.corso && row.corso !== filterCorso) setFilterCorso("");
+    if (filterCat && row.categoria !== filterCat) setFilterCat("");
+    setSearch("");
+    setJustAdded(row.id);
+    setModal(null);
+    carica(row.id, true);
+  };
 
   React.useEffect(() => { carica(); }, []);
 
@@ -10271,123 +10466,10 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
   };
 
 
-  // ── Form upload ─────────────────────────────────────────────────────────────
-  const AddModal = () => {
-    const [titolo,    setTitolo]    = useState("");
-    const [autore,    setAutore]    = useState("");
-    const [categoria, setCategoria] = useState("Manuale");
-    const [corso,     setCorso]     = useState("");
-    const [desc,      setDesc]      = useState("");
-    const [file,      setFile]      = useState(null);
-    const [err,       setErr]       = useState("");
-
-    const handleSubmit = async () => {
-      if (!titolo.trim()) { setErr("Titolo obbligatorio"); return; }
-      if (!file)          { setErr("Seleziona un file"); return; }
-      setUploading(true); setErr("");
-      try {
-        const sb = window.supabaseClient;
-        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const storagePath = `${Date.now()}_${safeName}`;
-        // Upload file
-        const { error: upErr } = await sb.storage.from("biblioteca").upload(storagePath, file, { upsert: true });
-        if (upErr) throw upErr;
-        const { data: urlData } = sb.storage.from("biblioteca").getPublicUrl(storagePath);
-        const fileUrl = urlData?.publicUrl || null;
-        // Salva record — genera l'id lato client per non dipendere da un default DB
-        // sulla colonna "id" (stesso problema riscontrato sulla tabella "allegati")
-        const newId = (typeof crypto !== 'undefined' && crypto.randomUUID)
-          ? crypto.randomUUID()
-          : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-              const r = Math.random()*16|0, v = c==='x' ? r : (r&0x3|0x8);
-              return v.toString(16);
-            });
-        const row = {
-          id: newId,
-          titolo: titolo.trim(),
-          autore: autore.trim() || null,
-          categoria,
-          corso: corso || null,
-          descrizione: desc.trim() || null,
-          file_url: fileUrl,
-          file_name: file.name,
-          file_type: file.type || null,
-          file_size: file.size || null,
-          storage_path: storagePath,
-          caricato_da: (appUser && appUser.nome) || null,
-        };
-        const { data: inserted, error: dbErr } = await sb.from("biblioteca").insert(row).select().single();
-        if (dbErr) throw dbErr;
-        setLibri(p => [inserted, ...p]);
-        setModal(null);
-      } catch(e) { setErr(e.message || "Errore upload"); }
-      finally { setUploading(false); }
-    };
-
-    const inpS = { width:"100%", padding:"9px 12px", border:`1px solid ${C.border}`,
-      borderRadius:8, fontSize:13, color:C.text, background:C.bg,
-      fontFamily:"'Open Sans',sans-serif", boxSizing:"border-box" };
-    const lblS = { fontSize:11, color:C.textMuted, fontWeight:600,
-      letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:4, display:"block" };
-
-    return React.createElement(Modal, { title:"Aggiungi libro / manuale", onClose:()=>setModal(null), wide:true }
-      , React.createElement('div', { style:{padding:"16px 22px", display:"flex", flexDirection:"column", gap:14} }
-        , React.createElement('div', { className:"form-2col" }
-          , React.createElement('div', null
-            , React.createElement('label', {style:lblS}, "Titolo *")
-            , React.createElement('input', { value:titolo, onChange:e=>setTitolo(e.target.value),
-                placeholder:"Es. Metodo Beyer, Scale Hanon…", style:inpS })
-          )
-          , React.createElement('div', null
-            , React.createElement('label', {style:lblS}, "Autore")
-            , React.createElement('input', { value:autore, onChange:e=>setAutore(e.target.value),
-                placeholder:"Es. Czerny, Hanon…", style:inpS })
-          )
-        )
-        , React.createElement('div', { className:"form-2col" }
-          , React.createElement('div', null
-            , React.createElement('label', {style:lblS}, "Categoria")
-            , React.createElement('select', { value:categoria, onChange:e=>setCategoria(e.target.value),
-                style:{...inpS, appearance:"none", cursor:"pointer"} }
-              , CATEGORIE.map(c => React.createElement('option', {key:c, value:c}, c))
-            )
-          )
-          , React.createElement('div', null
-            , React.createElement('label', {style:lblS}, "Corso / Strumento")
-            , React.createElement('select', { value:corso, onChange:e=>setCorso(e.target.value),
-                style:{...inpS, appearance:"none", cursor:"pointer"} }
-              , React.createElement('option', {value:""}, "Generale (tutti i corsi)")
-              , CORSI.map(c => React.createElement('option', {key:c, value:c}, c))
-            )
-          )
-        )
-        , React.createElement('div', { className:"form-2col" }
-          , React.createElement('div', null
-            , React.createElement('label', {style:lblS}, "Descrizione breve")
-            , React.createElement('input', { value:desc, onChange:e=>setDesc(e.target.value),
-                placeholder:"Note opzionali…", style:inpS })
-          )
-        )
-        , React.createElement('div', null
-          , React.createElement('label', {style:lblS}, "File (PDF, immagine, zip…) *")
-          , React.createElement('input', { type:"file",
-              accept:".pdf,.doc,.docx,.xls,.xlsx,.zip,.png,.jpg,.jpeg,.mp3,.mp4",
-              onChange:e=>setFile(e.target.files[0]||null),
-              style:{...inpS, padding:"7px 10px", cursor:"pointer"} })
-          , file && React.createElement('div', {style:{fontSize:11,color:C.green,marginTop:4}},
-              `✓ ${file.name} (${(file.size/1024/1024).toFixed(2)} MB)`)
-        )
-        , err && React.createElement('div', {style:{color:C.red,fontSize:12,background:C.redBg,
-            border:`1px solid ${C.redBorder}`,borderRadius:8,padding:"10px 14px"}}, err)
-        , React.createElement('div', {style:{display:"flex",gap:10,justifyContent:"flex-end"}}
-          , React.createElement(Btn, {variant:"secondary", onClick:()=>setModal(null)}, "Annulla")
-          , React.createElement(Btn, {onClick:handleSubmit, disabled:uploading}
-            , uploading ? "Caricamento…" : "Carica"
-          )
-        )
-      )
-    );
-  };
+  // [FM-BIB-FIX] Il form di upload è ora il componente top-level BibliotecaAddModal
+  // (definito sopra BibliotecaView): prima era un componente dichiarato DENTRO la vista,
+  // quindi ad ogni re-render del padre (es. setUploading) React lo smontava e rimontava
+  // da zero → il form si svuotava e l'eventuale messaggio di errore andava perso.
 
   const catColor = {
     Teoria:    {bg:C.blueBg,   bd:C.blueBorder,   tx:C.blue},
@@ -10409,7 +10491,9 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
     const q = search.toLowerCase();
     const matchQ = !q || (l.titolo||"").toLowerCase().includes(q) || (l.autore||"").toLowerCase().includes(q);
     const matchC = !filterCat || l.categoria === filterCat;
-    const matchCorso = !filterCorso || l.corso === filterCorso;
+    // [FM-BIB-FIX] i manuali "Generale (tutti i corsi)" restano visibili con
+    // qualunque filtro corso (stesso criterio già usato in LessonDetailModal)
+    const matchCorso = !filterCorso || !l.corso || l.corso === filterCorso;
     return matchQ && matchC && matchCorso;
   });
 
@@ -10455,12 +10539,17 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
       )
       /* ── LISTA ── */
       , React.createElement('div', { style:{flex:1,overflow:"auto",padding:"16px 24px"} }
+        , loadErr && React.createElement('div', {style:{color:C.red,fontSize:12,background:C.redBg,
+            border:`1px solid ${C.redBorder}`,borderRadius:8,padding:"10px 14px",marginBottom:12,
+            display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}
+          , React.createElement('span', null, "⚠️ ", loadErr)
+          , React.createElement(Btn, {variant:"secondary", onClick:()=>carica()}, "Riprova"))
         , loading && React.createElement('div', {style:{textAlign:"center",padding:40,color:C.textMuted,fontSize:13}},
             "Caricamento…")
         , !loading && filtered.length===0 && React.createElement('div', {style:{textAlign:"center",padding:60,color:C.textMuted}}
           , React.createElement(Ic,{n:"courses",size:40,stroke:C.textDim})
-          , React.createElement('p',{style:{marginTop:12,fontSize:14}}, search||filterCat ? "Nessun risultato" : "Nessun file caricato")
-          , canUpload && !search && !filterCat && React.createElement('p',{style:{fontSize:12,color:C.textDim,marginTop:4}},
+          , React.createElement('p',{style:{marginTop:12,fontSize:14}}, (search||filterCat||(filterCorso && libri.length>0)) ? `Nessun risultato${filterCorso?` per "${filterCorso}" (${libri.length} manuali in totale — prova "Tutti i corsi")`:""}` : "Nessun file caricato")
+          , canUpload && !search && !filterCat && !filterCorso && React.createElement('p',{style:{fontSize:12,color:C.textDim,marginTop:4}},
               "Usa il pulsante \"Aggiungi\" per caricare il primo file.")
         )
         , !loading && filtered.length > 0 && React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:10}}
@@ -10470,7 +10559,7 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
             const isPdf = (item.file_type||"").includes("pdf");
             const fileIcon = isPdf ? "report" : isImg ? "eye" : "paperclip";
             return React.createElement('div', { key:item.id,
-              style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
+              style:{background:C.surface,border:`1px solid ${String(item.id)===String(justAdded)?C.green:C.border}`,borderRadius:12,
                 padding:"14px 18px",display:"flex",alignItems:"flex-start",gap:14,flexWrap:"wrap",
                 transition:"box-shadow 0.15s"},
               onMouseEnter:e=>e.currentTarget.style.boxShadow=`0 2px 12px rgba(0,0,0,0.07)`,
@@ -10550,7 +10639,9 @@ const BibliotecaView = ({ userRuolo, appUser, quickAction, clearQuickAction }) =
         )
       )
       /* ── MODALS ── */
-      , modal==="add" && React.createElement(AddModal)
+      , modal==="add" && React.createElement(BibliotecaAddModal, {
+          CORSI, CATEGORIE, appUser, defaultCorso: filterCorso,
+          onClose: ()=>setModal(null), onSaved: onManualeSalvato })
       , rinominaTarget && React.createElement(Modal, { title:"Rinomina "+(rinominaTarget.titolo||""), onClose:()=>setRinominaTarget(null) }
         , React.createElement('div', { style:{padding:"16px 22px", display:"flex", flexDirection:"column", gap:12} }
           , React.createElement('label', {style:{fontSize:11, color:C.textMuted, fontWeight:600, letterSpacing:"0.05em", textTransform:"uppercase", marginBottom:2, display:"block"}}, "Nuovo titolo")
