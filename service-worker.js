@@ -3,7 +3,7 @@
 //   - app.js, fm_sync.js, supabase_integration.js → NETWORK-FIRST (sempre freschi)
 //   - webapp.html, manifest.json, icone          → NETWORK-FIRST con fallback cache
 //   - API Supabase, font Google (googleapis/gstatic) → solo network, mai cache
-const CACHE_VERSION = 'fm-v12'; // v12: fix TypeError 'put' su richieste HEAD (controllo periodico aggiornamenti)
+const CACHE_VERSION = 'fm-v13'; // v13: click notifica — URL sempre ricostruito sulla base attuale (404 su Android)
 
 // File pre-cachati all'install (solo per fallback offline)
 const CACHE_STATIC = [
@@ -101,6 +101,25 @@ self.addEventListener('fetch', event => {
   );
 });
 
+// ── URL di apertura sicuro ────────────────────────────────────────────────────
+// Ricostruisce SEMPRE il link su <scope attuale> + "webapp.html", tenendo dall'URL
+// ricevuto solo query e hash (deep-link). Usato sia alla ricezione del push sia al
+// click: le notifiche mostrate da una versione precedente del service worker
+// (fm-v9…v12) possono avere salvato in data.url un percorso vecchio come
+// "https://www.fmspettacolo.it/FM-webapp/webapp.html", che sul dominio personalizzato
+// non esiste più → 404 al tocco sulla notifica (caso segnalato su Android).
+function urlApp(rawUrl) {
+  const base = self.registration.scope;
+  let target = base + 'webapp.html';
+  try {
+    if (rawUrl) {
+      const parsed = new URL(rawUrl, base);
+      target = base + 'webapp.html' + parsed.search + parsed.hash;
+    }
+  } catch (e) { /* default */ }
+  return target;
+}
+
 // ── Push: riceve le notifiche dal server ─────────────────────────────────────
 self.addEventListener('push', event => {
   let data = {};
@@ -119,13 +138,7 @@ self.addEventListener('push', event => {
 
   const title = data.title || 'Futuro Musica';
 
-  let targetUrl = base + 'webapp.html';
-  try {
-    if (data.url) {
-      const parsed = new URL(data.url, base);
-      targetUrl = base + 'webapp.html' + parsed.search + parsed.hash;
-    }
-  } catch (e) { /* usa il default già impostato sopra */ }
+  const targetUrl = urlApp(data.url);
 
   const iconUrl  = new URL('icons/icon-192.png', base).href;
   console.log('[FM SW] push ricevuto — base:', base, '| data.url originale:', data.url, '| targetUrl risolto:', targetUrl);
@@ -152,8 +165,7 @@ self.addEventListener('push', event => {
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   const base = self.registration.scope;
-  let targetUrl = event.notification.data && event.notification.data.url;
-  if (!targetUrl) targetUrl = base + 'webapp.html';
+  const targetUrl = urlApp(event.notification.data && event.notification.data.url);
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
       for (const client of list) {

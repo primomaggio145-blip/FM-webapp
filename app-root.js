@@ -694,18 +694,18 @@ function App() {
             navigator.serviceWorker.ready.then(function(reg) {
               reg.showNotification(titolo, {
                 body:    testo,
-                icon:    '/FM-webapp/icons/icon-192.png',
-                badge:   '/FM-webapp/icons/icon-192.png',
+                icon:    '/icons/icon-192.png',
+                badge:   '/icons/icon-192.png',
                 tag:     key,
                 vibrate: [200, 100, 200],
               });
             }).catch(function() {
-              new Notification(titolo, { body: testo, icon: '/FM-webapp/icons/icon-192.png' });
+              new Notification(titolo, { body: testo, icon: '/icons/icon-192.png' });
             });
           } else if (Notification.permission !== 'denied') {
             Notification.requestPermission().then(function(p) {
               if (p === 'granted') {
-                new Notification(titolo, { body: testo, icon: '/FM-webapp/icons/icon-192.png' });
+                new Notification(titolo, { body: testo, icon: '/icons/icon-192.png' });
               }
             });
           }
@@ -906,7 +906,7 @@ function App() {
     window.__FM_ALLOW_EXIT__ = true; // sopprime il popup nativo "vuoi uscire dal sito?"
     setShowEsciMsg(true);
     setTimeout(() => {
-      window.location.href = 'https://primomaggio145-blip.github.io/FM-webapp/';
+      window.location.href = '/';
     }, IS_PWA ? 3500 : 1600);
   };
 
@@ -1992,14 +1992,14 @@ const NotificheSettingsView = ({ ruolo, onNavigate }) => {
               // Invia via service worker se disponibile (PWA), altrimenti Notification diretta
               const sendNotif = () => new Notification('⏰ Lezione tra 1 ora [TEST]', {
                 body: 'Pianoforte con Prof. Bianchi alle 15:30',
-                icon: '/FM-webapp/icons/icon-192.png',
+                icon: '/icons/icon-192.png',
               });
               if ('serviceWorker' in navigator) {
                 navigator.serviceWorker.ready.then(reg => {
                   reg.showNotification('⏰ Lezione tra 1 ora [TEST]', {
                     body: 'Pianoforte con Prof. Bianchi alle 15:30',
-                    icon: '/FM-webapp/icons/icon-192.png',
-                    badge: '/FM-webapp/icons/icon-192.png',
+                    icon: '/icons/icon-192.png',
+                    badge: '/icons/icon-192.png',
                     tag: 'fm-test',
                   });
                 }).catch(sendNotif);

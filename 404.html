@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>Futuro Musica</title>
+  <script>
+    // GitHub Pages serve questo file per QUALSIASI percorso inesistente sul dominio.
+    // Dopo il passaggio da primomaggio145-blip.github.io/FM-webapp/ a www.fmspettacolo.it
+    // restano in giro link con il vecchio prefisso /FM-webapp/ (notifiche push già
+    // ricevute, service worker non ancora aggiornati su alcuni telefoni, segnalibri,
+    // scorciatoie PWA). Li riportiamo al percorso giusto invece di mostrare un 404.
+    (function () {
+      var path = location.pathname;
+      var nuovo = null;
+      if (/^\/FM-webapp(\/|$)/i.test(path)) {
+        nuovo = path.replace(/^\/FM-webapp/i, '') || '/';
+      } else if (/webapp\.html?$/i.test(path) || /^\/app\/?$/i.test(path)) {
+        nuovo = '/webapp.html';
+      }
+      if (nuovo && nuovo !== path) {
+        location.replace(nuovo + location.search + location.hash);
+      }
+    })();
+  </script>
+  <style>
+    :root { color-scheme: light dark; --bg:#f7f7fa; --fg:#1b1b24; --muted:#6b6b7b; --accent:#b8892b; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#0f0f1a; --fg:#ececf2; --muted:#9a9aab; } }
+    body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+      background:var(--bg); color:var(--fg); font-family:'Open Sans', system-ui, sans-serif; text-align:center; padding:24px; box-sizing:border-box; }
+    h1 { font-size:20px; margin:0 0 8px; }
+    p { color:var(--muted); font-size:14px; margin:0 0 20px; }
+    a { display:inline-block; padding:10px 20px; border-radius:10px; background:var(--accent); color:#fff; text-decoration:none; font-weight:600; margin:4px; }
+  </style>
+</head>
+<body>
+  <div>
+    <h1>Pagina non trovata</h1>
+    <p>Il link potrebbe essere vecchio o non più valido.</p>
+    <a href="/webapp.html">Apri l'app</a>
+    <a href="/">Vai al sito</a>
+  </div>
+</body>
+</html>

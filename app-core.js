@@ -841,7 +841,7 @@ const NotifPermBtn = function() {
         navigator.serviceWorker.ready.then(function(reg) {
           reg.showNotification('✅ Notifiche attivate', {
             body: 'Riceverai un avviso prima di ogni lezione, anche con l\'app chiusa.',
-            icon: '/FM-webapp/icons/icon-192.png',
+            icon: '/icons/icon-192.png',
           });
         }).catch(function() {
           new Notification('✅ Notifiche attivate', {
