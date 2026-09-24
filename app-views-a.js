@@ -3481,9 +3481,13 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
           )
         )
     )
-    )
+    // [FM-ALL-FIX] Il modal anteprima DEVE stare dentro il Fragment: prima il Fragment
+    // veniva chiuso una parentesi troppo presto e "return ( <Fragment>, previewFile && … )"
+    // diventava un'espressione con virgola → restituiva solo "previewFile && …", cioè
+    // null a riposo → pagina Allegati completamente vuota.
     , previewFile && React.createElement(FilePreviewModal, { file: previewFile, onClose: ()=>setPreviewFile(null) })
     ) // close Fragment
+  );
 };
 
 const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, clearQuickAction }) => {
