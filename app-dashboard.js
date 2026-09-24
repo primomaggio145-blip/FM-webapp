@@ -2232,6 +2232,24 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
   const [selettoreTemaAperto, setSelettoreTemaAperto] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [extraPrevistiAperto, setExtraPrevistiAperto] = useState(false); // [FM-EXTRA-PREVISTI]
+  // [FM-EXTRA-PREVISTI] Elenco extra previste: mese corrente sempre, negli ultimi 7 giorni del
+  // mese anche il successivo; solo extra con data da oggi in poi. Mostrato su richiesta (pulsante).
+  const extraPrevisti = React.useMemo(() => {
+    const oggiEP = new Date(); oggiEP.setHours(0,0,0,0);
+    const mesi = [{ m: oggiEP.getMonth()+1, y: oggiEP.getFullYear() }];
+    const fineMeseEP = new Date(oggiEP.getFullYear(), oggiEP.getMonth()+1, 0);
+    if ((fineMeseEP - oggiEP) / 86400000 < 7) {
+      const nx = new Date(oggiEP.getFullYear(), oggiEP.getMonth()+1, 1);
+      mesi.push({ m: nx.getMonth()+1, y: nx.getFullYear() });
+    }
+    const righe = [];
+    try {
+      const oggiISO = yyyymmdd(oggiEP);
+      mesi.forEach(({ m, y }) => calcolaExtraPrevistiMese(propLessonsDash, propStudentsDash, m, y)
+        .forEach(r => { if (r.dateExtra.some(d => d >= oggiISO)) righe.push(r); }));
+    } catch (e) { console.warn('[FM] extra previsti:', e); }
+    return { righe, nomiMesi: mesi.map(({m}) => MESI[m-1]).join(' e ') };
+  }, [propLessonsDash, propStudentsDash]);
   // Clock live: aggiorna ogni 60s per far scorrere la progressbar e la timeline
   const [dashNow, setDashNow] = useState(new Date());
   useEffect(() => {
@@ -2713,60 +2731,6 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                 );
               })()
 
-            /* [FM-EXTRA-PREVISTI] Banner lezioni extra PREVISTE nel mese (5ª occorrenza ecc.), avviso
-               anticipato: mese corrente sempre; negli ultimi 7 giorni del mese anche il mese successivo. */
-            , ruolo === 'admin' && (() => {
-                let righe = [];
-                const oggiEP = new Date(); oggiEP.setHours(0,0,0,0);
-                const mesiEP = [{ m: oggiEP.getMonth()+1, y: oggiEP.getFullYear() }];
-                const fineMeseEP = new Date(oggiEP.getFullYear(), oggiEP.getMonth()+1, 0);
-                if ((fineMeseEP - oggiEP) / 86400000 < 7) {
-                  const nx = new Date(oggiEP.getFullYear(), oggiEP.getMonth()+1, 1);
-                  mesiEP.push({ m: nx.getMonth()+1, y: nx.getFullYear() });
-                }
-                try {
-                  const oggiISO = yyyymmdd(oggiEP);
-                  mesiEP.forEach(({ m, y }) => {
-                    calcolaExtraPrevistiMese(propLessonsDash, propStudentsDash, m, y)
-                      .forEach(r => { if (r.dateExtra.some(d => d >= oggiISO)) righe.push(r); });
-                  });
-                } catch (e) { console.warn('[FM] extra previsti:', e); return null; }
-                if (righe.length === 0) return null;
-                const OR = '#f59e0b';
-                const nomiMesi = mesiEP.map(({m}) => MESI[m-1]).join(' e ');
-                const fmtD = d => { try { return new Date(d+"T00:00:00").toLocaleDateString('it-IT', {weekday:'short', day:'numeric', month:'short'}); } catch(e){ return d; } };
-                const MAX = 5;
-                const visibili = extraPrevistiAperto ? righe : righe.slice(0, MAX);
-                return React.createElement('div', { style:{padding:'14px 18px',borderRadius:12,border:'1.5px solid rgba(245,158,11,0.4)',background:'rgba(245,158,11,0.10)'} }
-                  , React.createElement('div', { style:{display:'flex',alignItems:'center',gap:12,cursor:'pointer'}, onClick: () => onNavigate('calendario') }
-                    , React.createElement(Ic, { n:'alert', size:18, stroke:OR })
-                    , React.createElement('div', {style:{flex:1}}
-                      , React.createElement('div', {style:{fontSize:13,fontWeight:700,color:OR}}, `Lezioni extra previste · ${nomiMesi}`)
-                      , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}
-                        , righe.length===1 ? '1 allievo avrà un\'occorrenza oltre il pacchetto mensile' : `${righe.length} allievi avranno un'occorrenza oltre il pacchetto mensile`
-                        , ' — la decisione (genera / non generare) comparirà segnando la presenza della lezione-soglia'
-                      )
-                    )
-                    , React.createElement('span', {style:{fontSize:12,fontWeight:700,color:OR,whiteSpace:'nowrap'}}, 'Vai al Calendario →')
-                  )
-                  , React.createElement('div', { style:{marginTop:10, display:'flex', flexDirection:'column', gap:6} }
-                    , visibili.map((r, i) => (
-                        React.createElement('div', { key:i, style:{fontSize:12, color:C.text, padding:'8px 10px', background:'rgba(255,255,255,0.5)', borderRadius:8} }
-                          , React.createElement('strong', null, fmtD(r.dateExtra[0]))
-                          , ' — ', r.student, ' (', r.instrument, r.teacher ? `, ${r.teacher}` : '', ')'
-                          , React.createElement('span', {style:{color:C.textMuted}}
-                            , ` · ${r.N+1}ª lezione, pacchetto ${r.N} (${r.recurrence}) · soglia ${fmtD(r.dataSoglia)}`
-                            , r.dateExtra.length > 1 ? ` · altre: ${r.dateExtra.slice(1).map(fmtD).join(', ')}` : '')
-                        )
-                      ))
-                    , righe.length > MAX && React.createElement('button', {
-                        onClick: e => { e.stopPropagation(); setExtraPrevistiAperto(v => !v); },
-                        style:{alignSelf:'flex-start',fontSize:12,fontWeight:600,color:OR,background:'none',border:'none',cursor:'pointer',padding:'2px 0',fontFamily:"'Open Sans',sans-serif"} }
-                      , extraPrevistiAperto ? 'Mostra meno' : `Mostra tutti (${righe.length})`)
-                  )
-                );
-              })()
-
             /* Helper ordine pannelli: legge panels.panelOrder e restituisce {order:N} */
             , (() => {
                 const _panelOrder = (panels.panelOrder && panels.panelOrder.length > 0)
@@ -2785,6 +2749,19 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               , React.createElement('div', {
                   style:{display:"flex",justifyContent:"flex-end",gap:8,marginBottom:8}
                 }
+                /* [FM-EXTRA-PREVISTI] Pulsante compatto: apre/chiude l'elenco delle extra previste */
+                , ruolo === 'admin' && extraPrevisti.righe.length > 0 && React.createElement('button', {
+                    onClick: ()=>setExtraPrevistiAperto(v=>!v),
+                    title: `Lezioni extra previste · ${extraPrevisti.nomiMesi}`,
+                    style:{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",
+                      background: extraPrevistiAperto ? 'rgba(245,158,11,0.18)' : 'rgba(245,158,11,0.10)',
+                      border:'1px solid rgba(245,158,11,0.45)',borderRadius:20,
+                      cursor:"pointer",fontFamily:"'Open Sans',sans-serif",fontSize:11,fontWeight:600,
+                      color:'#f59e0b',transition:"all 0.15s"}
+                  }
+                  , React.createElement(Ic, {n:'alert', size:13, stroke:'#f59e0b'})
+                  , `Extra previste (${extraPrevisti.righe.length})`
+                )
                 , React.createElement('button', {
                     onClick: ()=>setSelettoreTemaAperto(true),
                     title: "Scegli come vedere l'app su questo dispositivo",
@@ -2811,6 +2788,30 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   , showAmounts ? "Nascondi importi" : "Mostra importi"
                 )
               )
+              /* [FM-EXTRA-PREVISTI] Pannello a comparsa: visibile solo dopo il clic sul pulsante */
+              , ruolo === 'admin' && extraPrevistiAperto && extraPrevisti.righe.length > 0 && (() => {
+                  const OR = '#f59e0b';
+                  const fmtD = d => { try { return new Date(d+"T00:00:00").toLocaleDateString('it-IT', {weekday:'short', day:'numeric', month:'short'}); } catch(e){ return d; } };
+                  return React.createElement('div', { style:{padding:'10px 14px',marginBottom:10,borderRadius:12,border:'1.5px solid rgba(245,158,11,0.4)',background:'rgba(245,158,11,0.08)'} }
+                    , React.createElement('div', { style:{display:'flex',alignItems:'center',gap:8,marginBottom:6} }
+                      , React.createElement('div', {style:{flex:1,fontSize:12,fontWeight:700,color:OR}}, `Lezioni extra previste · ${extraPrevisti.nomiMesi}`)
+                      , React.createElement('span', {onClick: () => onNavigate('calendario'), style:{fontSize:11,fontWeight:700,color:OR,cursor:'pointer',whiteSpace:'nowrap'}}, 'Calendario →')
+                      , React.createElement('span', {onClick: () => setExtraPrevistiAperto(false), title:'Chiudi', style:{fontSize:14,color:C.textMuted,cursor:'pointer',padding:'0 4px'}}, '✕')
+                    )
+                    , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:6}}, 'La decisione genera / non generare comparirà segnando la presenza della lezione-soglia.')
+                    , React.createElement('div', { style:{display:'flex', flexDirection:'column', gap:3, maxHeight:220, overflowY:'auto'} }
+                      , extraPrevisti.righe.map((r, i) => (
+                          React.createElement('div', { key:i, style:{fontSize:12, color:C.text, lineHeight:1.45} }
+                            , React.createElement('strong', null, fmtD(r.dateExtra[0]))
+                            , ' — ', r.student, ' (', r.instrument, ')'
+                            , React.createElement('span', {style:{color:C.textMuted}}
+                              , ` · ${r.N+1}ª lez., soglia ${fmtD(r.dataSoglia)}`
+                              , r.dateExtra.length > 1 ? ` · altre: ${r.dateExtra.slice(1).map(fmtD).join(', ')}` : '')
+                          )
+                        ))
+                    )
+                  );
+                })()
               , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2188}}
               , ruolo==="docente" ? React.createElement(React.Fragment, null
                   /* [FM-KPI-DOC] Lezioni di oggi → Calendario, vista giorno su oggi */
