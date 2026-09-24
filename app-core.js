@@ -1051,7 +1051,19 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
   const isMultiVoce = voci.length > 1;
 
   const numRic = entrata.noRicevuta ? "—" : (entrata.numRicevuta || (String(cfg.progressivoRicevute||1).padStart(3,"0") + "/" + (entrata.anno||new Date().getFullYear())));
-  const intestatario = (student && student.nomeRicevuta && student.nomeRicevuta.trim()) || (student && student.name) || entrata.studentName || "—";
+  // Convenzione: la ricevuta è intestata all'associazione/ente convenzionato (dati "fotografati"
+  // sull'entrata al momento dell'emissione), non all'allievo.
+  const _convSrc = voci.find(v=>v && (v.ricevutaIntestatario || v.convenzioneId)) || null;
+  const isConv = !!_convSrc;
+  const convIntestatario = isConv ? ((_convSrc.ricevutaIntestatario||"").trim() || _convSrc.convenzioneNome || "—") : "";
+  const convCf = isConv ? (_convSrc.ricevutaCf||"") : "";
+  const convIndirizzo = isConv ? (_convSrc.ricevutaIndirizzo||"") : "";
+  const allieviConv = isConv ? [...new Set(voci.map(v=>v.studentName).filter(Boolean))] : [];
+  const multiAllievo = allieviConv.length > 1;
+  const intestatario = isConv ? convIntestatario : ((student && student.nomeRicevuta && student.nomeRicevuta.trim()) || (student && student.name) || entrata.studentName || "—");
+  const cfIntestatario = isConv ? convCf : (student && student.codiceFiscale) || "";
+  const labelIntestatario = isConv ? "INTESTATARIO" : "SOCIO";
+  const descVoce = (v) => (v.desc||"—") + (isConv && multiAllievo && v.studentName ? ` — ${v.studentName}` : "");
   const MESI_N = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const dataStampa = new Date().toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"});
   const dataPag    = entrata.data ? new Date(entrata.data+"T00:00:00").toLocaleDateString("it-IT") : dataStampa;
@@ -1064,13 +1076,13 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
   const buildHtml = () => {
     const indirizzoHtml = stile.showIndirizzo!==false && cfg.indirizzo ? `<div style="font-size:11px;color:#666;margin-top:3px">${cfg.indirizzo}</div>` : "";
     const cfHtml = cfg.codiceFiscale ? `<div style="font-size:11px;color:#666">CF: ${cfg.codiceFiscale}</div>` : "";
-    const nascitaRow = stile.showDataNascita!==false && student && student.birthdate
+    const nascitaRow = !isConv && stile.showDataNascita!==false && student && student.birthdate
       ? `<tr><td class="k">Data di nascita</td><td class="v">${new Date(student.birthdate+"T00:00:00").toLocaleDateString("it-IT")}</td></tr>` : "";
     const meseRow = stile.showCompetenza!==false && meseLabel && !isMultiVoce ? `<tr><td class="k">Competenza</td><td class="v">${meseLabel}</td></tr>` : "";
     const noteRow = stile.noteFooter ? `<tr><td class="k">Note</td><td class="v">${stile.noteFooter}</td></tr>` : "";
     const descrizioneHtml = isMultiVoce
       ? `<tr><td colspan="2" style="padding-top:14px;padding-bottom:4px;border-bottom:none;"><div style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.08em;border-top:1px solid #eee;padding-top:10px;">Dettaglio pagamento</div></td></tr>`
-        + voci.map(v=>`<tr><td class="k">${v.desc||"—"}</td><td class="v">€ ${(Number(v.importo)||0).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>`).join("")
+        + voci.map(v=>`<tr><td class="k">${descVoce(v)}</td><td class="v">€ ${(Number(v.importo)||0).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}</td></tr>`).join("")
       : (stile.showDescrizione!==false?`<tr><td class="k">Descrizione</td><td class="v">${entrata.desc||"Quota mensile"}</td></tr>`:"");
     const firmaImg = stile.firmaPresidenteUrl ? `<img src="${stile.firmaPresidenteUrl}" style="height:42px;max-width:160px;object-fit:contain;display:block;margin:0 auto 4px;" alt="firma">` : `<div class="firma-line"></div>`;
     const firmeHtml = stile.showFirme!==false ? `
@@ -1120,8 +1132,10 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
       </div>
     </div>
     <table>
-      ${stile.showNominativo!==false?`<tr><td class="k">SOCIO</td><td class="v">${intestatario}</td></tr>`:""}
-      ${student&&student.codiceFiscale?`<tr><td class="k">Codice fiscale</td><td class="v">${student.codiceFiscale}</td></tr>`:""}
+      ${stile.showNominativo!==false?`<tr><td class="k">${labelIntestatario}</td><td class="v">${intestatario}</td></tr>`:""}
+      ${cfIntestatario?`<tr><td class="k">Codice fiscale / P.IVA</td><td class="v">${cfIntestatario}</td></tr>`:""}
+      ${isConv&&convIndirizzo?`<tr><td class="k">Indirizzo</td><td class="v">${convIndirizzo}</td></tr>`:""}
+      ${isConv&&allieviConv.length?`<tr><td class="k">${multiAllievo?"Allievi":"Allievo"}</td><td class="v">${allieviConv.join(", ")}</td></tr>`:""}
       ${nascitaRow}
       ${stile.showDataPagamento!==false?`<tr><td class="k">Data pagamento</td><td class="v">${dataPag}</td></tr>`:""}
       ${descrizioneHtml}
@@ -1197,8 +1211,10 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
   const rows = [
     {k:"Ricevuta n°", v:numRic},
     {k:"Data stampa",  v:dataStampa},
-    {k:"Nominativo",   v:intestatario},
-    ...(student&&student.codiceFiscale ? [{k:"Codice fiscale", v:student.codiceFiscale}] : []),
+    {k:isConv?"Intestatario":"Nominativo",   v:intestatario},
+    ...(cfIntestatario ? [{k:isConv?"Codice fiscale / P.IVA":"Codice fiscale", v:cfIntestatario}] : []),
+    ...(isConv && convIndirizzo ? [{k:"Indirizzo", v:convIndirizzo}] : []),
+    ...(isConv && allieviConv.length ? [{k:multiAllievo?"Allievi":"Allievo", v:allieviConv.join(", ")}] : []),
     {k:"Data pagamento", v:dataPag},
     ...(!isMultiVoce ? [{k:"Descrizione",  v:entrata.desc||"Quota mensile"}] : []),
     ...(!isMultiVoce && meseLabel ? [{k:"Competenza", v:meseLabel}] : []),
@@ -1250,7 +1266,7 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
             , React.createElement('div', {style:{fontSize:10,color:"#888",textTransform:"uppercase",letterSpacing:".08em",marginBottom:8}}, "Dettaglio pagamento")
             , voci.map((v,i)=>React.createElement('div', {key:v.id||i, style:{display:"flex",justifyContent:"space-between",alignItems:"center",
                 padding:"6px 0",borderBottom:i<voci.length-1?"1px solid #f3f3f3":"none"}}
-                , React.createElement('span', {style:{fontSize:12,color:"#666"}}, v.desc||"—")
+                , React.createElement('span', {style:{fontSize:12,color:"#666"}}, descVoce(v))
                 , React.createElement('span', {style:{fontSize:13,fontWeight:600,color:"#1a1a2e"}}, `€ ${(Number(v.importo)||0).toLocaleString("it-IT",{minimumFractionDigits:2,maximumFractionDigits:2})}`)
               ))
           )

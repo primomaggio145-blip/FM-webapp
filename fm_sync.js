@@ -158,6 +158,12 @@
       stato: sm[r.stato] || r.stato || 'attesa',
       dataPagamento: r.data_pagamento || '', numRicevuta: r.num_ricevuta || '',
       noRicevuta: r.no_ricevuta === true,
+      // Convenzioni: intestazione ricevuta "fotografata" al momento dell'emissione
+      convenzioneId: r.convenzione_id || null,
+      convenzioneNome: r.convenzione_nome || '',
+      ricevutaIntestatario: r.ricevuta_intestatario || '',
+      ricevutaCf: r.ricevuta_cf || '',
+      ricevutaIndirizzo: r.ricevuta_indirizzo || '',
     };
   }
   function adaptSpesa(r) {
@@ -375,6 +381,11 @@
         num_ricevuta: q.numRicevuta || '', metodo: q.metodo || 'Contanti',
         categoria: q.categoria || 'quota', descrizione: q.desc || '',
         note: q.note || '', no_ricevuta: q.noRicevuta === true,
+        convenzione_id: q.convenzioneId || null,
+        convenzione_nome: q.convenzioneNome || null,
+        ricevuta_intestatario: q.ricevutaIntestatario || null,
+        ricevuta_cf: q.ricevutaCf || null,
+        ricevuta_indirizzo: q.ricevutaIndirizzo || null,
       };
     },
     spese(s) {

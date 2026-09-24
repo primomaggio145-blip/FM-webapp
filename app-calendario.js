@@ -13155,6 +13155,65 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
   const setExtraVoce = (id,k,v) => setExtraVoci(p=>p.map(x=>x.id===id?{...x,[k]:v}:x));
   const removeExtraVoce = (id) => setExtraVoci(p=>p.filter(x=>x.id!==id));
 
+  // ── CONVENZIONE ──────────────────────────────────────────────────────────
+  // Allievi in convenzione con associazioni/enti: il pagamento e la ricevuta seguono regole diverse.
+  // - si possono aggiungere più quote (anche di allievi diversi) nella stessa registrazione;
+  // - "Emetti ricevuta" vale solo per le quote spuntate (non per tutte);
+  // - la ricevuta è intestata alla convenzione (tabella `convenzioni`); se i dati non sono in
+  //   memoria vanno inseriti a mano e vengono salvati per le volte successive.
+  const [convOn, setConvOn] = useState(!!(initial && initial.convenzioneId));
+  const [convenzioni, setConvenzioni] = useState([]);
+  const [convLoaded, setConvLoaded] = useState(false);
+  const [convSel, setConvSel] = useState(initial && initial.convenzioneId ? String(initial.convenzioneId) : "");
+  const [convDati, setConvDati] = useState({
+    denominazione: (initial && (initial.ricevutaIntestatario || initial.convenzioneNome)) || "",
+    codiceFiscale: (initial && initial.ricevutaCf) || "",
+    indirizzo:     (initial && initial.ricevutaIndirizzo) || "",
+  });
+  const [convEditDati, setConvEditDati] = useState(false);
+  const [primariaInRicevuta, setPrimariaInRicevuta] = useState(true);
+  const [savingConv, setSavingConv] = useState(false);
+  const setConvDato = (k,v) => setConvDati(p=>({...p,[k]:v}));
+
+  useEffect(() => {
+    if (!convOn || convLoaded) return;
+    let alive = true;
+    (async () => {
+      try {
+        const sb = window.supabaseClient;
+        if (!sb) return;
+        const { data, error } = await sb.from('convenzioni').select('*').order('denominazione');
+        if (error) { console.warn('[FM] convenzioni load:', error.message); return; }
+        if (!alive) return;
+        setConvenzioni((data||[]).map(r => ({
+          id: String(r.id), denominazione: r.denominazione || '',
+          codiceFiscale: r.codice_fiscale || '', indirizzo: r.indirizzo || '',
+        })));
+      } finally { if (alive) setConvLoaded(true); }
+    })();
+    return () => { alive = false; };
+  }, [convOn, convLoaded]);
+
+  const convRec   = convenzioni.find(c => c.id === convSel) || null;
+  const isNewConv = convSel === "__new__";
+  const handleConvSel = (val) => {
+    setConvSel(val); setConvEditDati(false);
+    const r = convenzioni.find(c => c.id === val);
+    setConvDati(r ? { denominazione: r.denominazione, codiceFiscale: r.codiceFiscale, indirizzo: r.indirizzo }
+                  : { denominazione: "", codiceFiscale: "", indirizzo: "" });
+  };
+  const ricevutaAttiva = !f.noRicevuta;
+  // Selezione per-quota: solo in creazione (in modifica l'entrata è un unico record → vale il toggle)
+  const perVoceRicevuta = convOn && ricevutaAttiva && !initial;
+  const anyInRicevuta = ricevutaAttiva && (!perVoceRicevuta || primariaInRicevuta || extraVoci.some(v => v.inRicevuta !== false));
+  const convDatiMancanti = !convRec || !convRec.denominazione.trim() || !convRec.codiceFiscale.trim();
+  const showConvCampi = convOn && (isNewConv || (!!convRec && (convEditDati || (anyInRicevuta && convDatiMancanti))));
+  const addQuotaConv = () => setExtraVoci(p => {
+    const sid = f.studentId;
+    const st = students.find(x => x.id === Number(sid));
+    return [...p, { id: uid(), categoria: "quota", studentId: sid, importo: st && st.monthlyFee ? String(st.monthlyFee) : "", mese: f.mese, anno: f.anno, inRicevuta: true }];
+  });
+
   const CAT_ENTRATE_USE = _catEntrForm || CAT_ENTRATE_DEFAULT;
   const catObj     = CAT_ENTRATE_USE.find(c=>c.id===f.categoria)||CAT_ENTRATE_USE[0];
   const needStudent = catObj.student;
@@ -13175,12 +13234,63 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
     if(!f.metodo)                   e.metodo    = "Metodo di pagamento obbligatorio";
     if(!needStudent && !f.desc.trim()) e.desc   = "Descrizione obbligatoria";
     extraVoci.forEach(v => { if(!v.importo||isNaN(v.importo)||Number(v.importo)<=0) e[`voce_${v.id}`] = "Importo non valido"; });
+    if (convOn) {
+      const catNeedsStud = (cat) => !!((CAT_ENTRATE_USE.find(c=>c.id===cat)||{}).student);
+      extraVoci.forEach(v => { if (catNeedsStud(v.categoria) && !v.studentId) e[`voceStud_${v.id}`] = "Seleziona l'allievo"; });
+      if (!convSel) e.conv = "Seleziona una convenzione o creane una nuova";
+      if (isNewConv && !convDati.denominazione.trim()) e.convDen = "Denominazione obbligatoria";
+      if (perVoceRicevuta && !anyInRicevuta) e.convRic = "Seleziona almeno una quota da includere in ricevuta, oppure disattiva «Emetti ricevuta»";
+      if (convSel && anyInRicevuta) {
+        if (!convDati.denominazione.trim()) e.convDen = "Intestatario obbligatorio per emettere la ricevuta";
+        if (!convDati.codiceFiscale.trim()) e.convCf  = "Codice fiscale / P.IVA obbligatorio per emettere la ricevuta";
+      }
+    }
     return e;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const e = validate();
-    if(Object.keys(e).length){ setErr(e); return; }
+    if(Object.keys(e).length){
+      setErr(e);
+      // se l'errore riguarda i dati di intestazione, mostra i campi
+      if ((e.convDen || e.convCf) && convRec) setConvEditDati(true);
+      return;
+    }
+    if (savingConv) return;
+    // Convenzione: crea/aggiorna il record in tabella `convenzioni` PRIMA di registrare l'entrata
+    let convFinale = null;
+    if (convOn) {
+      const dati = {
+        denominazione: convDati.denominazione.trim(),
+        codiceFiscale: convDati.codiceFiscale.trim(),
+        indirizzo:     convDati.indirizzo.trim(),
+      };
+      const sb = window.supabaseClient;
+      if (!sb) { setErr({ convSave: "Connessione al database non disponibile" }); return; }
+      setSavingConv(true);
+      try {
+        if (isNewConv) {
+          const id = uid();
+          const { error } = await sb.from('convenzioni').insert({ id, denominazione: dati.denominazione,
+            codice_fiscale: dati.codiceFiscale || null, indirizzo: dati.indirizzo || null });
+          if (error) { setErr({ convSave: "Salvataggio convenzione non riuscito: " + error.message }); return; }
+          convFinale = { id, ...dati };
+          setConvenzioni(p => [...p, convFinale]); setConvSel(id);
+        } else if (convRec) {
+          const cambiato = dati.denominazione !== convRec.denominazione || dati.codiceFiscale !== convRec.codiceFiscale || dati.indirizzo !== convRec.indirizzo;
+          if (cambiato && dati.denominazione) {
+            const { error } = await sb.from('convenzioni').update({ denominazione: dati.denominazione,
+              codice_fiscale: dati.codiceFiscale || null, indirizzo: dati.indirizzo || null,
+              updated_at: new Date().toISOString() }).eq('id', convRec.id);
+            if (error) { setErr({ convSave: "Aggiornamento convenzione non riuscito: " + error.message }); return; }
+            convFinale = { ...convRec, ...dati };
+            setConvenzioni(p => p.map(c => c.id === convRec.id ? convFinale : c));
+          } else {
+            convFinale = convRec;
+          }
+        }
+      } finally { setSavingConv(false); }
+    }
     const s = needStudent ? students.find(st=>st.id===Number(f.studentId)) : null;
     const nomeMese = MESI_ALL[f.mese-1];
     const autoDesc = f.categoria==="quota"
@@ -13203,19 +13313,83 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
       desc:         autoDesc || f.desc,
       stato:        f.stato || 'pagato',
       dataPagamento: f.data || f.dataPagamento || '',
-      extraVoci: extraVoci.map(v => ({
-        categoria: v.categoria,
-        importo:   Number(v.importo),
-        mese:      Number(v.mese||f.mese),
-        anno:      Number(v.anno||f.anno),
-        desc:      descPerCategoria(v.categoria, Number(v.mese||f.mese), Number(v.anno||f.anno)),
-      })),
+      // Convenzione (snapshot intestazione: le ricevute già emesse non cambiano se la convenzione viene modificata)
+      convenzioneId:        convFinale ? convFinale.id : null,
+      convenzioneNome:      convFinale ? convFinale.denominazione : "",
+      ricevutaIntestatario: convFinale && anyInRicevuta ? convFinale.denominazione : "",
+      ricevutaCf:           convFinale && anyInRicevuta ? convFinale.codiceFiscale : "",
+      ricevutaIndirizzo:    convFinale && anyInRicevuta ? convFinale.indirizzo : "",
+      ...(perVoceRicevuta ? { inRicevuta: primariaInRicevuta } : {}),
+      extraVoci: extraVoci.map(v => {
+        const base = {
+          categoria: v.categoria,
+          importo:   Number(v.importo),
+          mese:      Number(v.mese||f.mese),
+          anno:      Number(v.anno||f.anno),
+          desc:      descPerCategoria(v.categoria, Number(v.mese||f.mese), Number(v.anno||f.anno)),
+        };
+        if (!convOn) return base;
+        const st = v.studentId ? students.find(x => x.id === Number(v.studentId)) : null;
+        return { ...base,
+          studentId:   st ? st.id : null,
+          studentName: st ? st.name : "",
+          inRicevuta:  perVoceRicevuta ? v.inRicevuta !== false : true,
+        };
+      }),
     });
   };
 
   return (
     React.createElement(React.Fragment, null
       , React.createElement('div', { style: {padding:22,display:"flex",flexDirection:"column",gap:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6717}}
+        /* ── CONVENZIONE ── */
+        , React.createElement('div', {style:{padding:"12px 14px",borderRadius:10,border:`1px solid ${convOn?C.gold:C.border}`,background:convOn?C.goldBg:C.bg,display:"flex",flexDirection:"column",gap:10}}
+          , React.createElement('label', {style:{display:'flex',alignItems:'center',gap:10,cursor:'pointer',userSelect:'none'}}
+            , React.createElement('div', {onClick:()=>{ setConvOn(v=>!v); setErr({}); },
+                style:{width:36,height:20,borderRadius:10,background:convOn?C.gold:C.border,position:'relative',cursor:'pointer',transition:'background .15s',flexShrink:0}}
+              , React.createElement('div',{style:{position:'absolute',top:3,left:convOn?19:3,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}})
+            )
+            , React.createElement('div', {onClick:()=>{ setConvOn(v=>!v); setErr({}); }}
+              , React.createElement('div', {style:{fontSize:13,fontWeight:600,color:convOn?C.gold:C.text,letterSpacing:"0.04em"}}, "🤝 CONVENZIONE")
+              , React.createElement('div', {style:{fontSize:11,color:C.textDim}}, convOn
+                  ? "Più quote nella stessa registrazione; ricevuta solo per le quote spuntate, intestata alla convenzione."
+                  : "Attiva per allievi in convenzione con associazioni/enti.")
+            )
+          )
+          , convOn && React.createElement('div', null
+            , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}}, "Convenzione *")
+            , React.createElement('select', {value:convSel, onChange:e=>handleConvSel(e.target.value),
+                style:{...{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"10px 14px",fontFamily:"'Open Sans',sans-serif",appearance:"none"}, border:`1px solid ${err.conv?C.red:C.border}`}}
+              , React.createElement('option', {value:""}, convLoaded ? "— seleziona convenzione —" : "Caricamento…")
+              , convenzioni.map(c => React.createElement('option', {key:c.id, value:c.id}, c.denominazione + (c.codiceFiscale ? "" : "  (dati ricevuta mancanti)")))
+              , React.createElement('option', {value:"__new__"}, "+ Nuova convenzione…")
+            )
+            , err.conv && React.createElement('div', {style:{fontSize:11,color:C.red,marginTop:4}}, err.conv)
+          )
+          /* Riepilogo intestazione (dati già in memoria) */
+          , convOn && convRec && !showConvCampi && React.createElement('div', {style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,fontSize:12,color:C.text,padding:"8px 10px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`}}
+            , React.createElement('div', null
+              , React.createElement('div', {style:{fontWeight:600}}, convRec.denominazione)
+              , convRec.codiceFiscale && React.createElement('div', {style:{color:C.textMuted}}, "CF/P.IVA: " + convRec.codiceFiscale)
+              , convRec.indirizzo && React.createElement('div', {style:{color:C.textMuted}}, convRec.indirizzo)
+            )
+            , React.createElement('button', {type:"button", onClick:()=>setConvEditDati(true),
+                style:{background:"none",border:"none",color:C.teal,cursor:"pointer",fontSize:12,whiteSpace:"nowrap"}}, "Modifica dati")
+          )
+          /* Campi intestazione: nuova convenzione, dati mancanti o modifica */
+          , showConvCampi && React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:10}}
+            , !isNewConv && convDatiMancanti && anyInRicevuta && React.createElement('div', {style:{fontSize:11,color:"#b45309"}},
+                "⚠️ Dati per l'intestazione della ricevuta non presenti: inseriscili ora, verranno salvati per le prossime volte.")
+            , React.createElement(Input, {label:"Intestatario ricevuta (denominazione) *", value:convDati.denominazione, onChange:e=>setConvDato("denominazione",e.target.value), error:err.convDen, placeholder:"Es. Associazione …"})
+            , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}
+              , React.createElement(Input, {label: anyInRicevuta ? "Codice fiscale / P.IVA *" : "Codice fiscale / P.IVA", value:convDati.codiceFiscale, onChange:e=>setConvDato("codiceFiscale",e.target.value), error:err.convCf})
+              , React.createElement(Input, {label:"Indirizzo", value:convDati.indirizzo, onChange:e=>setConvDato("indirizzo",e.target.value), placeholder:"Facoltativo"})
+            )
+          )
+          , err.convRic && React.createElement('div', {style:{fontSize:11,color:C.red}}, err.convRic)
+          , err.convSave && React.createElement('div', {style:{fontSize:11,color:C.red}}, err.convSave)
+        )
+
         /* Categoria */
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 6719}}
           , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6720}}, "Categoria *" )
@@ -13305,8 +13479,75 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
         )
         , React.createElement(Sel, { label: "Metodo di pagamento"  , value: f.metodo, onChange: e=>set("metodo",e.target.value), options: METODI_PAG, error: err.metodo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6787}})
 
+        /* Convenzione: la quota principale va in ricevuta? */
+        , perVoceRicevuta && React.createElement('label', {style:{display:"flex",alignItems:"center",gap:8,fontSize:12,color:primariaInRicevuta?C.text:C.textMuted,cursor:"pointer"}}
+          , React.createElement('input', {type:"checkbox", checked:primariaInRicevuta, onChange:e=>setPrimariaInRicevuta(e.target.checked)})
+          , "🧾 Includi questa quota nella ricevuta"
+        )
+
+        /* Convenzione: quote aggiuntive (anche di allievi diversi) */
+        , !initial && convOn && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}, "Altre quote (convenzione)")
+          , extraVoci.map(v => {
+              const catV = CAT_ENTRATE_USE.find(c=>c.id===v.categoria) || {};
+              const conMese = v.categoria==="quota" || v.categoria==="iscrizione";
+              const stV = students.find(x=>x.id===Number(v.studentId));
+              const inRic = v.inRicevuta !== false;
+              const fieldSt = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 10px",fontFamily:"'Open Sans',sans-serif",appearance:"none"};
+              return React.createElement('div', {key:v.id, style:{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center",marginBottom:10,padding:"8px",borderRadius:8,border:`1px solid ${C.border}`,background:C.bg}}
+                , catV.student && React.createElement('select', {value:v.studentId||"", onChange:e=>{
+                      const sid=e.target.value; setExtraVoce(v.id,'studentId',sid);
+                      const st=students.find(x=>x.id===Number(sid));
+                      if(st && v.categoria==="quota" && !v.importo && st.monthlyFee) setExtraVoce(v.id,'importo',String(st.monthlyFee));
+                    }, style:{...fieldSt,flex:"1 1 160px",border:`1px solid ${err[`voceStud_${v.id}`]?C.red:C.border}`}}
+                  , React.createElement('option',{value:""},"— allievo —")
+                  , students.filter(s=>s.status==="attivo").map(s=>React.createElement('option',{key:s.id,value:s.id}, s.name))
+                )
+                , React.createElement('select', {value:v.categoria, onChange:e=>{
+                      const cat=e.target.value; setExtraVoce(v.id,'categoria',cat);
+                      if(cat==="iscrizione" && !v.importo) setExtraVoce(v.id,'importo',String(importoIscrizioneCfg));
+                    }, style:{...fieldSt,flex:"1 1 130px"}}
+                  , CAT_ENTRATE_USE.filter(c=>c.id!=="__new__e__").map(c=>React.createElement('option',{key:c.id,value:c.id},c.label))
+                )
+                , conMese && React.createElement('select', {value:v.mese, onChange:e=>setExtraVoce(v.id,'mese',Number(e.target.value)), style:{...fieldSt,flex:"0 1 120px"}}
+                  , MESI_ALL.map((m,i)=>React.createElement('option',{key:i+1,value:i+1},m))
+                )
+                , React.createElement('input', {type:"number", placeholder:"Importo €", value:v.importo, onChange:e=>setExtraVoce(v.id,'importo',e.target.value),
+                    style:{...fieldSt,width:100,border:`1px solid ${err[`voce_${v.id}`]?C.red:C.border}`}})
+                , perVoceRicevuta && React.createElement('label', {title:"Includi in ricevuta", style:{display:"flex",alignItems:"center",gap:4,fontSize:12,color:inRic?C.text:C.textMuted,cursor:"pointer"}}
+                  , React.createElement('input', {type:"checkbox", checked:inRic, onChange:e=>setExtraVoce(v.id,'inRicevuta',e.target.checked)})
+                  , "🧾"
+                )
+                , React.createElement('button', {onClick:()=>removeExtraVoce(v.id), type:"button",
+                    style:{padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:"none",color:C.textMuted,cursor:"pointer",fontSize:13}}, "✕")
+                , (err[`voceStud_${v.id}`]||err[`voce_${v.id}`]) && React.createElement('div', {style:{flexBasis:"100%",fontSize:11,color:C.red}}, err[`voceStud_${v.id}`]||err[`voce_${v.id}`])
+              );
+            })
+          , React.createElement('button', {onClick:addQuotaConv, type:"button",
+              style:{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:20,border:`1px dashed ${C.gold}`,
+                background:"none",color:C.gold,cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+            , React.createElement(Ic,{n:"plus",size:12,stroke:C.gold}), " Aggiungi un'altra quota"
+          )
+          , extraVoci.length>0 && (() => {
+              const tot = Number(f.importo||0) + extraVoci.reduce((t,v)=>t+(Number(v.importo)||0),0);
+              const totRic = !ricevutaAttiva ? 0 : (perVoceRicevuta
+                ? (primariaInRicevuta?Number(f.importo||0):0) + extraVoci.filter(v=>v.inRicevuta!==false).reduce((t,v)=>t+(Number(v.importo)||0),0)
+                : tot);
+              return React.createElement('div', {style:{marginTop:10,padding:"10px 14px",background:C.tealBg,border:`1px solid ${C.tealBorder}`,borderRadius:8,display:"flex",flexDirection:"column",gap:4}}
+                , React.createElement('div',{style:{display:"flex",justifyContent:"space-between"}}
+                  , React.createElement('span',{style:{fontSize:12,color:C.teal}}, `Totale registrato (${1+extraVoci.length} quote)`)
+                  , React.createElement('span',{style:{fontFamily:"'Oswald',sans-serif",fontSize:17,fontWeight:600,color:C.teal}}, `€${tot.toLocaleString('it-IT')}`)
+                )
+                , ricevutaAttiva && React.createElement('div',{style:{display:"flex",justifyContent:"space-between"}}
+                  , React.createElement('span',{style:{fontSize:12,color:C.textMuted}}, "di cui in ricevuta")
+                  , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}}, `€${totRic.toLocaleString('it-IT')}`)
+                )
+              );
+            })()
+        )
+
         /* Voci aggiuntive sulla stessa ricevuta — solo in creazione, non in modifica */
-        , !initial && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
+        , !initial && !convOn && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}
             , "Altre voci sulla stessa ricevuta"
           )
@@ -13368,7 +13609,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
               style:{width:36,height:20,borderRadius:10,background:f.noRicevuta?C.border:C.teal,position:'relative',cursor:'pointer',transition:'background .15s',flexShrink:0}}
             , React.createElement('div',{style:{position:'absolute',top:3,left:f.noRicevuta?3:19,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}})
           )
-          , React.createElement('span',null, f.noRicevuta ? '❌ Nessuna ricevuta' : '🧾 Emetti ricevuta')
+          , React.createElement('span',null, f.noRicevuta ? '❌ Nessuna ricevuta' : (perVoceRicevuta ? '🧾 Emetti ricevuta (quote spuntate)' : '🧾 Emetti ricevuta'))
         )
         , React.createElement('div',{style:{display:'flex',gap:10}}
           , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6791}}, "Annulla")
@@ -13500,7 +13741,13 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       const anno = d.anno || new Date().getFullYear();
       const dataPagamento = d.dataPagamento || d.data || '';
       let numRicevuta = '';
-      if (!d.noRicevuta) {
+      // Convenzione: la ricevuta può coprire solo alcune quote (inRicevuta). Fuori convenzione
+      // inRicevuta non è valorizzato → comportamento invariato (tutte le voci o nessuna).
+      const _extraValide = (d.extraVoci||[]).filter(v=>v.importo>0);
+      const _primInRic = !d.noRicevuta && d.inRicevuta !== false;
+      const _extraInRic = (v) => !d.noRicevuta && v.inRicevuta !== false;
+      const _serveNumero = _primInRic || _extraValide.some(_extraInRic);
+      if (_serveNumero) {
         // Usa contatore per anno solare — UN SOLO numero, condiviso anche dalle eventuali
         // voci aggiuntive (extraVoci) registrate insieme sulla stessa ricevuta.
         const contatoriRicevute = config.contatoriRicevute || {};
@@ -13516,15 +13763,25 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
           if (sb) await sb.from('sito_config').upsert({chiave:'contatoriRicevute', valore: JSON.stringify(nuoviContatori)});
         } catch(e) { console.warn('[FM] save contatori:', e?.message); }
       }
-      const { extraVoci: _extraVoci, ...dPrimaria } = d;
-      const primaria = {...dPrimaria, id:uid(), numRicevuta, dataPagamento, noRicevuta: d.noRicevuta||false};
-      const extra = (_extraVoci||[]).filter(v=>v.importo>0).map(v => ({
-        id: uid(), studentId: d.studentId, studentName: d.studentName,
-        importo: Number(v.importo), mese: Number(v.mese), anno: Number(v.anno),
-        categoria: v.categoria, desc: v.desc, stato: d.stato||'pagato',
-        data: d.data, dataPagamento, metodo: d.metodo, note: '',
-        numRicevuta, noRicevuta: d.noRicevuta||false,
-      }));
+      const { extraVoci: _extraVoci, inRicevuta: _inRicPrim, ...dPrimaria } = d;
+      const _noSnap = { ricevutaIntestatario: '', ricevutaCf: '', ricevutaIndirizzo: '' };
+      const primaria = {...dPrimaria, id:uid(), numRicevuta: _primInRic ? numRicevuta : '', dataPagamento,
+        noRicevuta: !_primInRic, ...(_primInRic ? {} : _noSnap)};
+      const extra = _extraValide.map(v => {
+        const inRic = _extraInRic(v);
+        const haStud = v.studentId !== undefined;   // valorizzato solo in modalità convenzione
+        return {
+          id: uid(),
+          studentId:   haStud ? v.studentId : d.studentId,
+          studentName: haStud ? (v.studentName||'') : d.studentName,
+          importo: Number(v.importo), mese: Number(v.mese), anno: Number(v.anno),
+          categoria: v.categoria, desc: v.desc, stato: d.stato||'pagato',
+          data: d.data, dataPagamento, metodo: d.metodo, note: '',
+          numRicevuta: inRic ? numRicevuta : '', noRicevuta: !inRic,
+          convenzioneId: d.convenzioneId || null, convenzioneNome: d.convenzioneNome || '',
+          ...(inRic ? { ricevutaIntestatario: d.ricevutaIntestatario||'', ricevutaCf: d.ricevutaCf||'', ricevutaIndirizzo: d.ricevutaIndirizzo||'' } : _noSnap),
+        };
+      });
       setEntrate(p=>[...p, primaria, ...extra]);
       if (extraLessonIdPendente) {
         const sb = window.supabaseClient;
