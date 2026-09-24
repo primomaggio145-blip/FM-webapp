@@ -1487,7 +1487,7 @@ const FormLogin = ({onSuccess,onRegistrazione,onRecupero,onBand})=>{
           if(!profilo){ setErr({form:"Profilo non trovato. Contatta l'amministratore."}); setLoading(false); return; }
           if(profilo.stato==='sospeso'){ setErr({form:"Il tuo account è stato sospeso. Contatta l'amministratore."}); setLoading(false); return; }
           if(profilo.stato==='invitato'){ setErr({form:"Account non ancora attivato. Imposta la password dal link nell'email di invito."}); setLoading(false); return; }
-          onSuccess({email:user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null, bellPrefs:profilo.bell_prefs||{}});
+          onSuccess({email:user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null, allieviIds:fmAllieviIdsDaProfilo(profilo), bellPrefs:profilo.bell_prefs||{}});
         } else {
           // Fallback DEMO (sviluppo locale senza Supabase)
           const DEMO={"admin@accademia.it":{password:"admin123",nome:"Marco Bianchi",ruolo:"admin"},"rossi@accademia.it":{password:"musica2024",nome:"Prof. Rossi",ruolo:"docente"},"sofia@accademia.it":{password:"sofia2024",nome:"Sofia Marchetti",ruolo:"allievo"}};
@@ -2026,11 +2026,27 @@ const fmSuggerisciCollegamento = (req, students, docenti) => {
   ];
   for (const [motivo, test] of criteri) {
     const trovati = lista.filter(test);
-    if (trovati.length === 1) return { id: String(trovati[0].id), motivo, candidati: trovati };
+    if (trovati.length === 1) return { id: String(trovati[0].id), ids: [String(trovati[0].id)], motivo, candidati: trovati };
+    // Email di famiglia condivisa da più allievi (es. genitore con due figli iscritti):
+    // l'email è verificata dall'invito, quindi li proponiamo TUTTI come collegati.
+    if (trovati.length > 1 && motivo === 'email' && ruolo === 'allievo')
+      return { id: String(trovati[0].id), ids: trovati.map(t => String(t.id)), motivo: 'email di famiglia', candidati: trovati };
     if (trovati.length > 1)  return { id: null, motivo: motivo + ' (più corrispondenze)', candidati: trovati };
   }
   // Nessuna corrispondenza esatta: candidati parziali (almeno un cognome/nome in comune)
   const tok = new Set([fmNormNome(req.nome), fmNormNome(req.nomeSocio)].join(' ').split(' ').filter(t => t.length > 2));
   const parziali = tok.size ? lista.filter(r => fmNormNome(nomeDi(r)).split(' ').some(t => tok.has(t))) : [];
   return { id: null, motivo: null, candidati: parziali.slice(0, 8) };
+};
+
+/* Elenco degli allievi collegati a un profilo (genitore con più figli iscritti).
+   profili.allievi_ids (jsonb) contiene tutti gli ID; profili.allievo_id è quello ATTIVO,
+   usato da tutte le viste per filtrare. Profili vecchi senza allievi_ids → [allievo_id]. */
+const fmAllieviIdsDaProfilo = (p) => {
+  if (!p) return [];
+  let arr = p.allievi_ids;
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { arr = []; } }
+  const out = (Array.isArray(arr) ? arr : []).filter(v => v != null && v !== '').map(String);
+  if (p.allievo_id != null && !out.includes(String(p.allievo_id))) out.unshift(String(p.allievo_id));
+  return [...new Set(out)];
 };

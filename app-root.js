@@ -12,6 +12,29 @@ function dedupeLessonsById(arr) {
 function App() {
   // ── TUTTI GLI HOOK IN CIMA — mai dopo un return condizionale ──
   const [user,           setUser]           = useState(null);
+  // ── Genitore con più figli collegati: elenco e cambio dell'allievo attivo ──
+  const [mieiAllievi,    setMieiAllievi]    = useState([]);
+  const [cambioAllievoInCorso, setCambioAllievoInCorso] = useState(false);
+  const _nAllieviCollegati = (user && user.ruolo==='allievo' && Array.isArray(user.allieviIds)) ? user.allieviIds.length : 0;
+  useEffect(() => {
+    if (_nAllieviCollegati < 2 || !window.FM_AUTH || !window.FM_AUTH.mieiAllievi) { setMieiAllievi([]); return; }
+    window.FM_AUTH.mieiAllievi().then(list => setMieiAllievi(list || [])).catch(() => setMieiAllievi([]));
+  }, [user && user.userId, _nAllieviCollegati]);
+  const cambiaAllievoAttivo = async (id) => {
+    if (!user || String(user.allievoId) === String(id) || cambioAllievoInCorso) return;
+    setCambioAllievoInCorso(true);
+    try {
+      // Lato server: verifica che l'ID sia tra quelli collegati e aggiorna profili.allievo_id
+      if (window.FM_AUTH && window.FM_AUTH.selezionaAllievo) await window.FM_AUTH.selezionaAllievo(id);
+      const u2 = { ...user, allievoId: id };
+      try { window.__currentUser__ = u2; } catch (e) {}
+      setUser(u2);
+      if (window.__FM_FORCE_REFRESH__) await window.__FM_FORCE_REFRESH__(true);
+    } catch (e) {
+      console.warn('[FM] cambio allievo non riuscito:', e && e.message);
+      alert('Impossibile passare all\'altro allievo: ' + (e && e.message ? e.message : 'errore'));
+    } finally { setCambioAllievoInCorso(false); }
+  };
   const [view,           setView]           = useState("dashboard");
   const [panKey,         setPanKey]         = useState(0);
   const [schermata,      setSchermata]      = useState("login");
@@ -153,7 +176,7 @@ function App() {
         if(session?.user){
           const profilo = await window.FM_AUTH.getProfilo(session.user.id);
           if(profilo && profilo.stato!=='sospeso'){
-            const _userObj0 = {email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null, bellPrefs:profilo.bell_prefs||{}};
+            const _userObj0 = {email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null, allieviIds:fmAllieviIdsDaProfilo(profilo), bellPrefs:profilo.bell_prefs||{}};
             setUser(_userObj0);
             try{ window.__currentUser__ = _userObj0; }catch(e){}
             setSharedRuolo(profilo.ruolo||"admin");
@@ -830,7 +853,7 @@ function App() {
                         if (profilo) {
                           // Aggiorna profilo da invitato ad attivo
                           await sb.from('profili').update({ stato: 'attivo' }).eq('id', session.user.id);
-                          const _userObj1 = {email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null, bellPrefs:profilo.bell_prefs||{}};
+                          const _userObj1 = {email:session.user.email, nome:profilo.nome, ruolo:profilo.ruolo, userId:session.user.id, docenteId:profilo.docente_id||null, allievoId:profilo.allievo_id||null, allieviIds:fmAllieviIdsDaProfilo(profilo), bellPrefs:profilo.bell_prefs||{}};
                           setUser(_userObj1);
                           try{ window.__currentUser__ = _userObj1; }catch(e){}
                           setSharedRuolo(profilo.ruolo||"admin");
@@ -924,8 +947,24 @@ function App() {
         }})
       , React.createElement('div', { style: {display:"flex",height:"100dvh",overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10786}}
         , React.createElement(Sidebar, { current: view, setView: setView, user: user, onLogout: handleLogout, onEsciSenzaLogout: handleEsciSenzaLogout, settingsDrawerOpen: false, onSettingsOpen: ()=>{}, currentRuolo: sharedRuolo, onQuickAction: (action)=>setSharedQuickAction(action), config: sharedConfig, temaAttivo: temaAttivo, onApriRicerca: ()=>setRicercaGlobaleAperta(true), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10787}})
-        , React.createElement('div', { key: view, className: "main-scroll", style: {flex:1,overflow:"auto",background:temaAttivo==='teen'?'transparent':C.bg,animation:"fadeIn 0.25s ease",
+        , React.createElement('div', { key: view + '|' + ((user && user.allievoId) || ''), className: "main-scroll", style: {flex:1,overflow:"auto",background:temaAttivo==='teen'?'transparent':C.bg,animation:"fadeIn 0.25s ease",
           paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 4px)",minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10788}}
+          /* ── Selettore allievo attivo (solo account collegati a più allievi) ── */
+          , _nAllieviCollegati > 1 && React.createElement('div', { style: {position:'sticky',top:0,zIndex:20,
+              background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'8px clamp(12px,3vw,24px)',
+              display:'flex',alignItems:'center',gap:8,overflowX:'auto',whiteSpace:'nowrap'} }
+            , React.createElement('span', {style:{fontSize:11,color:C.textMuted,letterSpacing:'.06em',textTransform:'uppercase',flexShrink:0}}, 'Stai vedendo:')
+            , user.allieviIds.map(id => {
+                const att = String(id) === String(user.allievoId);
+                const nome = ((mieiAllievi.find(a => String(a.id) === String(id)) || (sharedStudents||[]).find(s => String(s.id) === String(id)) || {}).nome)
+                          || ((sharedStudents||[]).find(s => String(s.id) === String(id)) || {}).name || ('Allievo #' + id);
+                return React.createElement('button', { key: id, disabled: cambioAllievoInCorso, onClick: () => cambiaAllievoAttivo(id),
+                  style: {flexShrink:0,padding:'6px 14px',borderRadius:16,cursor:cambioAllievoInCorso?'wait':'pointer',fontSize:13,
+                    fontFamily:"'Open Sans',sans-serif",fontWeight:att?600:400,
+                    border:`1.5px solid ${att?C.gold:C.border}`,background:att?C.goldBg:C.bg,color:att?C.gold:C.text} }, nome);
+              })
+            , cambioAllievoInCorso && React.createElement('span', {style:{fontSize:11,color:C.textDim}}, 'Caricamento…')
+          )
           , renderCurrentView()
         )
       )

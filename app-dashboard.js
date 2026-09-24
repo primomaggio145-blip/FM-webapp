@@ -1717,6 +1717,9 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
       if (ruoloNB === 'allievo') {
         if (!n.destinatario_id && !n.destinatario_nome) return true; // broadcast allievo
         if (myAllievoId && n.destinatario_id && String(n.destinatario_id) === String(myAllievoId)) return true;
+        // Genitore con più figli collegati: riceve le notifiche di TUTTI, non solo del figlio attivo
+        if (n.destinatario_id && _appUserNB && Array.isArray(_appUserNB.allieviIds) &&
+            _appUserNB.allieviIds.map(String).includes(String(n.destinatario_id))) return true;
         if (n.destinatario_nome) {
           var dn = (n.destinatario_nome||'').toLowerCase().trim();
           var nomiMiei = [myAllievoNome, myAllievoKey].filter(Boolean).map(function(s){ return s.toLowerCase().trim(); });

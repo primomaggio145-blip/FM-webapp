@@ -134,6 +134,7 @@
           if (rpcErr) console.warn('[FM] auto-collegamento profilo non disponibile:', rpcErr.message);
           else if (res && res.ok) {
             if (res.allievo_id != null) data.allievo_id = res.allievo_id;
+            if (Array.isArray(res.allievi_ids)) data.allievi_ids = res.allievi_ids;
             if (res.docente_id != null) data.docente_id = res.docente_id;
             console.log('[FM] profilo collegato automaticamente per email:', res);
           } else if (res) console.warn('[FM] profilo non collegato (' + (res.motivo || '?') + ') — collegalo da Impostazioni › Utenti');
@@ -159,7 +160,7 @@
     },
 
     // Admin: approva richiesta → manda email invito
-    async approvaRichiesta({ richiestaId, nome, email, ruolo, nomeSocio, allievoId, docenteId }) {
+    async approvaRichiesta({ richiestaId, nome, email, ruolo, nomeSocio, allievoId, docenteId, allieviIds }) {
       // Usa session token se disponibile, altrimenti anon key (admin senza sessione Auth)
       const session = await window.FM_AUTH.getSession();
       console.log('[FM] approvaRichiesta session:', session ? 'OK uid='+session.user?.id : 'NULL');
@@ -184,6 +185,9 @@
       const toId = v => (v == null || v === '') ? null : (isNaN(Number(v)) ? v : Number(v));
       const upd = {};
       if (nomeSocio) { upd.nome_socio = nomeSocio; upd.note = `Socio/iscritto: ${nomeSocio}`; }
+      // Più figli collegati allo stesso account: allievi_ids = tutti, allievo_id = quello attivo (il primo)
+      const listaAll = (Array.isArray(allieviIds) ? allieviIds : []).map(toId).filter(v => v != null);
+      if (ruolo === 'allievo' && listaAll.length) { upd.allievi_ids = listaAll; if (toId(allievoId) == null) allievoId = listaAll[0]; }
       if (ruolo === 'allievo' && toId(allievoId) != null) upd.allievo_id = toId(allievoId);
       if (ruolo === 'docente' && toId(docenteId) != null) upd.docente_id = toId(docenteId);
       json._collegato = false;
@@ -192,7 +196,15 @@
           const query = newUserId
             ? sb.from('profili').update(upd).eq('id', newUserId).select('id')
             : sb.from('profili').update(upd).eq('email', email).select('id');
-          const { data: updRows, error: updErr } = await query;
+          let { data: updRows, error: updErr } = await query;
+          // Colonna allievi_ids non ancora creata (migrazione non eseguita): riprova senza
+          if (updErr && /allievi_ids/.test(updErr.message || '') && upd.allievi_ids) {
+            console.warn('[FM] colonna profili.allievi_ids mancante: esegui la migrazione SQL. Salvo solo il primo allievo.');
+            delete upd.allievi_ids;
+            ({ data: updRows, error: updErr } = await (newUserId
+              ? sb.from('profili').update(upd).eq('id', newUserId).select('id')
+              : sb.from('profili').update(upd).eq('email', email).select('id')));
+          }
           if (updErr) console.warn('[FM] impossibile aggiornare il profilo approvato:', updErr.message);
           else json._collegato = !!(updRows && updRows.length) && (upd.allievo_id != null || upd.docente_id != null);
           if (!updErr && (!updRows || !updRows.length)) console.warn('[FM] profilo approvato non trovato per il collegamento (id/email):', newUserId, email);
@@ -286,6 +298,26 @@
         .order('created_at', { ascending: false });
       if (error) return [];
       return data || [];
+    },
+
+    // Genitore con più figli: elenco (id, nome) degli allievi collegati all'utente corrente.
+    // Via RPC SECURITY DEFINER: le RLS dell'allievo potrebbero non permettere di leggere
+    // l'anagrafica dell'altro figlio, ma il nome serve per il selettore.
+    async mieiAllievi() {
+      const { data, error } = await sb.rpc('fm_miei_allievi');
+      if (error) { console.warn('[FM] fm_miei_allievi:', error.message); return []; }
+      return (data || []).map(r => ({ id: String(r.id), nome: r.nome || '' }));
+    },
+
+    // Cambia l'allievo ATTIVO (profili.allievo_id) tra quelli collegati. Lato server verifica
+    // che l'ID sia davvero tra gli allievi_ids dell'utente: nessuno può selezionare altri allievi.
+    // Aggiornare allievo_id sul DB fa sì che anche eventuali policy RLS basate su allievo_id
+    // seguano il figlio selezionato, e che al prossimo accesso si riparta dall'ultimo scelto.
+    async selezionaAllievo(allievoId) {
+      const { data, error } = await sb.rpc('fm_seleziona_allievo', { p_allievo_id: String(allievoId) });
+      if (error) throw error;
+      if (!data || !data.ok) throw new Error((data && data.motivo) || 'Selezione non consentita');
+      return data;
     },
 
     // Carica tutti i profili utente (solo admin)

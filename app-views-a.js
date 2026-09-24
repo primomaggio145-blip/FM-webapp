@@ -2355,9 +2355,51 @@ const INIT_RICHIESTE = [
   {id:"r3", nome:"Sofia Belli",      email:"s.belli@accademia.it",    ruolo:"docente", data:"2025-05-18", messaggio:"Nuova insegnante di canto assunta dal 1° giugno."},
 ];
 
+// ─── COLLEGAMENTO MULTI-ALLIEVO (genitore con più figli iscritti) ─────────────
+// value: array di ID (stringhe). Il primo è l'allievo "principale" (attivo di default).
+const FMCollegaAllievi = ({students, value, onChange, suggeriti}) => {
+  const ids = (value||[]).map(String);
+  const nomeDi = id => { const s=(students||[]).find(x=>String(x.id)===String(id)); return s ? (s.name||s.nome||'') : ('Allievo #'+id); };
+  const add = id => { if (id && !ids.includes(String(id))) onChange([...ids, String(id)]); };
+  const rem = id => onChange(ids.filter(x=>x!==String(id)));
+  const principale = id => onChange([String(id), ...ids.filter(x=>x!==String(id))]);
+  const sugg = (suggeriti||[]).filter(x=>!ids.includes(String(x.id)));
+  const chip = {display:'inline-flex',alignItems:'center',gap:6,fontSize:12,padding:'5px 10px',borderRadius:14,border:`1px solid ${C.border}`,background:C.surface,color:C.text};
+  const mini = {border:'none',background:'transparent',cursor:'pointer',padding:0,fontSize:12,lineHeight:1};
+  return React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8}}
+    , ids.length>0 && React.createElement('div', {style:{display:'flex',flexWrap:'wrap',gap:6}}
+      , ids.map((id,i)=>React.createElement('span',{key:id,style:{...chip,borderColor:i===0?C.green:C.border}}
+          , i===0 ? React.createElement('span',{title:'Principale: mostrato per primo al login',style:{color:C.green}},'★')
+                  : React.createElement('button',{title:'Rendi principale',onClick:()=>principale(id),style:{...mini,color:C.textDim}},'☆')
+          , nomeDi(id)
+          , React.createElement('button',{title:'Scollega',onClick:()=>rem(id),style:{...mini,color:C.red,fontWeight:700}},'×')
+        ))
+    )
+    , React.createElement('select', {
+        value:'', onChange:e=>add(e.target.value),
+        style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none'}
+      }
+      , React.createElement('option',{value:''}, ids.length ? '+ Aggiungi un altro allievo (es. fratello/sorella)…' : '— Scegli l\'allievo da collegare —')
+      , [...(students||[])].filter(x=>!ids.includes(String(x.id)))
+          .sort((a,b)=>(a.name||a.nome||'').localeCompare(b.name||b.nome||''))
+          .map(x=>React.createElement('option',{key:x.id,value:String(x.id)},(x.name||x.nome||'')+(x.email?' · '+x.email:'')))
+    )
+    , sugg.length>0 && React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6,alignItems:'center',fontSize:11}}
+      , React.createElement('span',{style:{color:C.textDim}},'Possibili:')
+      , sugg.slice(0,6).map(x=>React.createElement('button',{key:x.id,onClick:()=>add(x.id),
+          style:{fontSize:11,padding:'3px 9px',borderRadius:12,cursor:'pointer',border:`1px dashed ${C.border}`,background:C.bg,color:C.text}},'+ '+(x.name||x.nome||'')))
+    )
+    , ids.length>1 && React.createElement('div',{style:{fontSize:11,color:C.textDim,lineHeight:1.5}},
+        'L\'utente vedrà un selettore in cima all\'app per passare da un allievo all\'altro. ★ = mostrato per primo.')
+  );
+};
+
 // ─── DRAWER DETTAGLIO UTENTE ──────────────────────────────────────────────────
 const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin,students,docenti})=>{
-  const [draft,setDraft]=useState({...utente, nomeSocio:utente.nomeSocio||'', docenteId:utente.docenteId||null, allievoId:utente.allievoId||null});
+  const [draft,setDraft]=useState({...utente, nomeSocio:utente.nomeSocio||'', docenteId:utente.docenteId||null, allievoId:utente.allievoId||null,
+    allieviIds: (utente.allieviIds&&utente.allieviIds.length) ? utente.allieviIds.map(String) : (utente.allievoId!=null ? [String(utente.allievoId)] : [])});
+  // allievoId (attivo) resta sempre coerente con la lista: se viene scollegato si passa al primo rimasto
+  const setAllieviIds = arr => setDraft(p=>({...p, allieviIds:arr, allievoId: arr.includes(String(p.allievoId)) ? p.allievoId : (arr[0]||null)}));
   const [tab,setTab]=useState("profilo");
   const r=ruoloById(draft.ruolo);
   const isSelf=isCurrentAdmin&&utente.id==="u1";// non può modificare se stesso
@@ -2532,7 +2574,12 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
                   )
                   , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:12,lineHeight:1.5}},
                     'Collega questo utente al suo record nel gestionale. I dati (lezioni, pagamenti, ecc.) verranno filtrati in base a questa associazione.')
-                  , React.createElement('select', {
+                  , draft.ruolo==='allievo' && React.createElement(FMCollegaAllievi, {
+                      students, value: draft.allieviIds||[], onChange: setAllieviIds,
+                      suggeriti: (typeof fmSuggerisciCollegamento==='function')
+                        ? (fmSuggerisciCollegamento({nome:draft.nome,nomeSocio:draft.nomeSocio,email:draft.email,ruolo:'allievo'}, students, docenti).candidati||[]) : []
+                    })
+                  , draft.ruolo==='docente' && React.createElement('select', {
                       value: draft.ruolo==='allievo' ? (draft.allievoId||'') : (draft.docenteId||''),
                       onChange: e => {
                         const val = e.target.value||null;
@@ -2548,7 +2595,9 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
                       ? (students||[]).map(s=>React.createElement('option',{key:s.id,value:String(s.id)},s.name||s.nome||''))
                       : (docenti||[]).map(d=>React.createElement('option',{key:d.id,value:String(d.id)},d.nome||d.name||''))
                   )
-                  , !(draft.ruolo==='allievo'?draft.allievoId:draft.docenteId) && (()=>{
+                  , draft.ruolo==='allievo' && !draft.allievoId && React.createElement('div',{style:{marginTop:8,fontSize:11,color:C.orange,lineHeight:1.5}},
+                      '⚠ Non collegato: l\'utente non vede le sue lezioni/pagamenti.')
+                  , draft.ruolo==='docente' && !draft.docenteId && (()=>{
                       const sg = (typeof fmSuggerisciCollegamento==='function')
                         ? fmSuggerisciCollegamento({nome:draft.nome,nomeSocio:draft.nomeSocio,email:draft.email,ruolo:draft.ruolo}, students, docenti)
                         : {id:null,candidati:[]};
@@ -2835,8 +2884,16 @@ const RichiestaModal=({richiesta,onApprova,onRifiuta,onClose,students,docenti})=
     ? fmSuggerisciCollegamento({...richiesta, ruolo}, students, docenti)
     : {id:null,motivo:null,candidati:[]}, [richiesta, ruolo, students, docenti]);
   const [linkId,setLinkId]=useState(sugg.id||'');
+  // Allievo: si possono collegare PIÙ record (genitore con più figli). Con email di famiglia
+  // condivisa vengono proposti già tutti.
+  const suggIdsKey = (sugg.ids||[]).join(',');
+  const [linkIds,setLinkIds]=useState(sugg.ids||(sugg.id?[sugg.id]:[]));
   // Solo quando cambia ruolo o proposta: un refresh realtime della lista non deve annullare la scelta manuale
-  useEffect(()=>{ setLinkId(sugg.id||''); },[ruolo, sugg.id]);
+  useEffect(()=>{ setLinkId(sugg.id||''); setLinkIds(sugg.ids||(sugg.id?[sugg.id]:[])); },[ruolo, sugg.id, suggIdsKey]);
+  const haLink = ruolo==='allievo' ? linkIds.length>0 : !!linkId;
+  const propostoAuto = ruolo==='allievo'
+    ? (sugg.ids && sugg.ids.length && sugg.ids.join(',')===linkIds.join(','))
+    : (sugg.id && String(sugg.id)===String(linkId));
   const listaLink = ruolo==='allievo' ? (students||[]) : ruolo==='docente' ? (docenti||[]) : [];
   const idCandidati = new Set((sugg.candidati||[]).map(x=>String(x.id)));
   const nomeRec = x => x.name||x.nome||'';
@@ -2878,10 +2935,13 @@ const RichiestaModal=({richiesta,onApprova,onRifiuta,onClose,students,docenti})=
         )
         /* ── Collegamento al record allievo/docente (per ID, non per nome) ── */
         , richiedeLink && (
-          React.createElement('div', {style:{background:C.bg,border:`1px solid ${linkId?C.green:C.orange}`,borderRadius:9,padding:'12px 14px'}}
+          React.createElement('div', {style:{background:C.bg,border:`1px solid ${haLink?C.green:C.orange}`,borderRadius:9,padding:'12px 14px'}}
             , React.createElement('div', {style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:8}}
               , 'Collega a ', ruolo==='allievo'?'allievo':'docente', ' in anagrafica')
-            , React.createElement('select', {
+            , ruolo==='allievo' && React.createElement(FMCollegaAllievi, {
+                students, value: linkIds, onChange: setLinkIds, suggeriti: sugg.candidati||[]
+              })
+            , ruolo==='docente' && React.createElement('select', {
                 value: linkId,
                 onChange: e=>setLinkId(e.target.value),
                 style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none'}
@@ -2890,9 +2950,9 @@ const RichiestaModal=({richiesta,onApprova,onRifiuta,onClose,students,docenti})=
               , listaOrdinata.map(x=>React.createElement('option',{key:x.id,value:String(x.id)},
                   (idCandidati.has(String(x.id))?'★ ':'')+nomeRec(x)+(x.email?' · '+x.email:'')))
             )
-            , React.createElement('div',{style:{marginTop:8,fontSize:11,lineHeight:1.5,color:linkId?C.green:C.orange}},
-                linkId
-                  ? (sugg.id && String(sugg.id)===String(linkId)
+            , React.createElement('div',{style:{marginTop:8,fontSize:11,lineHeight:1.5,color:haLink?C.green:C.orange}},
+                haLink
+                  ? (propostoAuto
                       ? `✓ Proposto automaticamente (corrispondenza per ${sugg.motivo}) — verifica che sia la persona giusta.`
                       : '✓ Collegamento scelto manualmente.')
                   : ((sugg.candidati||[]).length
@@ -2907,7 +2967,7 @@ const RichiestaModal=({richiesta,onApprova,onRifiuta,onClose,students,docenti})=
         )
         , React.createElement('div', { style: {display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9460}}
           , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9461}}, "Annulla")
-          , React.createElement(Btn, { onClick: ()=>onApprova(richiesta,ruolo,richiedeLink?(linkId||null):null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9462}}
+          , React.createElement(Btn, { onClick: ()=>onApprova(richiesta,ruolo,!richiedeLink?null:(ruolo==='allievo'?linkIds:(linkId||null))), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9462}}
             , React.createElement(Ic, { n: "check", size: 13, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 9463}}), "Approva e attiva"
           )
         )
@@ -3610,6 +3670,7 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, c
               nomeSocio:    p.nome_socio||'',
               docenteId:    p.docente_id||null,
               allievoId:    p.allievo_id||null,
+              allieviIds:   (typeof fmAllieviIdsDaProfilo==='function') ? fmAllieviIdsDaProfilo(p) : (p.allievo_id!=null?[String(p.allievo_id)]:[]),
             })));
           }
           if(richiesteLive.length>0){
@@ -3661,15 +3722,25 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, c
         // Normalizza gli ID: potrebbero essere stringhe da <select>
         const docenteIdVal = draft.docenteId ? (isNaN(Number(draft.docenteId)) ? draft.docenteId : Number(draft.docenteId)) : null;
         const allievoIdVal = draft.allievoId ? (isNaN(Number(draft.allievoId)) ? draft.allievoId : Number(draft.allievoId)) : null;
-        const { error } = await sb.from('profili').update({
+        const toId = v => (v==null||v==='') ? null : (isNaN(Number(v)) ? v : Number(v));
+        const allieviIdsVal = draft.ruolo==='allievo' ? (draft.allieviIds||[]).map(toId).filter(v=>v!=null) : [];
+        const rowUpd = {
           nome:       draft.nome,
           ruolo:      draft.ruolo,
           note:       draft.note||null,
           nome_socio: draft.nomeSocio||null,
           docente_id: docenteIdVal,
           allievo_id: allievoIdVal,
+          allievi_ids: allieviIdsVal,
           updated_at: new Date().toISOString(),
-        }).eq('id', draft.id);
+        };
+        let { error } = await sb.from('profili').update(rowUpd).eq('id', draft.id);
+        if (error && /allievi_ids/.test(error.message||'')) {
+          // Migrazione non ancora eseguita: salva almeno l'allievo principale
+          delete rowUpd.allievi_ids;
+          ({ error } = await sb.from('profili').update(rowUpd).eq('id', draft.id));
+          if (!error && allieviIdsVal.length>1) { showToast('Salvato solo il primo allievo: esegui la migrazione SQL per collegarne più di uno', C.orange); return; }
+        }
         if (error) {
           console.warn('[FM] salvaUtente error:', error.message);
           showToast(`Errore salvataggio: ${error.message}`, C.red);
@@ -3705,11 +3776,14 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, c
     };
     // linkId: undefined = approvazione rapida dalla lista (nessuna scelta fatta dall'admin),
     //         null/'' = admin ha scelto esplicitamente "nessun collegamento", altrimenti ID record.
+    //         Per l'allievo linkId può essere un ARRAY (più figli collegati allo stesso account).
     const approvaRichiesta=(req,ruolo,linkId)=>{
       const richiedeLink = ruolo==='allievo' || ruolo==='docente';
+      let linkIdsAll = [];
       if (richiedeLink && linkId === undefined) {
         const sg = (typeof fmSuggerisciCollegamento==='function')
           ? fmSuggerisciCollegamento({...req, ruolo}, allStudents, allDocenti) : {id:null};
+        if (sg.id && ruolo==='allievo') linkIdsAll = sg.ids || [sg.id];
         if (!sg.id) {
           // Nessuna corrispondenza univoca: senza collegamento l'utente non vedrebbe i suoi dati.
           // Apriamo la scheda richiesta così l'admin sceglie il record giusto.
@@ -3719,6 +3793,8 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, c
         }
         linkId = sg.id;
       }
+      if (Array.isArray(linkId)) { linkIdsAll = linkId.map(String); linkId = linkIdsAll[0] || null; }
+      else if (ruolo==='allievo' && linkId && !linkIdsAll.length) linkIdsAll = [String(linkId)];
       setSaving(true);
       (async()=>{
         try {
@@ -3726,6 +3802,7 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, c
           if(window.FM_AUTH){
             res = await window.FM_AUTH.approvaRichiesta({richiestaId:req.id,nome:req.nome,email:req.email,ruolo,nomeSocio:req.nomeSocio,
               allievoId: ruolo==='allievo' ? (linkId||null) : null,
+              allieviIds: ruolo==='allievo' ? linkIdsAll : [],
               docenteId: ruolo==='docente' ? (linkId||null) : null});
           }
           const nuovo={id:uid(),nome:req.nome,email:req.email,ruolo,stato:"invitato",
@@ -3734,6 +3811,7 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, c
             ultimoAccesso:null,permessi:{...PERM_DEFAULT[ruolo]},
             note:req.nomeSocio?`Socio/iscritto: ${req.nomeSocio}`:"",nomeSocio:req.nomeSocio||"",
             allievoId: ruolo==='allievo' ? (linkId||null) : null,
+            allieviIds: ruolo==='allievo' ? linkIdsAll : [],
             docenteId: ruolo==='docente' ? (linkId||null) : null};
           setUtenti(p=>[...p,nuovo]);
           setRichieste(p=>p.filter(r=>r.id!==req.id));
@@ -3750,7 +3828,8 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, c
               const byEmail = new Map(pr.map(p=>[String(p.email||'').toLowerCase(), p]));
               return prev.map(u => {
                 const p = byEmail.get(String(u.email||'').toLowerCase());
-                return p ? {...u, id:p.id, stato:p.stato||u.stato, allievoId:p.allievo_id||null, docenteId:p.docente_id||null, nomeSocio:p.nome_socio||u.nomeSocio||''} : u;
+                return p ? {...u, id:p.id, stato:p.stato||u.stato, allievoId:p.allievo_id||null, docenteId:p.docente_id||null, nomeSocio:p.nome_socio||u.nomeSocio||'',
+                  allieviIds:(typeof fmAllieviIdsDaProfilo==='function')?fmAllieviIdsDaProfilo(p):u.allieviIds} : u;
               });
             });
           } catch(e) {}
