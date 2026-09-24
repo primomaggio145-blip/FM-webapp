@@ -521,6 +521,7 @@ const Ic = ({ n, size=16, stroke="currentColor", fill="none" }) => {
 // doc, xls...) mostra un messaggio con link per aprire/scaricare il file.
 // ═══════════════════════════════════════════════════════════════════════════════
 const FilePreviewModal = ({ file, onClose }) => {
+  useFMBackClose(onClose); // gesto/tasto indietro chiude
   if (!file || !file.url) return null;
   const url = file.url, name = file.name || 'File', mime = (file.type||'').toLowerCase();
   const ext = (name.includes('.') ? name.slice(name.lastIndexOf('.')+1) : '').toLowerCase();
@@ -863,7 +864,234 @@ const NotifPermBtn = function() {
   );
 };
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GESTI PWA — "Indietro" (swipe / tasto di sistema) e "Trascina giù per aggiornare"
+// ═══════════════════════════════════════════════════════════════════════════════
+// FMBack: pila di azioni "indietro" collegata alla cronologia del browser.
+//  • Ogni Modal aperto e ogni cambio di vista aggiunge una voce (history.pushState).
+//  • Il gesto/tasto indietro di Android (e il pulsante indietro del browser) genera
+//    un 'popstate': chiudiamo l'ultima voce aperta invece di uscire dall'app.
+//  • Se una finestra viene chiusa dall'interfaccia (X, Annulla, Salva), la sua voce
+//    viene tolta con un history.back() "silenzioso" per non lasciare voci vuote.
+//  • Su iPhone (PWA installata) il gesto di sistema non esiste: lo ricreiamo con lo
+//    swipe dal bordo sinistro, che chiama semplicemente history.back().
+window.FMBack = window.FMBack || (function () {
+  let seq = 0;
+  let curDepth = 0;        // profondità della voce di cronologia corrente
+  let ignore = 0;          // popstate da ignorare (history.back() fatti da noi)
+  let inAttesa = [];       // push richiesti mentre un nostro back è in corso
+  let timerAttesa = null;
+  const stack = [];        // {id, depth, fn, tipo, vivo}
+
+  try {
+    const st = history.state;
+    if (!st || typeof st.fmDepth !== 'number') history.replaceState(Object.assign({}, st || {}, { fmDepth: 0 }), '');
+    else curDepth = st.fmDepth;
+  } catch (e) {}
+
+  function _svuotaAttesa() {
+    clearTimeout(timerAttesa); timerAttesa = null;
+    const q = inAttesa; inAttesa = [];
+    q.forEach(f => f());
+  }
+  function _pushReale(voce) {
+    voce.depth = curDepth + 1;
+    curDepth = voce.depth;
+    try { history.pushState(Object.assign({}, history.state || {}, { fmDepth: voce.depth }), ''); } catch (e) {}
+    stack.push(voce);
+  }
+  function push(fn, tipo) {
+    const voce = { id: ++seq, depth: 0, fn, tipo: tipo || 'modal', vivo: true };
+    if (ignore > 0) inAttesa.push(() => { if (voce.vivo) _pushReale(voce); });
+    else _pushReale(voce);
+    return voce;
+  }
+  // Chiusura dall'interfaccia (non dal gesto): rimuove la voce senza eseguirla
+  function remove(voce) {
+    if (!voce || !voce.vivo) return;
+    voce.vivo = false;
+    const i = stack.indexOf(voce);
+    if (i < 0) return;                 // mai entrata (era in attesa) o già tolta
+    stack.splice(i, 1);
+    if (voce.depth === curDepth) {     // era la voce in cima: la togliamo dalla cronologia
+      ignore++;
+      try { history.back(); } catch (e) { ignore--; }
+      clearTimeout(timerAttesa);
+      timerAttesa = setTimeout(() => { ignore = 0; _svuotaAttesa(); }, 600); // rete di sicurezza
+    }
+    // se non era in cima resta una voce "vuota": un gesto indietro in più non fa nulla
+  }
+  window.addEventListener('popstate', function (e) {
+    const target = (e.state && typeof e.state.fmDepth === 'number') ? e.state.fmDepth : 0;
+    curDepth = target;
+    if (ignore > 0) { ignore--; if (ignore === 0) _svuotaAttesa(); return; }
+    // Chiude (dall'alto) tutte le voci più profonde della posizione raggiunta
+    while (stack.length && stack[stack.length - 1].depth > target) {
+      const voce = stack.pop();
+      voce.vivo = false;
+      try { voce.fn(); } catch (err) { console.warn('[FM] back handler:', err); }
+      // Se la finestra non si è chiusa davvero (es. conferma "modifiche non salvate"
+      // annullata), il Modal è ancora montato: gli ridiamo la sua voce di cronologia.
+      if (voce.tipo === 'modal') {
+        setTimeout(() => { if (voce._montato && !voce._richiusa) { voce.vivo = true; _pushReale(voce); } }, 350);
+      }
+    }
+  });
+  return { push, remove, depth: () => curDepth, aperte: () => stack.length };
+})();
+
+// Hook: collega un componente "finestra" al gesto indietro.
+// onClose viene chiamato quando l'utente fa indietro; alla chiusura normale la voce si toglie da sola.
+function useFMBackClose(onClose, attivo) {
+  const ref = React.useRef(onClose);
+  ref.current = onClose;
+  const on = attivo === undefined ? true : !!attivo;
+  React.useEffect(() => {
+    if (!on || !window.FMBack || typeof ref.current !== 'function') return;
+    const voce = window.FMBack.push(() => { if (ref.current) ref.current(); }, 'modal');
+    voce._montato = true;
+    return () => { voce._montato = false; voce._richiusa = true; window.FMBack.remove(voce); };
+  }, [on]);
+}
+
+// ── Gesti touch: solo nella PWA installata ───────────────────────────────────
+(function installaGestiPWA() {
+  const isPwa = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+    || sessionStorage.getItem('fm_pwa') === '1';
+  if (!isPwa || !('ontouchstart' in window)) return;
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const col = (k, d) => { try { return (C && C[k]) || d; } catch (e) { return d; } };
+  const freccia = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
+  const giro = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>';
+  if (!document.getElementById('fm-gesti-css')) {
+    const st = document.createElement('style'); st.id = 'fm-gesti-css';
+    st.textContent = '@keyframes fmGiro{to{transform:rotate(360deg)}}'
+      + '.main-scroll{overscroll-behavior-y:contain}'
+      + '.fm-gesto{position:fixed;z-index:190;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.25);opacity:0}';
+    document.head.appendChild(st);
+  }
+  const creaBolla = (html) => {
+    const d = document.createElement('div'); d.className = 'fm-gesto'; d.innerHTML = html;
+    d.style.background = col('surface', '#fff'); d.style.color = col('textMuted', '#6b7280');
+    d.style.border = '1px solid ' + col('border', '#d0d9eb');
+    document.body.appendChild(d); return d;
+  };
+  // C'è una finestra/overlay a tutto schermo sopra la vista? (in quel caso niente "aggiorna")
+  const overlayAperto = () => Array.from(document.querySelectorAll('body *')).some(el => {
+    if (el.classList && el.classList.contains('fm-gesto')) return false;
+    const s = el.style; if (!s || s.position !== 'fixed') return false;
+    const z = parseInt(s.zIndex || '0', 10); if (z < 150) return false;
+    const r = el.getBoundingClientRect(); return r.width > innerWidth * 0.8 && r.height > innerHeight * 0.6;
+  });
+  // Un contenitore scrollabile tra il dito e .main-scroll non è in cima?
+  const scrollatoSopra = (el, fine) => {
+    for (let n = el; n && n !== document.body; n = n.parentElement) {
+      if (n.scrollTop > 0) return true;
+      if (n === fine) break;
+    }
+    return false;
+  };
+
+  // ── 1) Trascina giù per aggiornare ─────────────────────────────────────────
+  const SOGLIA_PTR = 70, MAX_PTR = 110;
+  let ptr = null, bollaPtr = null, aggiornando = false;
+  document.addEventListener('touchstart', function (e) {
+    if (aggiornando || e.touches.length !== 1) return;
+    const t = e.touches[0];
+    if (isIOS && t.clientX < 24) return;                  // riservato allo swipe indietro
+    const main = e.target.closest && e.target.closest('.main-scroll');
+    if (!main || main.scrollTop > 0 || scrollatoSopra(e.target, main) || overlayAperto()) return;
+    ptr = { y0: t.clientY, x0: t.clientX, pull: 0, attivo: false };
+  }, { passive: true });
+  document.addEventListener('touchmove', function (e) {
+    if (!ptr) return;
+    const t = e.touches[0], dy = t.clientY - ptr.y0, dx = t.clientX - ptr.x0;
+    if (!ptr.attivo) {
+      if (dy < 0 || Math.abs(dx) > Math.abs(dy)) { ptr = null; return; } // scroll normale o gesto laterale
+      if (dy < 10) return;
+      ptr.attivo = true;
+      bollaPtr = bollaPtr || creaBolla(giro);
+    }
+    e.preventDefault();                                   // niente "rimbalzo" iOS mentre tiriamo
+    ptr.pull = Math.min((dy - 10) * 0.5, MAX_PTR);
+    const p = Math.min(ptr.pull / SOGLIA_PTR, 1);
+    bollaPtr.style.transition = 'none';
+    bollaPtr.style.left = 'calc(50% - 20px)';
+    bollaPtr.style.top = 'calc(env(safe-area-inset-top, 0px) - 44px)';
+    bollaPtr.style.opacity = String(p);
+    bollaPtr.style.transform = `translateY(${ptr.pull + 8}px) rotate(${p * 270}deg)`;
+    bollaPtr.style.color = p >= 1 ? col('gold', '#1a4fa0') : col('textMuted', '#6b7280');
+  }, { passive: false });
+  const fineTrascina = async function () {
+    if (!ptr) return;
+    const pronto = ptr.attivo && ptr.pull >= SOGLIA_PTR;
+    ptr = null;
+    if (!bollaPtr) return;
+    const b = bollaPtr;
+    b.style.transition = 'transform .2s ease, opacity .2s ease';
+    if (!pronto || typeof window.__FM_FORCE_REFRESH__ !== 'function') {
+      b.style.transform = 'translateY(0) rotate(0deg)'; b.style.opacity = '0'; return;
+    }
+    aggiornando = true;
+    b.style.transform = `translateY(${SOGLIA_PTR * 0.8}px)`; b.style.opacity = '1';
+    const icona = b.firstChild; if (icona) icona.style.animation = 'fmGiro .8s linear infinite';
+    if (navigator.vibrate) try { navigator.vibrate(10); } catch (e) {}
+    try { await window.__FM_FORCE_REFRESH__(false); } catch (e) { console.warn('[FM] aggiorna:', e); }
+    if (icona) icona.style.animation = '';
+    b.style.transform = 'translateY(0)'; b.style.opacity = '0';
+    aggiornando = false;
+  };
+  document.addEventListener('touchend', fineTrascina, { passive: true });
+  document.addEventListener('touchcancel', fineTrascina, { passive: true });
+
+  // ── 2) Swipe dal bordo sinistro per tornare indietro (solo iPhone/iPad) ─────
+  // Su Android il gesto indietro è già di sistema e arriva come 'popstate' a FMBack.
+  if (!isIOS) return;
+  const SOGLIA_BACK = 80;
+  let sw = null, bollaBack = null;
+  document.addEventListener('touchstart', function (e) {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    if (t.clientX > 24) return;
+    sw = { x0: t.clientX, y0: t.clientY, dx: 0, attivo: false };
+  }, { passive: true });
+  document.addEventListener('touchmove', function (e) {
+    if (!sw) return;
+    const t = e.touches[0], dx = t.clientX - sw.x0, dy = t.clientY - sw.y0;
+    if (!sw.attivo) {
+      if (dx < 0 || Math.abs(dy) > Math.abs(dx)) { sw = null; return; }
+      if (dx < 12) return;
+      sw.attivo = true;
+      bollaBack = bollaBack || creaBolla(freccia);
+    }
+    e.preventDefault();
+    sw.dx = dx;
+    const possibile = window.FMBack && window.FMBack.depth() > 0;
+    const p = Math.min(dx / SOGLIA_BACK, 1);
+    bollaBack.style.transition = 'none';
+    bollaBack.style.left = '-44px';
+    bollaBack.style.top = (t.clientY - 20) + 'px';
+    bollaBack.style.opacity = String(possibile ? p : p * 0.35);
+    bollaBack.style.transform = `translateX(${Math.min(dx * 0.6, 70)}px)`;
+    bollaBack.style.color = (possibile && p >= 1) ? col('gold', '#1a4fa0') : col('textMuted', '#6b7280');
+  }, { passive: false });
+  const fineSwipe = function () {
+    if (!sw) return;
+    const ok = sw.attivo && sw.dx >= SOGLIA_BACK && window.FMBack && window.FMBack.depth() > 0;
+    sw = null;
+    if (bollaBack) {
+      bollaBack.style.transition = 'transform .2s ease, opacity .2s ease';
+      bollaBack.style.transform = 'translateX(0)'; bollaBack.style.opacity = '0';
+    }
+    if (ok) { if (navigator.vibrate) try { navigator.vibrate(10); } catch (e) {} history.back(); }
+  };
+  document.addEventListener('touchend', fineSwipe, { passive: true });
+  document.addEventListener('touchcancel', fineSwipe, { passive: true });
+})();
+
 const Modal = ({ title, onClose, children, footer, wide=false }) => {
+  useFMBackClose(onClose); // gesto/tasto indietro chiude la finestra
   // Detect mobile/PWA — full-screen layout; desktop — centered overlay
   const isMob = typeof useIsMobile === 'function' ? useIsMobile() : false;
   const isPwa = typeof window !== 'undefined' &&

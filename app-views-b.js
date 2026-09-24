@@ -2015,6 +2015,7 @@ const _normalizzaTesto = (s) => String(s||'')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // rimuove accenti
 
 const GlobalSearchModal = ({ ruolo, onClose, onNavigate, students, docenti, lessons, entrate, spese, utenti, manuali, allegati, concerti, brani }) => {
+  useFMBackClose(onClose); // gesto/tasto indietro chiude
   const [query, setQuery] = useState('');
   const inputRef = React.useRef(null);
   React.useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
@@ -3302,6 +3303,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
 
 // ── Modal Compose Message ─────────────────────────────────────────────────────
 const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) => {
+  useFMBackClose(onClose); // gesto/tasto indietro chiude
   const [oggetto,   setOggetto]   = useState('');
   const [testo,     setTesto]     = useState('');
   const [destSel,   setDestSel]   = useState([]);   // [{id, nome, ruolo, email, telefono}]

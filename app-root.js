@@ -65,6 +65,20 @@ function App() {
     if (window.__FM_LOAD_LEZIONI_ANNO__) window.__FM_LOAD_LEZIONI_ANNO__(annoAttivo);
   }, [view, sharedConfig.annoInizioAttivo]);
 
+  // ── Cronologia viste: il gesto/tasto indietro riporta alla vista precedente ──
+  // Ogni cambio di vista aggiunge una voce a FMBack (app-core.js); il gesto indietro
+  // la esegue e ripristina la vista di prima invece di chiudere l'app.
+  const _vistaPerBack = React.useRef(view);
+  const _vistaDaBack  = React.useRef(false);
+  React.useEffect(() => {
+    const prev = _vistaPerBack.current;
+    _vistaPerBack.current = view;
+    if (prev === view) return;
+    if (_vistaDaBack.current) { _vistaDaBack.current = false; return; }
+    if (!window.FMBack) return;
+    window.FMBack.push(() => { _vistaDaBack.current = true; setView(prev); }, 'vista');
+  }, [view]);
+
   // Applica subito il colore accento salvato (anche al primo caricamento,
   // non solo quando l'admin lo cambia in Impostazioni). Forza un re-render
   // immediato: mutare le proprietà di C da solo non fa ripartire React.
@@ -1034,6 +1048,7 @@ function App() {
 // Permette di modificare data e orario della lezione CORRENTE,
 // mentre la prossima lezione ricorrente viene già creata dall'orario originale.
 const CambioOraModal = ({ lesson, onSave, onDismiss }) => {
+  useFMBackClose(onDismiss); // gesto/tasto indietro chiude
   const [nuovaData, setNuovaData] = useState(lesson.date || '');
   const [nuoraOra,  setNuovaOra]  = useState(lesson.hour || '');
   const [saving, setSaving] = useState(false);
@@ -1503,6 +1518,7 @@ const REMINDER_DEFAULTS = [
 
 // Wizard per creare un nuovo reminder
 const ReminderWizard = ({ onClose, onSave }) => {
+  useFMBackClose(onClose); // gesto/tasto indietro chiude
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
     id: '', label: '', desc: '', dest: 'allievo', orario: '09:00',

@@ -14704,6 +14704,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
 
 // ─── DRAWER DETTAGLIO BRANO ──────────────────────────────────────────────────
 const BranoDrawer = ({brano,onClose,onEdit,onDelete,concerti}) => {
+  useFMBackClose(onClose); // gesto/tasto indietro chiude
   const [openV, setOpenV] = useState(0); // indice versione aperta (-1 = tutte chiuse)
   const isCol=brano.tipo==="collettivo";
   const typeHex=isCol?C.purple:C.gold;

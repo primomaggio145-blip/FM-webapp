@@ -523,6 +523,7 @@ const DASH_RUOLI = [
 ];
 
 const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruolo, onRuolo, anniScolastici:_anniScolasticiRaw, setAnniScolastici }) => {
+  useFMBackClose(onClose, open); // gesto/tasto indietro chiude
   const anniScolastici = _anniScolasticiRaw || [];
   const [tab, setTab]     = useState("dashboard");
   const [draft, setDraft] = useState(config);
@@ -2080,6 +2081,7 @@ const TEMA_CARDS = [
   { id:'adulto',  label:'👤 Adulto',   desc:'Aspetto standard, come oggi',         swatch:['#1a4fa0','#f4f6fa','#ffffff'] },
 ];
 const SelettoreTemaModal = ({ temaAttuale, sfondoTeenAttuale, onPreview, onSalva, onAnnulla }) => {
+  useFMBackClose(onAnnulla); // gesto/tasto indietro chiude
   const [temaBozza, setTemaBozza] = useState(temaAttuale || 'adulto');
   const [sfondoBozza, setSfondoBozza] = useState(sfondoTeenAttuale || { tipo:'preset', valore:'blu' });
   const [errImg, setErrImg] = useState('');
