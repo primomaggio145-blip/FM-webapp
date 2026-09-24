@@ -1161,7 +1161,7 @@ const LessonLog = ({ lessons:_lessonsRaw, studentId, onAddLesson }) => {
 // ════════════════════════════════════════════════════════════════════════════════
 // SCHEDA DETTAGLIO
 // ════════════════════════════════════════════════════════════════════════════════
-const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntrateRaw, setEntrate, annoInizioAttivo, onEdit, onDelete, onBack, onAddLesson, onUpdateStudent, config:propConfig, setConfig:propSetConfig, userRuolo:_sdRuolo, gruppi:_gruppiSD, setLessons:_setLessonsSD, iscrizioniAnno:_iscrizioniSD }) => {
+const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntrateRaw, setEntrate, annoInizioAttivo, onEdit, onDelete, onBack, onAddLesson, onUpdateStudent, config:propConfig, setConfig:propSetConfig, userRuolo:_sdRuolo, gruppi:_gruppiSD, setLessons:_setLessonsSD, iscrizioniAnno:_iscrizioniSD, anniScolastici:_anniScolasticiSD }) => {
   const isMobile = useIsMobile();
   const sdRuolo = _sdRuolo || "admin"; // admin | docente | allievo
   const lessons = _lessonsRaw || [];
@@ -1699,6 +1699,10 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
         React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3299}}
           , React.createElement(MeseSelector, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3300}})
           , React.createElement(GraficoAS, {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3301}})
+          /* [FM-SOGLIA-MAN] Soglia del mese selezionato: dettaglio calcolo + modifica manuale (admin) */
+          , sdRuolo !== 'allievo' && React.createElement(PannelloSoglieMese, {
+              student, lessons, config, anniScolastici: _anniScolasticiSD || [], iscrizioniAnno: _iscrizioniSD,
+              mese: selMese.m, anno: selMese.y, canEdit: sdRuolo === 'admin', meseLabel: `${MESI_LABEL_L[selMese.m-1]} ${selMese.y}` })
           /* Lista lezioni mese selezionato */
           , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",marginBottom:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3303}}
             , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3304}}
@@ -1852,7 +1856,20 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                         , MESI_LABEL_L[x.m-1], " " , x.y
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:isF?C.textDim:lm.length>0?accentHex:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3391}}
-                        , nonIscr ? React.createElement('span', {style:{fontFamily:"'Open Sans',sans-serif",fontSize:10,fontWeight:700,color:C.textDim,border:`1px solid ${C.border}`,borderRadius:4,padding:'2px 6px',letterSpacing:'.05em'}}, 'NON ISCRITTO') : isF?"—":lm.length
+                        , nonIscr ? React.createElement('span', {style:{fontFamily:"'Open Sans',sans-serif",fontSize:10,fontWeight:700,color:C.textDim,border:`1px solid ${C.border}`,borderRadius:4,padding:'2px 6px',letterSpacing:'.05em'}}, 'NON ISCRITTO') : isF?"—": lm.length===0 ? 0 : React.createElement(PopoverCalcolo, { contenuto: React.createElement('div', null
+                            , React.createElement('div', {style:{fontWeight:700,marginBottom:6}}, `${student.name} · lezioni di ${MESI_LABEL_L[x.m-1]} ${x.y}`)
+                            , React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginBottom:6}}, 'Conteggiate per mese di riferimento (non per data). Il dettaglio della soglia è nel riquadro "Soglia lezioni".')
+                            , lm.slice().sort((a,b)=>a.date.localeCompare(b.date)).map(l => {
+                                const [dy,dm] = l.date.split('-').map(Number);
+                                const altro = dm!==x.m || dy!==x.y;
+                                const att = studAttendance(l, student.name, student.id);
+                                return React.createElement('div', {key:l.id, style:{fontSize:12,marginTop:2}}
+                                  , `${_fmtDM(new Date(l.date+"T00:00:00"))} · ${isColl(l)?(l.courseName||'Collettiva'):(l.instrument||'Individuale')}`
+                                  , att ? ` · ${(ATT_STYLES[att]||{}).label||att}` : ''
+                                  , l.isLezioneExtra ? ' · extra (non conta per la soglia)' : ''
+                                  , altro ? React.createElement('span',{style:{color:C.gold}}, ' · data in altro mese') : null);
+                              }))
+                          }, React.createElement('span',{style:{borderBottom:`1px dotted ${C.textDim}`}}, lm.length))
                         , !isF && haExtra && React.createElement('span', { title:'Include una lezione extra concordata', style:{fontSize:12, marginLeft:5}}, '🔶')
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,color:C.green}}, isF?"—":pres||"—")
@@ -2670,11 +2687,117 @@ function allievoIscrittoNelMese(s, mese, anno, iscrizioniAnno) {
   return true;
 }
 
-function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese, anno, iscrizioniAnno }) {
+// [FM-SOGLIA-B] Analisi della soglia individuale di UN corso nel mese (opzione B).
+// Il giorno fisso della settimana si ricava, in ordine di priorità, da:
+//   1. lezioni RICORRENTI con mese di riferimento = mese del report (esclusi recuperi/spostamenti "Nessuna")
+//   2. tutte le lezioni con mese di riferimento = mese del report
+//   3. lezioni ricorrenti dello storico
+//   4. tutte le lezioni dello storico (comportamento precedente)
+// Così un cambio di giorno avvenuto in un mese successivo (es. da mercoledì a martedì da ottobre)
+// non altera più la soglia dei mesi precedenti. Ritorna null se il corso non ha lezioni.
+const _GIORNI_IT = ["Domenica","Lunedì","Martedì","Mercoledì","Giovedì","Venerdì","Sabato"];
+const _fmtDM = d => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`;
+const _isRicorrente = l => !!l.recurrence && !/^nessuna/i.test(String(l.recurrence));
+function analizzaSogliaIndividualeCorso(lezCorso, dataInizio, dataFine, mese, anno) {
+  const lez = (lezCorso||[]).filter(l => l.date);
+  if (lez.length === 0) return null;
+  const delMese = lez.filter(l => { const r = meseRiferimentoLezione(l); return r && r.m===mese && r.y===anno; });
+  const livelli = [
+    { fonte: 'lezioni ricorrenti del mese', lista: delMese.filter(_isRicorrente) },
+    { fonte: 'tutte le lezioni del mese',   lista: delMese },
+    { fonte: 'lezioni ricorrenti (storico)', lista: lez.filter(_isRicorrente) },
+    { fonte: 'tutte le lezioni (storico)',   lista: lez },
+  ];
+  const scelto = livelli.find(x => x.lista.length > 0);
+  const base = scelto.lista;
+  let giorniPattern;
+  const due = base.filter(l => l.recurrence === "2 volte a settimana");
+  if (due.length > 0) {
+    giorniPattern = new Set(due.map(l => new Date(l.date + "T00:00:00").getDay()));
+  } else {
+    const conteggio = {};
+    base.forEach(l => { const g = new Date(l.date + "T00:00:00").getDay(); conteggio[g] = (conteggio[g]||0) + 1; });
+    const max = Math.max(...Object.values(conteggio));
+    const cand = Object.keys(conteggio).filter(g => conteggio[g] === max).map(Number);
+    if (cand.length === 1) giorniPattern = new Set(cand);
+    else {
+      const piuRecente = base.slice().sort((a,b) => (b.date||'').localeCompare(a.date||''))[0];
+      giorniPattern = new Set([new Date(piuRecente.date + "T00:00:00").getDay()]);
+    }
+  }
+  const dateSoglia = [];
+  for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) {
+    if (giorniPattern.has(d.getDay())) dateSoglia.push(_fmtDM(d));
+  }
+  return {
+    totale: dateSoglia.length, metodo: 'pattern', fonte: scelto.fonte,
+    giorniFissi: Array.from(giorniPattern).sort().map(g => _GIORNI_IT[g]),
+    dateSoglia,
+  };
+}
+
+// [FM-SOGLIA-MAN] Soglie impostate manualmente (tabella soglie_manuali), una per
+// allievo + anno + mese + corso ('__collettive' per le collettive). Store globale condiviso
+// tra Report lezioni, scheda allievo e Dashboard, caricato una volta e aggiornato ad ogni salvataggio.
+const _normCorsoKey = x => String(x||'').trim().toLowerCase();
+const SOGLIA_COLL_KEY = '__collettive';
+window.__FM_SOGLIE_MAN__ = window.__FM_SOGLIE_MAN__ || { rows: [], loaded: false, loading: false, errore: null, listeners: new Set() };
+function _notificaSoglieManuali() { window.__FM_SOGLIE_MAN__.listeners.forEach(fn => { try { fn(); } catch(e) {} }); }
+async function caricaSoglieManuali() {
+  const st = window.__FM_SOGLIE_MAN__;
+  const sb = window.supabaseClient;
+  if (!sb || st.loading) return;
+  st.loading = true;
+  const { data, error } = await sb.from('soglie_manuali').select('*');
+  st.loading = false; st.loaded = true;
+  if (error) { st.errore = error.message; console.warn('[FM] soglie_manuali non disponibile:', error.message); st.rows = []; }
+  else { st.errore = null; st.rows = data || []; }
+  _notificaSoglieManuali();
+}
+function useSoglieManuali() {
+  const [, setTick] = useState(0);
+  React.useEffect(() => {
+    const st = window.__FM_SOGLIE_MAN__;
+    const fn = () => setTick(t => t + 1);
+    st.listeners.add(fn);
+    if (!st.loaded && !st.loading) caricaSoglieManuali();
+    return () => { st.listeners.delete(fn); };
+  }, []);
+  return window.__FM_SOGLIE_MAN__.rows;
+}
+function trovaSogliaManuale(rows, studenteId, anno, mese, corso) {
+  const k = _normCorsoKey(corso);
+  return (rows||[]).find(r => String(r.studente_id)===String(studenteId) && Number(r.anno)===Number(anno)
+    && Number(r.mese)===Number(mese) && _normCorsoKey(r.corso)===k) || null;
+}
+// soglia = null → rimuove l'impostazione manuale (torna al calcolo automatico)
+async function salvaSogliaManuale(studenteId, anno, mese, corso, soglia, nota) {
+  const sb = window.supabaseClient;
+  const st = window.__FM_SOGLIE_MAN__;
+  if (!sb) return { error: { message: 'Supabase non disponibile' } };
+  const esistente = trovaSogliaManuale(st.rows, studenteId, anno, mese, corso);
+  if (soglia == null) {
+    if (!esistente) return { error: null };
+    const { error } = await sb.from('soglie_manuali').delete().eq('id', esistente.id);
+    if (!error) { st.rows = st.rows.filter(r => r.id !== esistente.id); _notificaSoglieManuali(); }
+    return { error };
+  }
+  const row = { id: esistente ? esistente.id : uid(), studente_id: Number(studenteId), anno: Number(anno), mese: Number(mese),
+    corso: esistente ? esistente.corso : String(corso), soglia: Number(soglia), nota: nota || null, updated_at: new Date().toISOString() };
+  const { error } = await sb.from('soglie_manuali').upsert(row, { onConflict: 'id' });
+  if (!error) {
+    st.rows = esistente ? st.rows.map(r => r.id===row.id ? {...r, ...row} : r) : st.rows.concat([row]);
+    _notificaSoglieManuali();
+  }
+  return { error };
+}
+
+function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese, anno, iscrizioniAnno, soglieManuali }) {
   const now3 = new Date();
   const cfg = config || {};
   const PUNTI_CORSO_INDIVIDUALE = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
   const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
+  const rowsMan = Array.isArray(soglieManuali) ? soglieManuali : ((window.__FM_SOGLIE_MAN__ && window.__FM_SOGLIE_MAN__.rows) || []);
 
   // Ultimo mese che contiene effettivamente delle lezioni (esclude lezioni programmate nel futuro):
   // serve per capire se il mese selezionato è "in corso" (dati parziali) e va quindi prorata la soglia.
@@ -2690,8 +2813,7 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
   });
   const isUltimoMeseConLezioni = !!ultimoMeseConLezioni && ultimoMeseConLezioni.anno===anno && ultimoMeseConLezioni.mese===mese;
 
-  // Data di fine anno scolastico (Impostazioni → Archivio anni scolastici) — l'anno di
-  // riferimento è quello la cui finestra Set(inizio)→Ago(fine) contiene il mese selezionato.
+  // Data di fine anno scolastico (Impostazioni → Archivio anni scolastici)
   const annoScolasticoDelMese = (anniScolastici||[]).find(a => {
     const annoRif = mese >= 9 ? anno : anno - 1;
     return Number(a.annoInizio) === annoRif;
@@ -2700,85 +2822,79 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     ? new Date(annoScolasticoDelMese.dataFineAnno+"T00:00:00") : null;
   const isMeseFineAnno = !!dataFineAnno && dataFineAnno.getFullYear()===anno && (dataFineAnno.getMonth()+1)===mese;
 
-  // Soglia di un allievo per il mese selezionato — sempre calcolata sulle settimane realmente
-  // disponibili in quel mese per quell'allievo (la finestra [inizio, fine] si restringe per il
-  // mese d'iscrizione, per il mese in corso e per il mese di fine anno scolastico):
-  //   corso individuale (cadenza 1/settimana):  floor(settimane_disponibili)      × nr. corsi
-  //   corso collettivo  (cadenza 1/2 settimane): floor(settimane_disponibili ÷ 2) × nr. corsi
-  const sogliaAllievo = (s, corsiInd, corsiReport, lezIndAllievo) => {
-    const nCorsiIndividuali = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).length;
+  // Soglia di un allievo per il mese: calcolata sulla finestra [inizio, fine] realmente disponibile
+  // (si restringe per mese d'iscrizione, mese in corso, mese di fine anno scolastico).
+  // Ritorna anche il DETTAGLIO del calcolo, mostrato nell'hover del Report lezioni.
+  const sogliaAllievo = (s, corsiInd, corsiReport, lezIndAllievo, lezCollAllievo) => {
     const nCorsiCollettivi  = s.complementaryCourse ? 1 : 0;
-
     const enroll = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
     const isMeseIscrizione = enroll && enroll.getFullYear()===anno && (enroll.getMonth()+1)===mese;
 
     const inizioMese = new Date(anno, mese-1, 1);
     const fineMese    = new Date(anno, mese, 0);
+    const noteFinestra = [];
     let dataInizio = inizioMese;
-    if (isMeseIscrizione && enroll > inizioMese) dataInizio = enroll;
+    if (isMeseIscrizione && enroll > inizioMese) { dataInizio = enroll; noteFinestra.push(`dal giorno d'iscrizione (${_fmtDM(enroll)})`); }
     let dataFine = fineMese;
-    // Il "cap a oggi" (mese in corso) si applica SOLO se questo NON è anche il mese d'iscrizione,
-    // e solo se l'iscrizione è già iniziata (altrimenti la finestra collasserebbe a 0).
-    if (isUltimoMeseConLezioni && !isMeseIscrizione && now3 >= dataInizio && now3 < dataFine) dataFine = now3;
-    if (isMeseFineAnno && dataFineAnno < dataFine) dataFine = dataFineAnno;
-    if (dataFine < dataInizio) return { individuale:0, collettiva:0 }; // finestra vuota (es. iscrizione futura)
+    if (isUltimoMeseConLezioni && !isMeseIscrizione && now3 >= dataInizio && now3 < dataFine) {
+      dataFine = new Date(now3.getFullYear(), now3.getMonth(), now3.getDate());
+      noteFinestra.push('fino a oggi (mese in corso)');
+    }
+    if (isMeseFineAnno && dataFineAnno < dataFine) { dataFine = dataFineAnno; noteFinestra.push('fino alla fine dell\'anno scolastico'); }
+    const finestra = { da: _fmtDM(dataInizio), a: _fmtDM(dataFine), note: noteFinestra, vuota: dataFine < dataInizio };
+    if (dataFine < dataInizio) {
+      const perCorso = {}, dettPerCorso = {};
+      corsiReport.forEach(c => { perCorso[c] = 0; dettPerCorso[c] = { finestra, metodo: 'vuota', dateSoglia: [] }; });
+      return { individuale:0, collettiva:0, perCorso, dettPerCorso, dettColl: { finestra, metodo:'vuota', dateSoglia:[] } };
+    }
 
     const giorni = Math.round((dataFine - dataInizio)/86400000) + 1;
     const settimane = Math.max(giorni,1)/7;
 
-    // Individuale: conteggio ESATTO dalle lezioni ricorrenti reali già a calendario. Fallback
-    // alla stima solo se l'allievo non ha ancora nessuna lezione individuale registrata (es.
-    // le sue prime lezioni di prova non sono ancora collegate al suo nome/id anagrafico).
-    // La stima non usa più floor(settimane) — troppo grezza: in una finestra di soli 9 giorni
-    // che inizia esattamente nel giorno della settimana della data d'iscrizione, quel giorno
-    // può ricorrere 2 volte (es. iscritto un martedì, la finestra contiene 2 martedì), ma
-    // floor(9÷7)=1 lo perderebbe. Si contano invece le occorrenze REALI del giorno della
-    // settimana della data d'iscrizione nella finestra — molto più preciso.
-    const nome = s.name||s.nome||'';
-    // [FM-REPORT-CORSI] Soglia calcolata PER CORSO: stessa logica di prima (pattern reale del
-    // corso, fallback alla stima sul giorno d'iscrizione), applicata alle sole lezioni di
-    // ciascun corso. Il totale individuale = somma dei corsi (compatibile con la Dashboard).
-    let stimaPerCorso = Math.floor(settimane);
+    // Stima (corso senza lezioni a calendario): occorrenze del giorno della settimana della data
+    // d'iscrizione nella finestra, oppure floor(settimane) se manca la data d'iscrizione.
+    let stima = { totale: Math.floor(settimane), metodo: 'stima-settimane', settimane: Math.round(settimane*10)/10, dateSoglia: [] };
     if (enroll) {
-      let occorrenzeGiornoIscrizione = 0;
-      for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) {
-        if (d.getDay() === enroll.getDay()) occorrenzeGiornoIscrizione++;
-      }
-      stimaPerCorso = occorrenzeGiornoIscrizione;
+      const dateS = [];
+      for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) if (d.getDay() === enroll.getDay()) dateS.push(_fmtDM(d));
+      stima = { totale: dateS.length, metodo: 'stima-iscrizione', giorniFissi: [_GIORNI_IT[enroll.getDay()]], dateSoglia: dateS };
     }
-    const perCorso = {};
+    const perCorso = {}, dettPerCorso = {};
     corsiReport.forEach(corso => {
       const lezCorso = lezIndAllievo.filter(l => l.__corsoRep === corso);
-      const reale = lezCorso.length ? contaLezioniIndividualiReali(nome, s.id, lezCorso, dataInizio, dataFine) : null;
-      // Corso "fuori anagrafica" (lezioni con strumento non tra i corsi dell'allievo): nessuna stima
-      perCorso[corso] = reale != null ? reale : (corsiInd.includes(corso) ? stimaPerCorso : 0);
+      const an = lezCorso.length ? analizzaSogliaIndividualeCorso(lezCorso, dataInizio, dataFine, mese, anno) : null;
+      const ris = an || (corsiInd.includes(corso) ? stima : { totale: 0, metodo: 'nessuna', dateSoglia: [] });
+      perCorso[corso] = ris.totale;
+      dettPerCorso[corso] = Object.assign({ finestra }, ris);
     });
     const individuale = Object.values(perCorso).reduce((t,n)=>t+n, 0);
 
-    // Collettiva: conteggio ESATTO dalle lezioni collettive reali già a calendario (cadenza
-    // spesso variabile — non si può assumere "ogni 2 settimane" con certezza). Fallback alla
-    // stima solo se l'allievo non ha ancora nessuna lezione collettiva registrata. Si applica
-    // solo se l'allievo ha effettivamente un corso collettivo assegnato.
-    const collettivaReale = nCorsiCollettivi > 0 ? contaLezioniCollettiveReali(nome, s.id, lessons, dataInizio, dataFine) : null;
-    const collettiva = collettivaReale != null ? collettivaReale : Math.floor(settimane/2) * nCorsiCollettivi;
-
-    return { individuale, collettiva, perCorso };
+    // Collettiva: lezioni collettive reali a calendario nella finestra; fallback a stima 1 ogni 2 settimane.
+    let collettiva = 0, dettColl = { finestra, metodo: 'nessuna', dateSoglia: [] };
+    if (nCorsiCollettivi > 0) {
+      if (lezCollAllievo.length > 0) {
+        const dateC = lezCollAllievo.filter(l => { const d = new Date(l.date+"T00:00:00"); return d >= dataInizio && d <= dataFine; })
+          .sort((a,b)=>a.date.localeCompare(b.date)).map(l => _fmtDM(new Date(l.date+"T00:00:00")));
+        collettiva = dateC.length;
+        dettColl = { finestra, metodo: 'reale', dateSoglia: dateC };
+      } else {
+        collettiva = Math.floor(settimane/2) * nCorsiCollettivi;
+        dettColl = { finestra, metodo: 'stima-settimane-coll', settimane: Math.round(settimane*10)/10, dateSoglia: [] };
+      }
+    }
+    return { individuale, collettiva, perCorso, dettPerCorso, dettColl };
   };
 
-  // Lezioni del mese selezionato, deduplicate per id
+  // Lezioni del mese selezionato (per mese di RIFERIMENTO), deduplicate per id
   const lezioniMese = [];
   const lezioniGiaContate = new Set();
   (lessons||[]).forEach(l => {
     if (!l.date) return;
-    // Mese/anno di competenza: usa pacchetto_mese/anno se impostato (lezione spostata con
-    // "Cambio ora" oltre il confine del mese resta di competenza del mese originale — es.
-    // martedì 29/09 spostato a giovedì 01/10 conta ancora per settembre), altrimenti il
-    // mese/anno della sua data (comportamento invariato per le lezioni mai spostate).
     const rif = meseRiferimentoLezione(l);
     if (!rif || rif.y!==anno || rif.m!==mese) return;
     if (l.tipo==='prova'||l.tipo==='sala_prove'||l.tipo==='recupero') return;
     const lid = l.id!=null ? String(l.id) : `${l.date}|${l.hour}|${l.student||l.studentId||l.courseId||''}`;
-    if (lezioniGiaContate.has(lid)) return; // record duplicato: già conteggiato
+    if (lezioniGiaContate.has(lid)) return;
     lezioniGiaContate.add(lid);
     lezioniMese.push(l);
   });
@@ -2788,12 +2904,8 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
   allieviAttivi.forEach(s => {
     const nome = s.name||s.nome||'';
     if (!nome) return;
-    // Conteggio per allievo: usa studentInLesson/studAttendance (stesso match ID+nome usato
-    // ovunque nell'app) invece di un dizionario indicizzato solo per nome.
-    // [FM-REPORT-CORSI] Corsi individuali dell'allievo (anagrafica) e assegnazione di ogni sua
-    // lezione individuale a un corso: match per strumento; se l'allievo ha un solo corso le
-    // lezioni con strumento diverso/mancante vanno a quello; altrimenti colonna a parte.
-    const normK = x => String(x||'').trim().toLowerCase();
+    // [FM-REPORT-CORSI] Corsi individuali dell'allievo e assegnazione delle lezioni al corso
+    const normK = _normCorsoKey;
     const corsiInd = [];
     [s.instrument, ...(s.extraInstruments||[])].filter(Boolean).forEach(c => {
       if (!corsiInd.some(x => normK(x)===normK(c))) corsiInd.push(c);
@@ -2808,43 +2920,58 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     const lezIndAllievo = (lessons||[])
       .filter(l => l.date && !isColl(l) && !isProva(l) && !isSalaProve(l) && l.tipo!=='recupero' && studentInLesson(l, nome, s.id))
       .map(l => Object.assign({}, l, { __corsoRep: corsoDiLezione(l) }));
-    const countPerCorso = {};
-    corsiInd.forEach(c => { countPerCorso[c] = 0; });
-    let countCollReale = 0;
-    lezioniMese.forEach(l => {
+    const lezCollAllievo = (lessons||[]).filter(l => l.date && isColl(l) && l.tipo !== 'recupero' && studentInLesson(l, nome, s.id));
+
+    const countPerCorso = {}, dateContate = {}, escluse = {};
+    corsiInd.forEach(c => { countPerCorso[c] = 0; dateContate[c] = []; escluse[c] = []; });
+    const dateColl = [], esclColl = [];
+    lezioniMese.slice().sort((a,b)=>(a.date||'').localeCompare(b.date||'')).forEach(l => {
       if (!studentInLesson(l, nome, s.id)) return;
-      if (studAttendance(l, nome, s.id)==='recuperata') return;
-      if (l.isLezioneExtra) return; // lezione extra concordata: non conta ai fini della soglia
-      if (isColl(l)) { countCollReale++; return; }
-      const c = corsoDiLezione(l);
-      countPerCorso[c] = (countPerCorso[c]||0) + 1;
+      const coll = isColl(l);
+      const c = coll ? null : corsoDiLezione(l);
+      if (!coll && !(c in countPerCorso)) { countPerCorso[c] = 0; dateContate[c] = []; escluse[c] = []; }
+      const dStr = _fmtDM(new Date(l.date+"T00:00:00"));
+      const [dy, dm] = l.date.split('-').map(Number);
+      const spostata = (dm !== mese || dy !== anno) ? ' (data in altro mese)' : '';
+      if (studAttendance(l, nome, s.id)==='recuperata') { (coll ? esclColl : escluse[c]).push(`${dStr} — recuperata`); return; }
+      if (l.isLezioneExtra) { (coll ? esclColl : escluse[c]).push(`${dStr} — lezione extra concordata`); return; }
+      if (coll) { dateColl.push(dStr + spostata); return; }
+      countPerCorso[c]++;
+      dateContate[c].push(dStr + spostata);
     });
     const corsiReport = Object.keys(countPerCorso);
     const countInd  = Object.values(countPerCorso).reduce((t,n)=>t+n, 0);
-    const countColl = countCollReale;
+    const countColl = dateColl.length;
     const iscritto = allievoIscrittoNelMese(s, mese, anno, iscrizioniAnno);
-    const soglie = sogliaAllievo(s, corsiInd, corsiReport, lezIndAllievo);
-    // Un'eccezione è "impostata" solo se contiene un numero valido.
+    const soglie = sogliaAllievo(s, corsiInd, corsiReport, lezIndAllievo, lezCollAllievo);
     const isEccInd  = s.sogliaIndividualeEcc!=null && s.sogliaIndividualeEcc!=='' && !isNaN(Number(s.sogliaIndividualeEcc));
     const isEccColl = s.sogliaCollettivaEcc!=null  && s.sogliaCollettivaEcc!==''  && !isNaN(Number(s.sogliaCollettivaEcc));
-    const sogliaInd  = Math.round(soglie.individuale);
-    const sogliaColl = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc)  : soglie.collettiva);
-    const individuale = { count:countInd,  soglia:sogliaInd,  delta:countInd-sogliaInd,   isEccezione:isEccInd };
-    const collettiva  = { count:countColl, soglia:sogliaColl, delta:countColl-sogliaColl, isEccezione:isEccColl };
-    const haCollettivo = !!s.complementaryCourse || countColl > 0;
-    // Dettaglio per corso individuale (colonne "Corso 1", "Corso 2"… nel Report lezioni)
+
+    // Corsi individuali: soglia calcolata, sovrascritta dall'eventuale soglia MANUALE del mese
     const corsi = corsiReport.map(c => {
       const cnt = countPerCorso[c]||0;
-      const sog = Math.round((soglie.perCorso||{})[c]||0);
-      return { corso:c, count:cnt, soglia:sog, delta:cnt-sog, isEccezione:isEccInd, fuoriAnagrafica: !corsiInd.includes(c) };
+      const calc = Math.round((soglie.perCorso||{})[c]||0);
+      const man = trovaSogliaManuale(rowsMan, s.id, anno, mese, c);
+      const sog = man ? Number(man.soglia) : calc;
+      return { corso:c, count:cnt, soglia:sog, sogliaCalcolata:calc, manuale: !!man, notaManuale: man ? (man.nota||'') : '',
+        delta:cnt-sog, isEccezione:isEccInd, fuoriAnagrafica: !corsiInd.includes(c),
+        dettaglio: Object.assign({}, (soglie.dettPerCorso||{})[c]||{}, { dateContate: dateContate[c]||[], escluse: escluse[c]||[] }) };
     });
+    const collCalc = Math.round(isEccColl ? Number(s.sogliaCollettivaEcc) : soglie.collettiva);
+    const manColl = trovaSogliaManuale(rowsMan, s.id, anno, mese, SOGLIA_COLL_KEY);
+    const sogliaColl = manColl ? Number(manColl.soglia) : collCalc;
+    const collettiva  = { count:countColl, soglia:sogliaColl, sogliaCalcolata:collCalc, manuale: !!manColl, notaManuale: manColl ? (manColl.nota||'') : '',
+      delta:countColl-sogliaColl, isEccezione:isEccColl, sogliaEccezione: isEccColl ? Number(s.sogliaCollettivaEcc) : null,
+      dettaglio: Object.assign({}, soglie.dettColl||{}, { dateContate: dateColl, escluse: esclColl, sogliaAutomatica: Math.round(soglie.collettiva||0) }) };
+    const sogliaInd = corsi.reduce((t,c)=>t+c.soglia, 0);
+    const individuale = { count:countInd, soglia:sogliaInd, delta:countInd-sogliaInd, isEccezione:isEccInd };
+    const haCollettivo = !!s.complementaryCourse || countColl > 0;
     // Stato complessivo: la carenza (sotto soglia) di QUALSIASI corso ha priorità, poi l'eccedenza.
     const deltas = corsi.map(c=>c.delta).concat(haCollettivo ? [collettiva.delta] : []);
     if (deltas.length === 0) deltas.push(0);
     const deltaPeggiore = Math.min(...deltas) < 0 ? Math.min(...deltas) : Math.max(...deltas);
     report.push({ id:s.id, nome, individuale, collettiva, corsi, haCollettivo, nonIscritto: !iscritto, deltaPeggiore: iscritto ? deltaPeggiore : 0 });
   });
-  // Non iscritti in fondo, gli altri per delta crescente
   report.sort((a,b)=> (a.nonIscritto===b.nonIscritto) ? a.deltaPeggiore-b.deltaPeggiore : (a.nonIscritto?1:-1));
   const iscrittiRep = report.filter(r=>!r.nonIscritto);
 
@@ -2858,6 +2985,161 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
   };
 }
 
+// [FM-HOVER-CALCOLO] Popover "come è stato calcolato": si apre al passaggio del mouse (desktop)
+// e al tocco (mobile/PWA, resta aperto finché non si tocca altrove). Reso in un portal su
+// document.body con position:fixed, così non viene tagliato dai contenitori con overflow.
+const PopoverCalcolo = ({ contenuto, children, width = 320 }) => {
+  const [pos, setPos] = useState(null);
+  const ref = React.useRef(null);
+  const fissato = React.useRef(false);
+  const apri = () => {
+    if (!ref.current) return;
+    const r = ref.current.getBoundingClientRect();
+    const W = Math.min(width, window.innerWidth - 16);
+    const left = Math.min(Math.max(8, r.left), window.innerWidth - W - 8);
+    const sopra = r.bottom + 280 > window.innerHeight && r.top > 280;
+    setPos(sopra ? { left, bottom: window.innerHeight - r.top + 6, W } : { left, top: r.bottom + 6, W });
+  };
+  React.useEffect(() => {
+    if (!pos || !fissato.current) return;
+    const chiudi = () => { fissato.current = false; setPos(null); };
+    const t = setTimeout(() => { document.addEventListener('click', chiudi); window.addEventListener('scroll', chiudi, true); }, 0);
+    return () => { clearTimeout(t); document.removeEventListener('click', chiudi); window.removeEventListener('scroll', chiudi, true); };
+  }, [pos]);
+  const box = pos && React.createElement('div', {
+      onClick: e => e.stopPropagation(),
+      style: { position:'fixed', left:pos.left, top:pos.top, bottom:pos.bottom, width:pos.W, zIndex:10000,
+        background:C.surface, color:C.text, border:`1px solid ${C.border}`, borderRadius:10,
+        boxShadow:'0 8px 28px rgba(0,0,0,.22)', padding:'10px 12px', fontSize:12, lineHeight:1.55,
+        textAlign:'left', whiteSpace:'normal', fontWeight:400, textTransform:'none', letterSpacing:0,
+        maxHeight:'60vh', overflowY:'auto', fontFamily:"'Open Sans',sans-serif" } }, contenuto);
+  return React.createElement('span', {
+      ref,
+      onMouseEnter: () => { if (!fissato.current) apri(); },
+      onMouseLeave: () => { if (!fissato.current) setPos(null); },
+      onClick: e => { e.stopPropagation(); if (fissato.current) { fissato.current = false; setPos(null); } else { fissato.current = true; apri(); } },
+      style: { display:'inline-block', cursor:'help' } }
+    , children
+    , box && (window.ReactDOM && ReactDOM.createPortal ? ReactDOM.createPortal(box, document.body) : box)
+  );
+};
+
+// [FM-SOGLIA-MAN] Editor della soglia manuale di un corso per un mese (scheda allievo → Lezioni).
+const SogliaManualeEditor = ({ studenteId, anno, mese, corso, stat }) => {
+  const [val, setVal]   = useState(stat.manuale ? String(stat.soglia) : '');
+  const [nota, setNota] = useState(stat.notaManuale || '');
+  const [saving, setSaving] = useState(false);
+  const salva = async (v) => {
+    setSaving(true);
+    const { error } = await salvaSogliaManuale(studenteId, anno, mese, corso, v, nota);
+    setSaving(false);
+    if (error) {
+      alert('Impossibile salvare la soglia: ' + error.message +
+        (/soglie_manuali/.test(error.message) ? '\n\nEsegui prima la migrazione SQL che crea la tabella soglie_manuali.' : ''));
+      return;
+    }
+    if (v == null) { setVal(''); setNota(''); }
+  };
+  const inp = { fontSize:12, padding:'4px 8px', borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, color:C.text, fontFamily:"'Open Sans',sans-serif" };
+  const btn = (bg, bd, clr) => ({ fontSize:11, padding:'4px 10px', borderRadius:6, border:`1px solid ${bd}`, background:bg, color:clr, cursor:'pointer', fontWeight:600, fontFamily:"'Open Sans',sans-serif" });
+  const modificato = val !== '' && (!stat.manuale || Number(val) !== Number(stat.soglia) || nota !== (stat.notaManuale||''));
+  return React.createElement('div', { style:{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' } }
+    , React.createElement('input', { type:'number', min:0, max:31, value:val, placeholder:`auto (${stat.sogliaCalcolata})`,
+        onChange: e => setVal(e.target.value), style:{ ...inp, width:90 } })
+    , React.createElement('input', { type:'text', value:nota, placeholder:'Nota (facoltativa)',
+        onChange: e => setNota(e.target.value), style:{ ...inp, flex:'1 1 140px', minWidth:120 } })
+    , modificato && React.createElement('button', { disabled:saving, onClick:()=>salva(Math.max(0, parseInt(val,10)||0)),
+        style: btn(C.goldBg, C.gold, C.gold) }, saving ? '…' : 'Salva')
+    , stat.manuale && React.createElement('button', { disabled:saving, onClick:()=>{ if (confirm('Tornare alla soglia calcolata automaticamente?')) salva(null); },
+        style: btn('none', C.border, C.textMuted) }, 'Ripristina automatica')
+  );
+};
+
+// [FM-SOGLIA-MAN] Pannello "Soglie del mese" nella tab Lezioni della scheda allievo.
+const PannelloSoglieMese = ({ student, lessons, config, anniScolastici, iscrizioniAnno, mese, anno, canEdit, meseLabel }) => {
+  const rows = useSoglieManuali();
+  const st = window.__FM_SOGLIE_MAN__;
+  const r = calcolaReportLezioni({ lessons, students:[{ ...student, status:'attivo' }], config, anniScolastici, iscrizioniAnno,
+    soglieManuali: rows, mese, anno }).report[0];
+  if (!r) return null;
+  const voci = (r.corsi||[]).map(c => ({ key:c.corso, label:c.corso, stat:c }))
+    .concat(r.haCollettivo ? [{ key:SOGLIA_COLL_KEY, label:'Collettive', stat:r.collettiva }] : []);
+  const cella = (stat) => {
+    const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
+    return React.createElement('span', { style:{ display:'inline-flex', alignItems:'baseline', gap:5, whiteSpace:'nowrap', borderBottom:`1px dotted ${C.textDim}` } }
+      , React.createElement('span', { style:{ fontSize:15, fontWeight:700, color:C.text } }, stat.count)
+      , React.createElement('span', { style:{ fontSize:12, color:C.textMuted } }, `/ ${stat.soglia}`)
+      , React.createElement('span', { style:{ fontSize:11, fontWeight:700, color:clr } }, `(${stat.delta>0?'+'+stat.delta:stat.delta})`)
+      , stat.manuale && React.createElement('span', { style:{ fontSize:11, color:C.gold } }, '✎ manuale')
+    );
+  };
+  return React.createElement('div', { style:{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:'hidden', marginBottom:16 } }
+    , React.createElement('div', { style:{ padding:'12px 20px', borderBottom:`1px solid ${C.border}`, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' } }
+      , React.createElement(Ic, { n:'chart', size:14, stroke:C.textMuted })
+      , React.createElement('span', { style:{ fontSize:12, letterSpacing:'0.08em', textTransform:'uppercase', color:C.textMuted } }, `Soglia lezioni · ${meseLabel}`)
+      , r.nonIscritto && React.createElement('span', { style:{ fontSize:10, fontWeight:700, color:C.textDim, border:`1px dashed ${C.border}`, borderRadius:4, padding:'1px 8px', letterSpacing:'.06em' } }, 'NON ISCRITTO')
+      , React.createElement('span', { style:{ fontSize:11, color:C.textDim, marginLeft:'auto' } }, 'passa il mouse o tocca i valori per il dettaglio')
+    )
+    , st.errore && canEdit && React.createElement('div', { style:{ padding:'8px 20px', fontSize:11, color:C.orange, background:C.orangeBg } },
+        'Soglie manuali non disponibili (tabella soglie_manuali mancante?): ', st.errore)
+    , voci.length === 0
+      ? React.createElement('div', { style:{ padding:'16px 20px', fontSize:13, color:C.textDim } }, 'Nessun corso assegnato')
+      : voci.map((v, i) => React.createElement('div', { key:v.key, style:{ padding:'10px 20px', borderTop: i ? `1px solid ${C.border}` : 'none',
+            display:'grid', gridTemplateColumns:'minmax(110px,160px) auto 1fr', gap:12, alignItems:'center' } }
+          , React.createElement('div', { style:{ fontSize:12, fontWeight:600, color:C.text, textTransform:'uppercase', letterSpacing:'.04em' } }, v.label)
+          , React.createElement(PopoverCalcolo, { contenuto: React.createElement(DettaglioCalcoloSoglia, { titolo:`${student.name} · ${v.label} · ${meseLabel}`, stat:v.stat }) }, cella(v.stat))
+          , canEdit
+            ? React.createElement(SogliaManualeEditor, { key:`${anno}-${mese}-${v.key}-${v.stat.manuale?v.stat.soglia:'a'}`, studenteId:student.id, anno, mese, corso:v.key, stat:v.stat })
+            : React.createElement('span', null)
+        ))
+  );
+};
+
+// Contenuto dell'hover per una cella del report (corso individuale o collettive).
+const DettaglioCalcoloSoglia = ({ titolo, stat }) => {
+  const d = (stat && stat.dettaglio) || {};
+  const riga = (etichetta, valore, colore) => React.createElement('div', { style:{ marginTop:4 } }
+    , React.createElement('span', { style:{ color:C.textMuted } }, etichetta, ' ')
+    , React.createElement('span', { style:{ color: colore || C.text, fontWeight:600 } }, valore));
+  const lista = arr => (arr && arr.length) ? arr.join(', ') : 'nessuna';
+  const fin = d.finestra;
+  const spiegaSoglia = [];
+  if (fin) spiegaSoglia.push(riga('Periodo considerato:', `${fin.da} → ${fin.a}` + (fin.note && fin.note.length ? ` (${fin.note.join('; ')})` : ' (mese intero)')));
+  if (d.metodo === 'pattern') {
+    spiegaSoglia.push(riga('Giorno fisso:', `${(d.giorniFissi||[]).join(' + ')} — ricavato da ${d.fonte}`));
+    spiegaSoglia.push(riga('Occorrenze nel periodo:', `${lista(d.dateSoglia)} → ${d.dateSoglia.length}`));
+  } else if (d.metodo === 'stima-iscrizione') {
+    spiegaSoglia.push(riga('Metodo:', `nessuna lezione a calendario per il corso: stima sul giorno d'iscrizione (${(d.giorniFissi||[]).join('')})`));
+    spiegaSoglia.push(riga('Occorrenze nel periodo:', `${lista(d.dateSoglia)} → ${d.dateSoglia.length}`));
+  } else if (d.metodo === 'stima-settimane') {
+    spiegaSoglia.push(riga('Metodo:', `nessuna lezione a calendario e nessuna data d'iscrizione: 1 lezione per settimana (${d.settimane} sett.)`));
+  } else if (d.metodo === 'reale') {
+    spiegaSoglia.push(riga('Collettive a calendario nel periodo:', `${lista(d.dateSoglia)} → ${d.dateSoglia.length}`));
+  } else if (d.metodo === 'stima-settimane-coll') {
+    spiegaSoglia.push(riga('Metodo:', `nessuna collettiva a calendario: 1 ogni 2 settimane (${d.settimane} sett.)`));
+  } else if (d.metodo === 'vuota') {
+    spiegaSoglia.push(riga('Periodo:', 'vuoto (iscrizione successiva al periodo)'));
+  } else if (d.metodo === 'nessuna') {
+    spiegaSoglia.push(riga('Metodo:', 'corso non presente in anagrafica: nessuna soglia attesa'));
+  }
+  if (stat && stat.sogliaEccezione != null) spiegaSoglia.push(riga('Eccezione in anagrafica:', `${stat.sogliaEccezione} (sostituisce il calcolo automatico ${d.sogliaAutomatica})`, C.gold));
+  const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
+  return React.createElement('div', null
+    , React.createElement('div', { style:{ fontWeight:700, fontSize:12.5, marginBottom:6, color:C.text } }, titolo)
+    , React.createElement('div', { style:{ fontSize:10, textTransform:'uppercase', letterSpacing:'.07em', color:C.textDim, marginTop:2 } }, `Lezioni contate: ${stat.count}`)
+    , riga('Date (per mese di riferimento):', lista(d.dateContate))
+    , (d.escluse||[]).length > 0 && riga('Non contate:', d.escluse.join('; '), C.textMuted)
+    , React.createElement('div', { style:{ fontSize:10, textTransform:'uppercase', letterSpacing:'.07em', color:C.textDim, marginTop:10 } }, `Soglia: ${stat.soglia}`)
+    , stat.manuale
+        ? [ riga('✎ Impostata manualmente', `(calcolo automatico: ${stat.sogliaCalcolata})`, C.gold),
+            stat.notaManuale ? riga('Nota:', stat.notaManuale) : null,
+            React.createElement('div', { key:'sep', style:{ fontSize:11, color:C.textDim, marginTop:6 } }, 'Calcolo automatico:') ].concat(spiegaSoglia)
+        : spiegaSoglia
+    , React.createElement('div', { style:{ marginTop:10, paddingTop:8, borderTop:`1px solid ${C.border}`, fontWeight:700, color:clr } }
+      , `Risultato: ${stat.count} / ${stat.soglia} → ${stat.delta>0?'+'+stat.delta:stat.delta}`)
+  );
+};
+
 const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscrizioniAnno, onSelectAllievo }) => {
   const now3 = new Date();
   const meseCurr = now3.getMonth() + 1;
@@ -2868,9 +3150,10 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscri
   const [reportMese, setReportMese] = useState(meseCurr);
   const [reportAnno, setReportAnno] = useState(annoCurr);
   const [reportFiltro, setReportFiltro] = useState('tutti');
+  const soglieManRL = useSoglieManuali(); // [FM-SOGLIA-MAN] ricalcola quando cambiano le soglie manuali
 
   const { report, superano, inLinea, sottosoglia, nonIscritti, PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO } =
-    calcolaReportLezioni({ lessons, students, config, anniScolastici, iscrizioniAnno, mese: reportMese, anno: reportAnno });
+    calcolaReportLezioni({ lessons, students, config, anniScolastici, iscrizioniAnno, soglieManuali: soglieManRL, mese: reportMese, anno: reportAnno });
   const allieviAttiviCount = (students||[]).filter(s=>s.status==='attivo'||!s.status).length;
 
   const filtrato = reportFiltro==='oltre' ? superano
@@ -2927,8 +3210,13 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscri
                   , React.createElement('span',{style:{fontSize:11,color:C.textMuted}}, `/ ${stat.soglia}`)
                   , React.createElement('span',{style:{fontSize:11,fontWeight:700,color:clr}}, `(${lbl})`)
                   , stat.isEccezione && React.createElement('span',{style:{fontSize:10,color:C.gold}},'(ecc.)')
+                  , stat.manuale && React.createElement('span',{style:{fontSize:10,color:C.gold},title:'Soglia impostata manualmente'},'✎')
                 );
               };
+              // [FM-HOVER-CALCOLO] cella con popover "come è stato calcolato"
+              const cellaHover = (stat, titolo) => React.createElement(PopoverCalcolo, {
+                  contenuto: React.createElement(DettaglioCalcoloSoglia, { titolo: `${r.nome} · ${titolo} · ${MESI_FULL[reportMese-1]} ${reportAnno}`, stat }) }
+                , React.createElement('span',{style:{borderBottom:`1px dotted ${C.textDim}`,display:'inline-block'}}, cella(stat)));
               const clrStato = r.deltaPeggiore>0?C.orange : r.deltaPeggiore<0?C.blue : C.green;
               const bgStato  = r.deltaPeggiore>0?C.orangeBg : r.deltaPeggiore<0?C.blueBg : C.greenBg;
               const bdStato  = r.deltaPeggiore>0?C.orangeBorder : r.deltaPeggiore<0?C.blueBorder : C.greenBorder;
@@ -2938,7 +3226,7 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscri
                 ? React.createElement('div',null
                     , React.createElement('div',{style:{fontSize:10,color:c.fuoriAnagrafica?C.orange:C.textMuted,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:2,whiteSpace:'nowrap'},
                         title: c.fuoriAnagrafica ? 'Strumento delle lezioni non presente tra i corsi in anagrafica' : undefined}, c.corso, c.fuoriAnagrafica ? ' ⚠' : '')
-                    , cella(c))
+                    , cellaHover(c, c.corso))
                 : React.createElement('span',{style:{color:C.textDim,fontSize:12}},'—');
               const nonIscrCell = React.createElement('td',{colSpan:nColCorsi+1,style:{...tdS,textAlign:'center'}}
                 , React.createElement('span',{style:{fontSize:11,fontWeight:700,letterSpacing:'.08em',color:C.textDim,border:`1px dashed ${C.border}`,borderRadius:6,padding:'3px 12px'}},'NON ISCRITTO'));
@@ -2952,7 +3240,7 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscri
                     ? [nonIscrCell]
                     : [
                         ...Array.from({length:nColCorsi},(_,k)=>React.createElement('td',{key:'c'+k,style:tdS}, cellaCorso((r.corsi||[])[k]))),
-                        React.createElement('td',{key:'coll',style:tdS}, r.haCollettivo ? cella(r.collettiva) : React.createElement('span',{style:{color:C.textDim,fontSize:12}},'—')),
+                        React.createElement('td',{key:'coll',style:tdS}, r.haCollettivo ? cellaHover(r.collettiva, 'Collettive') : React.createElement('span',{style:{color:C.textDim,fontSize:12}},'—')),
                       ])
                 , React.createElement('td',{style:tdS}, React.createElement('span',{style:{fontSize:11,fontWeight:600,whiteSpace:'nowrap',
                     background:r.nonIscritto?C.bg:bgStato,color:r.nonIscritto?C.textDim:clrStato,border:`1px solid ${r.nonIscritto?C.border:bdStato}`,borderRadius:20,padding:'3px 10px'}},lblStato))
@@ -2963,7 +3251,7 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscri
       )
       )
       , React.createElement('div',{style:{padding:'10px 18px',borderTop:`1px solid ${C.border}`,fontSize:11,color:C.textDim,display:'flex',justifyContent:'space-between',flexWrap:'wrap',gap:6}}
-        , `Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · mese d'iscrizione e mese in corso calcolati in proporzione alle settimane trascorse · ${allieviAttiviCount} allievi attivi`
+        , `Soglia: ${PUNTI_CORSO_INDIVIDUALE} lez/mese per corso individuale + ${PUNTI_CORSO_COLLETTIVO} per corso collettivo · soglia = giorni di lezione nel periodo del mese · passa il mouse (o tocca) su un valore per vedere il calcolo · ✎ = soglia manuale · ${allieviAttiviCount} allievi attivi`
         , React.createElement('span',null,'Clicca su un allievo per aprire il profilo')
       )
     )
@@ -3800,6 +4088,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             gruppi: propGruppiAV || [],
             setLessons: setLessons,
             iscrizioniAnno: iscrizioniAnno,
+            anniScolastici: propAnniScolasticiAV || [],
             onUpdateStudent: d=>setStudents(p=>p.map(s=>s.id===d.id?d:s)), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3893}}
           )
         )

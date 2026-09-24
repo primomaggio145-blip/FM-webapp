@@ -1987,12 +1987,14 @@ const ReportLezioniCard = ({ lessons, students, config, anniScolastici, onNaviga
   const [openOltre,   setOpenOltre]   = useState(true);
   const [openInLinea, setOpenInLinea] = useState(false);
   const [openSotto,   setOpenSotto]   = useState(false);
+  // [FM-SOGLIA-MAN] soglie manuali impostate dalla scheda allievo (ricalcola quando cambiano)
+  const soglieManRLC = typeof useSoglieManuali === 'function' ? useSoglieManuali() : undefined;
 
   // Stessa funzione di calcolo condivisa con REPORT LEZIONI in ALLIEVI (calcolaReportLezioni,
   // definita in app-calendario.js) — garantisce che le due schede mostrino sempre gli stessi
   // identici numeri, invece di due formule duplicate che possono disallinearsi nel tempo.
   const { report, superano, inLinea, sottosoglia, PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO } =
-    calcolaReportLezioni({ lessons, students, config, anniScolastici, mese: meseCurr, anno: annoCurr });
+    calcolaReportLezioni({ lessons, students, config, anniScolastici, soglieManuali: soglieManRLC, mese: meseCurr, anno: annoCurr });
 
   const cella = (stat) => {
     const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
