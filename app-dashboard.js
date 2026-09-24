@@ -2173,9 +2173,65 @@ const SelettoreTemaModal = ({ temaAttuale, sfondoTeenAttuale, onPreview, onSalva
   );
 };
 
+// [FM-EXTRA-PREVISTI] Previsione delle lezioni EXTRA del mese (occorrenze oltre il pacchetto
+// mensile: 5ª per "Ogni settimana", 9ª per "2 volte a settimana", …), calcolata IN ANTICIPO
+// proiettando in avanti ogni serie individuale ricorrente con le stesse regole usate al momento
+// della presenza (calcolaInfoExtra / gapProssimaLezione in app-calendario.js).
+// Per ogni serie (allievo + strumento): lezioni già a calendario con mese di competenza = mese,
+// + occorrenze future proiettate dall'ultima lezione ricorrente. Se il totale supera il pacchetto,
+// le occorrenze in eccesso sono le extra previste. Le serie già in "da decidere" o con extra già
+// generata/saltata nel mese sono escluse (le gestisce il banner "Lezioni extra da gestire").
+function calcolaExtraPrevistiMese(lessons, students, mese, anno) {
+  const ricMese = l => { const r = meseRiferimentoLezione(l); return !!r && r.m === mese && r.y === anno; };
+  const fineMese = new Date(anno, mese, 0);
+  const inizioMese = new Date(anno, mese - 1, 1);
+  const inattivi = new Set((students||[]).filter(s => s.status && s.status !== 'attivo')
+    .flatMap(s => [String(s.id), String(s.name||s.nome||'').toLowerCase().trim()]));
+  const serie = {};
+  (lessons||[]).forEach(l => {
+    if (!l.date || isColl(l) || isProva(l) || isSalaProve(l) || l.tipo === 'recupero') return;
+    const nomeK = String(l.student||l.contactName||'').toLowerCase().trim();
+    if (!nomeK && l.studentId == null) return;
+    const k = (l.studentId != null ? 'id:' + l.studentId : 'n:' + nomeK) + '|' + String(l.instrument||l.strumento||'').toLowerCase().trim();
+    (serie[k] = serie[k] || []).push(l);
+  });
+  const out = [];
+  Object.values(serie).forEach(lez => {
+    const ric = lez.filter(l => _isRicorrente(l) && !l.isLezioneExtra).sort((a,b) => a.date.localeCompare(b.date));
+    if (!ric.length) return;
+    const head = ric[ric.length - 1];
+    const N = PACCHETTO_PER_RICORRENZA[head.recurrence];
+    if (!N) return;
+    if (inattivi.has(String(head.studentId)) || inattivi.has(String(head.student||'').toLowerCase().trim())) return;
+    // serie ferma da troppo tempo (ultima lezione > 21 gg prima dell'inizio del mese): ignorata
+    if (new Date(head.date + "T00:00:00") < addDays(inizioMese, -21)) return;
+    const delMese = lez.filter(ricMese);
+    if (head.extraDaDecidere || delMese.some(l => l.isLezioneExtra || l.extraDecisione)) return;
+    const esistenti = delMese.filter(l => l.attendance !== 'recuperata').map(l => l.date);
+    // proiezione in avanti dall'ultima lezione ricorrente (alternanza gap per 2 volte a settimana)
+    const proiettate = [];
+    let cur = head, guard = 0;
+    while (guard++ < 40) {
+      const nd = addDays(new Date(cur.date + "T00:00:00"), gapProssimaLezione(cur));
+      if (nd > fineMese) break;
+      const nds = yyyymmdd(nd);
+      if (nd >= inizioMese && !esistenti.includes(nds)) proiettate.push(nds);
+      cur = { ...cur, date: nds, gapGiorni: prossimoGapGiorni(cur) };
+    }
+    const tutte = esistenti.concat(proiettate).sort();
+    if (tutte.length <= N) return;
+    out.push({ student: head.student || head.contactName || '—', studentId: head.studentId,
+      instrument: head.instrument || head.strumento || '—', teacher: head.teacher || '',
+      recurrence: head.recurrence, N, totale: tutte.length,
+      dataSoglia: tutte[N - 1], dateExtra: tutte.slice(N) });
+  });
+  return out.sort((a,b) => a.dateExtra[0].localeCompare(b.dateExtra[0]) || a.student.localeCompare(b.student));
+}
+
 const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propSetConfig, anniScolastici:propAnni, setAnniScolastici:propSetAnni, students:propStudentsDash, entrate:propEntrateDash, spese:propSpeseDash, docenti:propDocentiDash, lessons:propLessonsDash, concerti:propConcertiDash, richieste:propRichieste, notifiche:propNotifiche, setNotifiche:propSetNotifiche, panels:propPanels, setPanels:propSetPanels, iscrizioniAnno:propIscrizioniAnnoDash, onQuickAction, temaAttivo, setTemaAttivoPreview, sfondoTeen, salvaTemaDispositivo }) => {
   const [selettoreTemaAperto, setSelettoreTemaAperto] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [extraPrevistiAperto, setExtraPrevistiAperto] = useState(false); // [FM-EXTRA-PREVISTI]
   // Clock live: aggiorna ogni 60s per far scorrere la progressbar e la timeline
   const [dashNow, setDashNow] = useState(new Date());
   useEffect(() => {
@@ -2653,6 +2709,60 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                           , etichetta(b), ' (', b.instrument||'—', b.teacher?`, ${b.teacher}`:'', ')'
                         )
                       ))
+                  )
+                );
+              })()
+
+            /* [FM-EXTRA-PREVISTI] Banner lezioni extra PREVISTE nel mese (5ª occorrenza ecc.), avviso
+               anticipato: mese corrente sempre; negli ultimi 7 giorni del mese anche il mese successivo. */
+            , ruolo === 'admin' && (() => {
+                let righe = [];
+                const oggiEP = new Date(); oggiEP.setHours(0,0,0,0);
+                const mesiEP = [{ m: oggiEP.getMonth()+1, y: oggiEP.getFullYear() }];
+                const fineMeseEP = new Date(oggiEP.getFullYear(), oggiEP.getMonth()+1, 0);
+                if ((fineMeseEP - oggiEP) / 86400000 < 7) {
+                  const nx = new Date(oggiEP.getFullYear(), oggiEP.getMonth()+1, 1);
+                  mesiEP.push({ m: nx.getMonth()+1, y: nx.getFullYear() });
+                }
+                try {
+                  const oggiISO = yyyymmdd(oggiEP);
+                  mesiEP.forEach(({ m, y }) => {
+                    calcolaExtraPrevistiMese(propLessonsDash, propStudentsDash, m, y)
+                      .forEach(r => { if (r.dateExtra.some(d => d >= oggiISO)) righe.push(r); });
+                  });
+                } catch (e) { console.warn('[FM] extra previsti:', e); return null; }
+                if (righe.length === 0) return null;
+                const OR = '#f59e0b';
+                const nomiMesi = mesiEP.map(({m}) => MESI[m-1]).join(' e ');
+                const fmtD = d => { try { return new Date(d+"T00:00:00").toLocaleDateString('it-IT', {weekday:'short', day:'numeric', month:'short'}); } catch(e){ return d; } };
+                const MAX = 5;
+                const visibili = extraPrevistiAperto ? righe : righe.slice(0, MAX);
+                return React.createElement('div', { style:{padding:'14px 18px',borderRadius:12,border:'1.5px solid rgba(245,158,11,0.4)',background:'rgba(245,158,11,0.10)'} }
+                  , React.createElement('div', { style:{display:'flex',alignItems:'center',gap:12,cursor:'pointer'}, onClick: () => onNavigate('calendario') }
+                    , React.createElement(Ic, { n:'alert', size:18, stroke:OR })
+                    , React.createElement('div', {style:{flex:1}}
+                      , React.createElement('div', {style:{fontSize:13,fontWeight:700,color:OR}}, `Lezioni extra previste · ${nomiMesi}`)
+                      , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:2}}
+                        , righe.length===1 ? '1 allievo avrà un\'occorrenza oltre il pacchetto mensile' : `${righe.length} allievi avranno un'occorrenza oltre il pacchetto mensile`
+                        , ' — la decisione (genera / non generare) comparirà segnando la presenza della lezione-soglia'
+                      )
+                    )
+                    , React.createElement('span', {style:{fontSize:12,fontWeight:700,color:OR,whiteSpace:'nowrap'}}, 'Vai al Calendario →')
+                  )
+                  , React.createElement('div', { style:{marginTop:10, display:'flex', flexDirection:'column', gap:6} }
+                    , visibili.map((r, i) => (
+                        React.createElement('div', { key:i, style:{fontSize:12, color:C.text, padding:'8px 10px', background:'rgba(255,255,255,0.5)', borderRadius:8} }
+                          , React.createElement('strong', null, fmtD(r.dateExtra[0]))
+                          , ' — ', r.student, ' (', r.instrument, r.teacher ? `, ${r.teacher}` : '', ')'
+                          , React.createElement('span', {style:{color:C.textMuted}}
+                            , ` · ${r.N+1}ª lezione, pacchetto ${r.N} (${r.recurrence}) · soglia ${fmtD(r.dataSoglia)}`
+                            , r.dateExtra.length > 1 ? ` · altre: ${r.dateExtra.slice(1).map(fmtD).join(', ')}` : '')
+                        )
+                      ))
+                    , righe.length > MAX && React.createElement('button', {
+                        onClick: e => { e.stopPropagation(); setExtraPrevistiAperto(v => !v); },
+                        style:{alignSelf:'flex-start',fontSize:12,fontWeight:600,color:OR,background:'none',border:'none',cursor:'pointer',padding:'2px 0',fontFamily:"'Open Sans',sans-serif"} }
+                      , extraPrevistiAperto ? 'Mostra meno' : `Mostra tutti (${righe.length})`)
                   )
                 );
               })()
