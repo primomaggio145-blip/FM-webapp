@@ -3290,11 +3290,11 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
     , showCompose && React.createElement(ComposeModal, {
         appUser, ruolo, students, docenti,
         onClose: ()=>setShowCompose(false),
-        onSent: (nuovi) => {
+        onSent: (nuovi, extra) => {
           setMessaggi(p=>[...nuovi,...p]);
           setShowCompose(false);
           setTab('inviati');
-          showToast(true, `✅ Messaggio inviato a ${nuovi.length} destinatar${nuovi.length===1?'io':'i'}`);
+          showToast(true, `✅ Messaggio inviato a ${nuovi.length} destinatar${nuovi.length===1?'io':'i'}${extra||''}`);
         }
       })
   );
@@ -3309,6 +3309,42 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) =>
   const [sending,   setSending]   = useState(false);
   const [search,    setSearch]    = useState('');
   const isAdmin = ruolo === 'admin';
+
+  // ── WhatsApp (invio dal numero WhatsApp Business della scuola, via send-message) ──
+  // Solo admin: gli altri ruoli scrivono all'Amministrazione, che non ha un numero
+  // destinatario in anagrafica. Lo stato viene chiesto alla Edge Function (action wa_status).
+  const [waStatus, setWaStatus] = useState(null); // null=verifica | {configured, template} | {errore}
+  React.useEffect(() => {
+    if (!isAdmin) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const sb = window.supabaseClient;
+        const { data:{ session } } = await sb.auth.getSession();
+        const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-message', {
+          method:'POST',
+          headers:{'Authorization':`Bearer ${session?.access_token||''}`,'Content-Type':'application/json'},
+          body: JSON.stringify({ action:'wa_status' }),
+        });
+        const j = await res.json().catch(()=>({}));
+        if (!vivo) return;
+        // Edge Function vecchia (v2) non conosce wa_status → risponde "Parametri mancanti"
+        if (j && j.ok && 'wa_configured' in j) setWaStatus({ configured: !!j.wa_configured, template: j.template });
+        else setWaStatus({ errore: 'Aggiorna la Edge Function send-message (v3) per verificare WhatsApp' });
+      } catch(e) { if (vivo) setWaStatus({ errore: 'Stato WhatsApp non verificabile' }); }
+    })();
+    return () => { vivo = false; };
+  }, [isAdmin]);
+  // Stessa logica di normalizzaTel() della Edge Function — serve solo per avvisare PRIMA dell'invio
+  const telValidoWA = (tel) => {
+    if (!tel) return false;
+    const raw = String(tel).trim();
+    let n = raw.replace(/[^\d]/g,'');
+    if (n.startsWith('00')) n = n.slice(2);
+    if (/^3\d{9}$/.test(n) || /^393\d{9}$/.test(n)) return true;
+    return (raw.startsWith('+')||raw.startsWith('00')) && /^\d{8,15}$/.test(n);
+  };
+  const senzaTelWA = canali.whatsapp ? destSel.filter(d => !telValidoWA(d.telefono)) : [];
 
   // Destinatari disponibili
   const DEST_FISSI = !isAdmin ? [
@@ -3376,13 +3412,31 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) =>
         setSending(false); return;
       }
       const now = new Date().toISOString();
-      const nuovi = destinatariReali.map(d=>({
-        id: crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo,
-        destinatario_id:d.id, destinatario_nome:d.nome, destinatario_ruolo:d.ruolo,
-        oggetto:oggetto.trim(), testo:testo.trim(), letto:false, created_at:now,
-        inviato_push:canali.push, inviato_wa:canali.whatsapp, inviato_email:canali.email
-      }));
-      onSent(nuovi);
+      const esiti = Array.isArray(json.results) ? json.results : [];
+      const nuovi = destinatariReali.map((d,i)=>{
+        const r = esiti[i] || {};
+        return {
+          id: crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo,
+          destinatario_id:d.id, destinatario_nome:d.nome, destinatario_ruolo:d.ruolo,
+          oggetto:oggetto.trim(), testo:testo.trim(), letto:false, created_at:now,
+          inviato_push: esiti[i] ? !!r.push : canali.push,
+          inviato_wa:   esiti[i] ? !!r.wa   : false,
+          inviato_email:canali.email
+        };
+      });
+      // Riepilogo WhatsApp: l'esito reale arriva per destinatario dalla Edge Function
+      let riepilogoWA = '';
+      if (canali.whatsapp) {
+        const okWA  = esiti.filter(r=>r && r.wa).length;
+        const falliti = esiti.filter(r=>r && !r.wa);
+        riepilogoWA = ` · WhatsApp ${okWA}/${destinatariReali.length}`;
+        if (falliti.length) {
+          alert('⚠️ WhatsApp non inviato a '+falliti.length+' destinatar'+(falliti.length===1?'io':'i')+':\n\n'
+            + falliti.map(r=>'• '+(r.destinatario||'—')+': '+(r.wa_errore||'nessun esito (Edge Function da aggiornare?)')).join('\n')
+            + '\n\nGli altri canali selezionati sono stati inviati normalmente.');
+        }
+      }
+      onSent(nuovi, riepilogoWA);
     } catch(e) { alert('Errore invio: '+e.message); }
     setSending(false);
   };
@@ -3442,12 +3496,23 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) =>
         , React.createElement('div',null
           , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:8}},'Invia tramite')
           , React.createElement('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}}
-              , [['app','📱 App',true],['push','🔔 Push',true],['whatsapp','💬 WhatsApp',false],['email','📧 Email',false]].map(([k,lbl])=>{
+              , [['app','📱 App'],['push','🔔 Push'],['whatsapp','💬 WhatsApp'],['email','📧 Email']]
+                  .filter(([k])=>k!=='whatsapp'||isAdmin)
+                  .map(([k,lbl])=>{
                   const on = canali[k];
-                  return React.createElement('button',{key:k,onClick:()=>setCanali(p=>({...p,[k]:!p[k]})),style:{padding:'6px 14px',borderRadius:20,border:`1.5px solid ${on?C.teal:C.border}`,background:on?C.tealBg:C.bg,color:on?C.teal:C.textMuted,cursor:'pointer',fontSize:12,fontWeight:on?600:400}},lbl);
+                  const waOff = k==='whatsapp' && waStatus && waStatus.configured===false;
+                  return React.createElement('button',{key:k,disabled:waOff,title:waOff?'WhatsApp non configurato sul server':undefined,onClick:()=>setCanali(p=>({...p,[k]:!p[k]})),style:{padding:'6px 14px',borderRadius:20,border:`1.5px solid ${on?(k==='whatsapp'?'#25d366':C.teal):C.border}`,background:on?(k==='whatsapp'?'#e9fbf0':C.tealBg):C.bg,color:on?(k==='whatsapp'?'#128c4a':C.teal):C.textMuted,cursor:waOff?'not-allowed':'pointer',opacity:waOff?0.5:1,fontSize:12,fontWeight:on?600:400}},lbl);
                 })
             )
-          , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:6}},'App e Push sempre attivi. WhatsApp e Email richiedono configurazione aggiuntiva.')
+          , isAdmin && React.createElement('div',{style:{fontSize:11,marginTop:6,color:waStatus&&waStatus.configured?'#128c4a':C.textMuted}},
+              !waStatus ? '⏳ Verifica configurazione WhatsApp...'
+              : waStatus.errore ? '⚠️ '+waStatus.errore
+              : waStatus.configured ? '✅ WhatsApp pronto — invio dal numero WhatsApp Business della scuola (modello "'+waStatus.template+'")'
+              : '⚠️ WhatsApp non configurato sul server (mancano WHATSAPP_PHONE_ID / WHATSAPP_TOKEN)')
+          , canali.whatsapp && React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:4}},
+              'Su WhatsApp gli a capo diventano " · " e il testo oltre ~700 caratteri viene troncato.')
+          , senzaTelWA.length>0 && React.createElement('div',{style:{fontSize:11,color:C.red,marginTop:4}},
+              '⚠️ Senza numero valido, WhatsApp non partirà per: '+senzaTelWA.map(d=>d.nome).join(', '))
         )
       )
       /* Footer */

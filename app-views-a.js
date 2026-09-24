@@ -2419,6 +2419,10 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
       });
       const json = await res.json().catch(()=>({}));
       if(!res.ok || json.ok===false) throw new Error(json.error||`Errore HTTP ${res.status}`);
+      // send-message risponde ok:true anche se il singolo canale fallisce: controlla l'esito reale
+      const esito = Array.isArray(json.results) ? json.results[0] : null;
+      if (esito && canale==='whatsapp' && !esito.wa) throw new Error('WhatsApp non inviato: '+(esito.wa_errore||'esito negativo'));
+      if (esito && canale==='push' && !esito.push) throw new Error('Push non inviato: nessun dispositivo registrato raggiungibile');
       setTestState(p=>({...p,[canale]:{loading:false, ok:true, msg: canale==='push'?'Push inviato ✓':'WhatsApp inviato ✓'}}));
     } catch(e) {
       setTestState(p=>({...p,[canale]:{loading:false, ok:false, msg: e.message}}));
