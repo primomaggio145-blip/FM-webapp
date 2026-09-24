@@ -10721,6 +10721,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     else if(qaCV==="showElenco"){ setAppView("lezioni_admin"); if(clearQaCV)clearQaCV(); }
     else if(qaCV==="showSalaProve"){ setAppView("sala_prove"); if(clearQaCV)clearQaCV(); }
     else if(qaCV==="showCalendario"){ setAppView("calendario"); if(clearQaCV)clearQaCV(); }
+    // [FM-KPI-DOC] Dalla Dashboard: apre il calendario su OGGI (vista giorno) o sulla SETTIMANA corrente
+    else if(qaCV==="showOggi"){ setAppView("calendario"); setViewMode("day"); setCurDate(new Date()); if(clearQaCV)clearQaCV(); }
+    else if(qaCV==="showSettimana"){ setAppView("calendario"); setViewMode("week"); setCurDate(new Date()); if(clearQaCV)clearQaCV(); }
     else if(typeof qaCV==="string" && qaCV.startsWith("openLesson:")) {
       const lid = qaCV.slice("openLesson:".length);
       const found = (propLessons||[]).find(l=>String(l.id)===lid);

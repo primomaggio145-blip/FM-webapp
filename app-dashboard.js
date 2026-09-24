@@ -2698,9 +2698,16 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               )
               , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2188}}
               , ruolo==="docente" ? React.createElement(React.Fragment, null
+                  /* [FM-KPI-DOC] Lezioni di oggi → Calendario, vista giorno su oggi */
+                  , React.createElement(KpiCard, { icon: "clock", label: "Lezioni oggi",
+                      value: _lessons.filter(function(l){return matchDocLezione(l) && l.attendance !== "recuperata" && (l.date||l.data||"")===yyyymmdd(dashNow);}).length,
+                      sub: "mie lezioni di oggi", hex: C.blue,
+                      onClick: () => { onQuickAction && onQuickAction('showOggi'); onNavigate('calendario'); }})
+                  /* [FM-KPI-DOC] Lezioni settimana → Calendario, vista settimana corrente */
                   , React.createElement(KpiCard, { icon: "calendar", label: "Lezioni settimana",
                       value: _lessons.filter(function(l){return matchDocLezione(l) && l.attendance !== "recuperata" && lezioniSettimanaDocente(l);}).length,
-                      sub: "mie lezioni", hex: C.teal, onClick: () => onNavigate('calendario')})
+                      sub: "mie lezioni", hex: C.teal,
+                      onClick: () => { onQuickAction && onQuickAction('showSettimana'); onNavigate('calendario'); }})
                   , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
                       value: (()=>{ const p=_lessons.filter(l=>matchDocLezione(l)&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0]; return p?new Date((p.date||p.data)+"T00:00:00").toLocaleDateString("it-IT",{day:"numeric",month:"short"}):"—"; })(),
                       sub: "data più vicina", hex: C.gold, onClick: () => onNavigate('calendario')})
