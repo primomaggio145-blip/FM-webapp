@@ -2548,6 +2548,22 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
                       ? (students||[]).map(s=>React.createElement('option',{key:s.id,value:String(s.id)},s.name||s.nome||''))
                       : (docenti||[]).map(d=>React.createElement('option',{key:d.id,value:String(d.id)},d.nome||d.name||''))
                   )
+                  , !(draft.ruolo==='allievo'?draft.allievoId:draft.docenteId) && (()=>{
+                      const sg = (typeof fmSuggerisciCollegamento==='function')
+                        ? fmSuggerisciCollegamento({nome:draft.nome,nomeSocio:draft.nomeSocio,email:draft.email,ruolo:draft.ruolo}, students, docenti)
+                        : {id:null,candidati:[]};
+                      const cand = sg.candidati||[];
+                      return React.createElement('div',{style:{marginTop:8,fontSize:11,color:C.orange,lineHeight:1.5}}
+                        , '⚠ Non collegato: l\'utente non vede le sue lezioni/pagamenti.'
+                        , cand.length>0 && React.createElement('div',{style:{display:'flex',flexWrap:'wrap',gap:6,marginTop:6}}
+                          , React.createElement('span',{style:{color:C.textDim}}, sg.id ? `Corrispondenza per ${sg.motivo}:` : 'Possibili:')
+                          , cand.slice(0,5).map(x=>React.createElement('button',{key:x.id,
+                              onClick:()=>setD(draft.ruolo==='allievo'?'allievoId':'docenteId', String(x.id)),
+                              style:{fontSize:11,padding:'3px 9px',borderRadius:12,cursor:'pointer',border:`1px solid ${C.border}`,background:C.surface,color:C.text}
+                            }, x.name||x.nome||''))
+                        )
+                      );
+                    })()
                   , (draft.ruolo==='allievo'?draft.allievoId:draft.docenteId) && (
                     React.createElement('div',{style:{marginTop:8,fontSize:11,color:C.green,display:'flex',alignItems:'center',gap:5}}
                       , React.createElement(Ic,{n:'check',size:11,stroke:C.green})
@@ -2809,9 +2825,22 @@ const InvitaModal=({onInvita,onClose})=>{
 };
 
 // ─── MODAL RICHIESTA DETTAGLIO ────────────────────────────────────────────────
-const RichiestaModal=({richiesta,onApprova,onRifiuta,onClose})=>{
+const RichiestaModal=({richiesta,onApprova,onRifiuta,onClose,students,docenti})=>{
   const [ruolo,setRuolo]=useState(richiesta.ruolo);
   const r=ruoloById(ruolo);
+  // Collegamento al record allievo/docente: proposto automaticamente (email → nome socio → nome,
+  // ignorando ordine delle parole e accenti) ma SEMPRE modificabile dall'admin prima di approvare.
+  const richiedeLink = ruolo==='allievo' || ruolo==='docente';
+  const sugg = useMemo(()=> (typeof fmSuggerisciCollegamento==='function')
+    ? fmSuggerisciCollegamento({...richiesta, ruolo}, students, docenti)
+    : {id:null,motivo:null,candidati:[]}, [richiesta, ruolo, students, docenti]);
+  const [linkId,setLinkId]=useState(sugg.id||'');
+  // Solo quando cambia ruolo o proposta: un refresh realtime della lista non deve annullare la scelta manuale
+  useEffect(()=>{ setLinkId(sugg.id||''); },[ruolo, sugg.id]);
+  const listaLink = ruolo==='allievo' ? (students||[]) : ruolo==='docente' ? (docenti||[]) : [];
+  const idCandidati = new Set((sugg.candidati||[]).map(x=>String(x.id)));
+  const nomeRec = x => x.name||x.nome||'';
+  const listaOrdinata = [...listaLink].sort((a,b)=>(idCandidati.has(String(b.id))-idCandidati.has(String(a.id))) || nomeRec(a).localeCompare(nomeRec(b)));
   return(
     React.createElement(Modal, { title: "Richiesta di accesso"  , onClose: onClose, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9427}}
       , React.createElement('div', { style: {padding:"20px 22px",display:"flex",flexDirection:"column",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9428}}
@@ -2847,6 +2876,30 @@ const RichiestaModal=({richiesta,onApprova,onRifiuta,onClose})=>{
             ))
           )
         )
+        /* ── Collegamento al record allievo/docente (per ID, non per nome) ── */
+        , richiedeLink && (
+          React.createElement('div', {style:{background:C.bg,border:`1px solid ${linkId?C.green:C.orange}`,borderRadius:9,padding:'12px 14px'}}
+            , React.createElement('div', {style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase',marginBottom:8}}
+              , 'Collega a ', ruolo==='allievo'?'allievo':'docente', ' in anagrafica')
+            , React.createElement('select', {
+                value: linkId,
+                onChange: e=>setLinkId(e.target.value),
+                style:{width:'100%',padding:'10px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:'none'}
+              }
+              , React.createElement('option',{value:''},'— Nessun collegamento —')
+              , listaOrdinata.map(x=>React.createElement('option',{key:x.id,value:String(x.id)},
+                  (idCandidati.has(String(x.id))?'★ ':'')+nomeRec(x)+(x.email?' · '+x.email:'')))
+            )
+            , React.createElement('div',{style:{marginTop:8,fontSize:11,lineHeight:1.5,color:linkId?C.green:C.orange}},
+                linkId
+                  ? (sugg.id && String(sugg.id)===String(linkId)
+                      ? `✓ Proposto automaticamente (corrispondenza per ${sugg.motivo}) — verifica che sia la persona giusta.`
+                      : '✓ Collegamento scelto manualmente.')
+                  : ((sugg.candidati||[]).length
+                      ? `⚠ Nessuna corrispondenza certa${sugg.motivo?' ('+sugg.motivo+')':''}: scegli tu il record (★ = possibili corrispondenze).`
+                      : `⚠ Nessun record trovato con questo nome/email. Senza collegamento l'utente non vedrà lezioni, pagamenti e repertorio.`))
+          )
+        )
       )
       , React.createElement('div', { style: {padding:"13px 22px",borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"space-between",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9456}}
         , React.createElement(Btn, { danger: true, onClick: ()=>onRifiuta(richiesta), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9457}}
@@ -2854,7 +2907,7 @@ const RichiestaModal=({richiesta,onApprova,onRifiuta,onClose})=>{
         )
         , React.createElement('div', { style: {display:"flex",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9460}}
           , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9461}}, "Annulla")
-          , React.createElement(Btn, { onClick: ()=>onApprova(richiesta,ruolo), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9462}}
+          , React.createElement(Btn, { onClick: ()=>onApprova(richiesta,ruolo,richiedeLink?(linkId||null):null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9462}}
             , React.createElement(Ic, { n: "check", size: 13, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 9463}}), "Approva e attiva"
           )
         )
@@ -3650,22 +3703,57 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, c
         finally { setSaving(false); }
       })();
     };
-    const approvaRichiesta=(req,ruolo)=>{
+    // linkId: undefined = approvazione rapida dalla lista (nessuna scelta fatta dall'admin),
+    //         null/'' = admin ha scelto esplicitamente "nessun collegamento", altrimenti ID record.
+    const approvaRichiesta=(req,ruolo,linkId)=>{
+      const richiedeLink = ruolo==='allievo' || ruolo==='docente';
+      if (richiedeLink && linkId === undefined) {
+        const sg = (typeof fmSuggerisciCollegamento==='function')
+          ? fmSuggerisciCollegamento({...req, ruolo}, allStudents, allDocenti) : {id:null};
+        if (!sg.id) {
+          // Nessuna corrispondenza univoca: senza collegamento l'utente non vedrebbe i suoi dati.
+          // Apriamo la scheda richiesta così l'admin sceglie il record giusto.
+          setSelReq(req); setModal("richiesta");
+          showToast(`Scegli a quale ${ruolo==='allievo'?'allievo':'docente'} collegare ${req.nome}`, C.orange);
+          return;
+        }
+        linkId = sg.id;
+      }
       setSaving(true);
       (async()=>{
         try {
+          let res = null;
           if(window.FM_AUTH){
-            await window.FM_AUTH.approvaRichiesta({richiestaId:req.id,nome:req.nome,email:req.email,ruolo,nomeSocio:req.nomeSocio});
+            res = await window.FM_AUTH.approvaRichiesta({richiestaId:req.id,nome:req.nome,email:req.email,ruolo,nomeSocio:req.nomeSocio,
+              allievoId: ruolo==='allievo' ? (linkId||null) : null,
+              docenteId: ruolo==='docente' ? (linkId||null) : null});
           }
           const nuovo={id:uid(),nome:req.nome,email:req.email,ruolo,stato:"invitato",
             avatar:req.nome.split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(),
             iscritto:new Date().toISOString().split("T")[0],
             ultimoAccesso:null,permessi:{...PERM_DEFAULT[ruolo]},
-            note:req.nomeSocio?`Socio/iscritto: ${req.nomeSocio}`:"",nomeSocio:req.nomeSocio||""};
+            note:req.nomeSocio?`Socio/iscritto: ${req.nomeSocio}`:"",nomeSocio:req.nomeSocio||"",
+            allievoId: ruolo==='allievo' ? (linkId||null) : null,
+            docenteId: ruolo==='docente' ? (linkId||null) : null};
           setUtenti(p=>[...p,nuovo]);
           setRichieste(p=>p.filter(r=>r.id!==req.id));
           closeModal();
-          showToast(`${req.nome} approvato — invito inviato a ${req.email}`);
+          const linkFallito = richiedeLink && linkId && res && res._collegato === false;
+          showToast(linkFallito
+            ? `${req.nome} approvato, ma il collegamento al record non è stato salvato: collegalo dalla scheda utente`
+            : `${req.nome} approvato — invito inviato a ${req.email}`, linkFallito ? C.orange : C.green);
+          // Ricarica i profili reali (il record locale sopra ha un id provvisorio: senza ricarica
+          // una modifica immediata dalla scheda utente verrebbe salvata su un id inesistente).
+          try {
+            const pr = window.FM_AUTH && await window.FM_AUTH.getProfili();
+            if (pr && pr.length) setUtenti(prev => {
+              const byEmail = new Map(pr.map(p=>[String(p.email||'').toLowerCase(), p]));
+              return prev.map(u => {
+                const p = byEmail.get(String(u.email||'').toLowerCase());
+                return p ? {...u, id:p.id, stato:p.stato||u.stato, allievoId:p.allievo_id||null, docenteId:p.docente_id||null, nomeSocio:p.nome_socio||u.nomeSocio||''} : u;
+              });
+            });
+          } catch(e) {}
         } catch(ex){
           showToast(`Errore: ${ex.message}`,C.red);
         } finally { setSaving(false); }
@@ -3951,7 +4039,7 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, c
         /* ── MODALI ── */
         , modal==="invita"&&React.createElement(InvitaModal, { onInvita: invitaUtente, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9818}})
         , modal==="richiesta"&&selReq&&(
-          React.createElement(RichiestaModal, { richiesta: selReq, onApprova: approvaRichiesta, onRifiuta: r=>{rifiutaRichiesta(r);closeModal();}, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9820}})
+          React.createElement(RichiestaModal, { richiesta: selReq, students: allStudents, docenti: allDocenti, onApprova: approvaRichiesta, onRifiuta: r=>{rifiutaRichiesta(r);closeModal();}, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9820}})
         )
         , modal==="confirm_sospendi"&&selUtente&&(
           React.createElement(ConfirmDel, {

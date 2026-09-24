@@ -120,6 +120,25 @@
     async getProfilo(userId) {
       const { data, error } = await sb.from('profili').select('*').eq('id', userId).maybeSingle();
       if (error) return null;
+      // Collegamento automatico per EMAIL (lato server, SECURITY DEFINER): se l'allievo/docente
+      // non è ancora collegato al suo record, lo colleghiamo quando l'email dell'account
+      // coincide in modo univoco con quella in anagrafica. Il nome NON viene usato qui: chi si
+      // registra con un nome diverso resta comunque collegabile, e nessuno può "agganciarsi"
+      // ai dati di un altro allievo solo scrivendone il nome. Best-effort: se la funzione SQL
+      // non esiste ancora, si prosegue come prima.
+      try {
+        const manca = data && ((data.ruolo === 'allievo' && data.allievo_id == null) ||
+                               (data.ruolo === 'docente' && data.docente_id == null));
+        if (manca && userId) {
+          const { data: res, error: rpcErr } = await sb.rpc('fm_collega_profilo_per_email');
+          if (rpcErr) console.warn('[FM] auto-collegamento profilo non disponibile:', rpcErr.message);
+          else if (res && res.ok) {
+            if (res.allievo_id != null) data.allievo_id = res.allievo_id;
+            if (res.docente_id != null) data.docente_id = res.docente_id;
+            console.log('[FM] profilo collegato automaticamente per email:', res);
+          } else if (res) console.warn('[FM] profilo non collegato (' + (res.motivo || '?') + ') — collegalo da Impostazioni › Utenti');
+        }
+      } catch (ex) { console.warn('[FM] auto-collegamento profilo fallito (non bloccante):', ex.message); }
       return data;
     },
 
@@ -140,7 +159,7 @@
     },
 
     // Admin: approva richiesta → manda email invito
-    async approvaRichiesta({ richiestaId, nome, email, ruolo, nomeSocio }) {
+    async approvaRichiesta({ richiestaId, nome, email, ruolo, nomeSocio, allievoId, docenteId }) {
       // Usa session token se disponibile, altrimenti anon key (admin senza sessione Auth)
       const session = await window.FM_AUTH.getSession();
       console.log('[FM] approvaRichiesta session:', session ? 'OK uid='+session.user?.id : 'NULL');
@@ -158,18 +177,27 @@
       const json = await res.json();
       if (!res.ok || json.error) throw new Error(json.error || 'Errore approvazione');
 
-      // Best-effort: riporta il "nome socio" nella nota del profilo appena creato,
-      // così l'informazione non va persa anche se la Edge Function non la conosce.
-      if (nomeSocio) {
+      // Dopo la creazione del profilo: nome socio (best-effort) + COLLEGAMENTO per ID al record
+      // allievo/docente scelto dall'admin. Senza allievo_id/docente_id l'app ricade sul
+      // confronto per nome e non trova nulla se l'utente si è registrato con un nome diverso.
+      const newUserId = json.user?.id || json.userId || json.id || null;
+      const toId = v => (v == null || v === '') ? null : (isNaN(Number(v)) ? v : Number(v));
+      const upd = {};
+      if (nomeSocio) { upd.nome_socio = nomeSocio; upd.note = `Socio/iscritto: ${nomeSocio}`; }
+      if (ruolo === 'allievo' && toId(allievoId) != null) upd.allievo_id = toId(allievoId);
+      if (ruolo === 'docente' && toId(docenteId) != null) upd.docente_id = toId(docenteId);
+      json._collegato = false;
+      if (Object.keys(upd).length) {
         try {
-          const newUserId = json.user?.id || json.userId || json.id || null;
           const query = newUserId
-            ? sb.from('profili').update({ nome_socio: nomeSocio, note: `Socio/iscritto: ${nomeSocio}` }).eq('id', newUserId)
-            : sb.from('profili').update({ nome_socio: nomeSocio, note: `Socio/iscritto: ${nomeSocio}` }).eq('email', email);
-          const { error: noteErr } = await query;
-          if (noteErr) console.warn('[FM] impossibile salvare nome_socio sul profilo:', noteErr.message);
+            ? sb.from('profili').update(upd).eq('id', newUserId).select('id')
+            : sb.from('profili').update(upd).eq('email', email).select('id');
+          const { data: updRows, error: updErr } = await query;
+          if (updErr) console.warn('[FM] impossibile aggiornare il profilo approvato:', updErr.message);
+          else json._collegato = !!(updRows && updRows.length) && (upd.allievo_id != null || upd.docente_id != null);
+          if (!updErr && (!updRows || !updRows.length)) console.warn('[FM] profilo approvato non trovato per il collegamento (id/email):', newUserId, email);
         } catch (ex) {
-          console.warn('[FM] propagazione nome_socio fallita (non bloccante):', ex.message);
+          console.warn('[FM] aggiornamento profilo approvato fallito (non bloccante):', ex.message);
         }
       }
       return json;

@@ -1997,3 +1997,40 @@ window.__FM_PERSIST_PANELS__ = function(newPanels) {
     }
   })();
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   COLLEGAMENTO PROFILO UTENTE ↔ RECORD ALLIEVO/DOCENTE
+   Il login dell'allievo/docente funziona per ID (profili.allievo_id / docente_id).
+   Se l'ID manca, l'app ricade sul confronto per nome, che fallisce appena l'utente
+   si registra con un nome diverso da quello in anagrafica (es. "Rossi Mario" vs
+   "Mario Rossi", nome del genitore, accenti, secondo nome...).
+   fmSuggerisciCollegamento() propone il record giusto all'admin in fase di
+   approvazione: email → nome socio → nome (ordine parole/accenti ignorati).
+   ═══════════════════════════════════════════════════════════════════════════ */
+const fmNormNome = (s) => String(s || '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/['’`]/g, '').replace(/[^a-z0-9\s]/g, ' ')
+  .split(/\s+/).filter(Boolean).sort().join(' ');
+
+const fmSuggerisciCollegamento = (req, students, docenti) => {
+  const ruolo = req && req.ruolo;
+  const lista = ruolo === 'allievo' ? (students || []) : ruolo === 'docente' ? (docenti || []) : [];
+  const vuoto = { id: null, motivo: null, candidati: [] };
+  if (!lista.length) return vuoto;
+  const nomeDi = r => r.name || r.nome || '';
+  const email = String(req.email || '').trim().toLowerCase();
+  const criteri = [
+    ['email',      r => !!email && String(r.email || '').trim().toLowerCase() === email],
+    ['nome socio', r => !!fmNormNome(req.nomeSocio) && fmNormNome(nomeDi(r)) === fmNormNome(req.nomeSocio)],
+    ['nome',       r => !!fmNormNome(req.nome) && fmNormNome(nomeDi(r)) === fmNormNome(req.nome)],
+  ];
+  for (const [motivo, test] of criteri) {
+    const trovati = lista.filter(test);
+    if (trovati.length === 1) return { id: String(trovati[0].id), motivo, candidati: trovati };
+    if (trovati.length > 1)  return { id: null, motivo: motivo + ' (più corrispondenze)', candidati: trovati };
+  }
+  // Nessuna corrispondenza esatta: candidati parziali (almeno un cognome/nome in comune)
+  const tok = new Set([fmNormNome(req.nome), fmNormNome(req.nomeSocio)].join(' ').split(' ').filter(t => t.length > 2));
+  const parziali = tok.size ? lista.filter(r => fmNormNome(nomeDi(r)).split(' ').some(t => tok.has(t))) : [];
+  return { id: null, motivo: null, candidati: parziali.slice(0, 8) };
+};
