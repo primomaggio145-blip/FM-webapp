@@ -65,18 +65,28 @@ function App() {
     if (window.__FM_LOAD_LEZIONI_ANNO__) window.__FM_LOAD_LEZIONI_ANNO__(annoAttivo);
   }, [view, sharedConfig.annoInizioAttivo]);
 
-  // ── Cronologia viste: il gesto/tasto indietro riporta alla vista precedente ──
-  // Ogni cambio di vista aggiunge una voce a FMBack (app-core.js); il gesto indietro
-  // la esegue e ripristina la vista di prima invece di chiudere l'app.
-  const _vistaPerBack = React.useRef(view);
-  const _vistaDaBack  = React.useRef(false);
+  // ── Cronologia viste: Indietro/Avanti (browser, mouse, gesti) tra le viste ──
+  // Ogni cambio di vista fatto dall'utente aggiunge una voce di cronologia con il nome
+  // della vista (FMBack.pushVista, app-core.js). Quando il browser torna indietro o
+  // avanti, FMBack chiama onVista con la vista salvata in quella voce.
+  const _vistaCorrente = React.useRef(view);
+  const _vistaDaCronologia = React.useRef(false);
   React.useEffect(() => {
-    const prev = _vistaPerBack.current;
-    _vistaPerBack.current = view;
-    if (prev === view) return;
-    if (_vistaDaBack.current) { _vistaDaBack.current = false; return; }
     if (!window.FMBack) return;
-    window.FMBack.push(() => { _vistaDaBack.current = true; setView(prev); }, 'vista');
+    window.FMBack.annota({ fmView: view }); // la voce iniziale conosce la vista di partenza
+    window.FMBack.onVista = (v) => {
+      if (!v || v === _vistaCorrente.current) return;
+      _vistaDaCronologia.current = true;
+      setView(v);
+    };
+    return () => { if (window.FMBack) window.FMBack.onVista = null; };
+  }, []);
+  React.useEffect(() => {
+    const prev = _vistaCorrente.current;
+    _vistaCorrente.current = view;
+    if (prev === view) return;
+    if (_vistaDaCronologia.current) { _vistaDaCronologia.current = false; return; }
+    if (window.FMBack) window.FMBack.pushVista(view);
   }, [view]);
 
   // Applica subito il colore accento salvato (anche al primo caricamento,

@@ -870,6 +870,10 @@ const NotifPermBtn = function() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // FMBack: pila di azioni "indietro" collegata alla cronologia del browser.
 //  • Ogni Modal aperto e ogni cambio di vista aggiunge una voce (history.pushState).
+//    Vale ovunque: PWA, browser mobile e browser desktop (tasti Indietro/Avanti, tasti
+//    laterali del mouse, swipe del trackpad). Le voci di vista contengono il nome
+//    della vista, così funziona anche "Avanti".
+//    Debug: localStorage.fm_debug_back='1' → log in console; FMBack.stato() → situazione.
 //  • Il gesto/tasto indietro di Android (e il pulsante indietro del browser) genera
 //    un 'popstate': chiudiamo l'ultima voce aperta invece di uscire dall'app.
 //  • Se una finestra viene chiusa dall'interfaccia (X, Annulla, Salva), la sua voce
@@ -882,7 +886,20 @@ window.FMBack = window.FMBack || (function () {
   let ignore = 0;          // popstate da ignorare (history.back() fatti da noi)
   let inAttesa = [];       // push richiesti mentre un nostro back è in corso
   let timerAttesa = null;
-  const stack = [];        // {id, depth, fn, tipo, vivo}
+  const stack = [];        // finestre aperte: {id, depth, fn, vivo}
+  const api = { onVista: null };
+
+  const DEBUG = () => { try { return localStorage.getItem('fm_debug_back') === '1'; } catch (e) { return false; } };
+  const dbg = (...a) => { if (DEBUG()) console.log('[FMBack]', ...a); };
+
+  // Chrome/Edge (desktop compresi) SALTANO con il tasto indietro le voci di cronologia
+  // aggiunte senza un'interazione recente dell'utente, e in quel caso tornano alla
+  // pagina precedente invece che alla vista precedente. Per non "avvelenare" la
+  // cronologia aggiungiamo voci solo subito dopo un clic/tocco/tasto dell'utente.
+  const haAttivazione = () => {
+    const ua = navigator.userActivation;
+    return !ua || ua.isActive;
+  };
 
   try {
     const st = history.state;
@@ -895,50 +912,74 @@ window.FMBack = window.FMBack || (function () {
     const q = inAttesa; inAttesa = [];
     q.forEach(f => f());
   }
-  function _pushReale(voce) {
-    voce.depth = curDepth + 1;
-    curDepth = voce.depth;
-    try { history.pushState(Object.assign({}, history.state || {}, { fmDepth: voce.depth }), ''); } catch (e) {}
-    stack.push(voce);
+  function _pushState(extra) {
+    curDepth = curDepth + 1;
+    try { history.pushState(Object.assign({}, history.state || {}, extra || {}, { fmDepth: curDepth }), ''); } catch (e) {}
+    return curDepth;
   }
-  function push(fn, tipo) {
-    const voce = { id: ++seq, depth: 0, fn, tipo: tipo || 'modal', vivo: true };
-    if (ignore > 0) inAttesa.push(() => { if (voce.vivo) _pushReale(voce); });
-    else _pushReale(voce);
+  function _pushFinestra(voce) {
+    voce.depth = _pushState();
+    stack.push(voce);
+    dbg('+ finestra', voce.id, 'depth', voce.depth);
+  }
+  // Finestra aperta (Modal, overlay): aggiunge una voce; il gesto indietro la chiude
+  function push(fn) {
+    const voce = { id: ++seq, depth: 0, fn, vivo: true };
+    if (!haAttivazione()) { dbg('finestra aperta senza interazione: nessuna voce'); return voce; }
+    if (ignore > 0) inAttesa.push(() => { if (voce.vivo) _pushFinestra(voce); });
+    else _pushFinestra(voce);
     return voce;
   }
-  // Chiusura dall'interfaccia (non dal gesto): rimuove la voce senza eseguirla
+  // Cambio di vista fatto dall'utente: nuova voce con il nome della vista (serve anche per "avanti")
+  function pushVista(vista) {
+    if (!haAttivazione()) { annota({ fmView: vista }); return; }
+    const fai = () => { _pushState({ fmView: vista }); dbg('+ vista', vista, 'depth', curDepth); };
+    if (ignore > 0) inAttesa.push(fai); else fai();
+  }
+  // Aggiorna i dati della voce corrente senza crearne una nuova
+  function annota(extra) {
+    try { history.replaceState(Object.assign({}, history.state || {}, extra, { fmDepth: curDepth }), ''); } catch (e) {}
+  }
+  // Chiusura dall'interfaccia (X, Annulla, Salva): toglie la voce senza eseguirla
   function remove(voce) {
     if (!voce || !voce.vivo) return;
     voce.vivo = false;
     const i = stack.indexOf(voce);
-    if (i < 0) return;                 // mai entrata (era in attesa) o già tolta
+    if (i < 0) return;                 // mai entrata in cronologia o già tolta
     stack.splice(i, 1);
-    if (voce.depth === curDepth) {     // era la voce in cima: la togliamo dalla cronologia
+    if (voce.depth === curDepth) {     // era in cima: la togliamo anche dalla cronologia
       ignore++;
+      dbg('- finestra (UI)', voce.id, '→ back silenzioso');
       try { history.back(); } catch (e) { ignore--; }
       clearTimeout(timerAttesa);
       timerAttesa = setTimeout(() => { ignore = 0; _svuotaAttesa(); }, 600); // rete di sicurezza
     }
-    // se non era in cima resta una voce "vuota": un gesto indietro in più non fa nulla
   }
   window.addEventListener('popstate', function (e) {
-    const target = (e.state && typeof e.state.fmDepth === 'number') ? e.state.fmDepth : 0;
+    const st = e.state || {};
+    const target = typeof st.fmDepth === 'number' ? st.fmDepth : 0;
     curDepth = target;
     if (ignore > 0) { ignore--; if (ignore === 0) _svuotaAttesa(); return; }
-    // Chiude (dall'alto) tutte le voci più profonde della posizione raggiunta
+    dbg('popstate → depth', target, 'vista', st.fmView);
+    // 1) Indietro: chiude (dall'alto) le finestre più profonde della posizione raggiunta
     while (stack.length && stack[stack.length - 1].depth > target) {
       const voce = stack.pop();
       voce.vivo = false;
       try { voce.fn(); } catch (err) { console.warn('[FM] back handler:', err); }
-      // Se la finestra non si è chiusa davvero (es. conferma "modifiche non salvate"
-      // annullata), il Modal è ancora montato: gli ridiamo la sua voce di cronologia.
-      if (voce.tipo === 'modal') {
-        setTimeout(() => { if (voce._montato && !voce._richiusa) { voce.vivo = true; _pushReale(voce); } }, 350);
-      }
+      // Finestra rimasta aperta (es. conferma "modifiche non salvate" annullata): ridiamo la voce
+      setTimeout(() => { if (voce._montato && !voce._richiusa) { voce.vivo = true; _pushFinestra(voce); } }, 350);
     }
+    // 2) Indietro/Avanti tra le viste: la voce raggiunta dice quale vista mostrare
+    if (st.fmView && typeof api.onVista === 'function') api.onVista(st.fmView);
   });
-  return { push, remove, depth: () => curDepth, aperte: () => stack.length };
+  api.push = push;
+  api.pushVista = pushVista;
+  api.annota = annota;
+  api.remove = remove;
+  api.depth = () => curDepth;
+  api.aperte = () => stack.length;
+  api.stato = () => ({ depth: curDepth, finestre: stack.map(v => v.id + '@' + v.depth), history: history.state, ignore });
+  return api;
 })();
 
 // Hook: collega un componente "finestra" al gesto indietro.
@@ -949,7 +990,7 @@ function useFMBackClose(onClose, attivo) {
   const on = attivo === undefined ? true : !!attivo;
   React.useEffect(() => {
     if (!on || !window.FMBack || typeof ref.current !== 'function') return;
-    const voce = window.FMBack.push(() => { if (ref.current) ref.current(); }, 'modal');
+    const voce = window.FMBack.push(() => { if (ref.current) ref.current(); });
     voce._montato = true;
     return () => { voce._montato = false; voce._richiusa = true; window.FMBack.remove(voce); };
   }, [on]);
