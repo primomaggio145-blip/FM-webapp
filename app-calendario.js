@@ -2714,6 +2714,14 @@ function analizzaSogliaIndividualeCorso(lezCorso, dataInizio, dataFine, mese, an
   const due = base.filter(l => l.recurrence === "2 volte a settimana");
   if (due.length > 0) {
     giorniPattern = new Set(due.map(l => new Date(l.date + "T00:00:00").getDay()));
+    // [FM-SOGLIA-PACCHETTO] inizio mese: la serie "2 volte a settimana" viene generata una
+    // lezione alla volta, quindi nel mese può esserci ancora un solo giorno → completa la coppia
+    // con i giorni delle lezioni "2 volte a settimana" più recenti dello storico.
+    if (giorniPattern.size < 2) {
+      lez.filter(l => l.recurrence === "2 volte a settimana")
+        .sort((a,b) => (b.date||'').localeCompare(a.date||''))
+        .forEach(l => { if (giorniPattern.size < 2) giorniPattern.add(new Date(l.date + "T00:00:00").getDay()); });
+    }
   } else {
     const conteggio = {};
     base.forEach(l => { const g = new Date(l.date + "T00:00:00").getDay(); conteggio[g] = (conteggio[g]||0) + 1; });
@@ -2729,11 +2737,29 @@ function analizzaSogliaIndividualeCorso(lezCorso, dataInizio, dataFine, mese, an
   for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) {
     if (giorniPattern.has(d.getDay())) dateSoglia.push(_fmtDM(d));
   }
+  // [FM-SOGLIA-PACCHETTO] Tetto al pacchetto mensile della ricorrenza (Ogni settimana = 4,
+  // 2 volte a settimana = 8, …): nei mesi con un giorno "in più" (es. 5 venerdì, 5 giovedì)
+  // l'occorrenza oltre il pacchetto NON è attesa — o diventa una lezione extra concordata
+  // (isLezioneExtra, esclusa dal conteggio) o viene saltata. Stessa regola di calcolaInfoExtra.
+  const pacc = pacchettoMensileDaLezioni(base.some(_isRicorrente) ? base : lez);
+  const oltre = (pacc && dateSoglia.length > pacc.N) ? dateSoglia.slice(pacc.N) : [];
   return {
-    totale: dateSoglia.length, metodo: 'pattern', fonte: scelto.fonte,
+    totale: dateSoglia.length - oltre.length, metodo: 'pattern', fonte: scelto.fonte,
     giorniFissi: Array.from(giorniPattern).sort().map(g => _GIORNI_IT[g]),
-    dateSoglia,
+    dateSoglia: oltre.length ? dateSoglia.slice(0, pacc.N) : dateSoglia,
+    pacchetto: pacc, dateOltrePacchetto: oltre,
   };
+}
+// [FM-SOGLIA-PACCHETTO] Pacchetto mensile {N, ricorrenza} dedotto dalla ricorrenza della lezione
+// ricorrente più recente del corso; null se non ci sono lezioni ricorrenti (nessun tetto).
+function pacchettoMensileDaLezioni(lez) {
+  const ric = (lez||[]).filter(l => l.date && _isRicorrente(l))
+    .sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  for (const l of ric) {
+    const N = PACCHETTO_PER_RICORRENZA[l.recurrence];
+    if (N) return { N, ricorrenza: l.recurrence };
+  }
+  return null;
 }
 
 // [FM-SOGLIA-MAN] Soglie impostate manualmente (tabella soglie_manuali), una per
@@ -2853,11 +2879,15 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
 
     // Stima (corso senza lezioni a calendario): occorrenze del giorno della settimana della data
     // d'iscrizione nella finestra, oppure floor(settimane) se manca la data d'iscrizione.
-    let stima = { totale: Math.floor(settimane), metodo: 'stima-settimane', settimane: Math.round(settimane*10)/10, dateSoglia: [] };
+    let stima = { totale: Math.min(Math.floor(settimane), PACCHETTO_PER_RICORRENZA["Ogni settimana"]), metodo: 'stima-settimane', settimane: Math.round(settimane*10)/10, dateSoglia: [] };
     if (enroll) {
       const dateS = [];
       for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) if (d.getDay() === enroll.getDay()) dateS.push(_fmtDM(d));
-      stima = { totale: dateS.length, metodo: 'stima-iscrizione', giorniFissi: [_GIORNI_IT[enroll.getDay()]], dateSoglia: dateS };
+      const Nsett = PACCHETTO_PER_RICORRENZA["Ogni settimana"];
+      const oltreS = dateS.length > Nsett ? dateS.slice(Nsett) : [];
+      stima = { totale: dateS.length - oltreS.length, metodo: 'stima-iscrizione', giorniFissi: [_GIORNI_IT[enroll.getDay()]],
+        dateSoglia: dateS.slice(0, dateS.length - oltreS.length),
+        pacchetto: oltreS.length ? { N: Nsett, ricorrenza: 'Ogni settimana' } : null, dateOltrePacchetto: oltreS };
     }
     const perCorso = {}, dettPerCorso = {};
     corsiReport.forEach(corso => {
@@ -3121,6 +3151,9 @@ const DettaglioCalcoloSoglia = ({ titolo, stat }) => {
     spiegaSoglia.push(riga('Periodo:', 'vuoto (iscrizione successiva al periodo)'));
   } else if (d.metodo === 'nessuna') {
     spiegaSoglia.push(riga('Metodo:', 'corso non presente in anagrafica: nessuna soglia attesa'));
+  }
+  if (d.dateOltrePacchetto && d.dateOltrePacchetto.length && d.pacchetto) {
+    spiegaSoglia.push(riga('Pacchetto mensile:', `${d.pacchetto.N} lezioni (${d.pacchetto.ricorrenza}) — ${lista(d.dateOltrePacchetto)} oltre il pacchetto: eventuale lezione extra da decidere, non conta nella soglia`, C.gold));
   }
   if (stat && stat.sogliaEccezione != null) spiegaSoglia.push(riga('Eccezione in anagrafica:', `${stat.sogliaEccezione} (sostituisce il calcolo automatico ${d.sogliaAutomatica})`, C.gold));
   const clr = stat.delta>0?C.orange : stat.delta<0?C.blue : C.green;
@@ -4535,7 +4568,7 @@ function calcolaInfoExtra(lesson, opts) {
   // della prossima occorrenza con il mese di competenza di QUESTA lezione è corretto.
   let next;
   if (recurrence === "2 volte a settimana") {
-    const gapAvanti = lesson.gapGiorni === 4 ? 4 : 3; // default 3 se non impostato
+    const gapAvanti = gapProssimaLezione(lesson); // gap reale della coppia di giorni (default 3)
     next = new Date(d); next.setDate(next.getDate() + gapAvanti);
   } else {
     const gap = GAP_PER_RICORRENZA[recurrence];
@@ -4694,9 +4727,13 @@ function contaLezioniIndividualiReali(nome, studentId, lessons, dataInizio, data
     // attesa del mese. Le occorrenze "fuori pattern" (es. lo spostamento manuale stesso) NON
     // vengono aggiunte come lezione extra: rappresentano lo spostamento di un'occorrenza già
     // conteggiata nel pattern, non una lezione aggiuntiva.
+    let occ = 0;
     for (let d = new Date(dataInizio); d <= dataFine; d = addDays(d, 1)) {
-      if (giorniPattern.has(d.getDay())) totale++;
+      if (giorniPattern.has(d.getDay())) occ++;
     }
+    // [FM-SOGLIA-PACCHETTO] tetto al pacchetto mensile della ricorrenza (vedi analizzaSogliaIndividualeCorso)
+    const pacc = pacchettoMensileDaLezioni(lezCorso);
+    totale += pacc ? Math.min(occ, pacc.N) : occ;
   });
   return totale;
 }
@@ -11791,7 +11828,12 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         extraContabilizzata: false,
         extraLessonId: null,
         tipo: lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
-        gapGiorni: lesson.recurrence === "2 volte a settimana" ? (lesson.gapGiorni === 4 ? 4 : 3) : null,
+        gapGiorni: lesson.recurrence === "2 volte a settimana" ? gap1 : null,
+        // [FM-SOGLIA-PACCHETTO] la lezione riparte nel mese successivo: il mese di competenza è
+        // quello della SUA data (prima ereditava quello della lezione-soglia → contata due volte
+        // nel mese vecchio e mancante nel nuovo).
+        pacchettoMese: new Date(nextDate+"T00:00:00").getMonth() + 1,
+        pacchettoAnno: new Date(nextDate+"T00:00:00").getFullYear(),
       };
       setLessons(prev => [
         ...prev.map(l => l.id === lesson.id
