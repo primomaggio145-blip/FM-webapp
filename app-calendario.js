@@ -5090,6 +5090,71 @@ function trovaConflittiOrario(lezione, tutteLeLezioni) {
     return stessoStrumento || stessoInsegnante;
   });
 }
+// [FM-BRANO-DA-LEZIONE] Brano creato "al volo" da un modale lezione (LessonForm, anteprima
+// LessonDetailModal, CollectiveLessonForm). Normalizza il brano nella STESSA forma di adaptBrano
+// (fm_sync.js), così lo stato locale è identico a quello che si rilegge dal DB:
+//  - corso: brano.strumento + versioni[0].strumento = corso della lezione (vuoto per le collettive
+//    = "per tutti", come prima)
+//  - genere: campo brano-level
+//  - tonalità (+ spartiti, file, link backing): SEMPRE nella prima versione
+// Prima lo stato locale non aveva "versioni" né "genere": ogni aggiornamento successivo delle
+// versioni fatto dallo stato locale (stato del brano, versione, ecc.) riscriveva versioni = []
+// sul DB cancellando tonalità e corso, e una modifica da Repertorio azzerava genere/corso.
+function corsoBranoDaLezione(lezione) {
+  return (lezione && !isColl(lezione)) ? (lezione.instrument || '') : '';
+}
+function normalizzaBranoDaLezione(b, lezione) {
+  const corso = corsoBranoDaLezione(lezione);
+  const tonalita = b.tonality || b.tonalita || '';
+  const versione = {
+    tonalita, strumento: corso,
+    spartiti: b.spartiti || [], allegati: b.files || b.allegati || [],
+    link: b.linkBacking ? [{ url: b.linkBacking, label: 'Backing track' }] : [],
+    allievi: [],
+  };
+  return {
+    id: b.id || uid(),
+    title: (b.title || b.titolo || '').trim(),
+    composer: b.composer || b.compositore || '',
+    tipo: b.tipo || b.type || (isColl(lezione) ? 'collettivo' : 'individuale'),
+    strumento: corso,
+    genere: (b.genere || '').trim(),
+    eventiIds: [],
+    versioni: [versione],
+    note: b.note || b.notes || '',
+    difficulty: b.difficulty || '',
+    lezioni: 0,
+    tonality: tonalita, // campo legacy letto da alcune viste locali (es. repertorio allievo)
+  };
+}
+// Riallinea il corso al valore FINALE della lezione (il corso può cambiare nel form dopo aver
+// creato il brano).
+function allineaCorsoBrano(nb, lezione) {
+  const corso = corsoBranoDaLezione(lezione);
+  const versioni = (nb.versioni && nb.versioni.length ? nb.versioni : [{ tonalita: nb.tonality || '', spartiti: [], allegati: [], link: [], allievi: [] }])
+    .map((v, i) => i === 0 ? { ...v, strumento: corso } : v);
+  return { ...nb, strumento: corso, versioni };
+}
+function persistiBranoDaLezione(nb, origine) {
+  const sb = window.supabaseClient;
+  if (!sb) return Promise.resolve(false);
+  return sb.from('brani').insert({
+    id: nb.id,
+    titolo: nb.title || '',
+    compositore: nb.composer || '',
+    strumento: nb.strumento || null,
+    genere: nb.genere || '',
+    eventi_ids: [],
+    versioni: nb.versioni || [],
+    note: nb.note || '',
+  }).then(({ error }) => {
+    if (error) { console.warn(`[FM] nuovo brano (${origine}) DB error:`, error.message); return false; }
+    window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+    window.__FM_RECENTLY_WRITTEN__.set(`brani:${nb.id}`, Date.now());
+    return true;
+  });
+}
+
 // Salva (aggiunge o modifica) una versione di un brano, scrivendo direttamente su Supabase
 // (la tabella "brani" non passa dal motore di sync generico) e aggiornando lo stato
 // condiviso del repertorio così il cambiamento è visibile ovunque immediatamente.
@@ -5551,14 +5616,28 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
     if(Object.keys(e).length){ setErr(e); return; }
     const conflitti = trovaConflittiOrario({ ...f, id: initial?.id || '__nuova__' }, _lessonsLF || []);
     if (conflitti.length > 0) { setConflittiOrario(conflitti); return; }
+    // [FM-BRANO-DA-LEZIONE] Brani creati in questo form: lo stato scelto va DENTRO la versione
+    // che viene inserita (l'update separato qui sotto poteva arrivare prima/dopo l'insert e,
+    // partendo da una copia locale senza versioni, azzerava tonalità e corso).
+    const _nuoviBr = {};
+    Object.entries(newlyCreatedBraniRef.current || {}).forEach(([id, nb]) => {
+      const st = statiBrani[id];
+      let out = nb;
+      if (st && st.stato) {
+        const vIdx = parseInt(st.versioneIdx) || 0;
+        out = { ...nb, versioni: (nb.versioni||[]).map((v,i) => i === vIdx ? { ...v, stato: st.stato } : v) };
+      }
+      _nuoviBr[id] = out;
+    });
     // Salva subito la lezione — non aspettare l'update degli stati brani
-    onSave({ ...f, _newBrani: newlyCreatedBraniRef.current, _statiBrani: statiBrani });
+    onSave({ ...f, _newBrani: _nuoviBr, _statiBrani: statiBrani });
     // Aggiorna gli stati dei brani in background (fire-and-forget)
-    if (Object.keys(statiBrani).length > 0) {
+    if (Object.keys(statiBrani).some(id => !_nuoviBr[id])) {
       const sb = window.supabaseClient;
       if (sb) {
         (async () => {
           for (const [branoId, {versioneIdx, stato}] of Object.entries(statiBrani)) {
+            if (_nuoviBr[branoId]) continue; // [FM-BRANO-DA-LEZIONE] già incluso nell'insert
             const b = repertorio.find(r=>r.id===branoId); if (!b) continue;
             const nuoveVersioni = (b.versioni||[]).map((v,i) =>
               i === (parseInt(versioneIdx)||0) ? {...v, stato} : v
@@ -5819,7 +5898,8 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
                       , React.createElement(BranoFormInline, {
                         onSave: b => {
                           const newId = uid();
-                          const newBrano = {...b, id:newId, tipo: b.tipo||b.type||"individuale", note: b.note||b.notes||""};
+                          // [FM-BRANO-DA-LEZIONE] forma completa: corso della lezione, genere, tonalità in versione
+                          const newBrano = normalizzaBranoDaLezione({...b, id:newId, tipo: b.tipo||b.type||"individuale"}, f);
                           // Salva nel ref locale per handleSave
                           newlyCreatedBraniRef.current[newId] = newBrano;
                           onAddBrano(newBrano);
@@ -6410,24 +6490,10 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                 , React.createElement(BranoFormInline, {
                     onSave: b => {
                       const newId = uid();
-                      const newBrano = {...b, id:newId, tipo: b.tipo||b.type||"individuale", note: b.note||b.notes||""};
+                      // [FM-BRANO-DA-LEZIONE] forma completa (corso, genere, tonalità in versione) sia in stato che su DB
+                      const newBrano = normalizzaBranoDaLezione({...b, id:newId}, lesson);
                       if (_setRepertorioLDM) _setRepertorioLDM(prev => [...prev, newBrano]);
-                      const sbBr = window.supabaseClient;
-                      if (sbBr) {
-                        sbBr.from('brani').insert({
-                          id: newId,
-                          titolo: b.title || '',
-                          compositore: b.composer || '',
-                          strumento: isColl(lesson) ? null : (lesson.instrument || null),
-                          genere: b.genere || '',
-                          eventi_ids: [],
-                          versioni: (b.tonality || (b.spartiti||[]).length > 0 || (b.files||[]).length > 0 || b.linkBacking)
-                            ? [{ tonalita: b.tonality||'', strumento: lesson.instrument||'', spartiti: b.spartiti||[], allegati: b.files||[],
-                                 link: b.linkBacking ? [{url:b.linkBacking, label:'Backing track'}] : [], allievi: [] }]
-                            : [],
-                          note: b.note || '',
-                        }).then(({ error }) => { if (error) console.warn('[FM] nuovo brano DB error:', error.message); });
-                      }
+                      persistiBranoDaLezione(newBrano, 'anteprima lezione');
                       const ids = lesson.repertorioIds || [];
                       onUpdateLesson({ ...lesson, repertorioIds: [...ids, newId] });
                       setShowBranoForm(false);
@@ -8698,8 +8764,10 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
                 onClick: function() {
                   if(!newBranoForm.title.trim()) return;
                   var newId = uid();
-                  var newBrano = Object.assign({ id:newId }, newBranoForm, { tipo:"collettivo", type:"collettivo", lezioni:0 });
+                  // [FM-BRANO-DA-LEZIONE] normalizzato + insert su DB (prima restava solo nello stato locale)
+                  var newBrano = normalizzaBranoDaLezione(Object.assign({ id:newId }, newBranoForm, { tipo:"collettivo" }), { tipo:"collettivo" });
                   if(onAddBrano) onAddBrano(newBrano);
+                  persistiBranoDaLezione(newBrano, 'lezione collettiva');
                   setRepertorioIds(function(p){ return [...p, newId]; });
                   setNewBranoForm({ title:"", composer:"", period:"", tonality:"", type:"collettivo", difficulty:"", notes:"" });
                   setShowBranoForm(false);
@@ -11048,49 +11116,19 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
       // ── 1. Aggiungi i brani NUOVI al catalogo globale (sharedRepertorio) ──
       if (data._newBrani && Object.keys(data._newBrani).length > 0) {
-        const nuoviBrani = Object.values(data._newBrani).map(b => ({
-          id:         b.id,
-          title:      b.title      || b.titolo      || '',
-          composer:   b.composer   || b.compositore || '',
-          tonality:   b.tonality   || b.tonalita    || '',
-          difficulty: b.difficulty || 'Intermedio',
-          tipo:       b.tipo       || b.type        || 'individuale',
-          strumento:  data.instrument || '',
-          note:       b.note       || b.notes       || '',
-          lezioni:    0,
-        }));
+        // [FM-BRANO-DA-LEZIONE] brani già normalizzati da LessonForm; corso riallineato al corso
+        // FINALE della lezione (può essere cambiato dopo aver creato il brano)
+        const nuoviBrani = Object.values(data._newBrani).map(b =>
+          allineaCorsoBrano(b.versioni ? b : normalizzaBranoDaLezione(b, data), data));
+        const _nbById = new Map(nuoviBrani.map(b => [b.id, b]));
         setRepertorio(prev => {
           const existingIds = new Set(prev.map(r => r.id));
           const toAdd = nuoviBrani.filter(b => !existingIds.has(b.id));
-          return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+          return [...prev.map(r => _nbById.get(r.id) || r), ...toAdd];
         });
         // Persisti su Supabase: "brani" NON è nel motore di diff-sync generico
-        // (gestito a parte da RepertorioView), quindi senza un insert diretto qui il
-        // brano restava solo nello stato React e spariva al primo refresh/aggiornamento.
-        const sbBr = window.supabaseClient;
-        if (sbBr) {
-          nuoviBrani.forEach(b => {
-            sbBr.from('brani').insert({
-              id: b.id,
-              titolo: b.title || '',
-              compositore: b.composer || '',
-              strumento: data.instrument || null,
-              genere: b.genere || '',
-              eventi_ids: [],
-              versioni: (b.tonality || (b.spartiti||[]).length > 0 || (b.files||[]).length > 0 || b.linkBacking)
-                ? [{ tonalita: b.tonality||'', strumento: data.instrument||'', spartiti: b.spartiti||[], allegati: b.files||[],
-                     link: b.linkBacking ? [{url:b.linkBacking, label:'Backing track'}] : [], allievi: [] }]
-                : [],
-              note: b.note || '',
-            }).then(({ error }) => {
-              if (error) console.warn('[FM] nuovo brano (handleAdd) DB error:', error.message);
-              else {
-                window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
-                window.__FM_RECENTLY_WRITTEN__.set(`brani:${b.id}`, Date.now());
-              }
-            });
-          });
-        }
+        // (gestito a parte da RepertorioView), quindi serve un insert diretto.
+        nuoviBrani.forEach(b => persistiBranoDaLezione(b, 'handleAdd'));
       }
 
       // ── 2. Propaga tutti i brani selezionati al repertorio dello studente ──
@@ -11426,49 +11464,19 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
 
       // ── 1. Aggiungi i brani NUOVI al catalogo globale ──
       if (data._newBrani && Object.keys(data._newBrani).length > 0) {
-        const nuoviBrani = Object.values(data._newBrani).map(b => ({
-          id:         b.id,
-          title:      b.title      || b.titolo      || '',
-          composer:   b.composer   || b.compositore || '',
-          tonality:   b.tonality   || b.tonalita    || '',
-          difficulty: b.difficulty || 'Intermedio',
-          tipo:       b.tipo       || b.type        || 'individuale',
-          strumento:  data.instrument || '',
-          note:       b.note       || b.notes       || '',
-          lezioni:    0,
-        }));
+        // [FM-BRANO-DA-LEZIONE] brani già normalizzati da LessonForm; corso riallineato al corso
+        // FINALE della lezione (può essere cambiato dopo aver creato il brano)
+        const nuoviBrani = Object.values(data._newBrani).map(b =>
+          allineaCorsoBrano(b.versioni ? b : normalizzaBranoDaLezione(b, data), data));
+        const _nbById = new Map(nuoviBrani.map(b => [b.id, b]));
         setRepertorio(prev => {
           const existingIds = new Set(prev.map(r => r.id));
           const toAdd = nuoviBrani.filter(b => !existingIds.has(b.id));
-          return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+          return [...prev.map(r => _nbById.get(r.id) || r), ...toAdd];
         });
         // Persisti su Supabase: "brani" NON è nel motore di diff-sync generico
-        // (gestito a parte da RepertorioView), quindi senza un insert diretto qui il
-        // brano restava solo nello stato React e spariva al primo refresh/aggiornamento.
-        const sbBr2 = window.supabaseClient;
-        if (sbBr2) {
-          nuoviBrani.forEach(b => {
-            sbBr2.from('brani').insert({
-              id: b.id,
-              titolo: b.title || '',
-              compositore: b.composer || '',
-              strumento: data.instrument || null,
-              genere: b.genere || '',
-              eventi_ids: [],
-              versioni: (b.tonality || (b.spartiti||[]).length > 0 || (b.files||[]).length > 0 || b.linkBacking)
-                ? [{ tonalita: b.tonality||'', strumento: data.instrument||'', spartiti: b.spartiti||[], allegati: b.files||[],
-                     link: b.linkBacking ? [{url:b.linkBacking, label:'Backing track'}] : [], allievi: [] }]
-                : [],
-              note: b.note || '',
-            }).then(({ error }) => {
-              if (error) console.warn('[FM] nuovo brano (handleEdit) DB error:', error.message);
-              else {
-                window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
-                window.__FM_RECENTLY_WRITTEN__.set(`brani:${b.id}`, Date.now());
-              }
-            });
-          });
-        }
+        // (gestito a parte da RepertorioView), quindi serve un insert diretto.
+        nuoviBrani.forEach(b => persistiBranoDaLezione(b, 'handleEdit'));
       }
 
       // ── 2. Propaga eventuali nuovi brani al repertorio dello studente ──
