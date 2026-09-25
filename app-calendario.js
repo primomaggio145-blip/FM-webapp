@@ -3183,16 +3183,49 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscri
   const [reportMese, setReportMese] = useState(meseCurr);
   const [reportAnno, setReportAnno] = useState(annoCurr);
   const [reportFiltro, setReportFiltro] = useState('tutti');
+  // [FM-REPORT-SORT] ordinamento per colonna: clic = crescente, 2° clic = decrescente, 3° = ordine originale
+  const [reportSort, setReportSort] = useState({ col: null, dir: 1 });
   const soglieManRL = useSoglieManuali(); // [FM-SOGLIA-MAN] ricalcola quando cambiano le soglie manuali
 
   const { report, superano, inLinea, sottosoglia, nonIscritti, PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO } =
     calcolaReportLezioni({ lessons, students, config, anniScolastici, iscrizioniAnno, soglieManuali: soglieManRL, mese: reportMese, anno: reportAnno });
   const allieviAttiviCount = (students||[]).filter(s=>s.status==='attivo'||!s.status).length;
 
-  const filtrato = reportFiltro==='oltre' ? superano
+  const filtratoBase = reportFiltro==='oltre' ? superano
     : reportFiltro==='sotto' ? sottosoglia
     : reportFiltro==='inlinea' ? inLinea
     : reportFiltro==='noniscr' ? nonIscritti : report;
+  // [FM-REPORT-SORT] chiave di ordinamento per colonna. Celle senza valore (nessun corso in quella
+  // colonna, niente collettive, non iscritto) restano sempre in fondo, in entrambe le direzioni.
+  //  - Allievo: alfabetico · Corso N / Collettive: scarto (count − soglia), poi lezioni fatte
+  //  - Stato: Oltre → In linea → Sotto (per scarto peggiore) · Non iscritto sempre in fondo
+  const chiaveSortRL = (r, col) => {
+    if (col === 'nome') return (r.nome||'').toLowerCase();
+    if (col === 'stato') return r.nonIscritto ? null : (r.deltaPeggiore||0);
+    if (r.nonIscritto) return null;
+    if (col === 'coll') return r.haCollettivo && r.collettiva ? [r.collettiva.delta||0, r.collettiva.count||0] : null;
+    if (col.startsWith('c')) { const c = (r.corsi||[])[Number(col.slice(1))]; return c ? [c.delta||0, c.count||0] : null; }
+    return null;
+  };
+  const filtrato = (() => {
+    const { col, dir } = reportSort;
+    if (!col) return filtratoBase;
+    const cmp = (a, b) => {
+      if (typeof a === 'string') return a.localeCompare(b, 'it');
+      if (Array.isArray(a)) return (a[0]-b[0]) || (a[1]-b[1]);
+      return a - b;
+    };
+    return filtratoBase.map((r, i) => ({ r, i, k: chiaveSortRL(r, col) }))
+      .sort((x, y) => {
+        if (x.k == null && y.k == null) return x.i - y.i;
+        if (x.k == null) return 1;
+        if (y.k == null) return -1;
+        return (cmp(x.k, y.k) * dir) || (x.r.nome||'').localeCompare(y.r.nome||'', 'it') || (x.i - y.i);
+      })
+      .map(x => x.r);
+  })();
+  const clickSortRL = (col) => setReportSort(prev =>
+    prev.col !== col ? { col, dir: 1 } : prev.dir === 1 ? { col, dir: -1 } : { col: null, dir: 1 });
   // [FM-REPORT-CORSI] Numero di colonne "Corso N" = massimo numero di corsi individuali
   // tra gli allievi visualizzati (min. 1).
   const nColCorsi = Math.max(1, ...filtrato.map(r => (r.corsi||[]).length));
@@ -3229,8 +3262,15 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscri
       , React.createElement('table',{style:{width:'100%',borderCollapse:'collapse'}}
         , React.createElement('thead',null
           , React.createElement('tr',{style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
-            , ['Allievo', ...Array.from({length:nColCorsi},(_,k)=>`Corso ${k+1}`), 'Collettive','Stato'].map(h=>
-                React.createElement('th',{key:h,style:{padding:'9px 16px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.07em',color:C.textMuted,fontWeight:600}},h))
+            , [{k:'nome',h:'Allievo'}, ...Array.from({length:nColCorsi},(_,j)=>({k:'c'+j,h:`Corso ${j+1}`})), {k:'coll',h:'Collettive'}, {k:'stato',h:'Stato'}].map(({k,h})=>{
+                // [FM-REPORT-SORT] intestazione cliccabile con indicatore ▲/▼
+                const attiva = reportSort.col === k;
+                return React.createElement('th',{key:k, onClick:()=>clickSortRL(k),
+                    title: attiva ? (reportSort.dir===1 ? 'Ordinato crescente — clic per decrescente' : 'Ordinato decrescente — clic per togliere l\'ordinamento') : 'Clic per ordinare',
+                    style:{padding:'9px 16px',textAlign:'left',fontSize:10,textTransform:'uppercase',letterSpacing:'0.07em',
+                      color: attiva ? C.gold : C.textMuted, fontWeight: attiva ? 700 : 600, cursor:'pointer', userSelect:'none', whiteSpace:'nowrap'}}
+                  , h, React.createElement('span',{style:{marginLeft:4,fontSize:9,opacity: attiva ? 1 : 0.35}}, attiva ? (reportSort.dir===1 ? '▲' : '▼') : '↕'));
+              })
           )
         )
         , React.createElement('tbody',null
