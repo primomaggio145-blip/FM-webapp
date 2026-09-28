@@ -2655,11 +2655,13 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
                   const comp = courses.find(c=>c.id===s.complementaryCourse);
                   const tuttiStrumenti = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean);
                   const tuttiInsegnanti = [s.teacher, ...(s.extraInstruments||[]).map(ins=>(s.extraTeachers||{})[ins]).filter(Boolean)].filter(Boolean);
+                  // Clic → scheda allievo; rotellina / Ctrl+clic → scheda allievo in nuova finestra
+                  const _slLink = fmLink(()=>onSelect(s), {view:"allievi", sub:s.id});
                   return (
-                    React.createElement('tr', { key: s.id, style: {borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",cursor:"pointer",transition:"background 0.12s"},
+                    React.createElement('tr', { key: s.id, onAuxClick: _slLink.onAuxClick, onMouseDown: _slLink.onMouseDown, style: {borderBottom:i<filtered.length-1?`1px solid ${C.border}`:"none",cursor:"pointer",transition:"background 0.12s"},
                       onMouseEnter: e=>e.currentTarget.style.background=C.surfaceHover,
                       onMouseLeave: e=>e.currentTarget.style.background="transparent", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3807}}
-                      , React.createElement('td', { style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3810}}
+                      , React.createElement('td', { style: {padding:"13px 16px"}, onClick: e=>_slLink.onClick(e), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3810}}
                         , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3811}}
                           , React.createElement('div', { style: {width:34,height:34,borderRadius:"50%",background:`${ic}20`,border:`1px solid ${ic}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:ic,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3812}}
                             , initials(s.name)
@@ -2670,18 +2672,18 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
                           )
                         )
                       )
-                      , React.createElement('td', { style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3821}}
+                      , React.createElement('td', { style: {padding:"13px 16px"}, onClick: e=>_slLink.onClick(e), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3821}}
                         , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:4}}
                           , tuttiStrumenti.map(ins => React.createElement(Badge, { key: ins, label: ins, color: "gold" }))
                         )
                       )
-                      , React.createElement('td', { className: "hide-mobile", style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}, comp?React.createElement(Badge, { label: comp.name, color: "purple", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}):React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}, "—"))
-                      , React.createElement('td', { className: "hide-mobile", style: {padding:"13px 16px",fontSize:13,color:C.textMuted}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3823}}, tuttiInsegnanti.join(" · "))
-                      , slRuolo!=="docente" && React.createElement('td', { style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3824}}
+                      , React.createElement('td', { className: "hide-mobile", style: {padding:"13px 16px"}, onClick: e=>_slLink.onClick(e), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}, comp?React.createElement(Badge, { label: comp.name, color: "purple", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}):React.createElement('span', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3822}}, "—"))
+                      , React.createElement('td', { className: "hide-mobile", style: {padding:"13px 16px",fontSize:13,color:C.textMuted}, onClick: e=>_slLink.onClick(e), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3823}}, tuttiInsegnanti.join(" · "))
+                      , slRuolo!=="docente" && React.createElement('td', { style: {padding:"13px 16px"}, onClick: e=>_slLink.onClick(e), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3824}}
                         , React.createElement('div', { style: {fontSize:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3825}}, "€ " , s.monthlyFee)
                         , React.createElement('div', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3826}}, s.feeType)
                       )
-                      , React.createElement('td', { className: "resp-hide", style: {padding:"13px 16px"}, onClick: ()=>onSelect(s), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3828}}
+                      , React.createElement('td', { className: "resp-hide", style: {padding:"13px 16px"}, onClick: e=>_slLink.onClick(e), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3828}}
                         , React.createElement(Badge, { label: s.status, color: s.status==="attivo"?"green":s.status==="sospeso"?"gold":"red", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3829}})
                       )
                       , React.createElement('td', { style: {padding:"13px 16px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3831}}
@@ -3821,6 +3823,21 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
     if (me) { setSelected(me); setView("detail"); }
   }, [_allStudents, _avAllievoId, _nomeAV, _ruoloAV]);
 
+  // Rotta dall'URL (#/allievi/<id> | #/allievi/report | #/allievi/lezioni): nuova finestra aperta con la rotellina
+  const _rottaAVRef = React.useRef(_ruoloAV!=="allievo" && window.FMRoute ? window.FMRoute.prendi("allievi") : null);
+  React.useEffect(() => {
+    const r = _rottaAVRef.current;
+    if (!r) return;
+    if (r==="report" || r==="lezioni") { if (_ruoloAV==="admin") setView(r); _rottaAVRef.current = null; return; }
+    const found = (_allStudents||[]).find(s => String(s.id) === String(r));
+    if (found) { setSelected(found); setView("detail"); _rottaAVRef.current = null; }
+  }, [_allStudents]);
+  React.useEffect(() => {
+    if (!window.FMRoute || _rottaAVRef.current) return;
+    const sub = view==="detail" ? (selected && selected.id != null ? selected.id : null) : (view==="list" ? null : view);
+    window.FMRoute.setSub("allievi", sub);
+  }, [view, selected && selected.id]);
+
   const closeModal = () => setModal(null);
   React.useEffect(()=>{
     if(qaAV==="addAllievo"){ setModal("add"); if(clearQaAV)clearQaAV(); }
@@ -4152,7 +4169,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         /* ── Tab: Elenco allievi / Report pagamenti / Report lezioni (solo admin) ── */
         , (view==="list"||view==="report"||view==="lezioni") && _ruoloAV==="admin" && React.createElement('div', {style:{display:'flex',gap:6,marginBottom:16,borderBottom:`1px solid ${C.border}`}}
           , [{k:'list',lbl:'Elenco allievi'},{k:'report',lbl:'Report pagamenti'},{k:'lezioni',lbl:'Report lezioni'}].map(t=>(
-            React.createElement('button', {key:t.k, onClick:()=>setView(t.k),
+            React.createElement('button', {key:t.k, ...fmLink(()=>setView(t.k), {view:"allievi", sub:t.k==="list"?null:t.k}),
               style:{padding:'9px 16px',border:'none',borderBottom:`2px solid ${view===t.k?C.gold:'transparent'}`,
                 background:'transparent',color:view===t.k?C.gold:C.textMuted,cursor:'pointer',
                 fontSize:13,fontWeight:view===t.k?600:400,fontFamily:"'Open Sans',sans-serif"}}
@@ -13974,7 +13991,7 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota, ruoloCV, i
       if (ruoloCV==="docente") return t.id==="compensi" || t.id==="report";
       return true; // admin vede tutto
     }).map(t=>(
-      React.createElement('button', { key: t.id, onClick: ()=>{ setTab(t.id); _optionalChain([onSelDoc, 'optionalCall', _59 => _59()]); },
+      React.createElement('button', { key: t.id, ...fmLink(()=>{ setTab(t.id); _optionalChain([onSelDoc, 'optionalCall', _59 => _59()]); }, {view:"contabilita", sub:t.id}),
         style: {display:"flex",alignItems:"center",gap:6,padding:"0 12px",
           alignSelf:"stretch",background:"none",border:"none",
           borderBottom:`2px solid ${tab===t.id?C.gold:"transparent"}`,
@@ -14054,7 +14071,14 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
   const [_speseLocal, _setSpeseLocal] = useState(INIT_SPESE);
   const spese    = propSpese    || _speseLocal;
   const setSpese = propSetSpese || _setSpeseLocal;
-    const [tab,      setTab]      = useState(ruoloCV==="allievo"?"quote":ruoloCV==="docente"?"compensi":"report");
+    const [tab,      setTab]      = useState(() => {
+      const def = ruoloCV==="allievo"?"quote":ruoloCV==="docente"?"compensi":"report";
+      // Scheda richiesta dall'URL (es. aperta in nuova finestra con la rotellina)
+      const daUrl = window.FMRoute ? window.FMRoute.prendi("contabilita") : null;
+      const consentite = ruoloCV==="allievo" ? ["quote"] : ruoloCV==="docente" ? ["compensi","report"] : ["report","quote","altre_entrate","compensi","altre_uscite"];
+      return daUrl && consentite.includes(daUrl) ? daUrl : def;
+    });
+    React.useEffect(() => { if (window.FMRoute) window.FMRoute.setSub("contabilita", tab); }, [tab]);
     const isCompensi    = tab === "compensi";
     const isAltraUscita = tab === "altre_uscite";
     const [modal,    setModal]    = useState(null);

@@ -982,6 +982,91 @@ window.FMBack = window.FMBack || (function () {
   return api;
 })();
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// FMRoute — indirizzi (link) delle schede e apertura in nuova finestra
+// ═══════════════════════════════════════════════════════════════════════════════
+// Formato hash: #/<vista>[/<sotto-scheda>][?qa=<azione rapida>]
+//   es. #/contabilita/quote   #/allievi/4043   #/calendario?qa=showCalendario
+//  • L'URL segue la scheda aperta (senza creare voci di cronologia: quelle restano a FMBack).
+//  • All'avvio l'App legge l'hash e apre direttamente quella scheda (così una nuova
+//    finestra/scheda del browser parte dal punto in cui si è cliccato).
+//  • fmLink(onClick, rotta): props per un pulsante di navigazione — clic normale invariato,
+//    clic con la rotellina (o Ctrl/⌘+clic) apre la stessa scheda in una nuova finestra.
+window.FMRoute = window.FMRoute || (function () {
+  const api = {};
+  api.parse = function (hash) {
+    const h = String(hash || '');
+    if (!/^#\//.test(h)) return null;                  // es. token di invito Supabase: non è una rotta
+    const [path, query] = h.slice(2).split('?');
+    const parti = path.split('/').filter(Boolean).map(x => { try { return decodeURIComponent(x); } catch (e) { return x; } });
+    if (!parti[0]) return null;
+    let qa = null;
+    if (query) { try { qa = new URLSearchParams(query).get('qa'); } catch (e) {} }
+    return { view: parti[0], sub: parti[1] || null, qa: qa || null };
+  };
+  api.build = function (r) {
+    if (!r || !r.view) return '';
+    let h = '#/' + encodeURIComponent(r.view);
+    if (r.sub != null && r.sub !== '') h += '/' + encodeURIComponent(String(r.sub));
+    if (r.qa) h += '?qa=' + encodeURIComponent(r.qa);
+    return h;
+  };
+  api.url = function (r) { return location.pathname + location.search + api.build(r); };
+  // Rotta di avvio: letta una volta sola; ogni vista "consuma" la propria sotto-scheda
+  api.iniziale = api.parse(location.hash);
+  const consumati = {};
+  api.prendi = function (view) {
+    const r = api.iniziale;
+    if (!r || r.view !== view || consumati[view]) return null;
+    consumati[view] = true;
+    return r.sub;
+  };
+  api.corrente = function () { return api.parse(location.hash) || {}; };
+  // Aggiorna l'URL (rinviato di un tick: così avviene DOPO l'eventuale nuova voce di
+  // cronologia creata da FMBack.pushVista nello stesso ciclo di render)
+  function _scrivi(r) {
+    const nuovo = api.url(r);
+    if (location.pathname + location.search + location.hash === nuovo) return;
+    try { history.replaceState(history.state, '', nuovo); } catch (e) {}
+  }
+  // Cambio di vista: se l'URL è già su questa vista, conserva la sotto-scheda
+  api.setVista = function (view) {
+    setTimeout(function () {
+      const c = api.corrente();
+      _scrivi(c.view === view ? { view: view, sub: c.sub } : { view: view });
+    }, 0);
+  };
+  // Cambio di sotto-scheda dentro una vista
+  api.setSub = function (view, sub) { setTimeout(function () { _scrivi({ view: view, sub: sub }); }, 0); };
+  api.apriNuova = function (r) {
+    const w = window.open(api.url(r), '_blank');
+    if (w) { try { w.opener = null; } catch (e) {} }
+  };
+  return api;
+})();
+
+// Props per un elemento di navigazione: clic normale → onClick; rotellina o Ctrl/⌘+clic →
+// stessa scheda in una nuova finestra. Uso: React.createElement('button', {...fmLink(()=>setView('x'), {view:'x'}), style})
+function fmLink(onClick, rotta) {
+  return {
+    onClick: function (e) {
+      if (e && (e.ctrlKey || e.metaKey) && rotta && !IS_PWA_FMR()) { e.preventDefault(); e.stopPropagation(); window.FMRoute.apriNuova(rotta); return; }
+      if (onClick) onClick(e);
+    },
+    onAuxClick: function (e) {
+      if (!e || e.button !== 1 || !rotta) return;
+      e.preventDefault(); e.stopPropagation();
+      window.FMRoute.apriNuova(rotta);
+    },
+    // evita lo scorrimento automatico del browser alla pressione della rotellina
+    onMouseDown: function (e) { if (e && e.button === 1 && rotta) e.preventDefault(); },
+  };
+}
+// Nella PWA installata (finestra standalone) Ctrl+clic non ha senso: resta il clic normale
+function IS_PWA_FMR() {
+  try { return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true; } catch (e) { return false; }
+}
+
 // Hook: collega un componente "finestra" al gesto indietro.
 // onClose viene chiamato quando l'utente fa indietro; alla chiusura normale la voce si toglie da sola.
 function useFMBackClose(onClose, attivo) {

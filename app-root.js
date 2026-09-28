@@ -35,7 +35,11 @@ function App() {
       alert('Impossibile passare all\'altro allievo: ' + (e && e.message ? e.message : 'errore'));
     } finally { setCambioAllievoInCorso(false); }
   };
-  const [view,           setView]           = useState("dashboard");
+  // Vista iniziale: se l'URL contiene una rotta (#/contabilita/quote, aperta ad es. con la
+  // rotellina del mouse da un'altra finestra) si parte da lì.
+  const _FM_VISTE_VALIDE = ['dashboard','allievi','docenti','corsi','cestino','calendario','contabilita','repertorio','allegati','biblioteca','concerti','utenti','impostazioni','schedaScuola','modulistica','messaggi','notifiche','notifiche_settings','reminders','sala_prove','googleCalendar'];
+  const _rottaIniziale = (window.FMRoute && window.FMRoute.iniziale && _FM_VISTE_VALIDE.includes(window.FMRoute.iniziale.view)) ? window.FMRoute.iniziale : null;
+  const [view,           setView]           = useState(_rottaIniziale ? _rottaIniziale.view : "dashboard");
   const [panKey,         setPanKey]         = useState(0);
   const [schermata,      setSchermata]      = useState("login");
   const [showEsciMsg,    setShowEsciMsg]    = useState(false);
@@ -88,6 +92,8 @@ function App() {
     if (_vistaDaCronologia.current) { _vistaDaCronologia.current = false; return; }
     if (window.FMBack) window.FMBack.pushVista(view);
   }, [view]);
+  // L'indirizzo nella barra segue la vista (serve per aprire/condividere il link della scheda)
+  React.useEffect(() => { if (window.FMRoute) window.FMRoute.setVista(view); }, [view]);
 
   // Applica subito il colore accento salvato (anche al primo caricamento,
   // non solo quando l'admin lo cambia in Impostazioni). Forza un re-render
@@ -134,7 +140,7 @@ function App() {
   };
   // Esponi config globalmente per componenti che non ricevono la prop (es. WeekCalSala)
   React.useEffect(() => { window.__FM_CONFIG__ = sharedConfig; }, [sharedConfig]);
-  const [sharedQuickAction,    setSharedQuickAction]    = useState(null);
+  const [sharedQuickAction,    setSharedQuickAction]    = useState(_rottaIniziale && _rottaIniziale.qa ? _rottaIniziale.qa : null);
   const [sharedSpese,          setSharedSpese]          = useState(_d.spese      || INIT_SPESE);
   const [sharedAnniScolastici, setSharedAnniScolastici] = useState(_d.anniScolastici || INIT_ANNI_SCOLASTICI);
   const [sharedIscrizioniAnno, setSharedIscrizioniAnno] = useState(_d.iscrizioniAnno || []);
@@ -841,7 +847,7 @@ function App() {
               , schermata==="login" && (
                 React.createElement(FormLogin, {
                   onSuccess: u=>{
-                    setUser(u);setSharedRuolo(u.ruolo||"admin");setView(u.ruolo==="band"?"sala_prove":"dashboard");
+                    setUser(u);setSharedRuolo(u.ruolo||"admin");setView(u.ruolo==="band"?"sala_prove":(_rottaIniziale?_rottaIniziale.view:"dashboard"));
                     try{window.__currentUserName__=u.nome||""; window.__currentUser__=u;}catch(e){};
                     // Refresh silenzioso dei dati ad ogni login: evita il caso in cui, in
                     // assenza di refresh manuale, l'utente veda dati incompleti/obsoleti

@@ -39,6 +39,19 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     if (_myDocRecord) setSelected(_myDocRecord);
   }, [_myDocRecord, ruoloDocView]);
 
+  // Rotta dall'URL (#/docenti/<id>): scheda docente aperta in nuova finestra con la rotellina
+  const _rottaDVRef = React.useRef(ruoloDocView !== "docente" && window.FMRoute ? window.FMRoute.prendi("docenti") : null);
+  React.useEffect(() => {
+    const r = _rottaDVRef.current;
+    if (!r) return;
+    const found = (docenti||[]).find(d => String(d.id) === String(r));
+    if (found) { setSelected(found); setTab("profilo"); _rottaDVRef.current = null; }
+  }, [docenti]);
+  React.useEffect(() => {
+    if (!window.FMRoute || _rottaDVRef.current || ruoloDocView === "docente") return;
+    window.FMRoute.setSub("docenti", selected && selected.id != null ? selected.id : null);
+  }, [selected && selected.id]);
+
   // Per admin: sincronizza selected con l'array docenti aggiornato
   React.useEffect(() => {
     if (ruoloDocView === "docente") return;
@@ -454,7 +467,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           // Il docente non era ancora presente nell'anno scolastico sfogliato (creato dopo)
           const nonPresenteAnno = ruoloDocView==="admin" && d.annoCreazione != null && Number(annoSelDoc) < Number(d.annoCreazione);
           return (
-            React.createElement('div', { key: d.id, onClick: ()=>{setSelected(d);setTab("profilo");},
+            React.createElement('div', { key: d.id, ...fmLink(()=>{setSelected(d);setTab("profilo");}, {view:"docenti", sub:d.id}),
               style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,
                 padding:22,cursor:"pointer",transition:"all 0.18s",borderTop:`3px solid ${d.colore}30`,
                 opacity: nonPresenteAnno ? 0.55 : 1},
@@ -2233,7 +2246,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                 const active = current === id;
                 return React.createElement('button', {
                   key: id,
-                  onClick: () => setView(id),
+                  ...fmLink(() => setView(id), {view:id}),
                   style: {width:"100%",display:"flex",alignItems:"center",gap:10,
                     padding: indent ? "7px 10px 7px 26px" : (isBambino ? "12px 12px" : "9px 12px"),
                     borderRadius:0,border:"none",cursor:"pointer",
@@ -2437,7 +2450,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                 const active = current === item.id;
                 const userRole2 = (user&&user.ruolo)||'admin';
                 return React.createElement(React.Fragment, {key:item.id}
-                  , React.createElement('button', { onClick: ()=>{ setView(item.id); if(item.subItems&&onQuickAction) setTimeout(()=>onQuickAction('showCalendario'),80); },
+                  , React.createElement('button', { ...fmLink(()=>{ setView(item.id); if(item.subItems&&onQuickAction) setTimeout(()=>onQuickAction('showCalendario'),80); }, {view:item.id, qa:item.subItems?'showCalendario':null}),
                     style: {width:"100%",display:"flex",alignItems:"center",gap:10,
                       padding:"9px 12px",borderRadius:0,border:"none",cursor:"pointer",
                       background:active?"rgba(255,255,255,0.15)":"transparent",
@@ -2452,7 +2465,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
                     , item.subItems
                       .filter(s=>!s.adminOnly || userRole2==='admin')
                       .map(s => React.createElement('button', {key:s.qaKey,
-                        onClick:()=>{ setView(item.id); if(onQuickAction) setTimeout(()=>onQuickAction(s.qaKey),120); },
+                        ...fmLink(()=>{ setView(item.id); if(onQuickAction) setTimeout(()=>onQuickAction(s.qaKey),120); }, {view:item.id, qa:s.qaKey}),
                         style:{width:'100%',display:'flex',alignItems:'center',gap:8,
                           padding:'6px 10px',border:'none',borderRadius:0,cursor:'pointer',
                           background:'transparent',color:'rgba(255,255,255,0.6)',
@@ -2572,7 +2585,7 @@ const Sidebar = ({ current, setView, user, onLogout, onEsciSenzaLogout, settings
         , BOTTOM_ITEMS.map(item => {
           const active = current === item.id;
           return (
-            React.createElement('button', { key: item.id, onClick: ()=>setView(item.id),
+            React.createElement('button', { key: item.id, ...fmLink(()=>setView(item.id), {view:item.id}),
               style: {flex:1,display:"flex",flexDirection:"column",alignItems:"center",
                 justifyContent:"center",gap:3,border:"none",background:"transparent",
                 cursor:"pointer",padding:"6px 2px",
@@ -2629,7 +2642,7 @@ const MobileMoreMenu = ({ current, setView, extraItems, onLogout, onEsciSenzaLog
           , (extraItems||[]).map(item => {
             const active = current === item.id;
             return (
-              React.createElement('button', { key: item.id, onClick: ()=>{setView(item.id);setOpen(false);},
+              React.createElement('button', { key: item.id, ...fmLink(()=>{setView(item.id);setOpen(false);}, {view:item.id}),
                 style: {width:"100%",display:"flex",alignItems:"center",gap:14,
                   padding:"14px 20px",border:"none",background:active?C.goldBg:"transparent",
                   cursor:"pointer",color:active?C.gold:C.text,
