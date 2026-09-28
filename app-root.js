@@ -4502,11 +4502,6 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         , React.createElement(Input,{label:"Partita IVA", value:draft.pIva||"", onChange:e=>setD("pIva",e.target.value), placeholder:"P.IVA..."})
         , React.createElement(Input,{label:"Telefono", value:draft.telefono||"", onChange:e=>setD("telefono",e.target.value), placeholder:"+39..."})
         , React.createElement(Input,{label:"Email", value:draft.email||"", onChange:e=>setD("email",e.target.value), placeholder:"info@..."})
-        , React.createElement('div', null
-          , React.createElement(Input,{label:"WhatsApp segreteria (cellulare)", value:draft.whatsappSegreteria||"", onChange:e=>setD("whatsappSegreteria",e.target.value), placeholder:"+39 3xx xxx xxxx"})
-          , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:-8,marginBottom:12,lineHeight:1.4}},
-              "Riceve su WhatsApp i messaggi che docenti e allievi inviano dalla scheda Messaggi. Deve essere un cellulare diverso dal numero WhatsApp Business che invia i reminder.")
-        )
         , React.createElement(Input,{label:"Codice SDI", value:draft.sdi||"", onChange:e=>setD("sdi",e.target.value), placeholder:"SDI..."})
         , React.createElement(Input,{label:"IBAN", value:draft.iban||"", onChange:e=>setD("iban",e.target.value), placeholder:"IT..."})
         , React.createElement(Input,{label:"Intestatario conto", value:draft.intestatarioConto||"", onChange:e=>setD("intestatarioConto",e.target.value), placeholder:"..."})

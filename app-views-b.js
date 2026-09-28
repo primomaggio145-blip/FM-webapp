@@ -3307,10 +3307,9 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) =>
   const [oggetto,   setOggetto]   = useState('');
   const [testo,     setTesto]     = useState('');
   const [destSel,   setDestSel]   = useState([]);   // [{id, nome, ruolo, email, telefono}]
-  // Docente/allievo: WhatsApp sempre attivo e NON visibile — il messaggio alla segreteria
-  // parte anche su WhatsApp, al numero impostato in Impostazioni → Scuola (letto dalla
-  // Edge Function send-message). Admin: pulsante WhatsApp visibile, a scelta. Email rimossa.
-  const [canali,    setCanali]    = useState({app:true, push:true, email:false, whatsapp: ruolo !== 'admin'});
+  // Canali: App e Push per tutti. WhatsApp solo per l'admin (pulsante a scelta).
+  // Docenti e allievi: nessun WhatsApp. Email rimossa.
+  const [canali,    setCanali]    = useState({app:true, push:true, email:false, whatsapp:false});
   const [sending,   setSending]   = useState(false);
   const [search,    setSearch]    = useState('');
   const isAdmin = ruolo === 'admin';
@@ -3431,10 +3430,7 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) =>
       });
       // Riepilogo WhatsApp: l'esito reale arriva per destinatario dalla Edge Function
       let riepilogoWA = '';
-      if (canali.whatsapp && !isAdmin) {
-        // WhatsApp automatico e invisibile: nessun avviso all'utente, solo log per il debug
-        esiti.filter(r=>r && !r.wa).forEach(r=>console.warn('[FM] WhatsApp alla segreteria non inviato:', r.wa_errore||'nessun esito'));
-      } else if (canali.whatsapp) {
+      if (isAdmin && canali.whatsapp) {
         const okWA  = esiti.filter(r=>r && r.wa).length;
         const falliti = esiti.filter(r=>r && !r.wa);
         riepilogoWA = ` · WhatsApp ${okWA}/${destinatariReali.length}`;
