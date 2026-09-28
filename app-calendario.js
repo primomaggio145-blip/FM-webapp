@@ -28,6 +28,19 @@ const useSortable = (defaultKey = "", defaultDir = "asc") => {
   return [sortKey, sortDir, handleSort, sortFn];
 };
 
+// Chiave numerica per ordinare per n° ricevuta ("007/2026" → 2026·100000 + 7).
+// Anno prima del progressivo, così 001/2027 viene dopo 150/2026. Le righe senza
+// ricevuta ricevono una chiave altissima → finiscono in fondo nell'ordine crescente.
+const ricevutaSortKey = (numRic, annoFallback) => {
+  const raw = String(numRic || "").trim();
+  if (!raw) return Number.MAX_SAFE_INTEGER;
+  const m = /^(\d+)\s*\/\s*(\d{2,4})$/.exec(raw);
+  if (m) { let y = Number(m[2]); if (y < 100) y += 2000; return y * 100000 + Number(m[1]); }
+  const d = /^(\d+)$/.exec(raw);
+  if (d) return (Number(annoFallback) || 0) * 100000 + Number(d[1]);
+  return Number.MAX_SAFE_INTEGER - 1;
+};
+
 // SortTh: table header cell with sort indicator
 const SortTh = ({ label, sortKey: col, currentKey, dir, onSort, style, className }) => {
   const active = currentKey === col;
@@ -2259,7 +2272,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
       , ricevutaEnt && (
         React.createElement(RicevutaModal, {
           entrata: ricevutaEnt,
-          righeExtra: ricevutaEnt.numRicevuta ? entrateStudent.filter(e=>e.numRicevuta===ricevutaEnt.numRicevuta) : [],
+          righeExtra: ricevutaEnt.numRicevuta ? allEntrate.filter(e=>e.numRicevuta===ricevutaEnt.numRicevuta && !e.noRicevuta) : [],
           student: student,
           config: config,
           onClose: ()=>setRicevutaEnt(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3716}}
@@ -12974,6 +12987,9 @@ const ReportView = ({ spese, entrate }) => {
   const [anno, setAnno] = useState(ANNO_ATT);
   const [metodoSel, setMetodoSel] = useState("tutti");
   const [meseSel, setMeseSel] = useState(0); // 0 = tutto l'anno, 1-12 = mese specifico
+  // Ordinamento prima nota (default: cronologico). Il saldo progressivo resta sempre calcolato
+  // in ordine cronologico: cambiando ordinamento ogni riga mantiene il proprio progressivo.
+  const [sortKeyPN, sortDirPN, handleSortPN, sortFnPN] = useSortable("data", "asc");
 
   const NON_SPEC = "Non specificato";
   const METODI_REPORT = [...METODI_PAG, NON_SPEC];
@@ -13025,12 +13041,24 @@ const ReportView = ({ spese, entrate }) => {
   const primaNota = meseSel===0 ? [] : (() => {
     const righe = [
       ...entrateView.map(e=>({ id:`e-${e.id}`, data: e.dataPagamento||e.data||'', tipo:'entrata',
-        desc: e.desc||'', categoria: e.categoria||'', metodo: e.metodo||'', chi: e.studentName||'', importo: Number(e.importo)||0 })),
+        desc: e.desc||'', categoria: e.categoria||'', metodo: e.metodo||'', chi: e.studentName||'', importo: Number(e.importo)||0,
+        ricevuta: e.noRicevuta ? '' : (e.numRicevuta||''), anno: e.anno })),
       ...speseView.map(s=>({ id:`s-${s.id}`, data: s.data||s.dataPagamento||'', tipo:'uscita',
-        desc: s.desc||'', categoria: s.categoria||'', metodo: s.metodo||'', chi: '', importo: -(Number(s.importo)||0) })),
+        desc: s.desc||'', categoria: s.categoria||'', metodo: s.metodo||'', chi: '', importo: -(Number(s.importo)||0),
+        ricevuta: '', anno: s.anno })),
     ].sort((a,b)=> (a.data||'').localeCompare(b.data||'') || (a.tipo==='entrata'?-1:1));
     let prog = 0;
-    return righe.map(r => { prog += r.importo; return { ...r, progressivo: Math.round(prog*100)/100 }; });
+    const conProg = righe.map(r => { prog += r.importo; return { ...r, progressivo: Math.round(prog*100)/100 }; });
+    // Ordine cronologico già applicato sopra: se la colonna scelta è "data" crescente lo teniamo
+    // (conserva anche l'ordine entrate-prima-delle-uscite nello stesso giorno).
+    if (sortKeyPN === "data" && sortDirPN === "asc") return conProg;
+    const ord = sortFnPN(conProg, (r,k) => {
+      if (k === "ricevuta") return ricevutaSortKey(r.ricevuta, r.anno);
+      if (k === "importo" || k === "progressivo") return Number(r[k]) || 0;
+      return r[k] || "";
+    });
+    // Ordinando per ricevuta, le righe senza ricevuta (uscite comprese) restano sempre in fondo
+    return sortKeyPN === "ricevuta" ? [...ord.filter(r=>r.ricevuta), ...ord.filter(r=>!r.ricevuta)] : ord;
   })();
 
   return (
@@ -13183,19 +13211,27 @@ const ReportView = ({ spese, entrate }) => {
           React.createElement('div', { style: {padding:"30px 0",textAlign:"center",color:C.textDim,fontSize:13} }, "Nessun movimento registrato in questo mese")
         ) : (
           React.createElement('div', { style: {overflowX:"auto"} }
-            , React.createElement('table', { style: {width:"100%",minWidth:640,borderCollapse:"collapse",fontSize:12.5} }
+            , React.createElement('table', { style: {width:"100%",minWidth:720,borderCollapse:"collapse",fontSize:12.5} }
               , React.createElement('thead', null
                 , React.createElement('tr', { style: {borderBottom:`1px solid ${C.border}`} }
-                  , ["Data","Tipo","Allievo","Descrizione","Categoria","Metodo","Importo","Progressivo"].map(h=>(
-                    React.createElement('th', { key: h, style: {textAlign:h==="Importo"||h==="Progressivo"?"right":"left",
-                      padding:"9px 14px",fontSize:10,letterSpacing:"0.06em",textTransform:"uppercase",color:C.textMuted,fontWeight:600} }, h)
-                  ))
+                  , [["Data","data"],["Ricevuta","ricevuta"],["Tipo","tipo"],["Allievo","chi"],["Descrizione","desc"],["Categoria","categoria"],["Metodo","metodo"],["Importo","importo"],["Progressivo",null]].map(([h,k])=>{
+                    const act = k && sortKeyPN===k;
+                    return React.createElement('th', { key: h, onClick: k ? ()=>handleSortPN(k) : undefined,
+                      title: k==="ricevuta" ? "Ordina per n° progressivo ricevuta" : undefined,
+                      style: {textAlign:h==="Importo"||h==="Progressivo"?"right":"left",
+                      padding:"9px 14px",fontSize:10,letterSpacing:"0.06em",textTransform:"uppercase",color:act?C.gold:C.textMuted,fontWeight:600,
+                      cursor:k?"pointer":"default",userSelect:"none",whiteSpace:"nowrap"} }
+                      , h
+                      , k && React.createElement('span',{style:{opacity:act?1:0.3,fontSize:9,marginLeft:3}}, act&&sortDirPN==="asc"?"▲":"▼")
+                    );
+                  })
                 )
               )
               , React.createElement('tbody', null
                 , primaNota.map(r=>(
                   React.createElement('tr', { key: r.id, style: {borderBottom:`1px solid ${C.border}`} }
                     , React.createElement('td', { style: {padding:"9px 14px",whiteSpace:"nowrap",color:C.textMuted} }, r.data ? new Date(r.data+"T00:00:00").toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit"}) : "—")
+                    , React.createElement('td', { style: {padding:"9px 14px",whiteSpace:"nowrap",fontFamily:"'Oswald',sans-serif",letterSpacing:"0.04em",color:r.ricevuta?C.gold:C.textDim} }, r.ricevuta||"—")
                     , React.createElement('td', { style: {padding:"9px 14px"} }
                       , React.createElement('span', { style: {fontSize:10,padding:"2px 8px",borderRadius:4,
                           background:r.tipo==="entrata"?C.greenBg:C.redBg,
@@ -13418,6 +13454,14 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
     if(!f.metodo)                   e.metodo    = "Metodo di pagamento obbligatorio";
     if(!needStudent && !f.desc.trim()) e.desc   = "Descrizione obbligatoria";
     extraVoci.forEach(v => { if(!v.importo||isNaN(v.importo)||Number(v.importo)<=0) e[`voce_${v.id}`] = "Importo non valido"; });
+    if (!convOn) {
+      // Fuori convenzione: se la voce aggiuntiva richiede un allievo e non ne è indicato uno
+      // specifico, eredita quello della voce principale → errore solo se manca anche quello.
+      extraVoci.forEach(v => {
+        const cv = CAT_ENTRATE_USE.find(c=>c.id===v.categoria)||{};
+        if (cv.student && !v.studentId && !(needStudent && f.studentId)) e[`voceStud_${v.id}`] = "Seleziona l'allievo";
+      });
+    }
     if (convOn) {
       const catNeedsStud = (cat) => !!((CAT_ENTRATE_USE.find(c=>c.id===cat)||{}).student);
       extraVoci.forEach(v => { if (catNeedsStud(v.categoria) && !v.studentId) e[`voceStud_${v.id}`] = "Seleziona l'allievo"; });
@@ -13512,7 +13556,11 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
           anno:      Number(v.anno||f.anno),
           desc:      descPerCategoria(v.categoria, Number(v.mese||f.mese), Number(v.anno||f.anno)),
         };
-        if (!convOn) return base;
+        if (!convOn) {
+          // Allievo specifico per la voce (se scelto); altrimenti eredita quello della voce principale
+          const stX = v.studentId ? students.find(x => x.id === Number(v.studentId)) : null;
+          return stX ? { ...base, studentId: stX.id, studentName: stX.name } : base;
+        }
         const st = v.studentId ? students.find(x => x.id === Number(v.studentId)) : null;
         return { ...base,
           studentId:   st ? st.id : null,
@@ -13735,8 +13783,20 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}
             , "Altre voci sulla stessa ricevuta"
           )
-          , extraVoci.map(v => (
-            React.createElement('div', {key:v.id, style:{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}}
+          , extraVoci.map(v => {
+            const catVx = CAT_ENTRATE_USE.find(c=>c.id===v.categoria)||{};
+            const fieldStx = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 10px",fontFamily:"'Open Sans',sans-serif",appearance:"none"};
+            const primName = selStudent ? selStudent.name : "";
+            return React.createElement('div', {key:v.id, style:{display:"flex",flexWrap:"wrap",gap:8,alignItems:"flex-start",marginBottom:8}}
+              , catVx.student && React.createElement('select', {value:v.studentId||"", onChange:e=>{
+                    const sid=e.target.value; setExtraVoce(v.id,'studentId',sid);
+                    const st=students.find(x=>x.id===Number(sid));
+                    if(st && v.categoria==="quota" && st.monthlyFee) setExtraVoce(v.id,'importo',String(st.monthlyFee));
+                  }, title:"Allievo a cui appartiene questa voce",
+                  style:{...fieldStx,flex:"1 1 100%",border:`1px solid ${err[`voceStud_${v.id}`]?C.red:C.border}`}}
+                , React.createElement('option',{value:""}, primName ? `— stesso allievo (${primName}) —` : "— allievo —")
+                , students.filter(s=>s.status==="attivo" || String(s.id)===String(v.studentId)).map(s=>React.createElement('option',{key:s.id,value:s.id}, s.name))
+              )
               , React.createElement('select', {value:v.categoria, onChange:e=>{
                     const cat=e.target.value; setExtraVoce(v.id,'categoria',cat);
                     if(cat==="iscrizione" && !v.importo) setExtraVoce(v.id,'importo',String(importoIscrizioneCfg));
@@ -13750,8 +13810,9 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
                   style:{padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:"none",color:C.textMuted,cursor:"pointer",fontSize:13}}
                 , "✕"
               )
-            )
-          ))
+              , err[`voceStud_${v.id}`] && React.createElement('div', {style:{flexBasis:"100%",fontSize:11,color:C.red}}, err[`voceStud_${v.id}`])
+            );
+          })
           , React.createElement('button', {onClick:addExtraVoce, type:"button",
               style:{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:20,border:`1px dashed ${C.teal}`,
                 background:"none",color:C.teal,cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
@@ -14241,8 +14302,15 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                   if(k==="mese")        return Number(e.mese)||0;
                   if(k==="metodo")      return e.metodo||"";
                   if(k==="categoria")   return e.categoria||"";
+                  if(k==="ricevuta")    return ricevutaSortKey(e.noRicevuta ? "" : e.numRicevuta, e.anno);
                   return e[k]||"";
                 });
+              // Ordinando per ricevuta, le entrate senza ricevuta restano sempre in fondo
+              if (sortKeySp==="ricevuta") {
+                const _senzaRic = e => e.noRicevuta || !e.numRicevuta;
+                const _con = qFiltrate.filter(e=>!_senzaRic(e)), _senza = qFiltrate.filter(_senzaRic);
+                qFiltrate.length = 0; qFiltrate.push(..._con, ..._senza);
+              }
               const totQFiltrate = qFiltrate.reduce((t,e)=>t+e.importo,0);
 
               // Riepilogo per allievo (usato in tabella studenti)
@@ -14284,8 +14352,9 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                   )
 
                   , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflowX:"auto",overflowY:"hidden",WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7166}}
-                    , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 100px auto",minWidth:480,
+                    , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"90px 2fr 1fr 1fr 1fr 100px auto",minWidth:580,
                       padding:"9px 18px",borderBottom:`1px solid ${C.border}`,background:C.bg}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7167}}
+                      , React.createElement('div',{onClick:()=>handleSortSp("ricevuta"), title:"Ordina per n° progressivo ricevuta", style:{fontSize:10,color:sortKeySp==="ricevuta"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Ricevuta", React.createElement('span',{style:{opacity:sortKeySp==="ricevuta"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="ricevuta"?"▲":"▼"))
                       , React.createElement('div',{onClick:()=>handleSortSp("desc"),     style:{fontSize:10,color:sortKeySp==="desc"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Descrizione", React.createElement('span',{style:{opacity:sortKeySp==="desc"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="desc"?"▲":"▼"))
                       , React.createElement('div',{onClick:()=>handleSortSp("categoria"), style:{fontSize:10,color:sortKeySp==="categoria"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Categoria", React.createElement('span',{style:{opacity:sortKeySp==="categoria"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="categoria"?"▲":"▼"))
                       , React.createElement('div',{onClick:()=>handleSortSp("data"),      style:{fontSize:10,color:sortKeySp==="data"?C.gold:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",cursor:"pointer",userSelect:"none",display:"flex",alignItems:"center",gap:3}}, "Data", React.createElement('span',{style:{opacity:sortKeySp==="data"?1:0.3,fontSize:9}},sortDirSp==="asc"&&sortKeySp==="data"?"▲":"▼"))
@@ -14296,14 +14365,16 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                     , qFiltrate.length===0?(
                       React.createElement('div', { style: {padding:"40px 0",textAlign:"center",color:C.textDim,fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7174}}, "Nessun pagamento trovato"  )
                     ):qFiltrate.map((e,i)=>(
-                      React.createElement('div', { key: e.id, style: {display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr 100px auto",minWidth:520,
+                      React.createElement('div', { key: e.id, style: {display:"grid",gridTemplateColumns:"90px 2fr 1fr 1fr 1fr 100px auto",minWidth:620,
                         padding:"12px 18px",borderBottom:i<qFiltrate.length-1?`1px solid ${C.border}20`:"none",
                         alignItems:"center",transition:"background 0.1s"},
                         onMouseEnter: el=>el.currentTarget.style.background=C.surfaceHover,
                         onMouseLeave: el=>el.currentTarget.style.background="transparent", __self: this, __source: {fileName: _jsxFileName, lineNumber: 7176}}
+                        , React.createElement('div', { style: {fontSize:13,fontFamily:"'Oswald',sans-serif",letterSpacing:"0.05em",color:(e.numRicevuta&&!e.noRicevuta)?C.gold:C.textDim} }
+                          , (e.numRicevuta&&!e.noRicevuta) ? e.numRicevuta : "—"
+                        )
                         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 7181}}
                           , React.createElement('div', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7182}}, e.desc||e.studentName||"—")
-                          , e.numRicevuta&&React.createElement('div', { style: {fontSize:11,color:C.gold,marginTop:1,fontFamily:"'Oswald',sans-serif",letterSpacing:"0.05em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7183}}, "Ric. n° "  , e.numRicevuta)
                           , e.studentName&&React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7184}}, e.studentName)
                           , e.note&&React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7185}}, e.note)
                         )

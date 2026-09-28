@@ -1327,12 +1327,15 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
   const convIntestatario = isConv ? ((_convSrc.ricevutaIntestatario||"").trim() || _convSrc.convenzioneNome || "—") : "";
   const convCf = isConv ? (_convSrc.ricevutaCf||"") : "";
   const convIndirizzo = isConv ? (_convSrc.ricevutaIndirizzo||"") : "";
-  const allieviConv = isConv ? [...new Set(voci.map(v=>v.studentName).filter(Boolean))] : [];
-  const multiAllievo = allieviConv.length > 1;
+  // Voci di allievi diversi sulla stessa ricevuta (convenzione o "aggiungi un'altra voce"):
+  // nel dettaglio pagamento ogni voce riporta il nome dell'allievo.
+  const allieviVoci = [...new Set(voci.map(v=>v.studentName).filter(Boolean))];
+  const multiAllievo = allieviVoci.length > 1;
+  const allieviConv = isConv ? allieviVoci : [];
   const intestatario = isConv ? convIntestatario : ((student && student.nomeRicevuta && student.nomeRicevuta.trim()) || (student && student.name) || entrata.studentName || "—");
   const cfIntestatario = isConv ? convCf : (student && student.codiceFiscale) || "";
   const labelIntestatario = isConv ? "INTESTATARIO" : "SOCIO";
-  const descVoce = (v) => (v.desc||"—") + (isConv && multiAllievo && v.studentName ? ` — ${v.studentName}` : "");
+  const descVoce = (v) => (v.desc||"—") + (multiAllievo && v.studentName ? ` — ${v.studentName}` : "");
   const MESI_N = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const dataStampa = new Date().toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"});
   const dataPag    = entrata.data ? new Date(entrata.data+"T00:00:00").toLocaleDateString("it-IT") : dataStampa;
