@@ -131,6 +131,9 @@
       // Campi collettive
       courseId:   r.corso_id   || null,
       courseName: r.corso_nome || null,
+      // Gruppo collettivo da cui sono stati presi gli allievi (per riproporlo in modifica)
+      gruppoId:   r.gruppo_id   || null,
+      gruppoNome: r.gruppo_nome || null,
       students: (() => {
         if (!r.students) return [];
         if (Array.isArray(r.students)) return r.students;
@@ -357,6 +360,8 @@
         // Campi collettive — essenziali per non perdere gli allievi
         corso_id:   l.courseId   || null,
         corso_nome: l.courseName || null,
+        gruppo_id:   l.gruppoId   ? String(l.gruppoId) : null,
+        gruppo_nome: l.gruppoNome || null,
         students: l.students && l.students.length > 0
           ? JSON.stringify(l.students)
           : null,

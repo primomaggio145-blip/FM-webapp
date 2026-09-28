@@ -4524,6 +4524,14 @@ const HOURS       = Array.from({length:15},(_,i)=>`${(i+8).toString().padStart(2
 const STUDENTS_LIST = ["Sofia Marchetti","Luca Ferrara","Emma Conti","Marco Ricci","Giulia Romano","Alessandro Gallo"];
 // ROOMS è ora dinamico: usa le sale configurate nelle Impostazioni, con fallback
 const ROOMS       = () => (window.__FM_CONFIG__&&window.__FM_CONFIG__.sale&&window.__FM_CONFIG__.sale.length>0) ? window.__FM_CONFIG__.sale : ["Sala A","Sala B","Sala C","Sala Grande","Studio 1"];
+// Opzioni per il menu "Sala": sale configurate + il valore attuale della lezione se non è
+// (più) in elenco, così una lezione con una sala vecchia/scritta a mano non la perde in modifica.
+const opzioniSala = (corrente) => {
+  const lista = [...ROOMS()];
+  const c = (corrente || "").trim();
+  if (c && !lista.includes(c)) lista.push(c);
+  return lista;
+};
 const RECURRENCE_OPTS = ["Nessuna","Ogni settimana","2 volte a settimana","Ogni 2 settimane","Ogni mese"];
 const DIFFICULTY_OPTS = ["Principiante","Elementare","Intermedio","Avanzato","Professionale"];
 const TONALITY_OPTS   = [
@@ -5038,6 +5046,8 @@ const safeInsertRecurringLesson = async (lesson, setLessons) => {
     durata:           lesson.durata     || null,
     corso_id:         lesson.courseId   || null,
     corso_nome:       lesson.courseName || null,
+    gruppo_id:        lesson.gruppoId ? String(lesson.gruppoId) : null,
+    gruppo_nome:      lesson.gruppoNome || null,
     students:         lesson.students && lesson.students.length > 0 ? JSON.stringify(lesson.students) : null,
     // NUOVO ISCRITTO: mancavano del tutto — una lezione "nuovo iscritto" con ricorrenza
     // impostata perdeva questi dati ad ogni occorrenza auto-generata (es. dopo aver
@@ -5056,10 +5066,13 @@ const safeInsertRecurringLesson = async (lesson, setLessons) => {
       // SQL): un solo retry senza quel campo, mai ripetuto oltre — questa è la creazione della
       // PROSSIMA lezione ricorrente, un fallimento silenzioso qui farebbe sparire l'appuntamento
       // al primo refresh pur restando visibile in questa sessione.
-      const m = /Could not find the '([^']+)' column/.exec(error.message||'');
-      if (m && Object.prototype.hasOwnProperty.call(row, m[1])) {
+      // (più colonne mancanti → un retry per ciascuna, massimo 4)
+      let rowSenzaColonna = {...row};
+      for (let tent = 0; tent < 4 && error; tent++) {
+        const m = /Could not find the '([^']+)' column/.exec(error.message||'');
+        if (!m || !Object.prototype.hasOwnProperty.call(rowSenzaColonna, m[1])) break;
         console.warn(`[FM] Colonna '${m[1]}' non presente su lezioni — lezione ricorrente creata senza questo campo. Aggiungila al DB con ALTER TABLE.`);
-        const rowSenzaColonna = {...row}; delete rowSenzaColonna[m[1]];
+        delete rowSenzaColonna[m[1]];
         ({ error } = await sb.from('lezioni').insert(rowSenzaColonna));
       }
     }
@@ -5773,6 +5786,8 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
     if(!f.nuovoIscritto && !f.student) e.student = "Allievo obbligatorio";
     if(!f.instrument) e.instrument = "Strumento obbligatorio";
     if(!f.teacher)    e.teacher    = "Insegnante obbligatorio";
+    // Sala obbligatoria (il docente non può modificarla: per lui il campo è in sola lettura)
+    if(roleLF !== "docente" && !(f.room||"").trim()) e.room = "Seleziona la sala";
     if(!f.recurrence) e.recurrence = "Seleziona la ricorrenza";
     return e;
   };
@@ -5856,7 +5871,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
           ? React.createElement(Sel, { label: "Insegnante *", value: f.teacher, onChange: e => set("teacher", e.target.value), options: _teacherOptsLes.length>0 ? _teacherOptsLes : TEACHERS, error: err.teacher })
           : React.createElement(Input, { label: "Insegnante", value: f.teacher || "—", readOnly: true })
         , roleLF !== "docente"
-          ? React.createElement(Sel, { label: "Sala", value: f.room, onChange: e => set("room", e.target.value), options: dynamicRooms })
+          ? React.createElement(Sel, { label: "Sala *", value: f.room, onChange: e => { set("room", e.target.value); setErr(p=>({...p,room:undefined})); }, options: opzioniSala((initial&&initial.room)||""), error: err.room })
           : React.createElement(Input, { label: "Sala", value: f.room || "—", readOnly: true })
 
         , React.createElement(SDiv, { label: "Contenuto", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4235}})
@@ -8587,7 +8602,21 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
   const [selStudents, setSelStudents]= useState(
     initial ? (initial.students || []).map(s => String(s.id)).filter(Boolean) : []
   );
-  const [selGruppoId, setSelGruppoId] = useState(initial?.gruppoId || '');
+  // Gruppo in modifica: quello salvato sulla lezione; per le lezioni salvate prima che il gruppo
+  // venisse memorizzato, si riconosce il gruppo del corso i cui allievi sono tutti presenti nella
+  // lezione (se più gruppi combaciano si sceglie quello più grande = più allievi in comune).
+  const _gruppoIniziale = (() => {
+    if (!initial) return '';
+    if (initial.gruppoId && gruppiAll.some(g => String(g.id) === String(initial.gruppoId))) return String(initial.gruppoId);
+    const inLez = new Set((initial.students || []).map(s => String(s && s.id)));
+    if (inLez.size === 0) return '';
+    const candidati = gruppiAll
+      .filter(g => String(g.corsoId) === String(initial.courseId))
+      .filter(g => (g.allievi||[]).length > 0 && (g.allievi||[]).every(id => inLez.has(String(id))))
+      .sort((a, b) => (b.allievi||[]).length - (a.allievi||[]).length);
+    return candidati.length ? String(candidati[0].id) : '';
+  })();
+  const [selGruppoId, setSelGruppoId] = useState(_gruppoIniziale);
   const [repertorioIds, setRepertorioIds] = useState(initial?.repertorioIds || []);
   const [showBranoForm, setShowBranoForm] = useState(false);
   const [newBranoForm, setNewBranoForm]   = useState({ title:'', composer:'', period:'', tonality:'', type:'collettivo', difficulty:'', notes:'' });
@@ -8630,11 +8659,11 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     : [];
 
   // Gruppi collettivi disponibili per il corso selezionato
-  const gruppiDelCorso = selCourse ? gruppiAll.filter(g => g.corsoId === selCourse.id) : [];
-  const selGruppo = gruppiDelCorso.find(g => g.id === selGruppoId) || null;
+  const gruppiDelCorso = selCourse ? gruppiAll.filter(g => String(g.corsoId) === String(selCourse.id)) : [];
+  const selGruppo = gruppiDelCorso.find(g => String(g.id) === String(selGruppoId)) || null;
   // Allievi provenienti dal gruppo attualmente selezionato (per distinguerli da quelli aggiunti manualmente)
   const [groupMemberIds, setGroupMemberIds] = useState(
-    initial?.gruppoId ? (gruppiAll.find(g=>g.id===initial.gruppoId)?.allievi || []).map(String) : []
+    _gruppoIniziale ? (gruppiAll.find(g=>String(g.id)===_gruppoIniziale)?.allievi || []).map(String) : []
   );
 
   const toggleStudent = id => {
@@ -8646,7 +8675,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
 
   // Selezione di un gruppo: precompila gli allievi del gruppo mantenendo quelli aggiunti manualmente
   const handleGruppoSelect = (gruppoId) => {
-    const g = gruppiDelCorso.find(x => x.id === gruppoId);
+    const g = gruppiDelCorso.find(x => String(x.id) === String(gruppoId));
     const newGroupIds = (g ? (g.allievi||[]) : []).map(String);
     setSelStudents(prev => {
       const external = prev.map(String).filter(id => !groupMemberIds.map(String).includes(id)); // allievi aggiunti manualmente, non dal gruppo precedente
@@ -8654,6 +8683,8 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     });
     setGroupMemberIds(newGroupIds);
     setSelGruppoId(gruppoId);
+    // Il gruppo ha una sala abituale: la propone se la sala non è ancora stata scelta
+    if (g && g.room && !(form.room||"").trim()) { set("room", g.room); setErr(p=>({...p,room:undefined})); }
   };
 
   // Quando cambia il corso resetta il docente se non è nel nuovo corso
@@ -8672,6 +8703,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     if (!form.date)                    e.date      = "Data obbligatoria";
     if (!form.hour)                    e.hour      = "Orario obbligatorio";
     if (!form.teacherId)               e.teacherId = "Seleziona il docente";
+    if (!(form.room||"").trim())       e.room      = "Seleziona la sala";
     if (selStudents.length === 0)      e.students  = "Seleziona almeno un allievo";
     return e;
   };
@@ -8848,8 +8880,8 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
           , React.createElement(Sel, { label: "Durata", value: String(form.durata||60),
             onChange: e=>set("durata",parseInt(e.target.value)),
             options: [{value:"45",label:"45 min"},{value:"60",label:"60 min"},{value:"90",label:"1h 30min"},{value:"120",label:"2 ore"}]})
-          , React.createElement(Input, { label: "Sala", value: form.room,
-            onChange: e=>set("room",e.target.value), placeholder: "Es. Sala A"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 5547}})
+          , React.createElement(Sel, { label: "Sala *", value: form.room,
+            onChange: e=>{ set("room",e.target.value); setErr(p=>({...p,room:undefined})); }, options: opzioniSala(initial&&initial.room), error: err.room })
         )
         , React.createElement(Input, { label: "Argomento", value: form.topic,
           onChange: e=>set("topic",e.target.value),
@@ -9181,6 +9213,7 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
     if(!f.instrument) e.instrument = "Seleziona un corso/strumento";
     if(!f.date)       e.date       = "Data obbligatoria";
     if(!f.hour)       e.hour       = "Orario obbligatorio";
+    if(!(f.room||'').trim())  e.room     = "Seleziona la sala";
     if(!(f.phone||'').trim()) e.phone    = "Recapito obbligatorio";
     return e;
   };
@@ -9299,11 +9332,14 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
 
         /* Sala */
         , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 5790}}
-          , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5791}}, "Sala")
-          , React.createElement('input', { value: f.room, onChange: e=>set("room",e.target.value),
-            placeholder: "Es. Sala A"  ,
-            style: {width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,
-              color:C.text,fontSize:13,padding:"10px 14px",fontFamily:"'Open Sans',sans-serif",boxSizing:"border-box"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5792}})
+          , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5791}}, "Sala *")
+          , React.createElement('select', { value: f.room||"", onChange: e=>{ set("room",e.target.value); setErr(p=>({...p,room:undefined})); },
+            style: {width:"100%",background:C.surface,border:`1px solid ${err.room?C.red:C.border}`,borderRadius:8,
+              color:f.room?C.text:C.textMuted,fontSize:13,padding:"10px 14px",fontFamily:"'Open Sans',sans-serif",boxSizing:"border-box",appearance:"none",cursor:"pointer"}}
+            , React.createElement('option', {value:""}, "— seleziona la sala —")
+            , opzioniSala(initial&&initial.room).map(r => React.createElement('option', {key:r, value:r}, r))
+          )
+          , err.room && React.createElement('div', {style:{fontSize:11,color:C.red,marginTop:4}}, err.room)
         )
 
         /* Note */
@@ -11721,6 +11757,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                               ? JSON.stringify(dataNormFull.repertorioVersioni) : null,
           corso_id:         mergedCourseId,
           corso_nome:       mergedCourseName,
+          gruppo_id:        dataNormFull.gruppoId ? String(dataNormFull.gruppoId) : null,
+          gruppo_nome:      dataNormFull.gruppoNome || null,
           students:         mergedStudents.length > 0 ? JSON.stringify(mergedStudents) : null,
           contact_name:     dataNormFull.contactName || null,
           phone:            dataNormFull.phone       || null,
@@ -11728,7 +11766,19 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           gap_giorni:       dataNormFull.gapGiorni != null ? dataNormFull.gapGiorni : null,
         };
         console.log(`[DEBUG contatto] handleEdit UPDATE lezioni [${data.id}] → contact_name="${row.contact_name}" phone="${row.phone}"`);
-        sb.from('lezioni').update(row).eq('id', data.id)
+        // Se una colonna non esiste ancora (migrazione SQL non eseguita, es. gruppo_id) la si
+        // toglie e si riprova, invece di perdere l'intero salvataggio della lezione.
+        const _updTollerante = async (r, tentativi) => {
+          const res = await sb.from('lezioni').update(r).eq('id', data.id);
+          const m = res.error && /Could not find the '([^']+)' column/.exec(res.error.message||'');
+          if (m && tentativi > 0 && Object.prototype.hasOwnProperty.call(r, m[1])) {
+            console.warn(`[FM] colonna ${m[1]} assente su lezioni: eseguire la migrazione SQL`);
+            const { [m[1]]: _omessa, ...resto } = r;
+            return _updTollerante(resto, tentativi - 1);
+          }
+          return res;
+        };
+        _updTollerante(row, 3)
           .then(({ error }) => {
             if (error) console.warn('[FM] handleEdit update error:', error.message);
             else {
