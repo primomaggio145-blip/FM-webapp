@@ -7301,7 +7301,11 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
 };
 
 // ─── VISTA GIORNALIERA ────────────────────────────────────────────────────────
-const DayView = ({ date, lessons, onSelect, isMobile, config, courses }) => {
+const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula }) => {
+  // Admin: lezioni divise per aula (colonne). Scelta ricordata su questo dispositivo.
+  const [modoAula, setModoAula] = React.useState(() => { try { return localStorage.getItem('fm_day_per_aula') !== '0'; } catch(e) { return true; } });
+  const cambiaModoAula = (v) => { setModoAula(v); try { localStorage.setItem('fm_day_per_aula', v ? '1' : '0'); } catch(e) {} };
+  const dividiPerAula = !!perAula && modoAula;
   const dayLessons = lessons
     .filter(l => l.date === yyyymmdd(date))
     .sort((a, b) => a.hour.localeCompare(b.hour));
@@ -7332,10 +7336,8 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses }) => {
     )
   );
 
-  return (
-    React.createElement('div', { style: {display:"flex", flexDirection:"column", gap: isMobile ? 6 : 10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4782}}
-      , HolidayBanner
-      , dayLessons.map(l => {
+  // Card di una lezione. isMobile è un parametro: nelle colonne per aula si usa il layout compatto.
+  const cardDi = (l, isMobile) => {
         const hex = lessonHex(l, courses);
         const dotHex = l.inRecupero && !l.attendance ? '#f59e0b' : attHex(l.attendance);
 
@@ -7535,13 +7537,65 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses }) => {
             )
           )
         );
-      })
+  };
+
+  // Interruttore "Per aula / Elenco" (solo admin)
+  const toggleAula = perAula && React.createElement('div', {style:{display:"flex", justifyContent:"flex-end", marginBottom: isMobile?4:0}}
+    , React.createElement('div', {style:{display:"inline-flex", border:`1px solid ${C.border}`, borderRadius:8, overflow:"hidden"}}
+      , [[true,"Per aula"],[false,"Elenco"]].map(([v,lbl]) => React.createElement('button', {key:lbl, type:"button", onClick:()=>cambiaModoAula(v),
+          style:{padding:"4px 12px", border:"none", cursor:"pointer", fontSize:12, fontFamily:"'Open Sans',sans-serif",
+            background: modoAula===v ? `${C.gold}20` : C.bg, color: modoAula===v ? C.gold : C.textMuted, fontWeight: modoAula===v?600:400}}, lbl))
+    )
+  );
+
+  if (!dividiPerAula) return (
+    React.createElement('div', { style: {display:"flex", flexDirection:"column", gap: isMobile ? 6 : 10}}
+      , toggleAula
+      , HolidayBanner
+      , dayLessons.map(l => cardDi(l, isMobile))
+    )
+  );
+
+  // ── Vista per aula: una colonna per ogni aula con lezioni nel giorno ──
+  const SENZA_AULA = "Senza aula";
+  const aulaDi = (l) => (l.room && String(l.room).trim()) || (isSalaProve(l) ? "Sala prove" : SENZA_AULA);
+  const perAulaMap = new Map();
+  dayLessons.forEach(l => { const a = aulaDi(l); if (!perAulaMap.has(a)) perAulaMap.set(a, []); perAulaMap.get(a).push(l); });
+  const ordineSale = ROOMS();
+  const aule = [...perAulaMap.keys()].sort((a, b) => {
+    if (a === SENZA_AULA) return 1; if (b === SENZA_AULA) return -1;
+    const ia = ordineSale.indexOf(a), ib = ordineSale.indexOf(b);
+    if (ia >= 0 && ib >= 0) return ia - ib;
+    if (ia >= 0) return -1; if (ib >= 0) return 1;
+    return a.localeCompare(b, 'it', {numeric:true});
+  });
+  const COL_W = isMobile ? 230 : 260;
+  return (
+    React.createElement('div', { style: {display:"flex", flexDirection:"column", gap: isMobile ? 6 : 10}}
+      , toggleAula
+      , HolidayBanner
+      , React.createElement('div', { style: {display:"flex", gap: isMobile ? 8 : 12, overflowX:"auto", WebkitOverflowScrolling:"touch", paddingBottom:4, alignItems:"flex-start"}}
+        , aule.map(a => {
+            const ls = perAulaMap.get(a);
+            return React.createElement('div', { key:a, style:{flex:`1 0 ${COL_W}px`, minWidth:COL_W, maxWidth: aule.length===1 ? "none" : 420,
+                background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding: isMobile ? 6 : 8, display:"flex", flexDirection:"column", gap:6}}
+              , React.createElement('div', {style:{display:"flex", alignItems:"center", justifyContent:"space-between", gap:6, padding:"2px 4px 6px", borderBottom:`1px solid ${C.border}`,
+                  position:"sticky", top:0, background:C.bg, zIndex:1}}
+                , React.createElement('span', {style:{fontFamily:"'Oswald',sans-serif", fontSize:14, fontWeight:600, letterSpacing:"0.04em",
+                    color: a===SENZA_AULA ? C.textDim : C.text, textTransform:"uppercase"}}, a)
+                , React.createElement('span', {style:{fontSize:11, color:C.textMuted, background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:"0 8px"}}
+                    , ls.length, ls.length===1?" lezione":" lezioni")
+              )
+              , ls.map(l => cardDi(l, true))
+            );
+          })
+      )
     )
   );
 };
 
 // ─── VISTA SETTIMANALE ────────────────────────────────────────────────────────
-const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses }) => {
+const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onDayClick }) => {
   // Solo Lun–Sab (6 giorni, no domenica)
   const days      = Array.from({length:6}, (_, i) => addDays(weekStart, i));
   const HOUR_H    = isMobile ? 42 : 64;   // px per 1 ora — su mobile ridotta: alle celle bastano 2-3 righe di testo
@@ -7626,20 +7680,27 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses }) =
             const isSab   = d.getDay() === 6;
             const holiday = getHoliday(yyyymmdd(d));
             const chiuso  = isGiornoChiuso(yyyymmdd(d), config);
+            // Clic sull'intestazione del giorno → apre la vista Giorno (come Google Calendar)
             return React.createElement('div', { key:i,
+              onClick: onDayClick ? () => onDayClick(d) : undefined,
+              title: onDayClick ? "Apri " + d.toLocaleDateString("it-IT",{weekday:"long", day:"numeric", month:"long"}) : undefined,
+              onMouseEnter: onDayClick ? e => { const n = e.currentTarget.querySelector('[data-fm-daynum]'); if (n && !isToday) n.style.background = C.surfaceHover; } : undefined,
+              onMouseLeave: onDayClick ? e => { const n = e.currentTarget.querySelector('[data-fm-daynum]'); if (n && !isToday) n.style.background = "transparent"; } : undefined,
               style:{padding: isMobile ? "4px 1px" : "6px 4px", textAlign:"center",
                 borderLeft:`1px solid ${C.border}`, minWidth:0, overflow:"hidden",
+                cursor: onDayClick ? "pointer" : undefined, userSelect:"none",
                 background: chiuso ? chiuso.bg : isSab ? "#f9f5f0" : undefined,
                 backgroundImage: chiuso ? CHIUSO_PATTERN : undefined}}
               , React.createElement('div',{style:{fontSize: isMobile ? 9 : 11,
                   color: chiuso ? chiuso.color : isSab ? "#b45309" : C.textMuted,
                   letterSpacing:"0.02em",textTransform:"uppercase"}}, isMobile ? DAYS_SHORT[i].slice(0,1) : DAYS_SHORT[i])
-              , React.createElement('div',{style:{fontFamily:"'Oswald',sans-serif",
+              , React.createElement('div',{'data-fm-daynum':'1', style:{fontFamily:"'Oswald',sans-serif",
                   fontSize: isMobile ? 15 : 20,fontWeight:600,marginTop:1,
                   color: chiuso ? chiuso.color : isToday?C.gold: isSab ? "#b45309" : C.text,
-                  background:isToday?`${C.gold}15`:undefined,
-                  borderRadius:isToday?6:undefined,
-                  padding:isToday?(isMobile?"1px 3px":"1px 6px"):undefined}},d.getDate())
+                  background:isToday?`${C.gold}15`:"transparent",
+                  borderRadius:6, display:"inline-block", minWidth: isMobile ? 20 : 32,
+                  transition:"background .12s",
+                  padding: isMobile?"1px 3px":"1px 6px"}},d.getDate())
               , chiuso && !isMobile && React.createElement('div',{style:{fontSize:8,color:chiuso.color,fontWeight:600,
                   marginTop:1,lineHeight:1.2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},
                   chiuso.emoji,' ',chiuso.label)
@@ -7914,11 +7975,14 @@ const MonthView = ({ year, month, lessons, onSelect, onDayClick, config, courses
               onMouseEnter: e => { e.currentTarget.style.background = C.surfaceHover; e.currentTarget.style.backgroundImage='none'; },
               onMouseLeave: e => { e.currentTarget.style.background = bgBase||'transparent'; e.currentTarget.style.backgroundImage = bgImg||'none'; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4961}}
               , React.createElement('div', { style: {display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4966}}
-                , React.createElement('span', { style: {fontSize:12, fontWeight:500,
+                , React.createElement('span', { title: "Apri il giorno",
+                  onMouseEnter: e => { if (!isToday) e.currentTarget.style.background = C.border; },
+                  onMouseLeave: e => { if (!isToday) e.currentTarget.style.background = "transparent"; },
+                  style: {fontSize:12, fontWeight:600,
                   color: chiuso ? chiuso.color : isToday ? C.gold : isSab ? "#b45309" : C.text,
-                  background: isToday ? `${C.gold}15` : undefined,
-                  borderRadius: isToday ? 4 : undefined,
-                  padding: isToday ? "1px 5px" : undefined}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4967}}
+                  background: isToday ? `${C.gold}15` : "transparent",
+                  borderRadius: 11, minWidth:22, height:22, display:"inline-flex", alignItems:"center", justifyContent:"center",
+                  padding: "0 5px", transition:"background .12s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4967}}
                   , day
                 )
                 , dayLessons.length > 0 && React.createElement('span', { style: {fontSize:10, color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4974}}, dayLessons.length)
@@ -12487,8 +12551,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           /* Contenuto */
           , React.createElement('div', { style: {flex:1, padding: isMobile ? "0 8px 8px" : "0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
             , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"visible"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
-              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, isMobile: isMobile, config: calConfig, courses: propCourses, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
-              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, config: calConfig, isMobile: isMobile, courses: propCourses, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
+              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, isMobile: isMobile, config: calConfig, courses: propCourses, perAula: role === "admin", onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
+              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, config: calConfig, isMobile: isMobile, courses: propCourses, onDayClick: d => { setCurDate(d); setViewMode("day"); }, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
               , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, config: calConfig, courses: propCourses, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
               , appView==='calendario' && viewMode === "extra" && React.createElement(ExtraLezioniTab, {
                   daDecidere: lezioniExtraDaDecidere,
