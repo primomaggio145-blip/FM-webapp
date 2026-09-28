@@ -41,6 +41,52 @@ const ricevutaSortKey = (numRic, annoFallback) => {
   return Number.MAX_SAFE_INTEGER - 1;
 };
 
+// ─── NUMERAZIONE RICEVUTE ────────────────────────────────────────────────────
+// Il numero si ricava dai DATI (max n° già usato nell'anno + 1), non solo dal contatore in
+// config: così un contatore avanzato "a vuoto" (salvataggio fallito, voce eliminata subito
+// dopo, ricevuta disattivata, altro dispositivo con config vecchia) non genera buchi né doppioni.
+const parseNumRicevuta = (s) => {
+  const m = /^\s*(\d+)\s*\/\s*(\d{4})\s*$/.exec(String(s || ""));
+  return m ? { n: Number(m[1]), anno: Number(m[2]) } : null;
+};
+const formatNumRicevuta = (n, anno) => String(Number(n)).padStart(3, "0") + "/" + anno;
+const maxNumRicevuta = (entrate, anno) => (entrate || []).reduce((mx, e) => {
+  if (!e || e.noRicevuta) return mx;
+  const p = parseNumRicevuta(e.numRicevuta);
+  return p && p.anno === Number(anno) && p.n > mx ? p.n : mx;
+}, 0);
+const prossimoNumeroRicevuta = (entrate, anno, config) => {
+  const mx = maxNumRicevuta(entrate, anno);
+  if (mx > 0) return mx + 1;
+  const c = (config && config.contatoriRicevute) || {};
+  return Number(c[String(anno)] ?? (config && config.progressivoRicevute) ?? 1) || 1;
+};
+// Numeri mancanti nella sequenza dell'anno
+const buchiNumerazioneRicevute = (entrate, anno) => {
+  const usati = new Set();
+  (entrate || []).forEach(e => {
+    if (!e || e.noRicevuta) return;
+    const p = parseNumRicevuta(e.numRicevuta);
+    if (p && p.anno === Number(anno)) usati.add(p.n);
+  });
+  if (usati.size === 0) return [];
+  // Dal primo all'ultimo numero usato nell'anno (se la numerazione è partita da un numero
+  // diverso da 1, es. ricevute cartacee precedenti, quelle non contano come buchi)
+  const mn = Math.min(...usati), mx = Math.max(...usati);
+  const buchi = [];
+  for (let i = mn + 1; i < mx; i++) if (!usati.has(i)) buchi.push(i);
+  return buchi;
+};
+// Salva il contatore per anno (config locale + tabella sito_config)
+const salvaContatoreRicevute = async (config, setConfig, anno, prossimo) => {
+  const nuovi = { ...((config && config.contatoriRicevute) || {}), [String(anno)]: prossimo };
+  if (setConfig) setConfig(p => ({ ...p, contatoriRicevute: { ...((p && p.contatoriRicevute) || {}), [String(anno)]: prossimo }, progressivoRicevute: prossimo }));
+  try {
+    const sb = window.supabaseClient;
+    if (sb) await sb.from('sito_config').upsert({ chiave: 'contatoriRicevute', valore: JSON.stringify(nuovi) });
+  } catch (e) { console.warn('[FM] save contatori:', e && e.message); }
+};
+
 // SortTh: table header cell with sort indicator
 const SortTh = ({ label, sortKey: col, currentKey, dir, onSort, style, className }) => {
   const active = currentKey === col;
@@ -1518,8 +1564,8 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   // ── handlers quote — scrivono su sharedEntrate ──
   const registraPagamento = (m, y) => {
     const MESI_ALL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
-    const progressivo = (config && config.progressivoRicevute) || 1;
-    const numRicevuta = String(progressivo).padStart(3,"0") + "/" + y;
+    const progressivo = prossimoNumeroRicevuta(allEntrate, y, propConfig);
+    const numRicevuta = formatNumRicevuta(progressivo, y);
     const newE = {
       id: uid(), studentId:student.id, studentName:student.name,
       importo: student.monthlyFee, mese:m, anno:y,
@@ -1532,9 +1578,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
     };
     setEntrate(p=>[...p,newE]);
     // Incrementa progressivo ricevute nella config
-    if (propSetConfig) {
-      propSetConfig(prev => ({...prev, progressivoRicevute: progressivo + 1}));
-    }
+    salvaContatoreRicevute(propConfig, propSetConfig, y, progressivo + 1);
     // Mostra anteprima ricevuta
     setRicevutaEnt(newE);
   };
@@ -4002,8 +4046,9 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
     const cfg = propConfig || {};
     const contatoriRicevute = {...(cfg.contatoriRicevute||{})};
     const annoKey = String(info.anno);
+    let _prossimoPN = prossimoNumeroRicevuta(entrate, info.anno, cfg);
     const genNumero = () => {
-      const progressivo = contatoriRicevute[annoKey] ?? cfg.progressivoRicevute ?? 1;
+      const progressivo = _prossimoPN++;
       contatoriRicevute[annoKey] = progressivo + 1;
       return String(progressivo).padStart(3,"0") + "/" + info.anno;
     };
@@ -13352,7 +13397,7 @@ const CAT_ENTRATE_DEFAULT = [
   { id:"altro",        label:"Altro",              icon:"plus",    student:false },
 ];
 
-const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrForm, onAddCategoriaEntr, config:_configEF }) => {
+const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrForm, onAddCategoriaEntr, config:_configEF, entrateTutte, modoModifica }) => {
   const importoIscrizioneCfg = (_configEF && _configEF.importoIscrizione != null) ? Number(_configEF.importoIscrizione) : 30;
   const [nuovaCatE, setNuovaCatE] = React.useState("");
   const [showAddCatE, setShowAddCatE] = React.useState(false);
@@ -13368,6 +13413,13 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
   });
   const [err, setErr] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
+  // N° ricevuta modificabile (solo in modifica). Vuoto = automatico.
+  const _ricIniz = modoModifica && initial && !initial.noRicevuta ? parseNumRicevuta(initial.numRicevuta) : null;
+  const [ricNum, setRicNum]   = useState(_ricIniz ? String(_ricIniz.n) : "");
+  const [ricAnno, setRicAnno] = useState(_ricIniz ? String(_ricIniz.anno) : String((initial && initial.anno) || new Date().getFullYear()));
+  const ricOriginale = (modoModifica && initial && !initial.noRicevuta && initial.numRicevuta) || "";
+  const ricNuovo = ricNum.trim() ? formatNumRicevuta(ricNum.trim(), ricAnno) : "";
+  const vociStessaRic = ricOriginale ? (entrateTutte||[]).filter(x=>x.id!==initial.id && x.numRicevuta===ricOriginale && !x.noRicevuta).length : 0;
   // Voci aggiuntive sulla STESSA ricevuta (es. quota mensile + iscrizione pagate insieme).
   // Disponibile solo in creazione (non in modifica, dove l'entrata resta un unico record).
   const [extraVoci, setExtraVoci] = useState([]);
@@ -13454,6 +13506,15 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
     if(!f.metodo)                   e.metodo    = "Metodo di pagamento obbligatorio";
     if(!needStudent && !f.desc.trim()) e.desc   = "Descrizione obbligatoria";
     extraVoci.forEach(v => { if(!v.importo||isNaN(v.importo)||Number(v.importo)<=0) e[`voce_${v.id}`] = "Importo non valido"; });
+    if (modoModifica && !f.noRicevuta && ricNum.trim()) {
+      const n = Number(ricNum), a = Number(ricAnno);
+      if (!/^\d+$/.test(ricNum.trim()) || n < 1) e.ricNum = "Numero ricevuta non valido";
+      else if (!/^\d{4}$/.test(String(ricAnno).trim()) || a < 2000 || a > 2100) e.ricNum = "Anno ricevuta non valido";
+      else if (ricNuovo !== ricOriginale) {
+        const occ = (entrateTutte||[]).find(x => x.id!==initial.id && !x.noRicevuta && x.numRicevuta===ricNuovo);
+        if (occ) e.ricNum = `Il n° ${ricNuovo} è già usato da: ${occ.studentName||""} ${occ.desc?("— "+occ.desc):""}`.trim();
+      }
+    }
     if (!convOn) {
       // Fuori convenzione: se la voce aggiuntiva richiede un allievo e non ne è indicato uno
       // specifico, eredita quello della voce principale → errore solo se manca anche quello.
@@ -13541,6 +13602,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
       desc:         autoDesc || f.desc,
       stato:        f.stato || 'pagato',
       dataPagamento: f.data || f.dataPagamento || '',
+      ...(modoModifica ? { numRicevutaManuale: f.noRicevuta ? "" : ricNuovo } : {}),
       // Convenzione (snapshot intestazione: le ricevute già emesse non cambiano se la convenzione viene modificata)
       convenzioneId:        convFinale ? convFinale.id : null,
       convenzioneNome:      convFinale ? convFinale.denominazione : "",
@@ -13826,6 +13888,33 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
             )
           )
         )
+        /* N° ricevuta — modificabile solo in modifica */
+        , modoModifica && !f.noRicevuta && React.createElement('div', {style:{padding:"12px 14px",borderRadius:10,border:`1px solid ${err.ricNum?C.red:C.border}`,background:C.bg}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}, "N° ricevuta")
+          , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
+            , React.createElement('input', {type:"number", min:1, value:ricNum, placeholder:"auto",
+                onChange:e=>{ setRicNum(e.target.value.replace(/[^0-9]/g,"")); setErr(p=>({...p,ricNum:undefined})); },
+                style:{width:100,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.gold,fontSize:16,padding:"8px 10px",fontFamily:"'Oswald',sans-serif",letterSpacing:"0.05em"}})
+            , React.createElement('span', {style:{fontSize:18,color:C.textMuted}}, "/")
+            , React.createElement('input', {type:"number", value:ricAnno,
+                onChange:e=>{ setRicAnno(e.target.value.replace(/[^0-9]/g,"").slice(0,4)); setErr(p=>({...p,ricNum:undefined})); },
+                style:{width:90,background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.gold,fontSize:16,padding:"8px 10px",fontFamily:"'Oswald',sans-serif"}})
+            , ricNuovo && ricNuovo!==ricOriginale && React.createElement('span', {style:{fontSize:12,color:C.teal}}, ricOriginale ? `era ${ricOriginale}` : "numero manuale")
+          )
+          , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:6}}
+            , !ricNum.trim()
+              ? "Lascia vuoto per assegnare automaticamente il prossimo numero libero."
+              : (vociStessaRic>0 && ricNuovo!==ricOriginale
+                  ? `Il nuovo numero verrà applicato anche alle altre ${vociStessaRic} voci della stessa ricevuta.`
+                  : "Usalo per correggere la numerazione (es. coprire un numero mancante).")
+          )
+          , err.ricNum && React.createElement('div', {style:{fontSize:11,color:C.red,marginTop:4}}, err.ricNum)
+        )
+        , modoModifica && f.noRicevuta && ricOriginale && React.createElement('div', {style:{fontSize:12,color:"#b45309",padding:"8px 12px",borderRadius:8,background:"rgba(245,158,11,0.1)",border:"1px solid rgba(245,158,11,0.35)"}}
+          , vociStessaRic>0
+            ? `La ricevuta n° ${ricOriginale} resterà sulle altre ${vociStessaRic} voci.`
+            : `⚠ Disattivando la ricevuta il n° ${ricOriginale} resterà scoperto nella numerazione.`
+        )
         , React.createElement('div', null
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}, "Stato pagamento")
           , React.createElement('div', {style:{display:"flex",gap:8}}
@@ -13995,18 +14084,9 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       if (_serveNumero) {
         // Usa contatore per anno solare — UN SOLO numero, condiviso anche dalle eventuali
         // voci aggiuntive (extraVoci) registrate insieme sulla stessa ricevuta.
-        const contatoriRicevute = config.contatoriRicevute || {};
-        const annoKey = String(anno);
-        const progressivo = contatoriRicevute[annoKey] ?? config.progressivoRicevute ?? 1;
-        numRicevuta = String(progressivo).padStart(3,"0") + "/" + anno;
-        // Aggiorna contatore
-        const nuoviContatori = {...contatoriRicevute, [annoKey]: progressivo + 1};
-        setConfig(p=>({...p, contatoriRicevute: nuoviContatori, progressivoRicevute: progressivo + 1}));
-        // Salva contatore nel DB config
-        try {
-          const sb = window.supabaseClient;
-          if (sb) await sb.from('sito_config').upsert({chiave:'contatoriRicevute', valore: JSON.stringify(nuoviContatori)});
-        } catch(e) { console.warn('[FM] save contatori:', e?.message); }
+        const progressivo = prossimoNumeroRicevuta(entrate, anno, config);
+        numRicevuta = formatNumRicevuta(progressivo, anno);
+        await salvaContatoreRicevute(config, setConfig, anno, progressivo + 1);
       }
       const { extraVoci: _extraVoci, inRicevuta: _inRicPrim, ...dPrimaria } = d;
       const _noSnap = { ricevutaIntestatario: '', ricevutaCf: '', ricevutaIndirizzo: '' };
@@ -14042,24 +14122,35 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       const anno = d.anno || (originale && originale.anno) || new Date().getFullYear();
       const dataPagamento = d.data || d.dataPagamento || (originale && originale.dataPagamento) || '';
       const avevaRicevuta = !!(originale && !originale.noRicevuta && originale.numRicevuta);
-      let numRicevuta = (originale && originale.numRicevuta) || '';
+      const { numRicevutaManuale: _numMan, ...dPulito } = d;
+      const numManuale = (_numMan || '').trim();
+      const numOriginale = (originale && originale.numRicevuta) || '';
+      let numRicevuta = numOriginale;
       if (d.noRicevuta) {
         // "Emetti ricevuta" disattivato in modifica: nessuna ricevuta
         numRicevuta = '';
+      } else if (numManuale) {
+        // N° ricevuta modificato a mano dall'admin
+        numRicevuta = numManuale;
+        const pm = parseNumRicevuta(numManuale);
+        if (pm) {
+          const cfgAnno = Number(((config && config.contatoriRicevute) || {})[String(pm.anno)] || 0);
+          const minimo = Math.max(maxNumRicevuta(entrate.filter(x=>x.id!==d.id), pm.anno), pm.n) + 1;
+          if (cfgAnno < minimo) await salvaContatoreRicevute(config, setConfig, pm.anno, minimo);
+        }
       } else if (!avevaRicevuta) {
         // Prima non prevedeva ricevuta, ora sì: assegna un nuovo numero progressivo
-        const contatoriRicevute = config.contatoriRicevute || {};
-        const annoKey = String(anno);
-        const progressivo = contatoriRicevute[annoKey] ?? config.progressivoRicevute ?? 1;
-        numRicevuta = String(progressivo).padStart(3,"0") + "/" + anno;
-        const nuoviContatori = {...contatoriRicevute, [annoKey]: progressivo + 1};
-        setConfig(p=>({...p, contatoriRicevute: nuoviContatori, progressivoRicevute: progressivo + 1}));
-        try {
-          const sb = window.supabaseClient;
-          if (sb) await sb.from('sito_config').upsert({chiave:'contatoriRicevute', valore: JSON.stringify(nuoviContatori)});
-        } catch(e) { console.warn('[FM] save contatori:', e?.message); }
+        const progressivo = prossimoNumeroRicevuta(entrate, anno, config);
+        numRicevuta = formatNumRicevuta(progressivo, anno);
+        await salvaContatoreRicevute(config, setConfig, anno, progressivo + 1);
       }
-      setEntrate(p=>p.map(x=>x.id===d.id?{...x,...d, numRicevuta, noRicevuta: d.noRicevuta||false, dataPagamento}:x));
+      // Se cambia il numero di una ricevuta con più voci, il nuovo numero vale per tutta la ricevuta
+      const rinominaGruppo = avevaRicevuta && numRicevuta && numOriginale && numRicevuta !== numOriginale;
+      setEntrate(p=>p.map(x=>{
+        if (x.id===d.id) return {...x,...dPulito, numRicevuta, noRicevuta: d.noRicevuta||false, dataPagamento};
+        if (rinominaGruppo && x.numRicevuta===numOriginale && !x.noRicevuta) return {...x, numRicevuta};
+        return x;
+      }));
       closeModal();
     };
     const handleDelQ   = () => { setEntrate(p=>p.filter(x=>x.id!==_optionalChain([selQuota, 'optionalAccess', _61 => _61.id]))); closeModal(); };
@@ -14323,6 +14414,18 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
 
               return (
                 React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7099}}
+                  /* Controllo numerazione ricevute: segnala i numeri mancanti */
+                  , ruoloCV==="admin" && tab==="quote" && (() => {
+                      const anniRic = [...new Set(entrate.map(e=>{ const p=parseNumRicevuta(e.numRicevuta); return (!e.noRicevuta&&p)?p.anno:null; }).filter(Boolean))].sort();
+                      const righe = anniRic.map(a=>({anno:a, buchi:buchiNumerazioneRicevute(entrate,a)})).filter(r=>r.buchi.length>0);
+                      if (righe.length===0) return null;
+                      return React.createElement('div', {style:{padding:"12px 16px",borderRadius:10,background:"rgba(245,158,11,0.1)",border:"1px solid rgba(245,158,11,0.35)",color:"#b45309",fontSize:12.5,display:"flex",flexDirection:"column",gap:4}}
+                        , React.createElement('div', {style:{fontWeight:600}}, "⚠ Numerazione ricevute non continua")
+                        , righe.map(r=>React.createElement('div', {key:r.anno}
+                            , `${r.anno}: mancano i n° `, r.buchi.map(n=>formatNumRicevuta(n,r.anno)).join(", ")))
+                        , React.createElement('div', {style:{fontSize:11.5,color:C.textMuted}}, "Puoi correggere il numero di una ricevuta aprendo la voce con ✏️ Modifica (campo «N° ricevuta»).")
+                      );
+                    })()
                   /* Riepilogo per allievo */
                   
                   /* Lista pagamenti filtrata */
@@ -14499,8 +14602,14 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         , modal==="edit"   && selSpesa && React.createElement(Modal, { title: "Modifica spesa" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}, React.createElement(SpesaForm, { initial: selSpesa, docenti: propDocentiCV||[], categorie: catSpese, onAddCategoria: (cat)=>setCatSpese(p=>[...p,cat]), onSave: handleEdit, onClose: closeModal, lessons: propLessonsCV||[], spese: spese, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7231}}))
         , modal==="delete" && selSpesa && React.createElement(ConfirmDel, { label: selSpesa.desc, onConfirm: handleDel, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7232}})
         , ruoloCV==="admin" && modal==="addq"   && React.createElement(Modal, { title: "Nuova entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}, React.createElement(EntrataForm, { students: students, initial: prefillEntrata, onSave: handleAddQ, onClose: closeModal, categorie: catEntrate, onAddCategoriaEntr: (cat)=>setCatEntrate(p=>[...p,cat]), config: config, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7233}}))
-        , modal==="editq"  && selQuota && React.createElement(Modal, { title: "Modifica entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}, React.createElement(EntrataForm, { students: students, initial: selQuota, onSave: handleEditQ, onClose: closeModal, config: config, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}))
-        , modal==="deleteq"&& selQuota && React.createElement(ConfirmDel, { label: selQuota.desc, onConfirm: handleDelQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7235}})
+        , modal==="editq"  && selQuota && React.createElement(Modal, { title: "Modifica entrata" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}, React.createElement(EntrataForm, { students: students, initial: selQuota, onSave: handleEditQ, onClose: closeModal, config: config, entrateTutte: entrate, modoModifica: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7234}}))
+        , modal==="deleteq"&& selQuota && React.createElement(ConfirmDel, { label: selQuota.desc, testo: (()=>{
+            const nr = !selQuota.noRicevuta && selQuota.numRicevuta;
+            if (!nr) return undefined;
+            const altre = entrate.filter(x=>x.id!==selQuota.id && x.numRicevuta===nr && !x.noRicevuta).length;
+            if (altre>0) return `La ricevuta n° ${nr} resta valida per le altre ${altre} voci. Questa azione è irreversibile.`;
+            return `⚠ Questa voce ha la ricevuta n° ${nr}: eliminandola il numero resterà scoperto nella numerazione. Se la ricevuta è già stata consegnata, correggi la voce con ✏️ Modifica invece di eliminarla.`;
+          })(), onConfirm: handleDelQ, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7235}})
         , modal==="ricevuta" && selQuota && (
           React.createElement(RicevutaModal, {
             entrata: selQuota,
