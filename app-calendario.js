@@ -4589,6 +4589,97 @@ const attBadge = (att) =>
 const today    = new Date();
 const addDays  = (d, n) => { const dt = new Date(d); dt.setDate(dt.getDate()+n); return dt; };
 // Helpers lezioni collettive
+// ─── MultiFiltro: menu a tendina con scelta multipla (checkbox) ───────────────
+// groups: [{label?, options:[{value,label}]}] · selected: array di valori (stringhe)
+// Il pannello è position:fixed così non viene tagliato da contenitori con overflow (barra filtri scorrevole).
+const MultiFiltro = ({ placeholder, groups, selected, onChange, accent, accentBg, accentBorder, minWidth }) => {
+  const [open, setOpen] = React.useState(false);
+  const [pos, setPos] = React.useState(null);
+  const btnRef = React.useRef(null);
+  const panelRef = React.useRef(null);
+  const sel = selected || [];
+  const tutte = (groups||[]).flatMap(g => g.options||[]);
+  const etichetta = (v) => { const o = tutte.find(x => String(x.value) === String(v)); return o ? o.label : String(v); };
+  const attivo = sel.length > 0;
+  const testo = !attivo ? placeholder
+    : sel.length <= 2 ? sel.map(etichetta).join(", ")
+    : `${etichetta(sel[0])} +${sel.length-1}`;
+  const calcolaPos = () => {
+    const b = btnRef.current && btnRef.current.getBoundingClientRect();
+    if (!b) return;
+    const w = Math.max(220, b.width);
+    const left = Math.max(8, Math.min(b.left, window.innerWidth - w - 8));
+    const spazioSotto = window.innerHeight - b.bottom - 12;
+    setPos({ left, top: b.bottom + 4, width: w, maxH: Math.max(160, Math.min(360, spazioSotto)) });
+  };
+  React.useEffect(() => {
+    if (!open) return;
+    calcolaPos();
+    const fuori = (e) => {
+      if (panelRef.current && panelRef.current.contains(e.target)) return;
+      if (btnRef.current && btnRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    const esc = (e) => { if (e.key === "Escape") setOpen(false); };
+    const riposiziona = (e) => { if (panelRef.current && e && e.target && panelRef.current.contains(e.target)) return; calcolaPos(); };
+    document.addEventListener("mousedown", fuori, true);
+    document.addEventListener("touchstart", fuori, true);
+    document.addEventListener("keydown", esc);
+    window.addEventListener("resize", riposiziona);
+    window.addEventListener("scroll", riposiziona, true);
+    return () => {
+      document.removeEventListener("mousedown", fuori, true);
+      document.removeEventListener("touchstart", fuori, true);
+      document.removeEventListener("keydown", esc);
+      window.removeEventListener("resize", riposiziona);
+      window.removeEventListener("scroll", riposiziona, true);
+    };
+  }, [open]);
+  const toggle = (v) => {
+    const k = String(v);
+    onChange(sel.includes(k) ? sel.filter(x => x !== k) : [...sel, k]);
+  };
+  const acc = accent || C.gold, accBg = accentBg || C.goldBg, accBd = accentBorder || C.goldDim;
+  return React.createElement('div', { style: {position:"relative", display:"flex", alignItems:"center", flexShrink:0} }
+    , React.createElement('button', { ref: btnRef, type: "button", onClick: () => setOpen(o => !o),
+        title: attivo ? sel.map(etichetta).join(", ") : placeholder,
+        style: {display:"flex", alignItems:"center", gap:6, background: attivo?accBg:C.bg,
+          border:`1px solid ${attivo?accBd:C.border}`, borderRadius:8, padding:"5px 10px",
+          fontSize:12, color: attivo?acc:C.textMuted, cursor:"pointer", fontFamily:"'Open Sans',sans-serif",
+          whiteSpace:"nowrap", maxWidth:220, minWidth: minWidth||0} }
+      , React.createElement('span', {style:{overflow:"hidden", textOverflow:"ellipsis"}}, testo)
+      , attivo && sel.length > 1 && React.createElement('span', {style:{fontSize:10, fontWeight:700, background:acc, color:"#fff", borderRadius:9, padding:"0 6px", lineHeight:"16px"}}, sel.length)
+      , React.createElement(Ic, { n: "right", size: 11, stroke: attivo?acc:C.textDim, style: {transform: open?"rotate(-90deg)":"rotate(90deg)", transition:"transform .15s", flexShrink:0} })
+    )
+    , open && pos && ReactDOM.createPortal(
+      React.createElement('div', { ref: panelRef,
+          style: {position:"fixed", left:pos.left, top:pos.top, width:pos.width, maxHeight:pos.maxH, overflowY:"auto",
+            background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, zIndex:10000,
+            boxShadow:"0 10px 30px rgba(0,0,0,0.18)", padding:"6px 0", fontFamily:"'Open Sans',sans-serif"} }
+        , React.createElement('div', {style:{display:"flex", justifyContent:"space-between", padding:"4px 12px 8px", borderBottom:`1px solid ${C.border}`, marginBottom:4}}
+          , React.createElement('button', {type:"button", onClick:()=>onChange(tutte.map(o=>String(o.value))),
+              style:{background:"none", border:"none", color:acc, fontSize:11.5, cursor:"pointer", padding:0}}, "Seleziona tutti")
+          , React.createElement('button', {type:"button", onClick:()=>onChange([]), disabled:!attivo,
+              style:{background:"none", border:"none", color:attivo?C.textMuted:C.textDim, fontSize:11.5, cursor:attivo?"pointer":"default", padding:0}}, "Nessuno")
+        )
+        , (groups||[]).filter(g => (g.options||[]).length > 0).map((g, gi) =>
+            React.createElement('div', {key: g.label || gi}
+              , g.label && React.createElement('div', {style:{fontSize:10, letterSpacing:"0.08em", textTransform:"uppercase", color:C.textDim, padding:"6px 12px 2px"}}, g.label)
+              , g.options.map(o => {
+                  const on = sel.includes(String(o.value));
+                  return React.createElement('label', { key: o.value,
+                      style: {display:"flex", alignItems:"center", gap:9, padding:"6px 12px", cursor:"pointer", fontSize:13,
+                        color: on?acc:C.text, background: on?accBg:"transparent"} }
+                    , React.createElement('input', { type:"checkbox", checked:on, onChange:()=>toggle(o.value),
+                        style:{accentColor:acc, width:15, height:15, margin:0, cursor:"pointer"} })
+                    , React.createElement('span', null, o.label)
+                  );
+                })
+            ))
+      ), document.body)
+  );
+};
+
 const isColl      = l => _optionalChain([l, 'optionalAccess', _46 => _46.tipo]) === "collettivo";
 
 // ═══ Lezione extra (5a/3a/2a occorrenza mensile) ═══════════════════════════
@@ -12011,9 +12102,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         .sort((a,b) => (a.date||'').localeCompare(b.date||'')),
       [lezioniExtraDaDecidere, lezioniExtraSaltate, lezioniExtraDaPagare]);
 
-    const [filterCorso,   setFilterCorso]   = useState("");
-    const [filterDocente, setFilterDocente] = useState("");
-    const [filterTipo,    setFilterTipo]    = useState("");
+    // Filtri a scelta multipla (array di valori): più opzioni nello stesso filtro sono in OR
+    // (es. Pianoforte + Chitarra), filtri diversi tra loro sono in AND.
+    const [filterCorso,   setFilterCorso]   = useState([]);
+    const [filterDocente, setFilterDocente] = useState([]);
+    const [filterTipo,    setFilterTipo]    = useState([]);
 
     const visibleLessons = useMemo(() => {
       let ls = role === "allievo"
@@ -12035,20 +12128,22 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             ? lessons.filter(l => { const d=propDocenti.find(x=>String(x.id)===String(_cvDocenteId)); const k=(d?(d.teacherKey||d.nome||''):_cvNome).toLowerCase().trim(); const t=(l.teacher||"").toLowerCase().trim(); return t===k||t.includes(k)||k.includes(t); })
             : _cvNome ? lessons.filter(l => (l.teacher||"").toLowerCase().includes(_cvNome.toLowerCase())) : lessons)
         : lessons;
-      if (filterCorso) {
+      if (filterCorso.length) {
         ls = ls.filter(l =>
           isColl(l)
-            ? l.courseId === filterCorso
-            : l.instrument === filterCorso
+            ? filterCorso.includes("c:" + String(l.courseId))
+            : filterCorso.includes("i:" + String(l.instrument))
         );
       }
-      if (filterDocente) {
-        ls = ls.filter(l => l.teacher === filterDocente);
+      if (filterDocente.length) {
+        ls = ls.filter(l => filterDocente.includes(String(l.teacher)));
       }
-      if (filterTipo) {
-        if (filterTipo === "prova")     ls = ls.filter(l => isProva(l));
-        else if (filterTipo === "collettivo") ls = ls.filter(l => isColl(l));
-        else if (filterTipo === "normale")    ls = ls.filter(l => !isProva(l) && !isColl(l));
+      if (filterTipo.length) {
+        ls = ls.filter(l =>
+          (filterTipo.includes("prova")      && isProva(l)) ||
+          (filterTipo.includes("collettivo") && isColl(l))  ||
+          (filterTipo.includes("normale")    && !isProva(l) && !isColl(l))
+        );
       }
       // Aggiungi eventi sala prove al calendario (solo se il docente ha attivato la visualizzazione
       // dalle sue Impostazioni — di default è disattivata; admin e allievi non sono soggetti al flag)
@@ -12350,62 +12445,29 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               lessons.filter(l=>!isColl(l)).map(l=>l.instrument).filter(Boolean)
             )].sort().map(s=>({id:s, label:s, coll:false}));
             const corsiOpts = [...corsiColl, ...strumentiInd];
-            const hasFilter = filterCorso || filterDocente || filterTipo;
+            const hasFilter = filterCorso.length>0 || filterDocente.length>0 || filterTipo.length>0;
             return (
               React.createElement('div', { style: {padding:"6px 16px 8px", background:C.surface,
                 borderBottom:`1px solid ${C.border}`, display:"flex", alignItems:"center",
                 gap:8, flexWrap:"nowrap", flexShrink:0, overflowX:"auto", WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6054}}
                 , React.createElement(Ic, { n: "filter", size: 13, stroke: C.textDim, style:{flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6057}})
-                /* Filtro corso/strumento */
-                , React.createElement('div', { style: {position:"relative", display:"flex", alignItems:"center", flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6059}}
-                  , React.createElement('select', { value: filterCorso, onChange: e=>setFilterCorso(e.target.value),
-                    style: {appearance:"none", background:filterCorso?C.goldBg:C.bg,
-                      border:`1px solid ${filterCorso?C.goldDim:C.border}`, borderRadius:8,
-                      padding:"5px 28px 5px 10px", fontSize:12, color:filterCorso?C.gold:C.textMuted,
-                      cursor:"pointer", fontFamily:"'Open Sans',sans-serif", minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6060}}
-                    , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6065}}, "Tutti i corsi"  )
-                    , corsiColl.length>0 && React.createElement('optgroup', { label: "Corsi collettivi" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 6066}}
-                      , corsiColl.map(c=>React.createElement('option', { key: c.id, value: c.id, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6067}}, c.label))
-                    )
-                    , strumentiInd.length>0 && React.createElement('optgroup', { label: "Strumenti individuali" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 6069}}
-                      , strumentiInd.map(c=>React.createElement('option', { key: c.id, value: c.id, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6070}}, c.label))
-                    )
-                  )
-                  , React.createElement(Ic, { n: "right", size: 11, stroke: filterCorso?C.gold:C.textDim,
-                    style: {position:"absolute", right:8, pointerEvents:"none", transform:"rotate(90deg)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6073}})
-                )
-                /* Filtro docente */
-                , React.createElement('div', { style: {position:"relative", display:"flex", alignItems:"center", flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6077}}
-                  , React.createElement('select', { value: filterDocente, onChange: e=>setFilterDocente(e.target.value),
-                    style: {appearance:"none", background:filterDocente?C.goldBg:C.bg,
-                      border:`1px solid ${filterDocente?C.goldDim:C.border}`, borderRadius:8,
-                      padding:"5px 28px 5px 10px", fontSize:12, color:filterDocente?C.gold:C.textMuted,
-                      cursor:"pointer", fontFamily:"'Open Sans',sans-serif", minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6078}}
-                    , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6083}}, "Tutti i docenti"  )
-                    , docenteOpts.map(d=>React.createElement('option', { key: d, value: d, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6084}}, d))
-                  )
-                  , React.createElement(Ic, { n: "right", size: 11, stroke: filterDocente?C.gold:C.textDim,
-                    style: {position:"absolute", right:8, pointerEvents:"none", transform:"rotate(90deg)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6086}})
-                )
-                /* Filtro tipo lezione */
-                , React.createElement('div', { style: {position:"relative", display:"flex", alignItems:"center", flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6090}}
-                  , React.createElement('select', { value: filterTipo, onChange: e=>setFilterTipo(e.target.value),
-                    style: {appearance:"none", background:filterTipo?C.tealBg:C.bg,
-                      border:`1px solid ${filterTipo?C.tealBorder:C.border}`, borderRadius:8,
-                      padding:"5px 28px 5px 10px", fontSize:12, color:filterTipo?C.teal:C.textMuted,
-                      cursor:"pointer", fontFamily:"'Open Sans',sans-serif", minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6091}}
-                    , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6096}}, "Tutti i tipi"  )
-                    , React.createElement('option', { value: "normale", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6097}}, "Individuali")
-                    , React.createElement('option', { value: "collettivo", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6098}}, "Collettive")
-                    , React.createElement('option', { value: "prova", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6099}}, "Lezioni prova" )
-                  )
-                  , React.createElement(Ic, { n: "right", size: 11, stroke: filterTipo?C.teal:C.textDim,
-                    style: {position:"absolute", right:8, pointerEvents:"none", transform:"rotate(90deg)"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6101}})
-                )
+                /* Filtro corso/strumento (scelta multipla) */
+                , React.createElement(MultiFiltro, { placeholder: "Tutti i corsi", selected: filterCorso, onChange: setFilterCorso,
+                    groups: [
+                      {label:"Corsi collettivi",      options: corsiColl.map(c=>({value:"c:"+String(c.id), label:c.label}))},
+                      {label:"Strumenti individuali", options: strumentiInd.map(c=>({value:"i:"+String(c.id), label:c.label}))},
+                    ] })
+                /* Filtro docente (scelta multipla) */
+                , React.createElement(MultiFiltro, { placeholder: "Tutti i docenti", selected: filterDocente, onChange: setFilterDocente,
+                    groups: [{options: docenteOpts.map(d=>({value:String(d), label:d}))}] })
+                /* Filtro tipo lezione (scelta multipla) */
+                , React.createElement(MultiFiltro, { placeholder: "Tutti i tipi", selected: filterTipo, onChange: setFilterTipo,
+                    accent: C.teal, accentBg: C.tealBg, accentBorder: C.tealBorder,
+                    groups: [{options: [{value:"normale",label:"Individuali"},{value:"collettivo",label:"Collettive"},{value:"prova",label:"Lezioni prova"}]}] })
 
                 /* Reset filtri */
                 , hasFilter && (
-                  React.createElement('button', { onClick: ()=>{setFilterCorso(""); setFilterDocente(""); setFilterTipo("");},
+                  React.createElement('button', { onClick: ()=>{setFilterCorso([]); setFilterDocente([]); setFilterTipo([]);},
                     style: {display:"flex", alignItems:"center", gap:5, padding:"5px 10px",
                       borderRadius:8, border:`1px solid ${C.border}`, background:C.bg,
                       cursor:"pointer", fontSize:11, color:C.textMuted, flexShrink:0,
