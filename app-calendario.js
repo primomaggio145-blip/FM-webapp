@@ -7569,26 +7569,116 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula }
     if (ia >= 0) return -1; if (ib >= 0) return 1;
     return a.localeCompare(b, 'it', {numeric:true});
   });
-  const COL_W = isMobile ? 230 : 260;
+  // Griglia oraria: le righe corrispondono all'orario, così lezioni alla stessa ora
+  // in aule diverse stanno sulla stessa riga. Altezza della cella = durata della lezione.
+  const toH = (t) => { if (!t) return 0; const p = String(t).split(":"); return parseInt(p[0]||0) + parseInt(p[1]||0)/60; };
+  const durH = (l) => {
+    if (isSalaProve(l) || (!l.durata && l.oraFine)) return Math.max(toH(l.oraFine || l.hour) - toH(l.hour), 0.5);
+    if (l.durata) return Number(l.durata) / 60;
+    return (isColl(l) ? 60 : isProva(l) ? 30 : 45) / 60;
+  };
+  const conOrari = dayLessons.map(l => ({ l, s: toH(l.hour), d: durH(l) }));
+  const H_START = Math.max(0, Math.floor(Math.min(...conOrari.map(x => x.s))));
+  const H_END   = Math.min(24, Math.max(H_START + 1, Math.ceil(Math.max(...conOrari.map(x => x.s + x.d)))));
+  const HOUR_H  = isMobile ? 56 : 72;          // px per ora
+  const GUTTER  = isMobile ? 34 : 46;
+  const COL_MIN = isMobile ? 118 : 150;
+  const TOT_H   = (H_END - H_START) * HOUR_H;
+  const HEAD_H  = 30;
+  // Sovrapposizioni nella stessa aula: sotto-colonne affiancate
+  const disponi = (items) => {
+    const ord = [...items].sort((x, y) => x.s - y.s || y.d - x.d);
+    const colonne = [];
+    ord.forEach(it => {
+      let c = colonne.findIndex(col => col[col.length-1].s + col[col.length-1].d <= it.s + 0.01);
+      if (c < 0) { colonne.push([it]); c = colonne.length - 1; } else colonne[c].push(it);
+      it.col = c;
+    });
+    ord.forEach(it => {
+      const fine = it.s + it.d;
+      it.nCol = Math.max(1, colonne.filter(col => col.some(x => x.s < fine && x.s + x.d > it.s)).length);
+      it.col = Math.min(it.col, it.nCol - 1);
+    });
+    return ord;
+  };
+  const oggi = yyyymmdd(new Date()) === yyyymmdd(date);
+  const oraAdesso = (() => { const n = new Date(); return n.getHours() + n.getMinutes()/60; })();
+  const hhmm = (h) => { const hh = Math.floor(h + 1e-6), mm = Math.round((h - hh) * 60); return String(hh).padStart(2,"0") + ":" + String(mm).padStart(2,"0"); };
+
+  const cella = (it) => {
+    const l = it.l;
+    const hex = isSalaProve(l) ? (l.stato === "in_attesa" ? "#f59e0b" : C.orange2) : lessonHex(l, courses);
+    const dot = l.inRecupero && !l.attendance ? '#f59e0b' : attHex(l.attendance);
+    const titolo = isSalaProve(l) ? "🤘 Sala Prove" + (l.richiedente ? " · " + l.richiedente : "")
+      : isColl(l) ? (l.courseName || "Collettiva")
+      : isProva(l) ? (l.contactName || "Lezione prova")
+      : (l.student || (l.nuovoIscritto ? (l.contactName || "🆕 Nuovo iscritto") : ""));
+    const sotto = isSalaProve(l) ? "" : isColl(l) ? [l.teacher, (l.students||[]).length + " allievi"].filter(Boolean).join(" · ")
+      : [l.instrument, l.teacher].filter(Boolean).join(" · ");
+    const orario = hhmm(it.s) + "–" + hhmm(it.s + it.d);
+    const hPx = Math.max(it.d * HOUR_H - 2, 18);
+    const compatta = hPx < 34;
+    const larg = 100 / it.nCol;
+    return React.createElement('div', { key: l.id, onClick: () => onSelect(l),
+        title: [orario, titolo, sotto, isProva(l) ? "Lezione prova" : "", l.topic ? '"' + l.topic + '"' : ""].filter(Boolean).join("\n"),
+        onMouseEnter: e => { e.currentTarget.style.filter = "brightness(0.95)"; e.currentTarget.style.zIndex = 3; },
+        onMouseLeave: e => { e.currentTarget.style.filter = "none"; e.currentTarget.style.zIndex = 2; },
+        style: {position:"absolute", top: (it.s - H_START) * HOUR_H + 1, height: hPx,
+          left: `calc(${it.col * larg}% + 2px)`, width: `calc(${larg}% - 4px)`, zIndex: 2,
+          background: `${hex}1f`, borderLeft: `3px solid ${hex}`, borderRadius: 5,
+          padding: compatta ? "1px 5px" : "3px 6px", overflow: "hidden", cursor: "pointer", boxSizing: "border-box",
+          fontSize: 11, lineHeight: 1.25, color: C.text, transition: "filter .12s"} }
+      , React.createElement('div', {style:{display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", overflow:"hidden"}}
+        , React.createElement('span', {style:{fontSize:10, fontWeight:700, color:hex, flexShrink:0}}, hhmm(it.s))
+        , compatta && React.createElement('span', {style:{fontWeight:600, overflow:"hidden", textOverflow:"ellipsis"}}, titolo)
+        , isProva(l) && React.createElement('span', {style:{fontSize:9, fontWeight:700, color:C.teal, flexShrink:0}}, "PROVA")
+        , isColl(l) && !compatta && React.createElement('span', {style:{fontSize:9, fontWeight:700, color:hex, flexShrink:0}}, "COLL.")
+        , l.recurrence && l.recurrence !== "Nessuna" && !compatta && React.createElement(Ic, {n:"repeat", size:9, stroke:C.textDim})
+        , dot && React.createElement('span', {style:{width:6, height:6, borderRadius:"50%", background:dot, flexShrink:0, marginLeft:"auto"}})
+      )
+      , !compatta && React.createElement('div', {style:{fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}, titolo)
+      , !compatta && hPx >= 46 && sotto && React.createElement('div', {style:{fontSize:10, color:C.textMuted, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}, sotto)
+    );
+  };
+
+  const ore = Array.from({length: H_END - H_START}, (_, i) => H_START + i);
+  const colTemplate = `${GUTTER}px repeat(${aule.length}, minmax(${COL_MIN}px, 1fr))`;
   return (
     React.createElement('div', { style: {display:"flex", flexDirection:"column", gap: isMobile ? 6 : 10}}
       , toggleAula
       , HolidayBanner
-      , React.createElement('div', { style: {display:"flex", gap: isMobile ? 8 : 12, overflowX:"auto", WebkitOverflowScrolling:"touch", paddingBottom:4, alignItems:"flex-start"}}
-        , aule.map(a => {
-            const ls = perAulaMap.get(a);
-            return React.createElement('div', { key:a, style:{flex:`1 0 ${COL_W}px`, minWidth:COL_W, maxWidth: aule.length===1 ? "none" : 420,
-                background:C.bg, border:`1px solid ${C.border}`, borderRadius:10, padding: isMobile ? 6 : 8, display:"flex", flexDirection:"column", gap:6}}
-              , React.createElement('div', {style:{display:"flex", alignItems:"center", justifyContent:"space-between", gap:6, padding:"2px 4px 6px", borderBottom:`1px solid ${C.border}`,
-                  position:"sticky", top:0, background:C.bg, zIndex:1}}
-                , React.createElement('span', {style:{fontFamily:"'Oswald',sans-serif", fontSize:14, fontWeight:600, letterSpacing:"0.04em",
-                    color: a===SENZA_AULA ? C.textDim : C.text, textTransform:"uppercase"}}, a)
-                , React.createElement('span', {style:{fontSize:11, color:C.textMuted, background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:"0 8px"}}
-                    , ls.length, ls.length===1?" lezione":" lezioni")
-              )
-              , ls.map(l => cardDi(l, true))
-            );
-          })
+      , React.createElement('div', { style: {overflowX:"auto", WebkitOverflowScrolling:"touch", border:`1px solid ${C.border}`, borderRadius:10, background:C.surface}}
+        , React.createElement('div', { style: {minWidth: GUTTER + aule.length * COL_MIN}}
+          /* Intestazione aule */
+          , React.createElement('div', { style: {display:"grid", gridTemplateColumns: colTemplate, height: HEAD_H,
+              borderBottom:`1px solid ${C.border}`, position:"sticky", top:0, background:C.surface, zIndex:5}}
+            , React.createElement('div')
+            , aule.map(a => React.createElement('div', { key:a, style:{borderLeft:`1px solid ${C.border}`, display:"flex", alignItems:"center",
+                  justifyContent:"center", gap:6, padding:"0 6px", overflow:"hidden", whiteSpace:"nowrap"}}
+                , React.createElement('span', {style:{fontFamily:"'Oswald',sans-serif", fontSize:13, fontWeight:600, letterSpacing:"0.04em",
+                    textTransform:"uppercase", overflow:"hidden", textOverflow:"ellipsis", color: a===SENZA_AULA ? C.textDim : C.text}}, a)
+                , React.createElement('span', {style:{fontSize:10, color:C.textMuted}}, perAulaMap.get(a).length)
+              ))
+          )
+          /* Griglia oraria */
+          , React.createElement('div', { style: {display:"grid", gridTemplateColumns: colTemplate, position:"relative"}}
+            , React.createElement('div', { style: {position:"relative", height: TOT_H}}
+              , ore.map(h => React.createElement('div', { key:h, style:{position:"absolute", top:(h-H_START)*HOUR_H, right:4,
+                  fontSize:10, color:C.textDim, transform:"translateY(-1px)", paddingTop:2}}, String(h).padStart(2,"0") + ":00"))
+            )
+            , aule.map(a => React.createElement('div', { key:a, style:{position:"relative", height: TOT_H, borderLeft:`1px solid ${C.border}`}}
+                /* righe delle ore e mezz'ore (uguali in tutte le colonne) */
+                , ore.map(h => React.createElement(React.Fragment, {key:h}
+                    , React.createElement('div', {style:{position:"absolute", left:0, right:0, top:(h-H_START)*HOUR_H, borderTop:`1px solid ${C.border}`}})
+                    , React.createElement('div', {style:{position:"absolute", left:0, right:0, top:(h-H_START+0.5)*HOUR_H, borderTop:`1px dashed ${C.border}80`}})
+                  ))
+                , disponi(conOrari.filter(x => aulaDi(x.l) === a)).map(cella)
+              ))
+            /* linea dell'ora attuale */
+            , oggi && oraAdesso >= H_START && oraAdesso <= H_END && React.createElement('div', {style:{position:"absolute", left:GUTTER, right:0,
+                top:(oraAdesso-H_START)*HOUR_H, borderTop:"2px solid #ef4444", zIndex:4, pointerEvents:"none"}})
+          )
+        )
       )
     )
   );
