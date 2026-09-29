@@ -5245,6 +5245,33 @@ const trovaLezionePrecedente = (lesson, tutteLeLezioni) => {
   candidati.sort((a, b) => b.date.localeCompare(a.date) || (b.hour || '').localeCompare(a.hour || ''));
   return candidati[0];
 };
+// [FM-PREV-LESSON-BRANI] Riepilogo della lezione precedente per l'alert nel modale:
+// argomento, esercizi, brani studiati (risolti dal repertorio, con la tonalità della versione
+// scelta per quella lezione) ed elenco delle informazioni mancanti. Se l'allievo era assente
+// (lezione individuale) non segnala mancanze: è normale che non ci siano contenuti.
+const infoLezionePrecedente = (prev, repertorio) => {
+  if (!prev) return null;
+  const topic = String(prev.topic || '').trim();
+  const exercises = String(prev.exercises || '').trim();
+  const rep = repertorio || [];
+  const vers = prev.repertorioVersioni || {};
+  const brani = (prev.repertorioIds || []).map(id => {
+    const b = rep.find(r => String(r.id) === String(id));
+    if (!b) return null;
+    const vs = b.versioni || [];
+    const vSel = vers[id] != null ? vs[vers[id]] : null;
+    const tonalita = vSel ? vSel.tonalita : (vs.length === 1 ? vs[0].tonalita : null);
+    return { id: b.id, title: b.title || b.titolo || 'Brano senza titolo', composer: b.composer || '', tonalita: tonalita || '' };
+  }).filter(Boolean);
+  const assente = !isColl(prev) && prev.attendance === 'assente';
+  const mancanti = [];
+  if (!assente) {
+    if (!topic) mancanti.push('argomento');
+    if (!exercises) mancanti.push('esercizi');
+    if (brani.length === 0) mancanti.push('brani');
+  }
+  return { topic, exercises, brani, assente, mancanti };
+};
 // Trova le lezioni ESISTENTI che si sovrappongono in orario con `lezione` (stesso giorno,
 // fasce orarie che si intersecano considerando la durata) e condividono lo stesso strumento
 // (solo tra due lezioni individuali) oppure lo stesso insegnante (qualunque tipo di lezione,
@@ -6567,21 +6594,41 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
         );
           })()
 
-        /* ── Lezione precedente — argomento ed esercizi della volta scorsa ── */
-        , prevLesson && (prevLesson.topic || prevLesson.exercises) && (
-          React.createElement('div', { style: {padding:"10px 12px", background:C.surfaceHover, borderRadius:8, border:`1px dashed ${C.border}`}}
-            , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:6, marginBottom:6}}
-              , React.createElement(Ic, { n:"clock", size:12, stroke:C.textDim})
-              , React.createElement('span', { style: {fontSize:10, color:C.textDim, letterSpacing:"0.06em", textTransform:"uppercase"}}
-                , "Lezione precedente · ", (() => { try { return new Date(prevLesson.date+"T00:00:00").toLocaleDateString('it-IT',{day:'numeric',month:'short'}); } catch(e){ return prevLesson.date; } })()
+        /* ── Lezione precedente — argomento, esercizi e brani della volta scorsa ──
+           [FM-PREV-LESSON-BRANI] Mostra anche i brani studiati (repertorioIds, con tonalità
+           della versione scelta) e segnala con un avviso le informazioni mancanti. */
+        , prevLesson && (() => {
+            const _info = infoLezionePrecedente(prevLesson, _repertorioLDM || window.__repertorio__ || []);
+            const _dataPrev = (() => { try { return new Date(prevLesson.date+"T00:00:00").toLocaleDateString('it-IT',{day:'numeric',month:'short'}); } catch(e){ return prevLesson.date; } })();
+            return React.createElement('div', { style: {padding:"10px 12px", background:C.surfaceHover, borderRadius:8, border:`1px dashed ${C.border}`}}
+              , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:6, marginBottom:6}}
+                , React.createElement(Ic, { n:"clock", size:12, stroke:C.textDim})
+                , React.createElement('span', { style: {fontSize:10, color:C.textDim, letterSpacing:"0.06em", textTransform:"uppercase"}}
+                  , "Lezione precedente · ", _dataPrev)
               )
-            )
-            , prevLesson.topic && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginBottom:prevLesson.exercises?4:0}}
-                , React.createElement('strong', null, "Argomento: "), prevLesson.topic)
-            , prevLesson.exercises && React.createElement('div', { style: {fontSize:12, color:C.textMuted}}
-                , React.createElement('strong', null, "Esercizi: "), prevLesson.exercises)
-          )
-        )
+              , _info.assente && React.createElement('div', { style: {fontSize:12, color:C.textMuted, fontStyle:"italic", marginBottom:4}}
+                  , "Allievo assente alla lezione precedente.")
+              , _info.topic && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginBottom:4}}
+                  , React.createElement('strong', null, "Argomento: "), _info.topic)
+              , _info.exercises && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginBottom:4}}
+                  , React.createElement('strong', null, "Esercizi: "), _info.exercises)
+              , _info.brani.length > 0 && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginBottom:4}}
+                  , React.createElement('strong', null, "Brani studiati: ")
+                  , _info.brani.map((b, i) => React.createElement('span', { key: b.id || i}
+                      , i > 0 ? " · " : ""
+                      , b.title
+                      , b.composer ? React.createElement('span', { style: {color:C.textDim}}, " (", b.composer, ")") : null
+                      , b.tonalita ? React.createElement('span', { style: {color:C.textDim}}, " – ", b.tonalita) : null
+                    ))
+                )
+              , _info.mancanti.length > 0 && React.createElement('div', { style: {display:"flex", alignItems:"flex-start", gap:6, marginTop:6, padding:"7px 9px", borderRadius:6, background:C.orangeBg, border:`1px solid ${C.orangeBorder}`}}
+                  , React.createElement(Ic, { n:"alert", size:13, stroke:C.orange})
+                  , React.createElement('span', { style: {fontSize:11.5, color:C.orange, lineHeight:1.4}}
+                    , React.createElement('strong', null, "Informazioni mancanti nella lezione precedente: ")
+                    , _info.mancanti.join(", "), ".")
+                )
+            );
+          })()
 
         /* ── Argomento — inline editable ── */
         , React.createElement('div', { style: {padding:"12px 14px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}`}}
