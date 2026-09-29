@@ -142,6 +142,8 @@
       // Mese/anno di competenza per il pacchetto/soglia mensile — vedi commento in toDB.lezioni()
       pacchettoMese: r.pacchetto_mese != null ? Number(r.pacchetto_mese) : null,
       pacchettoAnno: r.pacchetto_anno != null ? Number(r.pacchetto_anno) : null,
+      // [FM-MESE-SOLARE] true solo se il mese di riferimento è stato scelto a mano dall'admin
+      pacchettoManuale: r.pacchetto_manuale === true,
       allegati,
     };
   }

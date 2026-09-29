@@ -387,6 +387,7 @@ function App() {
             students: (() => { try { return r.students ? JSON.parse(r.students) : []; } catch(e) { return []; } })(),
             pacchettoMese: r.pacchetto_mese != null ? Number(r.pacchetto_mese) : null,
             pacchettoAnno: r.pacchetto_anno != null ? Number(r.pacchetto_anno) : null,
+            pacchettoManuale: r.pacchetto_manuale === true,
           };
         };
         // Preferisce l'adapter condiviso di fm_sync.js (fonte unica di verità, sempre
@@ -583,6 +584,7 @@ function App() {
               notesRecupero: r.notes_recupero||'',
               pacchettoMese: r.pacchetto_mese != null ? Number(r.pacchetto_mese) : null,
               pacchettoAnno: r.pacchetto_anno != null ? Number(r.pacchetto_anno) : null,
+              pacchettoManuale: r.pacchetto_manuale === true,
             };
           };
           // Preferisce l'adapter condiviso di fm_sync.js (fonte unica di verità,

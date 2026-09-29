@@ -1364,15 +1364,18 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
     if (!sb || !l || l.id == null) return;
     const prevM = l.pacchettoMese != null ? l.pacchettoMese : null;
     const prevY = l.pacchettoAnno != null ? l.pacchettoAnno : null;
-    const patch = (pm, py) => { if (_setLessonsSD) _setLessonsSD(prev => (prev||[]).map(x => String(x.id)===String(l.id) ? {...x, pacchettoMese:pm, pacchettoAnno:py} : x)); };
-    patch(m, y);
+    const prevMan = !!l.pacchettoManuale;
+    // [FM-MESE-SOLARE] m/y = null → "Automatico": torna al mese solare della data (flag manuale off)
+    const manuale = m != null && y != null;
+    const patch = (pm, py, pman) => { if (_setLessonsSD) _setLessonsSD(prev => (prev||[]).map(x => String(x.id)===String(l.id) ? {...x, pacchettoMese:pm, pacchettoAnno:py, pacchettoManuale:pman} : x)); };
+    patch(m, y, manuale);
     setMeseRifSaving(String(l.id));
-    const { error } = await sb.from('lezioni').update({ pacchetto_mese: m, pacchetto_anno: y }).eq('id', l.id);
+    const { error } = await sb.from('lezioni').update({ pacchetto_mese: m, pacchetto_anno: y, pacchetto_manuale: manuale }).eq('id', l.id);
     setMeseRifSaving(null);
     if (error) {
       console.warn('[FM] aggiornaMeseRif error:', error.message);
-      patch(prevM, prevY);
-      alert("Impossibile salvare il mese di riferimento: " + error.message + (/pacchetto_/.test(error.message) ? "\n\nEsegui prima la migrazione SQL (colonne pacchetto_mese / pacchetto_anno)." : ""));
+      patch(prevM, prevY, prevMan);
+      alert("Impossibile salvare il mese di riferimento: " + error.message + (/pacchetto_/.test(error.message) ? "\n\nEsegui prima la migrazione SQL (colonne pacchetto_mese / pacchetto_anno / pacchetto_manuale)." : ""));
       return;
     }
     window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
@@ -1816,7 +1819,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                     , (() => {
                         const rif = meseRiferimentoLezione(l);
                         const [dy, dm] = (l.date||'').split('-').map(Number);
-                        const manuale = l.pacchettoMese != null && l.pacchettoAnno != null;
+                        const manuale = !!l.pacchettoManuale && l.pacchettoMese != null && l.pacchettoAnno != null;
                         const diverso = rif && (rif.m !== dm || rif.y !== dy);
                         const clr = diverso ? C.gold : C.textDim;
                         const lbl = rif ? `${MESI_LABEL_L[rif.m-1]} ${rif.y}` : '—';
@@ -2716,11 +2719,32 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
 // così le due viste mostrano SEMPRE esattamente gli stessi numeri — questa funzione condivisa
 // esiste apposta per evitare la duplicazione della logica, che in passato ha causato
 // disallineamenti tra le due schede (formule diverse, conteggi diversi).
-// [FM-MESE-RIF] Mese/anno di RIFERIMENTO (competenza) di una lezione: pacchetto_mese/anno se
-// impostati, altrimenti il mese della data. Unica regola usata da Report lezioni e tab Lezioni.
+// [FM-MESE-RIF] Mese/anno di RIFERIMENTO (competenza) di una lezione. Unica regola usata da
+// Report lezioni, tab Lezioni, Dashboard e soglia pacchetto (calcolaInfoExtra):
+//  1) mese scelto A MANO dall'admin (pacchetto_manuale = true) → pacchetto_mese/anno;
+//  2) lezione spostata con "Cambio ora" → mese della data ORIGINALE, letta dalla nota
+//     "CAMBIO ORA, LEZIONE DEL <giorno> DD <mese> YYYY" (es. mar 29/09 → gio 01/10 resta settembre);
+//  3) altrimenti → mese SOLARE della data.
+// [FM-MESE-SOLARE] pacchetto_mese/anno NON manuali vengono ignorati: le occorrenze ricorrenti
+// generate segnando la presenza ereditavano il mese della lezione di origine (es. lezione del
+// 01/10 con pacchetto_mese=9), finendo nel report del mese precedente e sforando la soglia.
+const _MESI_IT_LOWER = ["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
+function meseOriginaleCambioOra(l) {
+  const note = l && l.notes ? String(l.notes) : '';
+  if (note.indexOf('CAMBIO ORA') === -1) return null;
+  // [\s\S]* greedy → ultima occorrenza = cambio ora più VECCHIO (le note nuove vengono anteposte),
+  // cioè la data originale vera anche dopo più spostamenti successivi.
+  const mt = note.match(/[\s\S]*CAMBIO ORA, LEZIONE DEL\s+\S+\s+(\d{1,2})\s+(\S+)\s+(\d{4})/i);
+  if (!mt) return null;
+  const m = _MESI_IT_LOWER.indexOf(mt[2].toLowerCase()) + 1;
+  const y = Number(mt[3]);
+  return (m > 0 && y) ? { m, y } : null;
+}
 function meseRiferimentoLezione(l) {
   if (!l) return null;
-  if (l.pacchettoMese != null && l.pacchettoAnno != null) return { m: Number(l.pacchettoMese), y: Number(l.pacchettoAnno) };
+  if (l.pacchettoManuale && l.pacchettoMese != null && l.pacchettoAnno != null) return { m: Number(l.pacchettoMese), y: Number(l.pacchettoAnno) };
+  const co = meseOriginaleCambioOra(l);
+  if (co) return co;
   if (!l.date) return null;
   const [y, m] = String(l.date).split('-').map(Number);
   return (y && m) ? { m, y } : null;
@@ -4746,8 +4770,10 @@ function calcolaInfoExtra(lesson, opts) {
   const d = new Date(lesson.date + "T00:00:00");
   // Mese/anno di competenza di QUESTA lezione: pacchetto_mese/anno se impostato, altrimenti
   // il mese/anno della sua data (comportamento invariato per lezioni mai spostate).
-  const pMese = lesson.pacchettoMese != null ? lesson.pacchettoMese : (d.getMonth() + 1);
-  const pAnno = lesson.pacchettoAnno != null ? lesson.pacchettoAnno : d.getFullYear();
+  // [FM-MESE-SOLARE] stessa regola del Report lezioni (meseRiferimentoLezione)
+  const _rifL = meseRiferimentoLezione(lesson) || { m: d.getMonth() + 1, y: d.getFullYear() };
+  const pMese = _rifL.m;
+  const pAnno = _rifL.y;
 
   // Tutte le lezioni REALI dello stesso allievo e dello stesso corso (individuale: stesso
   // strumento; collettiva: stesso corso_id) che appartengono allo stesso mese di competenza.
@@ -4765,8 +4791,9 @@ function calcolaInfoExtra(lesson, opts) {
       if (!stessoAllievo) return false;
     }
     const ld = new Date(l.date + "T00:00:00");
-    const lMese = l.pacchettoMese != null ? l.pacchettoMese : (ld.getMonth() + 1);
-    const lAnno = l.pacchettoAnno != null ? l.pacchettoAnno : ld.getFullYear();
+    const _rifX = meseRiferimentoLezione(l) || { m: ld.getMonth() + 1, y: ld.getFullYear() };
+    const lMese = _rifX.m;
+    const lAnno = _rifX.y;
     if (lMese !== pMese || lAnno !== pAnno) return false;
     if (dataMinima && ld < dataMinima) return false; // non risalire oltre l'iscrizione dell'allievo
     return true;
@@ -11482,7 +11509,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       // coincide con la propria data (non è ancora mai stata spostata). Resterà fisso da qui in
       // avanti anche se in futuro la lezione viene spostata con "Cambio ora" oltre il confine
       // del mese — vedi commento in calcolaInfoExtra.
-      if (dataFinal.date && dataFinal.pacchettoMese == null) {
+      // [FM-MESE-SOLARE] se il mese non è stato scelto a mano, si riallinea SEMPRE alla data
+      // (anche quando si modifica la data di una lezione esistente dal form).
+      if (dataFinal.date && (!dataFinal.pacchettoManuale || dataFinal.pacchettoMese == null)) {
         const _dIniz = new Date(dataFinal.date + "T00:00:00");
         dataFinal.pacchettoMese = _dIniz.getMonth() + 1;
         dataFinal.pacchettoAnno = _dIniz.getFullYear();
@@ -12036,6 +12065,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               // spostata con "Cambio ora" oltre il confine del mese (vedi calcolaInfoExtra).
               pacchettoMese:    _dNext.getMonth() + 1,
               pacchettoAnno:    _dNext.getFullYear(),
+              pacchettoManuale: false,
             };
             // Aggiorna React state
             setLessons(prev => {
@@ -12196,6 +12226,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               recuperoScadenza: null,
               tipo:             lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
               gapGiorni:        prossimoGapGiorni(lesson),
+              // [FM-MESE-SOLARE] mese di competenza = mese della SUA data (prima ereditava quello
+              // della lezione su cui si segnava la presenza → lezioni di ottobre contate a settembre)
+              pacchettoMese:    new Date(nextDate+"T00:00:00").getMonth() + 1,
+              pacchettoAnno:    new Date(nextDate+"T00:00:00").getFullYear(),
+              pacchettoManuale: false,
             };
             safeInsertRecurringLesson(nextLesson, setLessons);
             gcalSyncLesson('sync_one', nextLesson);
@@ -12252,6 +12287,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         extraLessonId: null,
         tipo: lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
         gapGiorni: prossimoGapGiorni(lesson),
+        pacchettoMese: new Date(nextDate+"T00:00:00").getMonth() + 1,
+        pacchettoAnno: new Date(nextDate+"T00:00:00").getFullYear(),
+        pacchettoManuale: false,
       };
       setLessons(prev => [
         ...prev.map(l => l.id === lesson.id
@@ -12299,6 +12337,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         // nel mese vecchio e mancante nel nuovo).
         pacchettoMese: new Date(nextDate+"T00:00:00").getMonth() + 1,
         pacchettoAnno: new Date(nextDate+"T00:00:00").getFullYear(),
+        pacchettoManuale: false,
       };
       setLessons(prev => [
         ...prev.map(l => l.id === lesson.id
