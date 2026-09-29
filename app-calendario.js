@@ -3079,8 +3079,14 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     const sogliaInd = corsi.reduce((t,c)=>t+c.soglia, 0);
     const individuale = { count:countInd, soglia:sogliaInd, delta:countInd-sogliaInd, isEccezione:isEccInd };
     const haCollettivo = !!s.complementaryCourse || countColl > 0;
-    // Stato complessivo: la carenza (sotto soglia) di QUALSIASI corso ha priorità, poi l'eccedenza.
-    const deltas = corsi.map(c=>c.delta).concat(haCollettivo ? [collettiva.delta] : []);
+    // [FM-STATO-IND] Stato complessivo: fanno fede SOLO i corsi INDIVIDUALI. Il collettivo resta
+    // visibile nella sua colonna ma non decide lo stato (es. corso 1 in soglia, corso 2 fuori
+    // soglia, collettivo sotto soglia → FUORI SOGLIA). Il collettivo decide lo stato solo se
+    // l'allievo non ha alcun corso individuale nel mese.
+    // Tra più corsi individuali resta la regola di prima: la carenza ha priorità, poi l'eccedenza.
+    const deltas = corsi.length > 0
+      ? corsi.map(c=>c.delta)
+      : (haCollettivo ? [collettiva.delta] : []);
     if (deltas.length === 0) deltas.push(0);
     const deltaPeggiore = Math.min(...deltas) < 0 ? Math.min(...deltas) : Math.max(...deltas);
     report.push({ id:s.id, nome, individuale, collettiva, corsi, haCollettivo, nonIscritto: !iscritto, deltaPeggiore: iscritto ? deltaPeggiore : 0 });
