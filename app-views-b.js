@@ -1128,6 +1128,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   , React.createElement(SortTh,{label:"Lezioni", sortKey:"n",       currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Compenso",sortKey:"c",       currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Extra",   sortKey:"extra",   currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
+                  , React.createElement(SortTh,{label:"Totale",  sortKey:"tot",     currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement('th',{style:{padding:"10px 18px",textAlign:"left",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}}, "vs mese prec.")
                 )
               )
@@ -1139,14 +1140,18 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   const extra = totaleAltreCompetenzeMese(selected, x.m, x.y);
                   const c  = n * selected.tariffaOra;
                   const delta = n - np;
-                  return { x, i, n, np, c, extra, delta, mese: x.y*100+x.m };
+                  // TOTALE da versare = compenso lezioni + extra (competenze aggiuntive) − acconti.
+                  // totaleAltreCompetenzeMese è già una somma algebrica: gli acconti vi entrano col segno meno.
+                  const tot = c + extra;
+                  return { x, i, n, np, c, extra, tot, delta, mese: x.y*100+x.m };
                 }), (r,k) => {
                   if(k==="mese") return r.mese;
                   if(k==="n")    return r.n;
                   if(k==="c")    return r.c;
                   if(k==="extra")return r.extra;
+                  if(k==="tot")  return r.tot;
                   return 0;
-                }).map(({x,i,n,np,c,extra,delta})=>{
+                }).map(({x,i,n,np,c,extra,tot,delta})=>{
                   const isS = x.m===selMese.m&&x.y===selMese.y;
                   const isF = isFuture(x);
                   return (
@@ -1167,6 +1172,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       )
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:extra!==0?600:400,color:isF?C.textDim:extra>0?C.gold:extra<0?C.red:C.textDim}}
                         , isF?"—":extra!==0?`${extra<0?"-":""}€${Math.abs(extra).toLocaleString("it-IT")}`:"—"
+                      )
+                      , React.createElement('td', { title: "Compenso + extra − acconti", style: {padding:"11px 18px",fontSize:14,fontWeight:700,color:isF?C.textDim:tot<0?C.red:tot>0?C.teal:C.textDim}}
+                        , isF?"—":(n>0||extra!==0)?`${tot<0?"-":""}€${Math.abs(tot).toLocaleString("it-IT")}`:"—"
                       )
                       , React.createElement('td', { style: {padding:"11px 18px"}}
                         , !isF && np>0 && (
@@ -1193,6 +1201,11 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   , (() => { const totExtraAnno = MESI_AS.reduce((t,x)=>t+totaleAltreCompetenzeMese(selected,x.m,x.y),0);
                     return React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:600,color:totExtraAnno<0?C.red:C.gold}, __self: this }
                       , totExtraAnno<0?"-":"", "€", Math.abs(totExtraAnno).toLocaleString("it-IT")
+                    );
+                  })()
+                  , (() => { const totNettoAnno = MESI_AS.reduce((t,x)=>t+lezioniMese(selected,x.m,x.y).length*selected.tariffaOra+totaleAltreCompetenzeMese(selected,x.m,x.y),0);
+                    return React.createElement('td', { title: "Compenso + extra − acconti", style: {padding:"11px 18px",fontSize:14,fontWeight:700,color:totNettoAnno<0?C.red:C.teal}, __self: this }
+                      , totNettoAnno<0?"-":"", "€", Math.abs(totNettoAnno).toLocaleString("it-IT")
                     );
                   })()
                   , React.createElement('td', { style: {padding:"11px 18px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10538}})
