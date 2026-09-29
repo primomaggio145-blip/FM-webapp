@@ -2889,9 +2889,11 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       )
                     );
                   })()
+                  /* [FM-KPI-ALLIEVO-SETT] Conta SOLO le lezioni della settimana corrente (lun-dom),
+                     come la KPI del docente — prima sommava tutte le lezioni caricate dell'allievo */
                   , React.createElement(KpiCard, { icon: "calendar", label: "Le mie lezioni",
-                      value: (_lessons||[]).filter(l => matchLezioneAllievo(l) && l.attendance !== 'recuperata').length,
-                      sub: "questa settimana", hex: C.teal, onClick: () => onNavigate('calendario')})
+                      value: (_lessons||[]).filter(l => matchLezioneAllievo(l) && l.attendance !== 'recuperata' && lezioniSettimanaDocente(l)).length,
+                      sub: "questa settimana", hex: C.teal, onClick: () => { onQuickAction && onQuickAction('showSettimana'); onNavigate('calendario'); }})
                   , React.createElement(KpiCard, { icon: "clock", label: "Prossima lezione",
                       value: (()=>{
                         const p=(_lessons||[]).filter(l=>matchLezioneAllievo(l)&&(l.date||l.data||"")>=yyyymmdd(oggi)).sort((a,b)=>(a.date||a.data||"").localeCompare(b.date||b.data||""))[0];
