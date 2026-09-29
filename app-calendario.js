@@ -13862,8 +13862,9 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
                   : { denominazione: "", codiceFiscale: "", indirizzo: "" });
   };
   const ricevutaAttiva = !f.noRicevuta;
-  // Selezione per-quota: solo in creazione (in modifica l'entrata è un unico record → vale il toggle)
-  const perVoceRicevuta = convOn && ricevutaAttiva && !initial;
+  // Selezione per-voce della ricevuta: in creazione (anche con entrata precompilata), per TUTTE le
+  // entrate con più voci o in convenzione. In modifica l'entrata è un unico record → vale il toggle.
+  const perVoceRicevuta = ricevutaAttiva && !modoModifica && (convOn || extraVoci.length > 0);
   const anyInRicevuta = ricevutaAttiva && (!perVoceRicevuta || primariaInRicevuta || extraVoci.some(v => v.inRicevuta !== false));
   const convDatiMancanti = !convRec || !convRec.denominazione.trim() || !convRec.codiceFiscale.trim();
   const showConvCampi = convOn && (isNewConv || (!!convRec && (convEditDati || (anyInRicevuta && convDatiMancanti))));
@@ -13902,6 +13903,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
         if (occ) e.ricNum = `Il n° ${ricNuovo} è già usato da: ${occ.studentName||""} ${occ.desc?("— "+occ.desc):""}`.trim();
       }
     }
+    if (!convOn && perVoceRicevuta && !anyInRicevuta) e.ricVoci = "Seleziona almeno una voce da includere in ricevuta, oppure disattiva «Emetti ricevuta»";
     if (!convOn) {
       // Fuori convenzione: se la voce aggiuntiva richiede un allievo e non ne è indicato uno
       // specifico, eredita quello della voce principale → errore solo se manca anche quello.
@@ -14004,6 +14006,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
           mese:      Number(v.mese||f.mese),
           anno:      Number(v.anno||f.anno),
           desc:      descPerCategoria(v.categoria, Number(v.mese||f.mese), Number(v.anno||f.anno)),
+          inRicevuta: perVoceRicevuta ? v.inRicevuta !== false : true,
         };
         if (!convOn) {
           // Allievo specifico per la voce (se scelto); altrimenti eredita quello della voce principale
@@ -14160,14 +14163,14 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
         )
         , React.createElement(Sel, { label: "Metodo di pagamento"  , value: f.metodo, onChange: e=>set("metodo",e.target.value), options: METODI_PAG, error: err.metodo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6787}})
 
-        /* Convenzione: la quota principale va in ricevuta? */
+        /* Voce principale in ricevuta? (convenzione o entrata con più voci) */
         , perVoceRicevuta && React.createElement('label', {style:{display:"flex",alignItems:"center",gap:8,fontSize:12,color:primariaInRicevuta?C.text:C.textMuted,cursor:"pointer"}}
           , React.createElement('input', {type:"checkbox", checked:primariaInRicevuta, onChange:e=>setPrimariaInRicevuta(e.target.checked)})
-          , "🧾 Includi questa quota nella ricevuta"
+          , (convOn ? "🧾 Includi questa quota nella ricevuta" : "🧾 Includi questa voce nella ricevuta")
         )
 
         /* Convenzione: quote aggiuntive (anche di allievi diversi) */
-        , !initial && convOn && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
+        , !modoModifica && convOn && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}, "Altre quote (convenzione)")
           , extraVoci.map(v => {
               const catV = CAT_ENTRATE_USE.find(c=>c.id===v.categoria) || {};
@@ -14227,10 +14230,10 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
             })()
         )
 
-        /* Voci aggiuntive sulla stessa ricevuta — solo in creazione, non in modifica */
-        , !initial && !convOn && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
+        /* Voci aggiuntive — solo in creazione, non in modifica. Ogni voce sceglie se andare in ricevuta. */
+        , !modoModifica && !convOn && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}
-            , "Altre voci sulla stessa ricevuta"
+            , "Altre voci"
           )
           , extraVoci.map(v => {
             const catVx = CAT_ENTRATE_USE.find(c=>c.id===v.categoria)||{};
@@ -14255,6 +14258,10 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
               )
               , React.createElement('input', {type:"number", placeholder:"Importo €", value:v.importo, onChange:e=>setExtraVoce(v.id,'importo',e.target.value),
                   style:{width:110,background:C.surface,border:`1px solid ${err[`voce_${v.id}`]?C.red:C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 10px",fontFamily:"'Open Sans',sans-serif"}})
+              , perVoceRicevuta && React.createElement('label', {title:"Includi questa voce in ricevuta", style:{display:"flex",alignItems:"center",gap:4,fontSize:12,color:v.inRicevuta!==false?C.text:C.textMuted,cursor:"pointer",alignSelf:"center"}}
+                , React.createElement('input', {type:"checkbox", checked:v.inRicevuta!==false, onChange:e=>setExtraVoce(v.id,'inRicevuta',e.target.checked)})
+                , "🧾"
+              )
               , React.createElement('button', {onClick:()=>removeExtraVoce(v.id), type:"button",
                   style:{padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:"none",color:C.textMuted,cursor:"pointer",fontSize:13}}
                 , "✕"
@@ -14267,13 +14274,23 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
                 background:"none",color:C.teal,cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
             , React.createElement(Ic,{n:"plus",size:12,stroke:C.teal}), " Aggiungi un'altra voce (stessa ricevuta)"
           )
-          , extraVoci.length>0 && React.createElement('div', {style:{marginTop:10,padding:"10px 14px",background:C.tealBg,border:`1px solid ${C.tealBorder}`,borderRadius:8,
-              display:"flex",justifyContent:"space-between",alignItems:"center"}}
-            , React.createElement('span',{style:{fontSize:12,color:C.teal}}, `Totale ricevuta (${1+extraVoci.length} voci)`)
-            , React.createElement('span',{style:{fontFamily:"'Oswald',sans-serif",fontSize:17,fontWeight:600,color:C.teal}}
-              , `€${(Number(f.importo||0)+extraVoci.reduce((t,v)=>t+(Number(v.importo)||0),0)).toLocaleString('it-IT')}`
-            )
-          )
+          , extraVoci.length>0 && (() => {
+              const tot = Number(f.importo||0) + extraVoci.reduce((t,v)=>t+(Number(v.importo)||0),0);
+              const totRic = !ricevutaAttiva ? 0 : (perVoceRicevuta
+                ? (primariaInRicevuta?Number(f.importo||0):0) + extraVoci.filter(v=>v.inRicevuta!==false).reduce((t,v)=>t+(Number(v.importo)||0),0)
+                : tot);
+              return React.createElement('div', {style:{marginTop:10,padding:"10px 14px",background:C.tealBg,border:`1px solid ${C.tealBorder}`,borderRadius:8,display:"flex",flexDirection:"column",gap:4}}
+                , React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                  , React.createElement('span',{style:{fontSize:12,color:C.teal}}, `Totale registrato (${1+extraVoci.length} voci)`)
+                  , React.createElement('span',{style:{fontFamily:"'Oswald',sans-serif",fontSize:17,fontWeight:600,color:C.teal}}, `€${tot.toLocaleString('it-IT')}`)
+                )
+                , ricevutaAttiva && React.createElement('div',{style:{display:"flex",justifyContent:"space-between"}}
+                  , React.createElement('span',{style:{fontSize:12,color:C.textMuted}}, "di cui in ricevuta")
+                  , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}}, `€${totRic.toLocaleString('it-IT')}`)
+                )
+              );
+            })()
+          , err.ricVoci && React.createElement('div', {style:{fontSize:11,color:C.red,marginTop:6}}, err.ricVoci)
         )
         /* N° ricevuta — modificabile solo in modifica */
         , modoModifica && !f.noRicevuta && React.createElement('div', {style:{padding:"12px 14px",borderRadius:10,border:`1px solid ${err.ricNum?C.red:C.border}`,background:C.bg}}
@@ -14330,7 +14347,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
               style:{width:36,height:20,borderRadius:10,background:f.noRicevuta?C.border:C.teal,position:'relative',cursor:'pointer',transition:'background .15s',flexShrink:0}}
             , React.createElement('div',{style:{position:'absolute',top:3,left:f.noRicevuta?3:19,width:14,height:14,borderRadius:'50%',background:'#fff',transition:'left .15s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}})
           )
-          , React.createElement('span',null, f.noRicevuta ? '❌ Nessuna ricevuta' : (perVoceRicevuta ? '🧾 Emetti ricevuta (quote spuntate)' : '🧾 Emetti ricevuta'))
+          , React.createElement('span',null, f.noRicevuta ? '❌ Nessuna ricevuta' : (perVoceRicevuta ? (convOn ? '🧾 Emetti ricevuta (quote spuntate)' : '🧾 Emetti ricevuta (voci spuntate)') : '🧾 Emetti ricevuta'))
         )
         , React.createElement('div',{style:{display:'flex',gap:10}}
           , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6791}}, "Annulla")
