@@ -6446,6 +6446,53 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
     ? React.createElement('span', {style:{fontSize:10,color:C.green,marginLeft:6}}, "✓ salvato")
     : null;
 
+  // [FM-ALERT-PRESENZA] Promemoria "indica la presenza" — SOLO admin e docente.
+  // Compare quando la lezione è già iniziata (data passata, o oggi con orario già
+  // raggiunto) e la presenza non è stata ancora indicata: per le individuali/prove
+  // nessuno stato scelto; per le collettive almeno un allievo senza presenza.
+  // Escluse: lezioni recuperate, recuperi ufficiali (sola lettura), sala prove.
+  const _alertPresenza = (() => {
+    if (!(role === 'admin' || role === 'docente')) return null;
+    if (!lesson || !lesson.date) return null;
+    if (lesson.attendance === 'recuperata' || lesson.tipo === 'recupero' || lesson.tipo === 'sala_prove') return null;
+    const _oggiISO = yyyymmdd(new Date());
+    if (lesson.date > _oggiISO) return null;
+    if (lesson.date === _oggiISO) {
+      const [_h, _m] = String(lesson.hour || '00:00').split(':').map(Number);
+      const _ora = new Date(); const _nowMin = _ora.getHours() * 60 + _ora.getMinutes();
+      if ((_h || 0) * 60 + (_m || 0) > _nowMin) return null;
+    }
+    let _dettaglio;
+    if (lesson.tipo === 'collettivo') {
+      const _mancanti = (lesson.students || []).filter(x => !x.attendance);
+      if (_mancanti.length === 0) return null;
+      _dettaglio = _mancanti.length === (lesson.students || []).length
+        ? 'Nessun allievo ha ancora la presenza indicata.'
+        : `Manca la presenza per ${_mancanti.length} allievo/i: ${_mancanti.map(x => x.name).filter(Boolean).join(', ')}.`;
+    } else {
+      if (lesson.attendance || lesson.inRecupero) return null;
+      _dettaglio = lesson.tipo === 'prova'
+        ? 'Indica se la lezione di prova è stata svolta (Presente / Assente).'
+        : 'Indica lo stato della lezione: Presente, Assente, Recupero, In recupero o Cambio ora.';
+    }
+    const _vai = () => {
+      const el = document.getElementById(lesson.tipo === 'collettivo' ? 'fm-presenza-coll-' + lesson.id : 'fm-presenza-' + lesson.id);
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    };
+    return React.createElement('div', {
+        style: { display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', padding:'10px 14px',
+                 background:'rgba(245,158,11,0.10)', border:'1px solid rgba(245,158,11,0.45)', borderRadius:10 } }
+      , React.createElement(Ic, { n:'alert', size:16, stroke:'#f59e0b' })
+      , React.createElement('div', { style:{ flex:1, minWidth:180 } }
+        , React.createElement('div', { style:{ fontSize:13, fontWeight:700, color:'#b45309' } }, '⚠️ Ricordati di indicare la presenza')
+        , React.createElement('div', { style:{ fontSize:11, color:C.textMuted, marginTop:2, lineHeight:1.5 } }, _dettaglio)
+      )
+      , React.createElement('button', { onClick:_vai,
+          style:{ padding:'6px 12px', borderRadius:8, border:'none', background:'#f59e0b', color:'#fff', cursor:'pointer',
+                  fontSize:12, fontWeight:600, fontFamily:"'Open Sans',sans-serif", whiteSpace:'nowrap' } }, 'Vai alla presenza')
+    );
+  })();
+
   return (
     React.createElement(Modal, { title: "Dettaglio lezione" , onClose: onClose,
       footer: React.createElement('div', { style: {padding:"14px 22px", display:"flex", justifyContent:"space-between", alignItems:"center"}}
@@ -6462,6 +6509,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
       ),
       __self: this, __source: {fileName: _jsxFileName, lineNumber: 4493}}
       , React.createElement('div', { style: {padding:22, display:"flex", flexDirection:"column", gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4494}}
+        , _alertPresenza /* [FM-ALERT-PRESENZA] */
         , React.createElement('div', { style: {display:"flex", gap:14, alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4495}}
           , React.createElement('div', { style: {width:46, height:46, borderRadius:10,
             background: lesson.tipo==="collettivo" ? C.purpleBg : lesson.tipo==="prova" ? C.tealBg : `${hex}20`,
@@ -6540,7 +6588,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                 )
               : (lesson.students||[]);
             return lesson.tipo==="collettivo" && _collStudents.length > 0 && (
-          React.createElement('div', { style: {padding:"12px 14px", background:C.purpleBg, borderRadius:8, border:`1px solid ${C.purpleBorder}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4566}}
+          React.createElement('div', { id: 'fm-presenza-coll-' + lesson.id, style: {padding:"12px 14px", background:C.purpleBg, borderRadius:8, border:`1px solid ${C.purpleBorder}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4566}}
             , React.createElement('div', { style: {fontSize:10, color:C.purple, letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4567}}, role === 'allievo' ? "La tua presenza"
                : "Allievi (" + _collStudents.length + ") · presenza individuale"
             )
@@ -7156,7 +7204,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
         )
 
         /* ── Segna presenza ── */
-        , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4636}}
+        , React.createElement('div', { id: 'fm-presenza-' + lesson.id, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4636}}
           , React.createElement('div', { style: {fontSize:10, color:C.textMuted, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4637}}, "Segna presenza" )
           /* Banner lezione recuperata — sola lettura */
           , lesson.attendance === 'recuperata'
