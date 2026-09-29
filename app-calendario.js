@@ -3079,17 +3079,20 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     const sogliaInd = corsi.reduce((t,c)=>t+c.soglia, 0);
     const individuale = { count:countInd, soglia:sogliaInd, delta:countInd-sogliaInd, isEccezione:isEccInd };
     const haCollettivo = !!s.complementaryCourse || countColl > 0;
-    // [FM-STATO-IND] Stato complessivo: fanno fede SOLO i corsi INDIVIDUALI. Il collettivo resta
-    // visibile nella sua colonna ma non decide lo stato (es. corso 1 in soglia, corso 2 fuori
-    // soglia, collettivo sotto soglia → FUORI SOGLIA). Il collettivo decide lo stato solo se
-    // l'allievo non ha alcun corso individuale nel mese.
-    // Tra più corsi individuali resta la regola di prima: la carenza ha priorità, poi l'eccedenza.
+    // [FM-STATO-IND] Stato complessivo: fanno fede SOLO i corsi INDIVIDUALI, tutti allo stesso
+    // livello. Basta che UN corso individuale superi la soglia → OLTRE SOGLIA (c'è comunque una
+    // lezione in più da pagare), anche se un altro corso è sotto (es. -1 e +1 → oltre soglia).
+    // Solo se nessun corso è oltre, la carenza di un corso → SOTTO SOGLIA, altrimenti IN LINEA.
+    // Il collettivo decide lo stato solo se l'allievo non ha alcun corso individuale nel mese;
+    // altrimenti, se è oltre soglia, viene solo SEGNALATO con un alert (collettivaOltre).
     const deltas = corsi.length > 0
       ? corsi.map(c=>c.delta)
       : (haCollettivo ? [collettiva.delta] : []);
     if (deltas.length === 0) deltas.push(0);
-    const deltaPeggiore = Math.min(...deltas) < 0 ? Math.min(...deltas) : Math.max(...deltas);
-    report.push({ id:s.id, nome, individuale, collettiva, corsi, haCollettivo, nonIscritto: !iscritto, deltaPeggiore: iscritto ? deltaPeggiore : 0 });
+    const deltaPeggiore = Math.max(...deltas) > 0 ? Math.max(...deltas) : Math.min(...deltas);
+    const collettivaOltre = iscritto && corsi.length > 0 && haCollettivo && collettiva.delta > 0;
+    report.push({ id:s.id, nome, individuale, collettiva, corsi, haCollettivo, nonIscritto: !iscritto, deltaPeggiore: iscritto ? deltaPeggiore : 0,
+      collettivaOltre, collettivaEccedenza: collettivaOltre ? collettiva.delta : 0 });
   });
   report.sort((a,b)=> (a.nonIscritto===b.nonIscritto) ? a.deltaPeggiore-b.deltaPeggiore : (a.nonIscritto?1:-1));
   const iscrittiRep = report.filter(r=>!r.nonIscritto);
@@ -3099,6 +3102,8 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     superano:    iscrittiRep.filter(r=>r.deltaPeggiore>0),
     inLinea:     iscrittiRep.filter(r=>r.deltaPeggiore===0),
     sottosoglia: iscrittiRep.filter(r=>r.deltaPeggiore<0),
+    // [FM-STATO-IND] allievi con corsi individuali il cui COLLETTIVO supera la soglia (solo alert)
+    collettiveOltre: iscrittiRep.filter(r=>r.collettivaOltre),
     nonIscritti: report.filter(r=>r.nonIscritto),
     PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO,
   };
@@ -3276,7 +3281,7 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscri
   const [reportSort, setReportSort] = useState({ col: null, dir: 1 });
   const soglieManRL = useSoglieManuali(); // [FM-SOGLIA-MAN] ricalcola quando cambiano le soglie manuali
 
-  const { report, superano, inLinea, sottosoglia, nonIscritti, PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO } =
+  const { report, superano, inLinea, sottosoglia, nonIscritti, collettiveOltre, PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO } =
     calcolaReportLezioni({ lessons, students, config, anniScolastici, iscrizioniAnno, soglieManuali: soglieManRL, mese: reportMese, anno: reportAnno });
   const allieviAttiviCount = (students||[]).filter(s=>s.status==='attivo'||!s.status).length;
 
@@ -3329,6 +3334,8 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscri
         , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text}}, `Report lezioni · ${MESI_FULL[reportMese-1]} ${reportAnno}`)
         , superano.length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px solid ${C.orangeBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${superano.length} oltre`)
         , sottosoglia.length>0&&React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},`${sottosoglia.length} sotto`)
+        , (collettiveOltre||[]).length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px dashed ${C.orangeBorder}`,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700},
+            title:'Allievi con le COLLETTIVE oltre soglia (lo stato segue i corsi individuali): '+collettiveOltre.map(r=>r.nome).join(', ')},`⚠ ${collettiveOltre.length} coll. oltre`)
       )
     )
     , React.createElement('div',{style:{background:C.surface,border:`1px solid ${C.border}`,borderTop:'none',borderRadius:'0 0 12px 12px'}}
@@ -3405,7 +3412,12 @@ const ReportLezioniMensile = ({ lessons, students, config, anniScolastici, iscri
                         React.createElement('td',{key:'coll',style:tdS}, r.haCollettivo ? cellaHover(r.collettiva, 'Collettive') : React.createElement('span',{style:{color:C.textDim,fontSize:12}},'—')),
                       ])
                 , React.createElement('td',{style:tdS}, React.createElement('span',{style:{fontSize:11,fontWeight:600,whiteSpace:'nowrap',
-                    background:r.nonIscritto?C.bg:bgStato,color:r.nonIscritto?C.textDim:clrStato,border:`1px solid ${r.nonIscritto?C.border:bdStato}`,borderRadius:20,padding:'3px 10px'}},lblStato))
+                    background:r.nonIscritto?C.bg:bgStato,color:r.nonIscritto?C.textDim:clrStato,border:`1px solid ${r.nonIscritto?C.border:bdStato}`,borderRadius:20,padding:'3px 10px'}},lblStato)
+                  /* [FM-STATO-IND] alert: collettive oltre soglia (non cambia lo stato, deciso dagli individuali) */
+                  , r.collettivaOltre && React.createElement('div',{style:{marginTop:6,display:'inline-flex',alignItems:'center',gap:4,fontSize:10.5,fontWeight:700,whiteSpace:'nowrap',
+                      color:C.orange,background:C.orangeBg,border:`1px dashed ${C.orangeBorder}`,borderRadius:6,padding:'2px 7px'},
+                      title:`Le lezioni collettive superano la soglia di ${r.collettivaEccedenza}: lo stato resta quello dei corsi individuali`}
+                    , React.createElement(Ic,{n:'alert',size:11,stroke:C.orange}), `Collettive oltre soglia (+${r.collettivaEccedenza})`))
               );
             })
           , filtrato.length===0&&React.createElement('tr',null,React.createElement('td',{colSpan:nColTot,style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}},'Nessun allievo in questa categoria'))

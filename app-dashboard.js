@@ -1997,7 +1997,7 @@ const ReportLezioniCard = ({ lessons, students, config, anniScolastici, onNaviga
   // Stessa funzione di calcolo condivisa con REPORT LEZIONI in ALLIEVI (calcolaReportLezioni,
   // definita in app-calendario.js) — garantisce che le due schede mostrino sempre gli stessi
   // identici numeri, invece di due formule duplicate che possono disallinearsi nel tempo.
-  const { report, superano, inLinea, sottosoglia, PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO } =
+  const { report, superano, inLinea, sottosoglia, collettiveOltre, PUNTI_CORSO_INDIVIDUALE, PUNTI_CORSO_COLLETTIVO } =
     calcolaReportLezioni({ lessons, students, config, anniScolastici, soglieManuali: soglieManRLC, mese: meseCurr, anno: annoCurr });
 
   const cella = (stat) => {
@@ -2014,7 +2014,10 @@ const ReportLezioniCard = ({ lessons, students, config, anniScolastici, onNaviga
   const RigaAllievo = (r) => React.createElement('div',{key:r.id||r.nome,
       style:{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:`1px solid ${C.border}44`,cursor:'pointer'},
       onClick:()=>onNavigate('allievi')}
-    , React.createElement('span',{style:{fontSize:12,color:C.text,fontWeight:600,flex:'1 1 auto',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, r.nome)
+    , React.createElement('span',{style:{fontSize:12,color:C.text,fontWeight:600,flex:'1 1 auto',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, r.nome
+        /* [FM-STATO-IND] alert collettive oltre soglia */
+        , r.collettivaOltre && React.createElement('span',{style:{marginLeft:6,fontSize:9,fontWeight:700,color:C.orange,background:C.orangeBg,border:`1px dashed ${C.orangeBorder}`,borderRadius:4,padding:'1px 5px'},
+            title:`Collettive oltre soglia (+${r.collettivaEccedenza})`},`⚠ Coll. +${r.collettivaEccedenza}`))
     , React.createElement('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,minWidth:52}}
         , React.createElement('span',{style:{fontSize:8,color:C.textDim,textTransform:'uppercase',letterSpacing:'.04em'}},'Ind.')
         , cella(r.individuale)
@@ -2055,6 +2058,8 @@ const ReportLezioniCard = ({ lessons, students, config, anniScolastici, onNaviga
           , superano.length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px solid ${C.orangeBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`${superano.length} oltre`)
           , inLinea.length>0&&React.createElement('span',{style:{background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`${inLinea.length} ok`)
           , sottosoglia.length>0&&React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700}},`${sottosoglia.length} sotto`)
+          , (collettiveOltre||[]).length>0&&React.createElement('span',{style:{background:C.orangeBg,color:C.orange,border:`1px dashed ${C.orangeBorder}`,borderRadius:4,padding:'2px 8px',fontSize:10,fontWeight:700},
+              title:'Collettive oltre soglia: '+collettiveOltre.map(r=>r.nome).join(', ')},`⚠ ${collettiveOltre.length} coll. oltre`)
         )
       )
       /* Sezioni collassabili — Individuali e Collettive mostrate separatamente per riga */
