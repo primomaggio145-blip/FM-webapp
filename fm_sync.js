@@ -69,6 +69,22 @@
     return Array.from(map.values());
   }
 
+  // Parse JSON tollerante alla doppia (o tripla) codifica: "[...]" → '[...]' → [...]
+  function _parseJsonDeep(v, fallback) {
+    let cur = v;
+    for (let i = 0; i < 3 && typeof cur === 'string'; i++) {
+      const t = cur.trim();
+      if (!t) return fallback;
+      try { cur = JSON.parse(t); }
+      catch(e) {
+        // stringa con virgolette interne ancora escapate (\") → tenta di de-escaparle
+        try { cur = JSON.parse(t.replace(/\\"/g, '"')); } catch(e2) { return fallback; }
+      }
+    }
+    return (cur === null || cur === undefined) ? fallback : cur;
+  }
+  window.__FM_PARSE_JSON_DEEP__ = _parseJsonDeep;
+
   function adaptLezione(r, allegatiAll) {
     // Collega gli allegati di questa lezione (dal array globale allegati)
     const allegati = allegatiAll
@@ -134,10 +150,13 @@
       // Gruppo collettivo da cui sono stati presi gli allievi (per riproporlo in modifica)
       gruppoId:   r.gruppo_id   || null,
       gruppoNome: r.gruppo_nome || null,
+      // [FM-LEZIONI-UTENTE] parsing "profondo": alcune righe hanno students salvato come
+      // stringa JSON dentro una colonna jsonb (doppia codifica) — un solo JSON.parse
+      // restituiva ancora una stringa, quindi .some() falliva e l'allievo non vedeva
+      // le proprie lezioni collettive.
       students: (() => {
-        if (!r.students) return [];
-        if (Array.isArray(r.students)) return r.students;
-        try { return JSON.parse(r.students); } catch(e) { return []; }
+        const v = _parseJsonDeep(r.students, []);
+        return Array.isArray(v) ? v : [];
       })(),
       // Mese/anno di competenza per il pacchetto/soglia mensile — vedi commento in toDB.lezioni()
       pacchettoMese: r.pacchetto_mese != null ? Number(r.pacchetto_mese) : null,
@@ -976,6 +995,19 @@
       const soglia60g = new Date(oggi);
       soglia60g.setDate(soglia60g.getDate() - 60);
       const sogliaISO = soglia60g.toISOString().split('T')[0];
+
+      // [FM-LEZIONI-UTENTE] Memorizza con QUALE utente autenticato è stata caricata la
+      // base delle lezioni. Il boot avviene spesso PRIMA del login (pagina di login
+      // aperta = utente anonimo): con le policy RLS l'anonimo non legge le lezioni, quindi
+      // la base resta vuota. __FM_FORCE_REFRESH__ (app-root.js) confronta questo valore
+      // con l'utente attuale e, se diverso, ricarica TUTTE le lezioni della finestra
+      // invece del solo "oggi + ultime 24h" — altrimenti l'allievo vedeva solo la
+      // lezione di oggi e quelle modificate di recente.
+      try {
+        const { data: { session: _sessBoot } } = await sb.auth.getSession();
+        window.__FM_LESSONS_AUTH_UID__ = (_sessBoot && _sessBoot.user && _sessBoot.user.id) || 'anon';
+      } catch(e) { window.__FM_LESSONS_AUTH_UID__ = 'anon'; }
+      window.__FM_LESSONS_SOGLIA_GIORNI__ = 60;
 
       const [
         { data: sS, error: e1 }, { data: sD, error: e2 }, { data: sC, error: e3 },

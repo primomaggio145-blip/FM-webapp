@@ -29,7 +29,7 @@ function App() {
       const u2 = { ...user, allievoId: id };
       try { window.__currentUser__ = u2; } catch (e) {}
       setUser(u2);
-      if (window.__FM_FORCE_REFRESH__) await window.__FM_FORCE_REFRESH__(true);
+      if (window.__FM_FORCE_REFRESH__) await window.__FM_FORCE_REFRESH__(true, { fullLessons: true }); // [FM-LEZIONI-UTENTE]
     } catch (e) {
       console.warn('[FM] cambio allievo non riuscito:', e && e.message);
       alert('Impossibile passare all\'altro allievo: ' + (e && e.message ? e.message : 'errore'));
@@ -302,7 +302,7 @@ function App() {
     // ── Refresh completo da Supabase ─────────────────────────────────────────
     // Espone window.__FM_FORCE_REFRESH__ per trigger manuale da qualsiasi punto
     let _refreshing = false;
-    window.__FM_FORCE_REFRESH__ = async function(silent) {
+    window.__FM_FORCE_REFRESH__ = async function(silent, opts) {
       if (_refreshing) return;
       _refreshing = true;
       // CRITICO: se c'è una scrittura debounced ancora in sospeso (es. l'utente ha
@@ -347,17 +347,52 @@ function App() {
           sb.from('concerti_partecipanti').select('*'),
         ]);
 
-        // ── Lezioni: SOLO oggi + modificate nelle ultime 24h ────────────────
-        // Mantiene in memoria quelle più vecchie già caricate
-        const [{ data: sLToday }, { data: sLRecent }] = await Promise.all([
-          sb.from('lezioni').select('*').eq('data', todayISO),
-          sb.from('lezioni').select('*').gt('updated_at', threshold24h).neq('data', todayISO),
-        ]);
-        const allFetchedL = [...(sLToday||[]), ...(sLRecent||[])];
-        const fetchedIds  = new Set(allFetchedL.map(r => r.id));
-        // Lezioni già in memoria che non sono state toccate → le teniamo
+        // ── Lezioni ─────────────────────────────────────────────────────────
+        // [FM-LEZIONI-UTENTE] Di norma: SOLO oggi + modificate nelle ultime 24h, tenendo in
+        // memoria quelle più vecchie già caricate. MA se la base in memoria è stata caricata
+        // con un ALTRO utente (tipicamente: boot sulla pagina di login da anonimo → RLS →
+        // zero lezioni) o se è vuota, o se richiesto esplicitamente (login, cambio allievo),
+        // serve un caricamento COMPLETO della finestra: altrimenti l'allievo vedeva solo la
+        // lezione di oggi e quelle toccate nelle ultime 24h (nessuna precedente/successiva,
+        // nessuna collettiva).
+        let _uidAttuale = 'anon';
+        try {
+          const { data: { session: _sessR } } = await sb.auth.getSession();
+          _uidAttuale = (_sessR && _sessR.user && _sessR.user.id) || 'anon';
+        } catch(e) {}
         const existingLessons = (window.__FM_DATA__ && window.__FM_DATA__.lessons) || [];
-        const untouched = existingLessons.filter(l => !fetchedIds.has(l.id));
+        const _lezioniComplete = !!(opts && opts.fullLessons)
+          || window.__FM_LESSONS_AUTH_UID__ !== _uidAttuale
+          || existingLessons.length === 0;
+        let allFetchedL, untouched;
+        if (_lezioniComplete) {
+          const _gg = window.__FM_LESSONS_SOGLIA_GIORNI__ || 60;
+          const _soglia = new Date(); _soglia.setDate(_soglia.getDate() - _gg);
+          let _sogliaISO = _soglia.toISOString().split('T')[0];
+          // Include comunque tutto l'anno scolastico attivo (dal 1° settembre), se più ampio
+          const _annoAtt = (sANNI || []).find(r => r.attivo === true);
+          if (_annoAtt && _annoAtt.anno_inizio) {
+            const _inizioAnno = `${_annoAtt.anno_inizio}-09-01`;
+            if (_inizioAnno < _sogliaISO) _sogliaISO = _inizioAnno;
+          }
+          const { data: sLAll, error: eLAll } = await sb.from('lezioni').select('*')
+            .gte('data', _sogliaISO).order('data', { ascending: false });
+          if (eLAll) console.warn('[FM] refresh lezioni completo:', eLAll.message);
+          allFetchedL = sLAll || [];
+          // Base sostituita per intero: niente lezioni "di un altro utente" rimaste in memoria
+          untouched = eLAll ? existingLessons : [];
+          if (!eLAll) window.__FM_LESSONS_AUTH_UID__ = _uidAttuale;
+          console.log(`[FM] Lezioni ricaricate per intero (utente ${_uidAttuale === 'anon' ? 'anonimo' : 'autenticato'}, dal ${_sogliaISO}): ${allFetchedL.length}`);
+        } else {
+          const [{ data: sLToday }, { data: sLRecent }] = await Promise.all([
+            sb.from('lezioni').select('*').eq('data', todayISO),
+            sb.from('lezioni').select('*').gt('updated_at', threshold24h).neq('data', todayISO),
+          ]);
+          allFetchedL = [...(sLToday||[]), ...(sLRecent||[])];
+          const fetchedIds  = new Set(allFetchedL.map(r => r.id));
+          // Lezioni già in memoria che non sono state toccate → le teniamo
+          untouched = existingLessons.filter(l => !fetchedIds.has(l.id));
+        }
 
         const adaptLFallback = (r) => {
           const allegatiAll = sAL || [];
@@ -384,7 +419,7 @@ function App() {
             repertorioIds: (() => { try { return r.repertorio_ids ? JSON.parse(r.repertorio_ids) : []; } catch(e) { return []; } })(),
             allegati,
             courseId: r.corso_id||null, courseName: r.corso_nome||null,
-            students: (() => { try { return r.students ? JSON.parse(r.students) : []; } catch(e) { return []; } })(),
+            students: (() => { const v = window.__FM_PARSE_JSON_DEEP__ ? window.__FM_PARSE_JSON_DEEP__(r.students, []) : (()=>{ try { return r.students ? JSON.parse(r.students) : []; } catch(e) { return []; } })(); return Array.isArray(v) ? v : []; })(),
             pacchettoMese: r.pacchetto_mese != null ? Number(r.pacchetto_mese) : null,
             pacchettoAnno: r.pacchetto_anno != null ? Number(r.pacchetto_anno) : null,
             pacchettoManuale: r.pacchetto_manuale === true,
@@ -579,7 +614,7 @@ function App() {
               durata: r.durata ? parseInt(r.durata) : (r.tipo==='collettivo'?60:45),
               repertorioIds: (function(){ try{return r.repertorio_ids?JSON.parse(r.repertorio_ids):[];}catch(e){return [];} })(),
               allegati: [],
-              students: (function(){ try{return r.students?JSON.parse(r.students):[];}catch(e){return [];} })(),
+              students: (function(){ var v = window.__FM_PARSE_JSON_DEEP__ ? window.__FM_PARSE_JSON_DEEP__(r.students, []) : (function(){ try{return r.students?JSON.parse(r.students):[];}catch(e){return [];} })(); return Array.isArray(v) ? v : []; })(),
               courseId: r.corso_id||null, courseName: r.corso_nome||null,
               notesRecupero: r.notes_recupero||'',
               pacchettoMese: r.pacchetto_mese != null ? Number(r.pacchetto_mese) : null,
@@ -854,7 +889,7 @@ function App() {
                     // Refresh silenzioso dei dati ad ogni login: evita il caso in cui, in
                     // assenza di refresh manuale, l'utente veda dati incompleti/obsoleti
                     // rispetto a quanto caricato all'apertura della pagina di login.
-                    setTimeout(()=>{ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true); }, 500);
+                    setTimeout(()=>{ if(window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__(true, { fullLessons: true }); }, 500); // [FM-LEZIONI-UTENTE]
                     if(u.ruolo==="admin"&&window.FM_AUTH&&window.FM_AUTH.getRichieste){window.FM_AUTH.getRichieste().then(r=>setSharedRichieste(r||[])).catch(()=>{});}
                     // Carica notifiche non lette al login — per ruolo (match preciso per
                     // persona demandato a NotificationBell/NotificheView)
