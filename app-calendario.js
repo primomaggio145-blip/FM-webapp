@@ -5093,7 +5093,7 @@ const safeInsertRecurringLesson = async (lesson, setLessons) => {
     corso_nome:       lesson.courseName || null,
     gruppo_id:        lesson.gruppoId ? String(lesson.gruppoId) : null,
     gruppo_nome:      lesson.gruppoNome || null,
-    students:         lesson.students && lesson.students.length > 0 ? JSON.stringify(lesson.students) : null,
+    students:         lesson.students && lesson.students.length > 0 ? lesson.students : null, // [FM-STUDENTS-JSONB] array vero, non stringa
     // NUOVO ISCRITTO: mancavano del tutto — una lezione "nuovo iscritto" con ricorrenza
     // impostata perdeva questi dati ad ogni occorrenza auto-generata (es. dopo aver
     // segnato la presenza sulla prima), lasciando l'admin senza sapere chi doveva venire.
@@ -11853,7 +11853,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           corso_nome:       mergedCourseName,
           gruppo_id:        dataNormFull.gruppoId ? String(dataNormFull.gruppoId) : null,
           gruppo_nome:      dataNormFull.gruppoNome || null,
-          students:         mergedStudents.length > 0 ? JSON.stringify(mergedStudents) : null,
+          students:         mergedStudents.length > 0 ? mergedStudents : null, // [FM-STUDENTS-JSONB]
           contact_name:     dataNormFull.contactName || null,
           phone:            dataNormFull.phone       || null,
           motivo_assenza:   dataNormFull.motivoAssenza || null,
@@ -12879,7 +12879,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   manuali_ids:    updated.manualiIds && updated.manualiIds.length > 0
                                     ? JSON.stringify(updated.manualiIds) : null,
                   students:       updated.students && updated.students.length > 0
-                                    ? JSON.stringify(updated.students) : null,
+                                    ? updated.students : null, // [FM-STUDENTS-JSONB]
                   motivo_assenza: updated.motivoAssenza || null,
                   updated_at:     new Date().toISOString(),
                 }).eq('id', updated.id).then(({ error }) => {

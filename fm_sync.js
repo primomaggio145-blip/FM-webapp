@@ -383,8 +383,13 @@
         corso_nome: l.courseName || null,
         gruppo_id:   l.gruppoId   ? String(l.gruppoId) : null,
         gruppo_nome: l.gruppoNome || null,
-        students: l.students && l.students.length > 0
-          ? JSON.stringify(l.students)
+        // [FM-STUDENTS-JSONB] La colonna è jsonb: va inviato l'ARRAY, non JSON.stringify().
+        // Con la stringa Postgres salvava uno scalare jsonb "[...]" (doppia codifica) e la
+        // policy RLS allievo_legge_proprie_lezioni (jsonb_array_elements) andava in errore
+        // "cannot extract elements from a scalar", facendo fallire l'intera lettura lezioni
+        // per TUTTI gli allievi.
+        students: Array.isArray(l.students) && l.students.length > 0
+          ? l.students
           : null,
         // Mese/anno di COMPETENZA per il pacchetto/soglia mensile — impostato una volta sola
         // alla creazione e MAI ricalcolato quando la lezione viene spostata con "Cambio ora"
