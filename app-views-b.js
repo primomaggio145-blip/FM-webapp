@@ -3159,7 +3159,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons, students, docent
 // ═══════════════════════════════════════════════════════════════════════════════
 // MESSAGGI VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
+const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, annoInizioAttivo }) => {
   // STILE CONVERSAZIONE: i messaggi sono raggruppati per interlocutore (thread).
   // Cliccando su una conversazione si apre lo storico completo (ricevuti + inviati)
   // con una casella di risposta in fondo che invia al mittente via send-message.
@@ -3611,7 +3611,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
 
     /* Modal Compose */
     , showCompose && React.createElement(ComposeModal, {
-        appUser, ruolo, students, docenti,
+        appUser, ruolo, students, docenti, gruppi, courses, annoInizioAttivo,
         onClose: ()=>setShowCompose(false),
         onSent: (nuovi, extra) => {
           setMessaggi(p=>[...nuovi,...p]);
@@ -3624,7 +3624,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
 };
 
 // ── Modal Compose Message ─────────────────────────────────────────────────────
-const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) => {
+const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, annoInizioAttivo, onClose, onSent }) => {
   useFMBackClose(onClose); // gesto/tasto indietro chiude
   const [oggetto,   setOggetto]   = useState('');
   const [testo,     setTesto]     = useState('');
@@ -3690,6 +3690,45 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) =>
     if (d.id==='__admin__') { setDestSel([d]); return; }
     setDestSel(p => p.some(x=>x.id===d.id) ? p.filter(x=>x.id!==d.id) : [...p,d]);
   };
+
+  // ── Gruppi delle lezioni collettive (solo admin) ──────────────────────────
+  // Un clic sul gruppo aggiunge in blocco tutti i suoi allievi (e, se attivo, il docente);
+  // un secondo clic li toglie. Si mostrano i gruppi dell'anno scolastico attivo
+  // (più quelli senza anno, creati prima dell'introduzione del campo).
+  const [inclDocGruppo, setInclDocGruppo] = useState(false);
+  const GRUPPI_LISTA = React.useMemo(() => {
+    if (!isAdmin) return [];
+    const byId = {}; DEST_LISTA.forEach(d => { byId[d.ruolo+':'+d.id] = d; });
+    return (gruppi||[])
+      .filter(g => annoInizioAttivo == null || g.annoInizio == null || String(g.annoInizio) === String(annoInizioAttivo))
+      .map(g => {
+        const corso = (courses||[]).find(c => String(c.id) === String(g.corsoId));
+        const membri = (g.allievi||[]).map(id => byId['allievo:'+String(id)]).filter(Boolean);
+        const docente = g.docenteId ? byId['docente:'+String(g.docenteId)] : null;
+        const corsoNome = corso ? (corso.name||corso.nome||'') : '';
+        return { id:String(g.id), nome:g.nome||'Gruppo', corsoNome, membri, docente,
+                 etichetta: (corsoNome ? corsoNome+' · ' : '') + (g.nome||'Gruppo') };
+      })
+      .filter(g => g.membri.length > 0)
+      .sort((a,b) => a.etichetta.localeCompare(b.etichetta, 'it'));
+  }, [gruppi, courses, annoInizioAttivo, students, docenti, isAdmin]);
+  const membriGruppo = (g) => [...g.membri, ...(inclDocGruppo && g.docente ? [g.docente] : [])];
+  const gruppoSelezionato = (g) => membriGruppo(g).every(d => destSel.some(x => x.id===d.id && x.ruolo===d.ruolo));
+  const toggleGruppo = (g) => {
+    const lista = membriGruppo(g);
+    if (gruppoSelezionato(g)) {
+      // Toglie i membri, ma NON chi appartiene anche a un altro gruppo ancora selezionato
+      const altri = GRUPPI_LISTA.filter(x => x.id !== g.id && gruppoSelezionato(x)).flatMap(membriGruppo);
+      const tieni = new Set(altri.map(d => d.ruolo+':'+d.id));
+      const via = new Set(lista.map(d => d.ruolo+':'+d.id).filter(k => !tieni.has(k)));
+      setDestSel(p => p.filter(d => !via.has(d.ruolo+':'+d.id)));
+    } else {
+      setDestSel(p => [...p, ...lista.filter(d => !p.some(x => x.id===d.id && x.ruolo===d.ruolo))]);
+    }
+  };
+  const gruppiFiltrati = search
+    ? GRUPPI_LISTA.filter(g => g.etichetta.toLowerCase().includes(search.toLowerCase()))
+    : GRUPPI_LISTA;
 
   const selectAll = (ruolo) => {
     const tutti = DEST_LISTA.filter(d=>d.ruolo===ruolo);
@@ -3785,7 +3824,30 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, onClose, onSent }) =>
           , isAdmin && React.createElement('div',{style:{display:'flex',gap:6,marginBottom:8}}
               , ['allievo','docente'].map(r=>React.createElement('button',{key:r,onClick:()=>selectAll(r),style:{padding:'4px 12px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11}},'Tutti i '+r+'i'))
             )
-          , isAdmin && React.createElement('input',{type:'text',placeholder:'Cerca destinatario...',value:search,onChange:e=>setSearch(e.target.value),style:{width:'100%',boxSizing:'border-box',padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,marginBottom:6}})
+          /* Gruppi delle lezioni collettive */
+          , isAdmin && GRUPPI_LISTA.length>0 && React.createElement('div',{style:{marginBottom:8}}
+              , React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:5,flexWrap:'wrap'}}
+                , React.createElement('span',{style:{fontSize:11,color:C.textMuted}},'Gruppi collettivi')
+                , React.createElement('label',{style:{fontSize:11,color:C.textMuted,display:'flex',alignItems:'center',gap:5,cursor:'pointer'}}
+                  , React.createElement('input',{type:'checkbox',checked:inclDocGruppo,onChange:e=>setInclDocGruppo(e.target.checked)})
+                  , 'Includi il docente del gruppo')
+              )
+              , React.createElement('div',{style:{display:'flex',gap:6,flexWrap:'wrap',maxHeight:96,overflowY:'auto'}}
+                , gruppiFiltrati.length===0
+                  ? React.createElement('span',{style:{fontSize:11,color:C.textDim}},'Nessun gruppo corrisponde alla ricerca')
+                  : gruppiFiltrati.map(g => {
+                      const on = gruppoSelezionato(g);
+                      return React.createElement('button',{key:g.id,onClick:()=>toggleGruppo(g),
+                          title: g.membri.map(m=>m.nome).join(', ') + (g.docente ? ' — docente: '+g.docente.nome : ''),
+                          style:{padding:'4px 10px',borderRadius:20,border:`1.5px solid ${on?C.teal:C.border}`,background:on?C.tealBg:C.bg,color:on?C.teal:C.text,cursor:'pointer',fontSize:11,fontWeight:on?700:400,display:'flex',alignItems:'center',gap:5}}
+                        , on ? '✓' : '👥'
+                        , g.etichetta
+                        , React.createElement('span',{style:{fontSize:10,color:on?C.teal:C.textDim}}, '('+membriGruppo(g).length+')')
+                      );
+                    })
+              )
+            )
+          , isAdmin && React.createElement('input',{type:'text',placeholder:'Cerca destinatario o gruppo...',value:search,onChange:e=>setSearch(e.target.value),style:{width:'100%',boxSizing:'border-box',padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,marginBottom:6}})
           /* Lista destinatari selezionabili */
           , React.createElement('div',{style:{maxHeight:150,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,background:C.bg}}
               , filtered.map(d=>{
