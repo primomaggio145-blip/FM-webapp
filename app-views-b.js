@@ -3180,6 +3180,10 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
 
   const showToast = (ok, msg) => { setToast({ok,msg}); setTimeout(()=>setToast(null),4000); };
 
+  // Id con cui un messaggio può essere indirizzato a me: utente app + schede anagrafiche collegate
+  const idsMiei = (authId) => [...new Set([authId, appUser?.allievoId, ...((appUser && appUser.allieviIds) || []), appUser?.docenteId]
+    .filter(v => v != null && v !== '').map(String))];
+
   // Carica messaggi
   const loadMessaggi = React.useCallback(async () => {
     const sb = window.supabaseClient; if (!sb) { setLoading(false); return; }
@@ -3190,7 +3194,9 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
       setMyAuthId(myId);
 
       const [{ data: ricevuti }, { data: broadcast }, { data: inviati }] = await Promise.all([
-        sb.from('messaggi').select('*').eq('destinatario_id', myId).order('created_at', {ascending:false}).limit(300),
+        // Anche i messaggi più vecchi indirizzati all'id della SCHEDA (allievo/docente/figli collegati)
+        // invece che all'utente dell'app: la Edge Function v3.3 ora salva l'id utente, ma lo storico no.
+        sb.from('messaggi').select('*').in('destinatario_id', idsMiei(myId)).order('created_at', {ascending:false}).limit(300),
         sb.from('messaggi').select('*').is('destinatario_id', null).eq('destinatario_ruolo', ruolo).order('created_at', {ascending:false}).limit(100),
         sb.from('messaggi').select('*').eq('mittente_id', myId).order('created_at', {ascending:false}).limit(300),
       ]);
@@ -3218,7 +3224,8 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
   }, [loadMessaggi]);
 
   const myId = myAuthId || appUser?.userId || appUser?.id;
-  const isIn  = m => m.mittente_id!==myId && (m.destinatario_id===myId || (!m.destinatario_id && m.destinatario_ruolo===ruolo));
+  const mieiIds = idsMiei(myId);
+  const isIn  = m => m.mittente_id!==myId && ((m.destinatario_id && mieiIds.includes(String(m.destinatario_id))) || (!m.destinatario_id && m.destinatario_ruolo===ruolo));
   const isOut = m => m.mittente_id===myId;
   const ricevuti = messaggi.filter(isIn);
   const inviati  = messaggi.filter(isOut);
@@ -3251,11 +3258,11 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
   };
   const interlocutore = (m) => isIn(m)
     ? { id:m.mittente_id||null, nome:m.mittente_nome||'', ruolo:m.mittente_ruolo||'', telefono:m.telefono||'' }
-    : { id:m.destinatario_id||null, nome:m.destinatario_nome||'', ruolo:m.destinatario_ruolo||'', telefono:'', broadcast:!m.destinatario_id };
+    : { id:m.destinatario_id||null, nome:m.destinatario_nome||'', ruolo:m.destinatario_ruolo||'', telefono:'', broadcast:!m.destinatario_id && !m.destinatario_nome };
   const chiaveDi = (m) => {
     const o = interlocutore(m);
-    if (o.broadcast) return { key:'b:'+(o.ruolo||''), o, anag:null };
     if (!isAdmin && o.ruolo === 'admin') return { key:'admin', o, anag:null };
+    if (o.broadcast) return { key:'b:'+(o.ruolo||''), o, anag:null };
     const anag = trovaAnagrafica(o);
     if (anag) return { key:'a:'+anag.ruolo+':'+anag.id, o, anag };
     if (o.nome) return { key:'n:'+(o.ruolo||'')+':'+_norm(o.nome), o, anag:null };
@@ -3403,7 +3410,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
       if (usaWA && !r.wa) alert('⚠️ WhatsApp non inviato: '+(r.wa_errore||'nessun esito dalla Edge Function')+(canali.app?'\n\nIl messaggio in app è stato inviato normalmente.':''));
       setMessaggi(p => [...p, {
         id: crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo,
-        destinatario_id: dest.id, destinatario_nome: dest.nome, destinatario_ruolo: dest.ruolo,
+        destinatario_id: r.destinatario_id !== undefined ? r.destinatario_id : dest.id, destinatario_nome: dest.nome, destinatario_ruolo: dest.ruolo,
         oggetto, testo, letto:false, created_at:new Date().toISOString(), canale:'interno',
         inviato_push: json.results ? !!r.push : canali.push, inviato_wa: usaWA ? !!r.wa : false, inviato_email:false
       }]);
