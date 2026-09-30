@@ -3160,14 +3160,23 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons, students, docent
 // MESSAGGI VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
 const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
+  // STILE CONVERSAZIONE: i messaggi sono raggruppati per interlocutore (thread).
+  // Cliccando su una conversazione si apre lo storico completo (ricevuti + inviati)
+  // con una casella di risposta in fondo che invia al mittente via send-message.
   const [messaggi,    setMessaggi]    = useState([]);
   const [myAuthId,    setMyAuthId]    = useState(null);
   const [loading,     setLoading]     = useState(true);
-  const [tab,         setTab]         = useState('ricevuti'); // 'ricevuti' | 'inviati'
+  const [tab,         setTab]         = useState('conversazioni'); // 'conversazioni' | 'inviati'
   const [canaleFiltro, setCanaleFiltro] = useState('tutti'); // 'tutti' | 'interno' | 'whatsapp'
   const [showCompose, setShowCompose] = useState(false);
   const [toast,       setToast]       = useState(null);
+  const [apertaKey,   setApertaKey]   = useState(null);   // chiave della conversazione aperta
+  const [risposta,    setRisposta]    = useState('');
+  const [invioRisp,   setInvioRisp]   = useState(false);
+  const [rispWA,      setRispWA]      = useState(false);  // solo admin
   const isMobile = useIsMobile();
+  const isAdmin  = ruolo === 'admin';
+  const fondoRef = React.useRef(null);
 
   const showToast = (ok, msg) => { setToast({ok,msg}); setTimeout(()=>setToast(null),4000); };
 
@@ -3181,9 +3190,9 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
       setMyAuthId(myId);
 
       const [{ data: ricevuti }, { data: broadcast }, { data: inviati }] = await Promise.all([
-        sb.from('messaggi').select('*').eq('destinatario_id', myId).order('created_at', {ascending:false}).limit(100),
-        sb.from('messaggi').select('*').is('destinatario_id', null).eq('destinatario_ruolo', ruolo).order('created_at', {ascending:false}).limit(50),
-        sb.from('messaggi').select('*').eq('mittente_id', myId).order('created_at', {ascending:false}).limit(100),
+        sb.from('messaggi').select('*').eq('destinatario_id', myId).order('created_at', {ascending:false}).limit(300),
+        sb.from('messaggi').select('*').is('destinatario_id', null).eq('destinatario_ruolo', ruolo).order('created_at', {ascending:false}).limit(100),
+        sb.from('messaggi').select('*').eq('mittente_id', myId).order('created_at', {ascending:false}).limit(300),
       ]);
       const tutti = [...(ricevuti||[]), ...(broadcast||[]), ...(inviati||[])];
       const dedup = Object.values(tutti.reduce((a, m) => { a[m.id]=m; return a; }, {}));
@@ -3194,10 +3203,112 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
 
   React.useEffect(() => { loadMessaggi(); }, []);
 
+  // Realtime: nuovi messaggi → ricarica (le policy RLS filtrano già ciò che l'utente può vedere)
+  React.useEffect(() => {
+    const sb = window.supabaseClient; if (!sb || !sb.channel) return;
+    let ch = null, t = null;
+    try {
+      ch = sb.channel('fm-messaggi-conv')
+        .on('postgres_changes', { event:'INSERT', schema:'public', table:'messaggi' }, () => {
+          clearTimeout(t); t = setTimeout(() => loadMessaggi(), 400);
+        })
+        .subscribe();
+    } catch(e) { console.warn('[FM] realtime messaggi:', e?.message); }
+    return () => { clearTimeout(t); try { if (ch) sb.removeChannel(ch); } catch(e) {} };
+  }, [loadMessaggi]);
+
   const myId = myAuthId || appUser?.userId || appUser?.id;
-  const ricevuti = messaggi.filter(m => m.destinatario_id===myId || (!m.destinatario_id && m.destinatario_ruolo===ruolo));
-  const inviati  = messaggi.filter(m => m.mittente_id===myId);
+  const isIn  = m => m.mittente_id!==myId && (m.destinatario_id===myId || (!m.destinatario_id && m.destinatario_ruolo===ruolo));
+  const isOut = m => m.mittente_id===myId;
+  const ricevuti = messaggi.filter(isIn);
+  const inviati  = messaggi.filter(isOut);
   const nonLetti = ricevuti.filter(m => !m.letto).length;
+
+  // ── Raggruppamento in conversazioni ────────────────────────────────────────
+  const _norm = s => String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+  const _tel  = t => { let n = String(t||'').replace(/\D/g,''); if (n.startsWith('00')) n = n.slice(2); return n; };
+  const _telUguali = (a, b) => {
+    const na = _tel(a), nb = _tel(b);
+    if (!na || !nb) return false;
+    if (na === nb) return true;
+    const corto = na.length <= nb.length ? na : nb, lungo = na.length <= nb.length ? nb : na;
+    return corto.length >= 8 && lungo.endsWith(corto);
+  };
+  // Collega l'interlocutore all'anagrafica (allievi/docenti): gli id dei messaggi possono essere
+  // UUID auth (messaggi ricevuti) o id anagrafica (messaggi composti dall'admin) → si unificano qui.
+  const trovaAnagrafica = (o) => {
+    if (!o || o.ruolo === 'admin') return null;
+    const liste = [];
+    if (o.ruolo !== 'docente') liste.push(['allievo', students||[]]);
+    if (o.ruolo !== 'allievo') liste.push(['docente', docenti||[]]);
+    for (const [r, lst] of liste) {
+      const x = (o.id && lst.find(s => String(s.id) === String(o.id)))
+             || (o.telefono && lst.find(s => _telUguali(o.telefono, s.phone||s.telefono)))
+             || (o.nome && lst.find(s => _norm(s.nome||s.name) === _norm(o.nome)));
+      if (x) return { ruolo:r, id:String(x.id), nome:x.nome||x.name||o.nome, telefono:x.phone||x.telefono||'' };
+    }
+    return null;
+  };
+  const interlocutore = (m) => isIn(m)
+    ? { id:m.mittente_id||null, nome:m.mittente_nome||'', ruolo:m.mittente_ruolo||'', telefono:m.telefono||'' }
+    : { id:m.destinatario_id||null, nome:m.destinatario_nome||'', ruolo:m.destinatario_ruolo||'', telefono:'', broadcast:!m.destinatario_id };
+  const chiaveDi = (m) => {
+    const o = interlocutore(m);
+    if (o.broadcast) return { key:'b:'+(o.ruolo||''), o, anag:null };
+    if (!isAdmin && o.ruolo === 'admin') return { key:'admin', o, anag:null };
+    const anag = trovaAnagrafica(o);
+    if (anag) return { key:'a:'+anag.ruolo+':'+anag.id, o, anag };
+    if (o.nome) return { key:'n:'+(o.ruolo||'')+':'+_norm(o.nome), o, anag:null };
+    if (o.id) return { key:'i:'+o.id, o, anag:null };
+    if (o.telefono) return { key:'t:'+_tel(o.telefono), o, anag:null };
+    return { key:'x:'+m.id, o, anag:null };
+  };
+
+  const conversazioni = React.useMemo(() => {
+    const map = {};
+    messaggi.forEach(m => {
+      if (!isIn(m) && !isOut(m)) return;
+      const { key, o, anag } = chiaveDi(m);
+      if (!map[key]) map[key] = { key, msgs:[], anag, nome:'', ruolo:'', broadcast:!!o.broadcast };
+      const t = map[key];
+      t.msgs.push(m);
+      if (anag && !t.anag) t.anag = anag;
+    });
+    return Object.values(map).map(t => {
+      t.msgs.sort((a,b) => String(a.created_at||'').localeCompare(String(b.created_at||'')));
+      const inMsgs  = t.msgs.filter(isIn);
+      const outMsgs = t.msgs.filter(isOut);
+      const lastIn  = inMsgs[inMsgs.length-1] || null;
+      const lastOutId = [...outMsgs].reverse().find(m => m.destinatario_id) || null;
+      const ultimo  = t.msgs[t.msgs.length-1];
+      if (t.key === 'admin') { t.nome = 'Amministrazione'; t.ruolo = 'admin'; }
+      else if (t.broadcast) { t.nome = 'Tutti i '+(t.msgs[0].destinatario_ruolo||'')+(String(t.msgs[0].destinatario_ruolo||'').endsWith('e')?'':'i'); t.ruolo = t.msgs[0].destinatario_ruolo||''; }
+      else {
+        t.nome  = (t.anag && t.anag.nome) || (lastIn && lastIn.mittente_nome) || (ultimo.destinatario_nome) || 'Sconosciuto';
+        t.ruolo = (t.anag && t.anag.ruolo) || (lastIn && lastIn.mittente_ruolo) || ultimo.destinatario_ruolo || '';
+      }
+      // Destinatario della risposta: preferisce l'UUID auth del mittente (così il messaggio
+      // arriva nella sua casella), poi l'ultimo id usato in invio, poi l'anagrafica.
+      const telefono = (t.anag && t.anag.telefono) || (lastIn && lastIn.telefono) || '';
+      let destId = null;
+      if (lastIn && lastIn.mittente_id) destId = lastIn.mittente_id;
+      else if (lastOutId) destId = lastOutId.destinatario_id;
+      else if (t.anag) destId = t.anag.id;
+      else if (t.key === 'admin') destId = '__admin__';
+      t.reply = t.broadcast ? null : { id:destId, nome:t.nome, ruolo:t.ruolo, email:'', telefono };
+      t.lastIn = lastIn;
+      t.ultimo = ultimo;
+      t.nonLetti = inMsgs.filter(m => !m.letto).length;
+      t.haWA = t.msgs.some(m => m.canale === 'whatsapp');
+      t.haInterni = t.msgs.some(m => (m.canale||'interno') !== 'whatsapp');
+      return t;
+    }).sort((a,b) => String(b.ultimo.created_at||'').localeCompare(String(a.ultimo.created_at||'')));
+  }, [messaggi, myId, ruolo, students, docenti]);
+
+  const convFiltrate = canaleFiltro==='tutti' ? conversazioni
+    : conversazioni.filter(t => canaleFiltro==='whatsapp' ? t.haWA : t.haInterni);
+  const aperta = apertaKey ? conversazioni.find(t => t.key === apertaKey) : null;
+  const keyDelMsg = (m) => chiaveDi(m).key;
 
   const fmtDate = d => {
     if (!d) return '';
@@ -3208,16 +3319,227 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
     if (dt >= ieri) return 'Ieri '+dt.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'});
     return dt.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit'});
   };
+  const fmtFull = d => d ? new Date(d).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
 
-  const segnaLetto = async (id) => {
+  const segnaLetti = async (ids) => {
+    if (!ids.length) return;
     const sb = window.supabaseClient; if (!sb) return;
-    const { error } = await sb.from('messaggi').update({letto:true, letto_at:new Date().toISOString()}).eq('id',id);
-    if (error) console.warn('[FM] segnaLetto error:', error.message);
-    else setMessaggi(p => p.map(m => m.id===id ? {...m,letto:true} : m));
+    const { error } = await sb.from('messaggi').update({letto:true, letto_at:new Date().toISOString()}).in('id', ids);
+    if (error) console.warn('[FM] segnaLetti error:', error.message);
+    else setMessaggi(p => p.map(m => ids.includes(m.id) ? {...m,letto:true} : m));
   };
 
-  const listaBase = tab==='ricevuti' ? ricevuti : inviati;
-  const lista = canaleFiltro==='tutti' ? listaBase : listaBase.filter(m => (m.canale||'interno')===canaleFiltro);
+  const apriConversazione = (key) => {
+    setApertaKey(key);
+    setRisposta('');
+    const t = conversazioni.find(x => x.key === key);
+    if (!t) return;
+    setRispWA(isAdmin && !!(t.lastIn && t.lastIn.canale === 'whatsapp') && telValido(t.reply && t.reply.telefono));
+    segnaLetti(t.msgs.filter(m => isIn(m) && !m.letto).map(m => m.id));
+  };
+
+  // Messaggi arrivati mentre la conversazione è aperta → segnati come letti
+  React.useEffect(() => {
+    if (!aperta) return;
+    const ids = aperta.msgs.filter(m => isIn(m) && !m.letto).map(m => m.id);
+    if (ids.length) segnaLetti(ids);
+  }, [aperta && aperta.msgs.length]);
+
+  // Scroll in fondo alla conversazione
+  React.useEffect(() => {
+    if (fondoRef.current) fondoRef.current.scrollIntoView({ block:'end' });
+  }, [apertaKey, aperta && aperta.msgs.length]);
+
+  // Su mobile la conversazione è a tutto schermo: il gesto/tasto indietro la chiude
+  useFMBackClose(() => setApertaKey(null), !!apertaKey && isMobile);
+
+  // Stessa logica di normalizzaTel() della Edge Function
+  function telValido(tel) {
+    if (!tel) return false;
+    const raw = String(tel).trim();
+    let n = raw.replace(/[^\d]/g,'');
+    if (n.startsWith('00')) n = n.slice(2);
+    if (/^3\d{9}$/.test(n) || /^393\d{9}$/.test(n)) return true;
+    return (raw.startsWith('+')||raw.startsWith('00')) && /^\d{8,15}$/.test(n);
+  }
+
+  const oggettoRisposta = (t) => {
+    const base = (t.lastIn && t.lastIn.oggetto) || (t.ultimo && t.ultimo.oggetto) || 'Messaggio';
+    return 'Re: ' + String(base).replace(/^\s*(re:\s*)+/i, '').trim();
+  };
+
+  const inviaRisposta = async () => {
+    const t = aperta;
+    const testo = risposta.trim();
+    if (!t || !t.reply || !testo || invioRisp) return;
+    const usaWA = isAdmin && rispWA && telValido(t.reply.telefono);
+    if (!t.reply.id && !usaWA) { alert('Impossibile rispondere: destinatario non collegato a un utente dell\'app.'); return; }
+    setInvioRisp(true);
+    try {
+      const sb = window.supabaseClient;
+      const { data:{ session } } = await sb.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { alert('Sessione scaduta — riloggati'); setInvioRisp(false); return; }
+      const mittente_id    = session.user.id;
+      const mittente_nome  = appUser?.nome||session.user.email||'';
+      const mittente_ruolo = ruolo;
+
+      let dest = { ...t.reply };
+      if (dest.id === '__admin__') {
+        const { data: adminP } = await sb.from('profili').select('id, nome').eq('ruolo','admin').limit(1);
+        dest = adminP?.length ? { ...dest, id: adminP[0].id } : { ...dest, id: null };
+      }
+      const canali = { app: !!dest.id, push: !!dest.id, email:false, whatsapp: usaWA };
+      const oggetto = oggettoRisposta(t);
+
+      const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-message', {
+        method:'POST',
+        headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
+        body: JSON.stringify({ mittente_id, mittente_nome, mittente_ruolo, oggetto, testo, destinatari:[dest], canali }),
+      });
+      const json = await res.json().catch(()=>({ok:false,error:'Risposta non valida'}));
+      if (!res.ok || !json.ok) { alert('Errore: '+(json.error||`HTTP ${res.status}`)); setInvioRisp(false); return; }
+      const r = (Array.isArray(json.results) && json.results[0]) || {};
+      if (usaWA && !r.wa) alert('⚠️ WhatsApp non inviato: '+(r.wa_errore||'nessun esito dalla Edge Function')+(canali.app?'\n\nIl messaggio in app è stato inviato normalmente.':''));
+      setMessaggi(p => [...p, {
+        id: crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo,
+        destinatario_id: dest.id, destinatario_nome: dest.nome, destinatario_ruolo: dest.ruolo,
+        oggetto, testo, letto:false, created_at:new Date().toISOString(), canale:'interno',
+        inviato_push: json.results ? !!r.push : canali.push, inviato_wa: usaWA ? !!r.wa : false, inviato_email:false
+      }]);
+      setRisposta('');
+    } catch(e) { alert('Errore invio: '+e.message); }
+    setInvioRisp(false);
+  };
+
+  const RUOLO_COL = {admin:{c:C.gold,bg:C.goldBg},docente:{c:C.teal,bg:C.tealBg},allievo:{c:C.blue,bg:C.blueBg}};
+  const iniziali = n => String(n||'?').trim().split(/\s+/).slice(0,2).map(p=>p[0]||'').join('').toUpperCase() || '?';
+  const Avatar = (t, size) => {
+    const rc = RUOLO_COL[t.ruolo] || {c:C.textMuted,bg:C.bg};
+    return React.createElement('div',{style:{width:size,height:size,borderRadius:'50%',background:rc.bg,color:rc.c,border:`1px solid ${rc.c}40`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:Math.round(size*0.36),fontWeight:700,fontFamily:"'Open Sans',sans-serif"}}, t.broadcast ? '👥' : iniziali(t.nome));
+  };
+  const badgeCanale = (m) => [
+    m.canale==='whatsapp' && React.createElement('span',{key:'wa',style:{fontSize:10,background:'#dcfce7',color:'#16a34a',border:'1px solid #bbf7d0',borderRadius:4,padding:'1px 6px'}},'📲 Da WhatsApp'),
+    m.inviato_push && React.createElement('span',{key:'p',style:{fontSize:10,opacity:.8}},'📱 Push'),
+    m.inviato_wa && React.createElement('span',{key:'w',style:{fontSize:10,opacity:.8}},'💬 WA'),
+  ].filter(Boolean);
+
+  // ── Riga conversazione (lista) ──────────────────────────────────────────────
+  const RigaConv = (t) => {
+    const attiva = t.key === apertaKey;
+    const u = t.ultimo;
+    const mio = isOut(u);
+    return React.createElement('div', {key:t.key, onClick:()=>apriConversazione(t.key),
+        style:{display:'flex',gap:12,alignItems:'center',padding:'12px 14px',cursor:'pointer',borderRadius:10,
+          background: attiva ? C.tealBg : (t.nonLetti ? `${C.teal}08` : C.surface),
+          border:`1px solid ${attiva||t.nonLetti ? C.tealBorder : C.border}`}}
+      , Avatar(t, 40)
+      , React.createElement('div',{style:{flex:1,minWidth:0}}
+        , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,justifyContent:'space-between'}}
+          , React.createElement('span',{style:{fontSize:13,fontWeight:t.nonLetti?700:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, t.nome)
+          , React.createElement('span',{style:{fontSize:11,color:t.nonLetti?C.teal:C.textDim,whiteSpace:'nowrap',fontWeight:t.nonLetti?700:400}}, fmtDate(u.created_at))
+        )
+        , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,justifyContent:'space-between',marginTop:2}}
+          , React.createElement('span',{style:{fontSize:12,color:t.nonLetti?C.text:C.textMuted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:t.nonLetti?600:400}},
+              (mio ? 'Tu: ' : '') + (u.testo || u.oggetto || ''))
+          , t.nonLetti>0 && React.createElement('span',{style:{minWidth:18,height:18,borderRadius:9,background:C.teal,color:'#fff',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 5px',flexShrink:0}}, t.nonLetti)
+        )
+      )
+    );
+  };
+
+  // ── Pannello conversazione ─────────────────────────────────────────────────
+  const Thread = (t) => {
+    const telOk = isAdmin && t.reply && telValido(t.reply.telefono);
+    const puoRisp = !!(t.reply && (t.reply.id || telOk));
+    let oggPrec = null;
+    return React.createElement('div',{style:{display:'flex',flexDirection:'column',height:'100%',minHeight:0,background:C.bg}}
+      /* Intestazione */
+      , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:10,padding:isMobile?'calc(env(safe-area-inset-top, 0px) + 10px) 12px 10px':'12px 16px',background:C.surface,borderBottom:`1px solid ${C.border}`,flexShrink:0}}
+        , React.createElement('button',{onClick:()=>setApertaKey(null),title:'Chiudi conversazione',
+            style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted,fontSize:26,lineHeight:1,padding:'0 6px 2px 0'}}, isMobile ? '‹' : '×')
+        , Avatar(t, 36)
+        , React.createElement('div',{style:{flex:1,minWidth:0}}
+          , React.createElement('div',{style:{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, t.nome)
+          , React.createElement('div',{style:{fontSize:11,color:C.textMuted}}, (t.ruolo ? t.ruolo.charAt(0).toUpperCase()+t.ruolo.slice(1) : '') + ' · ' + t.msgs.length + ' messagg' + (t.msgs.length===1?'io':'i'))
+        )
+      )
+      /* Messaggi */
+      , React.createElement('div',{style:{flex:1,overflowY:'auto',padding:'16px 14px',display:'flex',flexDirection:'column',gap:8,minHeight:0}}
+        , t.msgs.map(m => {
+            const mio = isOut(m);
+            const ogg = String(m.oggetto||'').replace(/^\s*(re:\s*)+/i,'').trim();
+            const mostraOgg = ogg && ogg !== oggPrec;
+            oggPrec = ogg || oggPrec;
+            return React.createElement('div',{key:m.id,style:{display:'flex',justifyContent:mio?'flex-end':'flex-start'}}
+              , React.createElement('div',{style:{maxWidth:'82%',padding:'8px 12px 6px',borderRadius:14,
+                  borderBottomRightRadius: mio?4:14, borderBottomLeftRadius: mio?14:4,
+                  background: mio ? C.teal : C.surface, color: mio ? '#fff' : C.text,
+                  border: mio ? 'none' : `1px solid ${C.border}`, boxShadow:'0 1px 2px rgba(0,0,0,.06)'}}
+                , mostraOgg && React.createElement('div',{style:{fontSize:11,fontWeight:700,marginBottom:3,opacity:mio?.9:1,color:mio?'#fff':C.teal}}, m.oggetto)
+                , React.createElement('div',{style:{fontSize:13,lineHeight:1.45,whiteSpace:'pre-wrap',wordBreak:'break-word'}}, m.testo)
+                , React.createElement('div',{style:{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end',marginTop:4,fontSize:10,color:mio?'rgba(255,255,255,.8)':C.textDim,flexWrap:'wrap'}}
+                  , badgeCanale(m)
+                  , React.createElement('span',{title:fmtFull(m.created_at)}, fmtDate(m.created_at))
+                  , mio && m.destinatario_id && React.createElement('span',{title:m.letto?'Letto':'Non ancora letto'}, m.letto ? '✓✓' : '✓')
+                )
+              )
+            );
+          })
+        , React.createElement('div',{ref:fondoRef})
+      )
+      /* Risposta */
+      , puoRisp
+        ? React.createElement('div',{style:{flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface,padding:isMobile?'10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px)':'10px 14px'}}
+            , telOk && React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}
+                , React.createElement('button',{onClick:()=>setRispWA(v=>!v),
+                    style:{padding:'4px 12px',borderRadius:20,border:`1.5px solid ${rispWA?'#25d366':C.border}`,background:rispWA?'#e9fbf0':C.bg,color:rispWA?'#128c4a':C.textMuted,cursor:'pointer',fontSize:11,fontWeight:rispWA?600:400}},
+                    '💬 Anche su WhatsApp')
+                , !t.reply.id && React.createElement('span',{style:{fontSize:11,color:C.textMuted}},'Non è un utente dell\'app: la risposta parte solo su WhatsApp')
+              )
+            , React.createElement('div',{style:{display:'flex',gap:8,alignItems:'flex-end'}}
+              , React.createElement('textarea',{value:risposta,onChange:e=>setRisposta(e.target.value),rows:1,
+                  placeholder:'Rispondi a '+t.nome+'…',
+                  onKeyDown:e=>{ if (e.key==='Enter' && (e.ctrlKey||e.metaKey)) { e.preventDefault(); inviaRisposta(); } },
+                  onInput:e=>{ e.target.style.height='auto'; e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'; },
+                  style:{flex:1,boxSizing:'border-box',padding:'9px 12px',borderRadius:18,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,resize:'none',fontFamily:"'Open Sans',sans-serif",maxHeight:140,lineHeight:1.4}})
+              , React.createElement('button',{onClick:inviaRisposta,disabled:!risposta.trim()||invioRisp||(!t.reply.id&&!rispWA),title:'Invia (Ctrl+Invio)',
+                  style:{width:40,height:40,borderRadius:'50%',border:'none',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',
+                    background:(!risposta.trim()||invioRisp)?C.border:C.teal,cursor:(!risposta.trim()||invioRisp)?'not-allowed':'pointer'}}
+                , invioRisp ? React.createElement('span',{style:{color:'#fff',fontSize:13}},'⏳') : React.createElement(Ic,{n:'send',size:16,stroke:'#fff'}))
+            )
+            , React.createElement('div',{style:{fontSize:10,color:C.textDim,marginTop:5}}, 'Oggetto: '+oggettoRisposta(t)+(t.reply.id?' · App + Push':''))
+          )
+        : React.createElement('div',{style:{flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface,padding:'12px 16px',fontSize:12,color:C.textMuted,textAlign:'center'}},
+            t.broadcast ? 'Messaggio inviato a un intero gruppo: per rispondere scrivi un nuovo messaggio.' : 'Questo mittente non può ricevere risposte dall\'app.')
+    );
+  };
+
+  // ── Lista inviati (storico) ────────────────────────────────────────────────
+  const listaInviati = canaleFiltro==='tutti' ? inviati : inviati.filter(m => (m.canale||'interno')===canaleFiltro);
+  const inviatiOrd = [...listaInviati].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+
+  const vuoto = (txt) => React.createElement('div',{style:{textAlign:'center',padding:'48px 0',color:C.textDim}}
+    , React.createElement(Ic,{n:'mail',size:32,stroke:C.textDim})
+    , React.createElement('p',{style:{marginTop:12,fontSize:14}}, txt));
+
+  const listaEl = loading
+    ? React.createElement('div',{style:{textAlign:'center',padding:40,color:C.textDim}},'⏳ Caricamento...')
+    : tab==='conversazioni'
+      ? (convFiltrate.length===0 ? vuoto('Nessuna conversazione')
+          : React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:6}}, convFiltrate.map(RigaConv)))
+      : (inviatiOrd.length===0 ? vuoto('Nessun messaggio inviato')
+          : React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:6}}
+              , inviatiOrd.map(m => React.createElement('div',{key:m.id,onClick:()=>{ setTab('conversazioni'); apriConversazione(keyDelMsg(m)); },
+                  style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 14px',cursor:'pointer'}}
+                  , React.createElement('div',{style:{display:'flex',justifyContent:'space-between',gap:8}}
+                    , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, '→ '+(m.destinatario_nome||m.destinatario_ruolo||''))
+                    , React.createElement('span',{style:{fontSize:11,color:C.textDim,whiteSpace:'nowrap'}}, fmtDate(m.created_at)))
+                  , React.createElement('div',{style:{fontSize:12,fontWeight:500,color:C.text,marginTop:2}}, m.oggetto||'(senza oggetto)')
+                  , React.createElement('div',{style:{fontSize:12,color:C.textMuted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, m.testo)
+                ))));
+
+  const splitDesktop = !isMobile && tab==='conversazioni';
 
   return React.createElement('div', {style:{minHeight:'100%',background:C.bg}}
     /* Header */
@@ -3241,7 +3563,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
       )
       /* Tabs */
       , React.createElement('div', {style:{display:'flex',gap:0}}
-        , [['ricevuti','📥 Ricevuti', ricevuti.length],['inviati','📤 Inviati', inviati.length]].map(([id,lbl,cnt]) =>
+        , [['conversazioni','💬 Conversazioni', conversazioni.length],['inviati','📤 Inviati', inviati.length]].map(([id,lbl,cnt]) =>
             React.createElement('button', {key:id, onClick:()=>setTab(id),
               style:{padding:'10px 20px',border:'none',background:'transparent',cursor:'pointer',
                 fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:tab===id?700:400,
@@ -3253,11 +3575,11 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
           )
       )
       /* Filtro canale */
-      , React.createElement('div', {style:{display:'flex',gap:6,padding:'8px 20px 12px'}}
+      , React.createElement('div', {style:{display:'flex',gap:6,padding:'8px 20px 12px',overflowX:'auto',whiteSpace:'nowrap'}}
         , [['tutti','Tutti'],['interno','💬 Interni'],['whatsapp','📲 WhatsApp']].map(([id,lbl]) =>
             React.createElement('button', {key:id, onClick:()=>setCanaleFiltro(id),
               style:{padding:'5px 12px',borderRadius:20,border:`1px solid ${canaleFiltro===id?C.teal:C.border}`,
-                background:canaleFiltro===id?C.tealBg:'transparent',cursor:'pointer',
+                background:canaleFiltro===id?C.tealBg:'transparent',cursor:'pointer',flexShrink:0,
                 fontFamily:"'Open Sans',sans-serif",fontSize:11,fontWeight:canaleFiltro===id?700:400,
                 color:canaleFiltro===id?C.teal:C.textMuted}}
               , lbl
@@ -3269,49 +3591,16 @@ const MessaggiView = ({ appUser, ruolo, students, docenti }) => {
     /* Toast */
     , toast && React.createElement('div',{style:{position:'fixed',top:20,right:20,zIndex:9999,padding:'12px 20px',borderRadius:10,background:toast.ok?'#16a34a':C.red,color:'#fff',fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:600,boxShadow:'0 4px 20px rgba(0,0,0,.2)'}}, toast.msg)
 
-    /* Lista messaggi */
-    , React.createElement('div', {style:{padding:isMobile?'12px 16px':'20px 32px'}}
-      , loading
-        ? React.createElement('div',{style:{textAlign:'center',padding:40,color:C.textDim}},'⏳ Caricamento...')
-        : lista.length===0
-          ? React.createElement('div',{style:{textAlign:'center',padding:'48px 0',color:C.textDim}}
-              , React.createElement(Ic,{n:'mail',size:32,stroke:C.textDim})
-              , React.createElement('p',{style:{marginTop:12,fontSize:14}}, tab==='ricevuti'?'Nessun messaggio ricevuto':'Nessun messaggio inviato')
-            )
-          : React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
-              , lista.map(m => {
-                  const isRicevuto = tab==='ricevuti';
-                  const nonLetto = isRicevuto && !m.letto;
-                  return React.createElement('div', {key:m.id,
-                      onClick: ()=>{ if(nonLetto) segnaLetto(m.id); },
-                      style:{background:nonLetto?`${C.teal}08`:C.surface,border:`1px solid ${nonLetto?C.tealBorder:C.border}`,
-                        borderRadius:12,padding:'14px 18px',cursor:nonLetto?'pointer':'default',
-                        display:'flex',gap:14,alignItems:'flex-start',transition:'background .15s'}}
-                    , React.createElement('div',{style:{width:36,height:36,borderRadius:8,background:nonLetto?C.tealBg:C.bg,border:`1px solid ${nonLetto?C.tealBorder:C.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
-                      , React.createElement(Ic,{n:nonLetto?'mail':'mail',size:16,stroke:nonLetto?C.teal:C.textMuted})
-                    )
-                    , React.createElement('div',{style:{flex:1,minWidth:0}}
-                      , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,justifyContent:'space-between',marginBottom:3}}
-                        , React.createElement('span',{style:{fontSize:13,fontWeight:nonLetto?700:600,color:C.text}},
-                            isRicevuto ? m.mittente_nome : `→ ${m.destinatario_nome||m.destinatario_ruolo}`)
-                        , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}}
-                          , nonLetto && React.createElement('div',{style:{width:7,height:7,borderRadius:'50%',background:C.teal,flexShrink:0}})
-                          , React.createElement('span',{style:{fontSize:11,color:C.textDim,whiteSpace:'nowrap'}},fmtDate(m.created_at))
-                        )
-                      )
-                      , React.createElement('div',{style:{fontSize:12,fontWeight:nonLetto?600:500,color:C.text,marginBottom:3}},m.oggetto||'(senza oggetto)')
-                      , React.createElement('div',{style:{fontSize:12,color:C.textMuted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},m.testo)
-                      , React.createElement('div',{style:{display:'flex',gap:6,marginTop:5}}
-                        , m.canale==='whatsapp' && React.createElement('span',{style:{fontSize:10,background:'#dcfce7',color:'#16a34a',border:'1px solid #bbf7d0',borderRadius:4,padding:'1px 6px'}},'📲 Ricevuto su WhatsApp')
-                        , m.inviato_push && React.createElement('span',{style:{fontSize:10,background:C.tealBg,color:C.teal,border:`1px solid ${C.tealBorder}`,borderRadius:4,padding:'1px 6px'}},'📱 Push')
-                        , m.inviato_wa && React.createElement('span',{style:{fontSize:10,background:'#dcfce7',color:'#16a34a',border:'1px solid #bbf7d0',borderRadius:4,padding:'1px 6px'}},'💬 WA')
-                        , m.inviato_email && React.createElement('span',{style:{fontSize:10,background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:4,padding:'1px 6px'}},'📧 Email')
-                      )
-                    )
-                  );
-                })
-            )
-    )
+    /* Corpo */
+    , splitDesktop
+      ? React.createElement('div',{style:{display:'flex',gap:16,padding:'20px 32px',height:'calc(100vh - 230px)',minHeight:420,boxSizing:'border-box'}}
+          , React.createElement('div',{style:{width:aperta?340:'100%',maxWidth:aperta?340:760,flexShrink:0,overflowY:'auto'}}, listaEl)
+          , aperta && React.createElement('div',{style:{flex:1,minWidth:0,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden',display:'flex',flexDirection:'column'}}, Thread(aperta))
+        )
+      : React.createElement('div', {style:{padding:isMobile?'12px 16px':'20px 32px'}}, listaEl)
+
+    /* Conversazione a tutto schermo su mobile */
+    , isMobile && aperta && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9990,display:'flex',flexDirection:'column',background:C.bg}}, Thread(aperta))
 
     /* Modal Compose */
     , showCompose && React.createElement(ComposeModal, {
