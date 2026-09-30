@@ -3194,11 +3194,34 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
       if (!myId) { setLoading(false); return; }
       setMyAuthId(myId);
 
+      // Ricevuti: per id utente (destinatario_id, uuid) e per id della SCHEDA collegata
+      // (destinatario_scheda_id, testo: le schede più vecchie hanno id numerici, che la colonna
+      // uuid non può contenere). Gli id non-uuid NON vanno mai nel filtro su destinatario_id:
+      // PostgREST risponderebbe 400 e l'utente non vedrebbe nessun messaggio.
+      const ids = idsMiei(myId);
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidIds = ids.filter(v => UUID_RE.test(v));
+      const quota = v => '"' + String(v).replace(/[",()\\]/g, '') + '"';
+      const caricaRicevuti = async () => {
+        const filtri = [];
+        if (uuidIds.length) filtri.push(`destinatario_id.in.(${uuidIds.join(',')})`);
+        filtri.push(`destinatario_scheda_id.in.(${ids.map(quota).join(',')})`);
+        let r = await sb.from('messaggi').select('*').or(filtri.join(',')).order('created_at', {ascending:false}).limit(300);
+        if (r.error) {
+          // colonna destinatario_scheda_id non ancora creata (migrazione v3.5 da eseguire)
+          console.warn('[FM] messaggi ricevuti, ripiego senza destinatario_scheda_id:', r.error.message);
+          r = await sb.from('messaggi').select('*').in('destinatario_id', uuidIds.length ? uuidIds : [myId]).order('created_at', {ascending:false}).limit(300);
+        }
+        return r;
+      };
+      // Messaggi "a tutto il ruolo": solo quelli SENZA un destinatario nominato.
+      // Una riga con id vuoto ma con un nome (es. "Flavio Surano") è per una persona precisa:
+      // prima veniva mostrata a tutti gli allievi. Per l'admin restano tutte (casella condivisa).
+      let qBroadcast = sb.from('messaggi').select('*').is('destinatario_id', null).eq('destinatario_ruolo', ruolo);
+      if (ruolo !== 'admin') qBroadcast = qBroadcast.or('destinatario_nome.is.null,destinatario_nome.eq.');
       const [{ data: ricevuti }, { data: broadcast }, { data: inviati }] = await Promise.all([
-        // Anche i messaggi più vecchi indirizzati all'id della SCHEDA (allievo/docente/figli collegati)
-        // invece che all'utente dell'app: la Edge Function v3.3 ora salva l'id utente, ma lo storico no.
-        sb.from('messaggi').select('*').in('destinatario_id', idsMiei(myId)).order('created_at', {ascending:false}).limit(300),
-        sb.from('messaggi').select('*').is('destinatario_id', null).eq('destinatario_ruolo', ruolo).order('created_at', {ascending:false}).limit(100),
+        caricaRicevuti(),
+        qBroadcast.order('created_at', {ascending:false}).limit(100),
         sb.from('messaggi').select('*').eq('mittente_id', myId).order('created_at', {ascending:false}).limit(1500),
       ]);
       const tutti = [...(ricevuti||[]), ...(broadcast||[]), ...(inviati||[])];
@@ -3226,7 +3249,11 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
 
   const myId = myAuthId || appUser?.userId || appUser?.id;
   const mieiIds = idsMiei(myId);
-  const isIn  = m => m.mittente_id!==myId && ((m.destinatario_id && mieiIds.includes(String(m.destinatario_id))) || (!m.destinatario_id && m.destinatario_ruolo===ruolo));
+  const isIn  = m => m.mittente_id!==myId && (
+       (m.destinatario_id && mieiIds.includes(String(m.destinatario_id)))
+    || (m.destinatario_scheda_id && mieiIds.includes(String(m.destinatario_scheda_id)))
+    || (!m.destinatario_id && m.destinatario_ruolo===ruolo
+        && (ruolo==='admin' || (!m.destinatario_nome && !m.destinatario_scheda_id))));
   const isOut = m => m.mittente_id===myId;
   const ricevuti = messaggi.filter(isIn);
   const inviati  = messaggi.filter(isOut);
@@ -3259,7 +3286,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
   };
   const interlocutore = (m) => isIn(m)
     ? { id:m.mittente_id||null, nome:m.mittente_nome||'', ruolo:m.mittente_ruolo||'', telefono:m.telefono||'' }
-    : { id:m.destinatario_id||null, nome:m.destinatario_nome||'', ruolo:m.destinatario_ruolo||'', telefono:'', broadcast:!m.destinatario_id && !m.destinatario_nome };
+    : { id:m.destinatario_id||m.destinatario_scheda_id||null, nome:m.destinatario_nome||'', ruolo:m.destinatario_ruolo||'', telefono:'', broadcast:!m.destinatario_id && !m.destinatario_scheda_id && !m.destinatario_nome };
   const chiaveDi = (m) => {
     const o = interlocutore(m);
     // CONVERSAZIONE DI GRUPPO (stile WhatsApp): tutte le righe con lo stesso conversazione_id
@@ -3307,15 +3334,24 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
         });
         t.vista = vista;
         // Partecipanti = destinatari degli invii fatti da me in questa conversazione
+        // La stessa persona può comparire con id diversi nei vari invii (id utente, id scheda,
+        // vuoto): si unifica sull'anagrafica. Id di invio preferito: l'ultimo id UTENTE visto,
+        // poi l'id della scheda. Chi resta senza alcun id viene escluso: un destinatario vuoto
+        // verrebbe trattato dal server come "tutti gli allievi".
         const mem = {};
         outMsgs.forEach(m => {
-          const k = m.destinatario_id ? 'i:'+m.destinatario_id : 'n:'+_norm(m.destinatario_nome);
-          if (!mem[k]) mem[k] = { id:m.destinatario_id||null, nome:m.destinatario_nome||'', ruolo:m.destinatario_ruolo||'' };
+          const base = { id:m.destinatario_id||m.destinatario_scheda_id||null, nome:m.destinatario_nome||'', ruolo:m.destinatario_ruolo||'' };
+          const an = trovaAnagrafica(base);
+          const k = an ? 'a:'+an.ruolo+':'+an.id : (base.id ? 'i:'+base.id : 'n:'+base.ruolo+':'+_norm(base.nome));
+          const prec = mem[k];
+          const idUtente = m.destinatario_id || (prec && prec.idUtente) || null;
+          mem[k] = { nome: (an && an.nome) || base.nome || (prec && prec.nome) || '', ruolo: (an && an.ruolo) || base.ruolo,
+                     idUtente, idScheda: (an && an.id) || m.destinatario_scheda_id || (prec && prec.idScheda) || null,
+                     telefono: an ? an.telefono : '' };
         });
-        t.membri = Object.values(mem).map(d => {
-          const an = trovaAnagrafica(d);
-          return { ...d, email:'', telefono: an ? an.telefono : '' };
-        }).sort((a,b) => String(a.nome).localeCompare(String(b.nome), 'it'));
+        const tuttiMembri = Object.values(mem).map(d => ({ id: d.idUtente || d.idScheda || null, nome:d.nome, ruolo:d.ruolo, email:'', telefono:d.telefono }));
+        t.membri = tuttiMembri.filter(d => d.id).sort((a,b) => String(a.nome).localeCompare(String(b.nome), 'it'));
+        t.membriSenzaId = tuttiMembri.filter(d => !d.id).map(d => d.nome);
         t.ultimo = t.msgs[t.msgs.length-1];
         t.lastIn = lastIn;
         if (isAdmin) {
@@ -3561,6 +3597,8 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
       )
       /* Partecipanti */
       , t.gruppo && isAdmin && vediMembri && React.createElement('div',{style:{flexShrink:0,maxHeight:160,overflowY:'auto',padding:'8px 16px',background:C.surface,borderBottom:`1px solid ${C.border}`,display:'flex',gap:6,flexWrap:'wrap'}}
+        , (t.membriSenzaId||[]).length>0 && React.createElement('div',{style:{width:'100%',fontSize:11,color:C.red,marginBottom:4}},
+            '⚠️ Non raggiungibili (nessuna scheda o account collegato): '+t.membriSenzaId.join(', '))
         , t.membri.map(d => {
             const rc = RUOLO_COL[d.ruolo] || {c:C.textMuted,bg:C.bg};
             return React.createElement('span',{key:(d.id||d.nome),style:{fontSize:11,background:rc.bg,color:rc.c,borderRadius:20,padding:'2px 10px'}}, d.nome || '—');
