@@ -3174,6 +3174,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
   const [risposta,    setRisposta]    = useState('');
   const [invioRisp,   setInvioRisp]   = useState(false);
   const [rispWA,      setRispWA]      = useState(false);  // solo admin
+  const [vediMembri,  setVediMembri]  = useState(false);  // elenco partecipanti (conversazioni di gruppo)
   const isMobile = useIsMobile();
   const isAdmin  = ruolo === 'admin';
   const fondoRef = React.useRef(null);
@@ -3198,7 +3199,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
         // invece che all'utente dell'app: la Edge Function v3.3 ora salva l'id utente, ma lo storico no.
         sb.from('messaggi').select('*').in('destinatario_id', idsMiei(myId)).order('created_at', {ascending:false}).limit(300),
         sb.from('messaggi').select('*').is('destinatario_id', null).eq('destinatario_ruolo', ruolo).order('created_at', {ascending:false}).limit(100),
-        sb.from('messaggi').select('*').eq('mittente_id', myId).order('created_at', {ascending:false}).limit(300),
+        sb.from('messaggi').select('*').eq('mittente_id', myId).order('created_at', {ascending:false}).limit(1500),
       ]);
       const tutti = [...(ricevuti||[]), ...(broadcast||[]), ...(inviati||[])];
       const dedup = Object.values(tutti.reduce((a, m) => { a[m.id]=m; return a; }, {}));
@@ -3261,6 +3262,8 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
     : { id:m.destinatario_id||null, nome:m.destinatario_nome||'', ruolo:m.destinatario_ruolo||'', telefono:'', broadcast:!m.destinatario_id && !m.destinatario_nome };
   const chiaveDi = (m) => {
     const o = interlocutore(m);
+    // CONVERSAZIONE DI GRUPPO (stile WhatsApp): tutte le righe con lo stesso conversazione_id
+    if (m.conversazione_id) return { key:'c:'+m.conversazione_id, o, anag:null };
     if (!isAdmin && o.ruolo === 'admin') return { key:'admin', o, anag:null };
     if (o.broadcast) return { key:'b:'+(o.ruolo||''), o, anag:null };
     const anag = trovaAnagrafica(o);
@@ -3276,7 +3279,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
     messaggi.forEach(m => {
       if (!isIn(m) && !isOut(m)) return;
       const { key, o, anag } = chiaveDi(m);
-      if (!map[key]) map[key] = { key, msgs:[], anag, nome:'', ruolo:'', broadcast:!!o.broadcast };
+      if (!map[key]) map[key] = { key, msgs:[], anag, nome:'', ruolo:'', broadcast:!!o.broadcast && !key.startsWith('c:'), gruppo:key.startsWith('c:') };
       const t = map[key];
       t.msgs.push(m);
       if (anag && !t.anag) t.anag = anag;
@@ -3288,6 +3291,46 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
       const lastIn  = inMsgs[inMsgs.length-1] || null;
       const lastOutId = [...outMsgs].reverse().find(m => m.destinatario_id) || null;
       const ultimo  = t.msgs[t.msgs.length-1];
+      t.vista = t.msgs;
+      if (t.gruppo) {
+        const conNome = [...t.msgs].reverse().find(m => m.conversazione_nome);
+        t.nome  = (conNome && conNome.conversazione_nome) || 'Gruppo';
+        t.ruolo = '';
+        t.conversazione = { id: t.key.slice(2), nome: t.nome };
+        // Un invio al gruppo = una riga per destinatario → una sola bolla per invio
+        const perInvio = {}; const vista = [];
+        t.msgs.forEach(m => {
+          if (!isOut(m)) { vista.push(m); return; }
+          const k = m.invio_id || (String(m.created_at||'').slice(0,19)+'|'+m.testo);
+          if (perInvio[k]) { perInvio[k]._dest.push(m); return; }
+          const r = { ...m, _dest:[m] }; perInvio[k] = r; vista.push(r);
+        });
+        t.vista = vista;
+        // Partecipanti = destinatari degli invii fatti da me in questa conversazione
+        const mem = {};
+        outMsgs.forEach(m => {
+          const k = m.destinatario_id ? 'i:'+m.destinatario_id : 'n:'+_norm(m.destinatario_nome);
+          if (!mem[k]) mem[k] = { id:m.destinatario_id||null, nome:m.destinatario_nome||'', ruolo:m.destinatario_ruolo||'' };
+        });
+        t.membri = Object.values(mem).map(d => {
+          const an = trovaAnagrafica(d);
+          return { ...d, email:'', telefono: an ? an.telefono : '' };
+        }).sort((a,b) => String(a.nome).localeCompare(String(b.nome), 'it'));
+        t.ultimo = t.msgs[t.msgs.length-1];
+        t.lastIn = lastIn;
+        if (isAdmin) {
+          const tel = (t.membri.find(d => telValido(d.telefono)) || {}).telefono || '';
+          t.reply = t.membri.length ? { gruppo:true, id:'gruppo', nome:t.nome, ruolo:'', telefono:tel } : null;
+        } else {
+          // Chi riceve il messaggio di gruppo risponde all'amministrazione, dentro la stessa conversazione
+          const daAdmin = [...inMsgs].reverse().find(m => m.mittente_ruolo === 'admin' && m.mittente_id);
+          t.reply = { id: daAdmin ? daAdmin.mittente_id : '__admin__', nome: daAdmin ? (daAdmin.mittente_nome||'Amministrazione') : 'Amministrazione', ruolo:'admin', email:'', telefono:'' };
+        }
+        t.nonLetti = inMsgs.filter(m => !m.letto).length;
+        t.haWA = t.msgs.some(m => m.canale === 'whatsapp');
+        t.haInterni = true;
+        return t;
+      }
       if (t.key === 'admin') { t.nome = 'Amministrazione'; t.ruolo = 'admin'; }
       else if (t.broadcast) { t.nome = 'Tutti i '+(t.msgs[0].destinatario_ruolo||'')+(String(t.msgs[0].destinatario_ruolo||'').endsWith('e')?'':'i'); t.ruolo = t.msgs[0].destinatario_ruolo||''; }
       else {
@@ -3341,7 +3384,8 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
     setRisposta('');
     const t = conversazioni.find(x => x.key === key);
     if (!t) return;
-    setRispWA(isAdmin && !!(t.lastIn && t.lastIn.canale === 'whatsapp') && telValido(t.reply && t.reply.telefono));
+    setVediMembri(false);
+    setRispWA(isAdmin && !t.gruppo && !!(t.lastIn && t.lastIn.canale === 'whatsapp') && telValido(t.reply && t.reply.telefono));
     segnaLetti(t.msgs.filter(m => isIn(m) && !m.letto).map(m => m.id));
   };
 
@@ -3371,6 +3415,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
   }
 
   const oggettoRisposta = (t) => {
+    if (t.gruppo) return t.nome;
     const base = (t.lastIn && t.lastIn.oggetto) || (t.ultimo && t.ultimo.oggetto) || 'Messaggio';
     return 'Re: ' + String(base).replace(/^\s*(re:\s*)+/i, '').trim();
   };
@@ -3391,39 +3436,76 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
       const mittente_nome  = appUser?.nome||session.user.email||'';
       const mittente_ruolo = ruolo;
 
-      let dest = { ...t.reply };
-      if (dest.id === '__admin__') {
-        const { data: adminP } = await sb.from('profili').select('id, nome').eq('ruolo','admin').limit(1);
-        dest = adminP?.length ? { ...dest, id: adminP[0].id } : { ...dest, id: null };
+      let destList;
+      if (t.gruppo && isAdmin) destList = t.membri.map(d => ({ ...d }));
+      else {
+        let dest = { ...t.reply };
+        if (dest.id === '__admin__') {
+          const { data: adminP } = await sb.from('profili').select('id, nome').eq('ruolo','admin').limit(1);
+          dest = adminP?.length ? { ...dest, id: adminP[0].id } : { ...dest, id: null };
+        }
+        destList = [dest];
       }
-      const canali = { app: !!dest.id, push: !!dest.id, email:false, whatsapp: usaWA };
+      const conAccount = destList.some(d => d.id);
+      const canali = { app: conAccount || !!t.gruppo, push: conAccount || !!t.gruppo, email:false, whatsapp: usaWA };
       const oggetto = oggettoRisposta(t);
+      const invio_id = crypto.randomUUID();
+      const conversazione = t.gruppo ? t.conversazione : undefined;
 
       const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-message', {
         method:'POST',
         headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
-        body: JSON.stringify({ mittente_id, mittente_nome, mittente_ruolo, oggetto, testo, destinatari:[dest], canali }),
+        body: JSON.stringify({ mittente_id, mittente_nome, mittente_ruolo, oggetto, testo, destinatari:destList, canali, conversazione, invio_id }),
       });
       const json = await res.json().catch(()=>({ok:false,error:'Risposta non valida'}));
       if (!res.ok || !json.ok) { alert('Errore: '+(json.error||`HTTP ${res.status}`)); setInvioRisp(false); return; }
-      const r = (Array.isArray(json.results) && json.results[0]) || {};
-      if (usaWA && !r.wa) alert('⚠️ WhatsApp non inviato: '+(r.wa_errore||'nessun esito dalla Edge Function')+(canali.app?'\n\nIl messaggio in app è stato inviato normalmente.':''));
-      setMessaggi(p => [...p, {
-        id: crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo,
-        destinatario_id: r.destinatario_id !== undefined ? r.destinatario_id : dest.id, destinatario_nome: dest.nome, destinatario_ruolo: dest.ruolo,
-        oggetto, testo, letto:false, created_at:new Date().toISOString(), canale:'interno',
-        inviato_push: json.results ? !!r.push : canali.push, inviato_wa: usaWA ? !!r.wa : false, inviato_email:false
-      }]);
+      const esiti = Array.isArray(json.results) ? json.results : [];
+      const convRisp = (conversazione && json.conversazione) ? json.conversazione : null;
+      if (usaWA) {
+        const falliti = esiti.filter(r => r && !r.wa);
+        if (falliti.length) alert('⚠️ WhatsApp non inviato a '+falliti.length+':\n\n'+falliti.map(r=>'• '+(r.destinatario||'—')+': '+(r.wa_errore||'nessun esito')).join('\n')+(canali.app?'\n\nIl messaggio in app è stato inviato normalmente.':''));
+      }
+      const ora = new Date().toISOString();
+      setMessaggi(p => [...p, ...destList.map((dest, i) => {
+        const r = esiti[i] || {};
+        return {
+          id: crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo,
+          destinatario_id: r.destinatario_id !== undefined ? r.destinatario_id : dest.id, destinatario_nome: dest.nome, destinatario_ruolo: dest.ruolo,
+          oggetto, testo, letto:false, created_at:ora, canale:'interno',
+          conversazione_id: convRisp ? convRisp.id : null, conversazione_nome: convRisp ? convRisp.nome : null, invio_id,
+          inviato_push: esiti[i] ? !!r.push : canali.push, inviato_wa: usaWA ? !!r.wa : false, inviato_email:false
+        };
+      })]);
       setRisposta('');
     } catch(e) { alert('Errore invio: '+e.message); }
     setInvioRisp(false);
+  };
+
+  const rinominaConversazione = async (t) => {
+    const nuovo = window.prompt('Nome della conversazione', t.nome);
+    if (nuovo == null) return;
+    const nome = nuovo.trim();
+    if (!nome || nome === t.nome) return;
+    try {
+      const sb = window.supabaseClient;
+      const { data:{ session } } = await sb.auth.getSession();
+      const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-message', {
+        method:'POST',
+        headers:{'Authorization':`Bearer ${session?.access_token||''}`,'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'rinomina_conversazione', conversazione_id: t.conversazione.id, nome }),
+      });
+      const j = await res.json().catch(()=>({}));
+      if (!res.ok || !j.ok) { alert('Rinomina non riuscita: '+(j.error||`HTTP ${res.status}`)); return; }
+      setMessaggi(p => p.map(m => m.conversazione_id === t.conversazione.id ? { ...m, conversazione_nome: nome } : m));
+      showToast(true, '✅ Conversazione rinominata in "'+nome+'"');
+    } catch(e) { alert('Rinomina non riuscita: '+e.message); }
   };
 
   const RUOLO_COL = {admin:{c:C.gold,bg:C.goldBg},docente:{c:C.teal,bg:C.tealBg},allievo:{c:C.blue,bg:C.blueBg}};
   const iniziali = n => String(n||'?').trim().split(/\s+/).slice(0,2).map(p=>p[0]||'').join('').toUpperCase() || '?';
   const Avatar = (t, size) => {
     const rc = RUOLO_COL[t.ruolo] || {c:C.textMuted,bg:C.bg};
-    return React.createElement('div',{style:{width:size,height:size,borderRadius:'50%',background:rc.bg,color:rc.c,border:`1px solid ${rc.c}40`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:Math.round(size*0.36),fontWeight:700,fontFamily:"'Open Sans',sans-serif"}}, t.broadcast ? '👥' : iniziali(t.nome));
+    return React.createElement('div',{style:{width:size,height:size,borderRadius:'50%',background:rc.bg,color:rc.c,border:`1px solid ${rc.c}40`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:Math.round(size*0.36),fontWeight:700,fontFamily:"'Open Sans',sans-serif"}}, (t.broadcast || t.gruppo) ? '👥' : iniziali(t.nome));
   };
   const badgeCanale = (m) => [
     m.canale==='whatsapp' && React.createElement('span',{key:'wa',style:{fontSize:10,background:'#dcfce7',color:'#16a34a',border:'1px solid #bbf7d0',borderRadius:4,padding:'1px 6px'}},'📲 Da WhatsApp'),
@@ -3448,7 +3530,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
         )
         , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,justifyContent:'space-between',marginTop:2}}
           , React.createElement('span',{style:{fontSize:12,color:t.nonLetti?C.text:C.textMuted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:t.nonLetti?600:400}},
-              (mio ? 'Tu: ' : '') + (u.testo || u.oggetto || ''))
+              (mio ? 'Tu: ' : (t.gruppo && u.mittente_nome ? u.mittente_nome.split(' ')[0]+': ' : '')) + (u.testo || u.oggetto || ''))
           , t.nonLetti>0 && React.createElement('span',{style:{minWidth:18,height:18,borderRadius:9,background:C.teal,color:'#fff',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',padding:'0 5px',flexShrink:0}}, t.nonLetti)
         )
       )
@@ -3468,13 +3550,28 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
         , Avatar(t, 36)
         , React.createElement('div',{style:{flex:1,minWidth:0}}
           , React.createElement('div',{style:{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, t.nome)
-          , React.createElement('div',{style:{fontSize:11,color:C.textMuted}}, (t.ruolo ? t.ruolo.charAt(0).toUpperCase()+t.ruolo.slice(1) : '') + ' · ' + t.msgs.length + ' messagg' + (t.msgs.length===1?'io':'i'))
+          , t.gruppo
+            ? React.createElement('button',{onClick:()=>isAdmin && setVediMembri(v=>!v),
+                style:{background:'none',border:'none',padding:0,cursor:isAdmin?'pointer':'default',fontSize:11,color:C.textMuted,textAlign:'left',fontFamily:"'Open Sans',sans-serif"}},
+                isAdmin ? ('👥 '+t.membri.length+' partecipant'+(t.membri.length===1?'e':'i')+(vediMembri?' ▴':' ▾')) : 'Conversazione di gruppo · rispondi all\'amministrazione')
+            : React.createElement('div',{style:{fontSize:11,color:C.textMuted}}, (t.ruolo ? t.ruolo.charAt(0).toUpperCase()+t.ruolo.slice(1) : '') + ' · ' + t.msgs.length + ' messagg' + (t.msgs.length===1?'io':'i'))
         )
+        , t.gruppo && isAdmin && React.createElement('button',{onClick:()=>rinominaConversazione(t),title:'Rinomina conversazione',
+            style:{background:'none',border:`1px solid ${C.border}`,borderRadius:8,cursor:'pointer',color:C.textMuted,fontSize:12,padding:'5px 9px',flexShrink:0}}, '✏️ Rinomina')
+      )
+      /* Partecipanti */
+      , t.gruppo && isAdmin && vediMembri && React.createElement('div',{style:{flexShrink:0,maxHeight:160,overflowY:'auto',padding:'8px 16px',background:C.surface,borderBottom:`1px solid ${C.border}`,display:'flex',gap:6,flexWrap:'wrap'}}
+        , t.membri.map(d => {
+            const rc = RUOLO_COL[d.ruolo] || {c:C.textMuted,bg:C.bg};
+            return React.createElement('span',{key:(d.id||d.nome),style:{fontSize:11,background:rc.bg,color:rc.c,borderRadius:20,padding:'2px 10px'}}, d.nome || '—');
+          })
       )
       /* Messaggi */
       , React.createElement('div',{style:{flex:1,overflowY:'auto',padding:'16px 14px',display:'flex',flexDirection:'column',gap:8,minHeight:0}}
-        , t.msgs.map(m => {
+        , t.vista.map(m => {
             const mio = isOut(m);
+            const dest = m._dest || null;
+            const letti = dest ? dest.filter(x => x.letto).length : 0;
             const ogg = String(m.oggetto||'').replace(/^\s*(re:\s*)+/i,'').trim();
             const mostraOgg = ogg && ogg !== oggPrec;
             oggPrec = ogg || oggPrec;
@@ -3483,12 +3580,14 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
                   borderBottomRightRadius: mio?4:14, borderBottomLeftRadius: mio?14:4,
                   background: mio ? C.teal : C.surface, color: mio ? '#fff' : C.text,
                   border: mio ? 'none' : `1px solid ${C.border}`, boxShadow:'0 1px 2px rgba(0,0,0,.06)'}}
-                , mostraOgg && React.createElement('div',{style:{fontSize:11,fontWeight:700,marginBottom:3,opacity:mio?.9:1,color:mio?'#fff':C.teal}}, m.oggetto)
+                , t.gruppo && !mio && React.createElement('div',{style:{fontSize:11,fontWeight:700,marginBottom:2,color:(RUOLO_COL[m.mittente_ruolo]||{c:C.teal}).c}}, m.mittente_nome || '—')
+                , !t.gruppo && mostraOgg && React.createElement('div',{style:{fontSize:11,fontWeight:700,marginBottom:3,opacity:mio?.9:1,color:mio?'#fff':C.teal}}, m.oggetto)
                 , React.createElement('div',{style:{fontSize:13,lineHeight:1.45,whiteSpace:'pre-wrap',wordBreak:'break-word'}}, m.testo)
                 , React.createElement('div',{style:{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end',marginTop:4,fontSize:10,color:mio?'rgba(255,255,255,.8)':C.textDim,flexWrap:'wrap'}}
                   , badgeCanale(m)
                   , React.createElement('span',{title:fmtFull(m.created_at)}, fmtDate(m.created_at))
-                  , mio && m.destinatario_id && React.createElement('span',{title:m.letto?'Letto':'Non ancora letto'}, m.letto ? '✓✓' : '✓')
+                  , mio && dest && t.gruppo && React.createElement('span',{title:'Letto da '+letti+' su '+dest.length+(letti?': '+dest.filter(x=>x.letto).map(x=>x.destinatario_nome).join(', '):'')}, (letti===dest.length?'✓✓':'✓')+' '+letti+'/'+dest.length)
+                  , mio && !t.gruppo && m.destinatario_id && React.createElement('span',{title:m.letto?'Letto':'Non ancora letto'}, m.letto ? '✓✓' : '✓')
                 )
               )
             );
@@ -3501,7 +3600,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
             , telOk && React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}
                 , React.createElement('button',{onClick:()=>setRispWA(v=>!v),
                     style:{padding:'4px 12px',borderRadius:20,border:`1.5px solid ${rispWA?'#25d366':C.border}`,background:rispWA?'#e9fbf0':C.bg,color:rispWA?'#128c4a':C.textMuted,cursor:'pointer',fontSize:11,fontWeight:rispWA?600:400}},
-                    '💬 Anche su WhatsApp')
+                    t.gruppo ? '💬 Anche su WhatsApp (a chi ha il numero)' : '💬 Anche su WhatsApp')
                 , !t.reply.id && React.createElement('span',{style:{fontSize:11,color:C.textMuted}},'Non è un utente dell\'app: la risposta parte solo su WhatsApp')
               )
             , React.createElement('div',{style:{display:'flex',gap:8,alignItems:'flex-end'}}
@@ -3515,7 +3614,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
                     background:(!risposta.trim()||invioRisp)?C.border:C.teal,cursor:(!risposta.trim()||invioRisp)?'not-allowed':'pointer'}}
                 , invioRisp ? React.createElement('span',{style:{color:'#fff',fontSize:13}},'⏳') : React.createElement(Ic,{n:'send',size:16,stroke:'#fff'}))
             )
-            , React.createElement('div',{style:{fontSize:10,color:C.textDim,marginTop:5}}, 'Oggetto: '+oggettoRisposta(t)+(t.reply.id?' · App + Push':''))
+            , React.createElement('div',{style:{fontSize:10,color:C.textDim,marginTop:5}}, t.gruppo ? (isAdmin ? 'A tutti i '+t.membri.length+' partecipanti · App + Push' : 'La risposta arriva all\'amministrazione · App + Push') : 'Oggetto: '+oggettoRisposta(t)+(t.reply.id?' · App + Push':''))
           )
         : React.createElement('div',{style:{flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface,padding:'12px 16px',fontSize:12,color:C.textMuted,textAlign:'center'}},
             t.broadcast ? 'Messaggio inviato a un intero gruppo: per rispondere scrivi un nuovo messaggio.' : 'Questo mittente non può ricevere risposte dall\'app.')
@@ -3524,7 +3623,14 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
 
   // ── Lista inviati (storico) ────────────────────────────────────────────────
   const listaInviati = canaleFiltro==='tutti' ? inviati : inviati.filter(m => (m.canale||'interno')===canaleFiltro);
-  const inviatiOrd = [...listaInviati].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')));
+  const _visti = {};
+  const inviatiOrd = [...listaInviati].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))
+    .filter(m => {
+      if (!m.conversazione_id) return true;
+      const k = m.invio_id || (m.conversazione_id+'|'+String(m.created_at||'').slice(0,19)+'|'+m.testo);
+      if (_visti[k]) { _visti[k]._n++; return false; }
+      _visti[k] = m; m._n = 1; return true;
+    });
 
   const vuoto = (txt) => React.createElement('div',{style:{textAlign:'center',padding:'48px 0',color:C.textDim}}
     , React.createElement(Ic,{n:'mail',size:32,stroke:C.textDim})
@@ -3540,7 +3646,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
               , inviatiOrd.map(m => React.createElement('div',{key:m.id,onClick:()=>{ setTab('conversazioni'); apriConversazione(keyDelMsg(m)); },
                   style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'10px 14px',cursor:'pointer'}}
                   , React.createElement('div',{style:{display:'flex',justifyContent:'space-between',gap:8}}
-                    , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, '→ '+(m.destinatario_nome||m.destinatario_ruolo||''))
+                    , React.createElement('span',{style:{fontSize:13,fontWeight:600,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, m.conversazione_id ? ('👥 '+(m.conversazione_nome||'Gruppo')+' ('+m._n+')') : ('→ '+(m.destinatario_nome||m.destinatario_ruolo||'')))
                     , React.createElement('span',{style:{fontSize:11,color:C.textDim,whiteSpace:'nowrap'}}, fmtDate(m.created_at)))
                   , React.createElement('div',{style:{fontSize:12,fontWeight:500,color:C.text,marginTop:2}}, m.oggetto||'(senza oggetto)')
                   , React.createElement('div',{style:{fontSize:12,color:C.textMuted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, m.testo)
@@ -3613,10 +3719,11 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
     , showCompose && React.createElement(ComposeModal, {
         appUser, ruolo, students, docenti, gruppi, courses, annoInizioAttivo,
         onClose: ()=>setShowCompose(false),
-        onSent: (nuovi, extra) => {
+        onSent: (nuovi, extra, conv) => {
           setMessaggi(p=>[...nuovi,...p]);
           setShowCompose(false);
-          setTab('inviati');
+          if (conv) { setTab('conversazioni'); setVediMembri(false); setRisposta(''); setRispWA(false); setApertaKey('c:'+conv.id); }
+          else setTab('inviati');
           showToast(true, `✅ Messaggio inviato a ${nuovi.length} destinatar${nuovi.length===1?'io':'i'}${extra||''}`);
         }
       })
@@ -3726,6 +3833,14 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
       setDestSel(p => [...p, ...lista.filter(d => !p.some(x => x.id===d.id && x.ruolo===d.ruolo))]);
     }
   };
+  // Invio a più destinatari (admin) = CONVERSAZIONE DI GRUPPO, con nome modificabile.
+  // Nome automatico: il gruppo (o i gruppi) selezionati, es. "GRUPPO TEEN".
+  const [nomeConv, setNomeConv] = useState(null); // null = automatico
+  const gruppiScelti = GRUPPI_LISTA.filter(g => gruppoSelezionato(g));
+  const nomeConvAuto = gruppiScelti.length ? gruppiScelti.map(g => g.nome).join(' + ') : ('Gruppo ('+destSel.length+')');
+  const isCollettivo = isAdmin && destSel.length > 1;
+  const nomeConvFinale = ((nomeConv != null ? nomeConv : nomeConvAuto) || '').trim() || nomeConvAuto;
+
   const gruppiFiltrati = search
     ? GRUPPI_LISTA.filter(g => g.etichetta.toLowerCase().includes(search.toLowerCase()))
     : GRUPPI_LISTA;
@@ -3762,13 +3877,15 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
         return { ...d, id: null }; // broadcast admin senza ID specifico
       }));
 
+      const conversazione = isCollettivo ? { id: crypto.randomUUID(), nome: nomeConvFinale } : undefined;
+      const invio_id = crypto.randomUUID();
       const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-message', {
         method:'POST',
         headers:{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'},
         body: JSON.stringify({
           mittente_id, mittente_nome, mittente_ruolo,
           oggetto: oggetto.trim(), testo: testo.trim(),
-          destinatari: destinatariReali, canali
+          destinatari: destinatariReali, canali, conversazione, invio_id
         }),
       });
       const json = await res.json().catch(()=>({ok:false,error:'Risposta non valida'}));
@@ -3777,12 +3894,14 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
         setSending(false); return;
       }
       const now = new Date().toISOString();
+      const convOk = (conversazione && json.conversazione) ? json.conversazione : undefined;
       const esiti = Array.isArray(json.results) ? json.results : [];
       const nuovi = destinatariReali.map((d,i)=>{
         const r = esiti[i] || {};
         return {
           id: crypto.randomUUID(), mittente_id, mittente_nome, mittente_ruolo,
-          destinatario_id:d.id, destinatario_nome:d.nome, destinatario_ruolo:d.ruolo,
+          destinatario_id: r.destinatario_id !== undefined ? r.destinatario_id : d.id, destinatario_nome:d.nome, destinatario_ruolo:d.ruolo,
+          conversazione_id: convOk ? convOk.id : null, conversazione_nome: convOk ? convOk.nome : null, invio_id,
           oggetto:oggetto.trim(), testo:testo.trim(), letto:false, created_at:now,
           inviato_push: esiti[i] ? !!r.push : canali.push,
           inviato_wa:   esiti[i] ? !!r.wa   : false,
@@ -3801,7 +3920,8 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
             + '\n\nGli altri canali selezionati sono stati inviati normalmente.');
         }
       }
-      onSent(nuovi, riepilogoWA);
+      if (conversazione && !convOk) alert('⚠️ Messaggi inviati, ma la conversazione di gruppo non è stata creata: '+(json.avviso||'aggiorna la Edge Function send-message (v3.4)'));
+      onSent(nuovi, riepilogoWA, convOk);
     } catch(e) { alert('Errore invio: '+e.message); }
     setSending(false);
   };
@@ -3869,6 +3989,17 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
                   ,React.createElement('button',{onClick:()=>toggleDest(d),style:{background:'none',border:'none',cursor:'pointer',color:C.teal,fontSize:13,lineHeight:1,padding:0}},'×')
                 ))
             )
+        )
+        /* Nome della conversazione di gruppo */
+        , isCollettivo && React.createElement('div',null
+          , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:4}},'Nome conversazione di gruppo')
+          , React.createElement('input',{type:'text',value:nomeConv != null ? nomeConv : nomeConvAuto,maxLength:80,
+              onChange:e=>setNomeConv(e.target.value),placeholder:nomeConvAuto,
+              style:{width:'100%',boxSizing:'border-box',padding:'8px 12px',borderRadius:8,border:`1px solid ${C.tealBorder}`,background:C.bg,color:C.text,fontSize:13,fontWeight:600}})
+          , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:4}},
+              'Tutti i destinatari finiscono in un\'unica conversazione, da cui potrai continuare a scrivere al gruppo.'
+              + (nomeConv != null ? '' : ' Il nome segue i gruppi selezionati.'))
+          , nomeConv != null && React.createElement('button',{onClick:()=>setNomeConv(null),style:{marginTop:4,background:'none',border:'none',padding:0,cursor:'pointer',color:C.teal,fontSize:11}},'↺ Usa il nome automatico ('+nomeConvAuto+')')
         )
         /* Oggetto */
         , React.createElement('div',null
