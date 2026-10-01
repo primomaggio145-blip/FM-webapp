@@ -1222,7 +1222,21 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                     const mLabel = MESI_LABEL_L[selMese.m-1] + ' ' + selMese.y;
                     const lezioni = lezSel.slice().sort((a,b)=>a.date.localeCompare(b.date));
                     const nLez = lezioni.length;
-                    const totale = nLez * selected.tariffaOra;
+                    const totale = nLez * selected.tariffaOra;            // compenso lezioni
+                    // Allineato alla colonna TOTALE della tabella: compenso + extra − acconti
+                    const _esc = (t) => String(t==null?'':t).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+                    const _eur = (v) => `${v<0?'-':''}€${Math.abs(v).toLocaleString('it-IT')}`;
+                    const voci = altreSel.slice().sort((a,b)=>(a.data||"").localeCompare(b.data||""));
+                    const totExtra   = voci.filter(v=>!v.isAcconto).reduce((t,v)=>t+(Number(v.importo)||0),0);
+                    const totAcconti = voci.filter(v=> v.isAcconto).reduce((t,v)=>t+(Number(v.importo)||0),0);
+                    const totNetto   = totale + totExtra - totAcconti;
+                    const rowsVoci = voci.map(v => `
+                      <tr style="border-bottom:1px solid #eee;">
+                        <td style="padding:8px 12px;font-size:13px;">${v.data ? new Date(v.data+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'long'}) : '—'}</td>
+                        <td style="padding:8px 12px;font-size:13px;">${_esc(v.desc||'Competenza')}${v.isAcconto?' <span style="font-size:10px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:6px;padding:1px 6px;">ACCONTO</span>':''}</td>
+                        <td style="padding:8px 12px;font-size:13px;color:#666;">${_esc(v.categoria||'—')}</td>
+                        <td style="padding:8px 12px;font-size:13px;text-align:right;font-weight:600;color:${v.isAcconto?'#991b1b':'#166534'};">${v.isAcconto?'-':''}€${(Number(v.importo)||0).toLocaleString('it-IT')}</td>
+                      </tr>`).join('');
                     const rows = lezioni.map((l,i) => `
                       <tr style="border-bottom:1px solid #eee;">
                         <td style="padding:8px 12px;font-size:13px;">${i+1}</td>
@@ -1244,11 +1258,17 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
 @media print{body{padding:20px;}}</style></head><body>
 <div class="header"><div><div class="logo">🎵 Futuro Musica</div><div style="font-size:11px;color:#999;margin-top:2px;">Generato il ${new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'})}</div></div>
 <div style="text-align:right;"><div style="font-size:16px;font-weight:700;">${selected.nome||selected.name||'Docente'}</div><div style="font-size:12px;color:#666;">Tariffa: €${selected.tariffaOra}/ora · ${selected.strumento||'—'}</div></div></div>
-<h1>Resoconto mensile — ${mLabel}</h1><div style="font-size:14px;color:#666;margin-bottom:24px;">${nLez} lezioni · compenso totale: €${totale.toLocaleString('it-IT')}</div>
+<h1>Resoconto mensile — ${mLabel}</h1><div style="font-size:14px;color:#666;margin-bottom:24px;">${nLez} lezioni · compenso lezioni: €${totale.toLocaleString('it-IT')}${voci.length?` · totale da versare: ${_eur(totNetto)}`:''}</div>
 <table><thead><tr><th>#</th><th>Data</th><th>Ora</th><th>Allievo / Corso</th><th>Argomento</th><th style="text-align:right;">Tariffa</th><th style="text-align:center;">Presenza</th></tr></thead>
 <tbody>${rows}</tbody></table>
+${voci.length ? `<h2 style="font-size:15px;font-weight:700;margin:28px 0 10px;">Competenze extra e acconti</h2>
+<table><thead><tr><th>Data</th><th>Descrizione</th><th>Categoria</th><th style="text-align:right;">Importo</th></tr></thead>
+<tbody>${rowsVoci}</tbody></table>` : ''}
 <div class="totale"><div><div class="totale-label">Lezioni</div><div style="font-size:22px;font-weight:700;">${nLez}</div></div>
-<div><div class="totale-label">Compenso</div><div style="font-size:22px;font-weight:700;color:#166534;">€${totale.toLocaleString('it-IT')}</div></div></div>
+<div><div class="totale-label">Compenso lezioni</div><div style="font-size:22px;font-weight:700;color:#166534;">€${totale.toLocaleString('it-IT')}</div></div>
+${totExtra ? `<div><div class="totale-label">Extra</div><div style="font-size:22px;font-weight:700;color:#166534;">+€${totExtra.toLocaleString('it-IT')}</div></div>` : ''}
+${totAcconti ? `<div><div class="totale-label">Acconti</div><div style="font-size:22px;font-weight:700;color:#991b1b;">-€${totAcconti.toLocaleString('it-IT')}</div></div>` : ''}
+<div style="border-left:2px solid #e5e7eb;padding-left:32px;"><div class="totale-label">Totale da versare</div><div style="font-size:26px;font-weight:800;color:${totNetto<0?'#991b1b':'#0f766e'};">${_eur(totNetto)}</div></div></div>
 <div class="footer">Futuro Musica — Resoconto compensi ${mLabel} · ${selected.nome||selected.name}</div>
 </body></html>`;
                     const w = window.open('','_blank','width=900,height=700');
