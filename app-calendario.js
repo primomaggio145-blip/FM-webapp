@@ -2902,25 +2902,10 @@ async function salvaSogliaManuale(studenteId, anno, mese, corso, soglia, nota) {
 }
 
 function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese, anno, iscrizioniAnno, soglieManuali }) {
-  const now3 = new Date();
   const cfg = config || {};
   const PUNTI_CORSO_INDIVIDUALE = cfg.sogliaLezioniIndividuali != null ? Number(cfg.sogliaLezioniIndividuali) : 4;
   const PUNTI_CORSO_COLLETTIVO  = cfg.sogliaLezioniCollettive  != null ? Number(cfg.sogliaLezioniCollettive)  : 2;
   const rowsMan = Array.isArray(soglieManuali) ? soglieManuali : ((window.__FM_SOGLIE_MAN__ && window.__FM_SOGLIE_MAN__.rows) || []);
-
-  // Ultimo mese che contiene effettivamente delle lezioni (esclude lezioni programmate nel futuro):
-  // serve per capire se il mese selezionato è "in corso" (dati parziali) e va quindi prorata la soglia.
-  const oggiYM = anno*12 + mese;
-  let ultimoMeseConLezioni = null;
-  (lessons||[]).forEach(l => {
-    if (!l.date) return;
-    const [ly,lm] = l.date.split('-').map(Number);
-    if (!ly||!lm) return;
-    const ym = ly*12+lm;
-    if (ym > oggiYM) return; // ignora lezioni future
-    if (!ultimoMeseConLezioni || ym > ultimoMeseConLezioni.ym) ultimoMeseConLezioni = { anno:ly, mese:lm, ym };
-  });
-  const isUltimoMeseConLezioni = !!ultimoMeseConLezioni && ultimoMeseConLezioni.anno===anno && ultimoMeseConLezioni.mese===mese;
 
   // Data di fine anno scolastico (Impostazioni → Archivio anni scolastici)
   const annoScolasticoDelMese = (anniScolastici||[]).find(a => {
@@ -2944,11 +2929,11 @@ function calcolaReportLezioni({ lessons, students, config, anniScolastici, mese,
     const noteFinestra = [];
     let dataInizio = inizioMese;
     if (isMeseIscrizione && enroll > inizioMese) { dataInizio = enroll; noteFinestra.push(`dal giorno d'iscrizione (${_fmtDM(enroll)})`); }
+    // [FM-SOGLIA-MESE-INTERO] La soglia si calcola SEMPRE sul mese intero (1 → ultimo giorno),
+    // anche per il mese in corso: le lezioni contate includono già quelle programmate più
+    // avanti nel mese, quindi troncare il periodo "fino a oggi" dava soglie a 0 a inizio mese.
+    // Restano le sole riduzioni legittime: mese d'iscrizione e fine anno scolastico.
     let dataFine = fineMese;
-    if (isUltimoMeseConLezioni && !isMeseIscrizione && now3 >= dataInizio && now3 < dataFine) {
-      dataFine = new Date(now3.getFullYear(), now3.getMonth(), now3.getDate());
-      noteFinestra.push('fino a oggi (mese in corso)');
-    }
     if (isMeseFineAnno && dataFineAnno < dataFine) { dataFine = dataFineAnno; noteFinestra.push('fino alla fine dell\'anno scolastico'); }
     const finestra = { da: _fmtDM(dataInizio), a: _fmtDM(dataFine), note: noteFinestra, vuota: dataFine < dataInizio };
     if (dataFine < dataInizio) {
