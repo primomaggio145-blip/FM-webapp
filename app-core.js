@@ -2449,3 +2449,181 @@ const fmApplicaModalita = (u, scelta) => {
   }
   return { ...out, ruolo: 'docente', docenteId: orig.docenteId, allievoId: null };
 };
+
+/* ── [FM-TESTO-FORMATTATO] Testo formattato per Argomento ed Esercizi ────────
+   Formattazione "markdown leggero" salvata come TESTO SEMPLICE nelle colonne
+   esistenti (lezioni.topic / lezioni.exercises): nessuna migrazione, i testi già
+   scritti restano identici. Il rendering crea elementi React (mai innerHTML),
+   quindi non c'è rischio di HTML/script iniettato.
+     **grassetto**  *corsivo*  __sottolineato__  ~~barrato~~  ==evidenziato==
+     righe "- testo" → elenco puntato · righe "1. testo" → elenco numerato    */
+const _FM_FMT_BOLD = '\\*\\*(?!\\s)(?:[^\\n]*?[^\\s])?\\*\\*(?!\\*)';
+const _FM_FMT_ITAL = '(?<![\\w*])\\*(?![\\s*])(?:[^*\\n]*?[^\\s*])?\\*(?![\\w*])';
+const _FM_FMT_RE = new RegExp('(' + _FM_FMT_BOLD + '|__[^\\n]+?__|~~[^\\n]+?~~|==[^\\n]+?==|' + _FM_FMT_ITAL + ')');
+const _FM_FMT_TAG = { '**':'strong', '__':'u', '~~':'s', '==':'mark', '*':'em' };
+const _fmRigaElenco = (riga) => {
+  let m = /^\s*[-•]\s+(.*)$/.exec(riga);
+  if (m) return { tipo: 'ul', testo: m[1] };
+  m = /^\s*(\d+)[.)]\s+(.*)$/.exec(riga);
+  if (m) return { tipo: 'ol', testo: m[2], n: parseInt(m[1], 10) };
+  return null;
+};
+const fmInlineFormattato = (testo, chiave) => {
+  const out = [];
+  let resto = String(testo == null ? '' : testo), i = 0;
+  while (resto) {
+    const m = _FM_FMT_RE.exec(resto);
+    if (!m) { out.push(resto); break; }
+    if (m.index > 0) out.push(resto.slice(0, m.index));
+    const tok = m[0];
+    const mk = ['**','__','~~','=='].find(k => tok.startsWith(k) && tok.endsWith(k) && tok.length > 4) || '*';
+    const inner = tok.slice(mk.length, tok.length - mk.length);
+    const tag = _FM_FMT_TAG[mk];
+    const st = tag === 'mark' ? { background: 'rgba(250,204,21,.35)', color: 'inherit', padding: '0 2px', borderRadius: 3 } : undefined;
+    out.push(React.createElement(tag, { key: (chiave || 'f') + '-' + (i++), style: st }, ...fmInlineFormattato(inner, (chiave || 'f') + '-' + i)));
+    resto = resto.slice(m.index + tok.length);
+  }
+  return out;
+};
+// Componente di sola lettura: testo formattato (righe, elenchi, stili inline)
+const FMTestoFormattato = ({ testo, style, vuoto }) => {
+  const s = String(testo == null ? '' : testo);
+  if (!s.trim()) return vuoto != null ? React.createElement('div', { style }, vuoto) : null;
+  const righe = s.split('\n');
+  const blocchi = [];
+  righe.forEach((r) => {
+    const el = _fmRigaElenco(r);
+    const ult = blocchi[blocchi.length - 1];
+    if (el && ult && ult.tipo === el.tipo) ult.voci.push(el);
+    else if (el) blocchi.push({ tipo: el.tipo, voci: [el] });
+    else blocchi.push({ tipo: 'p', testo: r });
+  });
+  return React.createElement('div', { style: { whiteSpace: 'normal', wordBreak: 'break-word', ...(style || {}) } },
+    blocchi.map((b, i) => {
+      if (b.tipo === 'p') return b.testo.trim()
+        ? React.createElement('div', { key: i }, ...fmInlineFormattato(b.testo, 'p' + i))
+        : React.createElement('div', { key: i, style: { height: '0.6em' } });
+      return React.createElement(b.tipo, { key: i, start: b.tipo === 'ol' ? (b.voci[0].n || 1) : undefined,
+          style: { margin: '2px 0', paddingLeft: 22 } },
+        b.voci.map((v, j) => React.createElement('li', { key: j }, ...fmInlineFormattato(v.testo, 'l' + i + '-' + j))));
+    }));
+};
+// Versione "piana" per contesti su una riga (liste, tooltip, messaggi, stampe)
+const fmTestoPiano = (testo) => {
+  let s = String(testo == null ? '' : testo);
+  for (let k = 0; k < 3; k++) {
+    s = s.replace(new RegExp(_FM_FMT_BOLD, 'g'), m => m.slice(2, -2)).replace(/__([^\n]+?)__/g, '$1')
+         .replace(/~~([^\n]+?)~~/g, '$1').replace(/==([^\n]+?)==/g, '$1')
+         .replace(new RegExp(_FM_FMT_ITAL, 'g'), m => m.slice(1, -1));
+  }
+  return s.split('\n').map(r => { const el = _fmRigaElenco(r); return el ? (el.tipo === 'ul' ? '• ' : el.n + '. ') + el.testo : r; })
+          .map(r => r.trim()).filter(Boolean).join(' · ');
+};
+// Editor con barra di formattazione (textarea + pulsanti + anteprima)
+const FMEditorTesto = ({ label, value, onChange, onBlur, placeholder, rows, borderColor, background, labelStyle }) => {
+  const ref = React.useRef(null);
+  const [anteprima, setAnteprima] = React.useState(false);
+  const val = String(value == null ? '' : value);
+  const bc = borderColor || C.border;
+  const applica = (nuovo, selA, selB) => {
+    onChange(nuovo);
+    requestAnimationFrame(() => {
+      const ta = ref.current; if (!ta) return;
+      ta.focus();
+      try { ta.setSelectionRange(selA, selB); } catch (e) {}
+    });
+  };
+  const avvolgi = (mk) => {
+    const ta = ref.current; if (!ta) return;
+    const a = ta.selectionStart, b = ta.selectionEnd;
+    const prima = val.slice(0, a), sel = val.slice(a, b), dopo = val.slice(b);
+    // già formattato → rimuove la formattazione (toggle)
+    if (prima.endsWith(mk) && dopo.startsWith(mk) && !(mk === '*' && (prima.endsWith('**') || dopo.startsWith('**')))) {
+      return applica(prima.slice(0, -mk.length) + sel + dopo.slice(mk.length), a - mk.length, b - mk.length);
+    }
+    if (sel.length > 2 * mk.length && sel.startsWith(mk) && sel.endsWith(mk)) {
+      const inner = sel.slice(mk.length, sel.length - mk.length);
+      return applica(prima + inner + dopo, a, a + inner.length);
+    }
+    // gli spazi ai bordi della selezione restano fuori dai simboli
+    const lead = sel.match(/^\s*/)[0], trail = sel.slice(lead.length).match(/\s*$/)[0];
+    const core = sel.slice(lead.length, sel.length - trail.length);
+    const nuovo = prima + lead + mk + core + mk + trail + dopo;
+    const ini = a + lead.length + mk.length;
+    applica(nuovo, ini, ini + core.length);
+  };
+  const elenco = (tipo) => {
+    const ta = ref.current; if (!ta) return;
+    const a = ta.selectionStart, b = ta.selectionEnd;
+    const iniRiga = val.lastIndexOf('\n', a - 1) + 1;
+    let fineRiga = val.indexOf('\n', b); if (fineRiga < 0) fineRiga = val.length;
+    const righe = val.slice(iniRiga, fineRiga).split('\n');
+    const tutteGia = righe.every(r => { const el = _fmRigaElenco(r); return el && el.tipo === tipo; });
+    const nuove = righe.map((r, i) => {
+      const el = _fmRigaElenco(r);
+      const base = el ? el.testo : r;
+      if (tutteGia) return base;
+      return (tipo === 'ul' ? '- ' : (i + 1) + '. ') + base;
+    });
+    const blocco = nuove.join('\n');
+    applica(val.slice(0, iniRiga) + blocco + val.slice(fineRiga), iniRiga + blocco.length, iniRiga + blocco.length);
+  };
+  const onKeyDown = (e) => {
+    const k = (e.key || '').toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && (k === 'b' || k === 'i' || k === 'u')) {
+      e.preventDefault(); avvolgi(k === 'b' ? '**' : k === 'i' ? '*' : '__'); return;
+    }
+    // Invio dentro un elenco: continua l'elenco (o lo chiude se la voce è vuota)
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+      const ta = e.target, a = ta.selectionStart;
+      if (a !== ta.selectionEnd) return;
+      const iniRiga = val.lastIndexOf('\n', a - 1) + 1;
+      const riga = val.slice(iniRiga, a);
+      const el = _fmRigaElenco(riga + 'x');
+      if (!el) return;
+      e.preventDefault();
+      if (!el.testo.replace(/x$/, '').trim()) {
+        return applica(val.slice(0, iniRiga) + val.slice(a), iniRiga, iniRiga);
+      }
+      const pref = '\n' + (el.tipo === 'ul' ? '- ' : (el.n + 1) + '. ');
+      applica(val.slice(0, a) + pref + val.slice(a), a + pref.length, a + pref.length);
+    }
+  };
+  const btn = (key, contenuto, titolo, azione, extraStyle) => React.createElement('button', {
+    key, type: 'button', title: titolo, disabled: anteprima && key !== 'prev',
+    onPointerDown: e => e.preventDefault(), onMouseDown: e => e.preventDefault(),
+    onClick: azione,
+    style: { minWidth: 28, height: 26, padding: '0 7px', borderRadius: 6, border: `1px solid ${key === 'prev' && anteprima ? C.gold : 'transparent'}`,
+      background: key === 'prev' && anteprima ? C.goldBg : 'transparent', color: key === 'prev' && anteprima ? C.gold : C.textMuted,
+      cursor: anteprima && key !== 'prev' ? 'default' : 'pointer', opacity: anteprima && key !== 'prev' ? .35 : 1,
+      fontSize: 13, fontFamily: "'Open Sans',sans-serif", lineHeight: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', ...(extraStyle || {}) }
+  }, contenuto);
+  const sep = (k) => React.createElement('span', { key: k, style: { width: 1, height: 16, background: C.border, margin: '0 3px', flexShrink: 0 } });
+  return React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 6 } }
+    , label && React.createElement('label', { style: { fontSize: 12, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase', ...(labelStyle || {}) } }, label)
+    , React.createElement('div', { style: { border: `1px solid ${bc}`, borderRadius: 7, background: background || 'rgba(255,255,255,0.08)', overflow: 'hidden' } }
+      , React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 2, padding: '3px 5px', borderBottom: `1px solid ${bc}`, overflowX: 'auto', whiteSpace: 'nowrap' } }
+        , btn('b', React.createElement('strong', null, 'B'), 'Grassetto (Ctrl+B)', () => avvolgi('**'))
+        , btn('i', React.createElement('em', { style: { fontFamily: 'Georgia,serif' } }, 'I'), 'Corsivo (Ctrl+I)', () => avvolgi('*'))
+        , btn('u', React.createElement('u', null, 'U'), 'Sottolineato (Ctrl+U)', () => avvolgi('__'))
+        , btn('s', React.createElement('s', null, 'S'), 'Barrato', () => avvolgi('~~'))
+        , btn('h', React.createElement('span', { style: { background: 'rgba(250,204,21,.45)', padding: '0 3px', borderRadius: 2, color: C.text } }, 'A'), 'Evidenziato', () => avvolgi('=='))
+        , sep('s1')
+        , btn('ul', '• ≡', 'Elenco puntato', () => elenco('ul'))
+        , btn('ol', '1. ≡', 'Elenco numerato', () => elenco('ol'))
+        , React.createElement('span', { key: 'sp', style: { flex: 1 } })
+        , btn('prev', anteprima ? '✎ Modifica' : '👁 Anteprima', anteprima ? 'Torna alla modifica' : 'Mostra il testo formattato', () => {
+            if (!anteprima && onBlur) onBlur(); // salva prima di nascondere la casella
+            setAnteprima(p => !p);
+          }, { fontSize: 11 })
+      )
+      , anteprima
+        ? React.createElement(FMTestoFormattato, { testo: val, vuoto: 'Nessun testo',
+            style: { padding: '8px 10px', minHeight: (rows || 3) * 21, fontSize: 13, color: val.trim() ? C.text : C.textDim, lineHeight: 1.6 } })
+        : React.createElement('textarea', { ref, value: val, rows: rows || 3, placeholder,
+            onChange: e => onChange(e.target.value), onBlur, onKeyDown,
+            style: { display: 'block', width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: 'none', background: 'transparent',
+              color: C.text, fontSize: 13, fontFamily: "'Open Sans',sans-serif", outline: 'none', resize: 'vertical', lineHeight: 1.5 } })
+    )
+  );
+};

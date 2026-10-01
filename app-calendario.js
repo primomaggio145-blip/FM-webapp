@@ -1206,7 +1206,7 @@ const LessonLog = ({ lessons:_lessonsRaw, studentId, onAddLesson }) => {
           React.createElement('div', { key: i, style: {display:"flex",gap:12,padding:"12px 14px",background:C.bg,borderRadius:8,border:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3052}}
             , React.createElement('div', { style: {flexShrink:0,minWidth:72,fontSize:11,color:C.textMuted,paddingTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3053}}, fmtDate(l.date))
             , React.createElement('div', { style: {flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3054}}
-              , React.createElement('div', { style: {fontSize:14,fontWeight:500,marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3055}}, l.topic)
+              , React.createElement('div', { style: {fontSize:14,fontWeight:500,marginBottom:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3055}}, fmTestoPiano(l.topic))
               , l.notes && React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3056}}, l.notes)
             )
             , l.attendance && React.createElement(Badge, { label: (ATT_STYLES[l.attendance]||{}).label || l.attendance, color: l.attendance==="presente"?"green":"red", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3058}})
@@ -1805,7 +1805,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                       , React.createElement('span', { style: {fontSize:13,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3341}}
                         , isColl(l)
                           ? (l.courseName || l.courseId || "Lezione collettiva")
-                          : (l.topic || l.instrument || "—")
+                          : (fmTestoPiano(l.topic) || l.instrument || "—")
                       )
                       , isColl(l) && React.createElement('span', { style: {fontSize:10,background:C.purpleBg,color:C.purple,
                         border:`1px solid ${C.purpleBorder}`,borderRadius:4,padding:"1px 6px",letterSpacing:"0.05em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3342}}, "collettiva")
@@ -2358,7 +2358,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                       , new Date(l.date+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"2-digit",month:"long"})
                       , " ore ", l.hour
                     )
-                    , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:1}}, l.topic||l.instrument||"—")
+                    , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:1}}, fmTestoPiano(l.topic)||l.instrument||"—")
                   )
                 );
               })
@@ -5167,7 +5167,7 @@ window.gcalBuildCaption = (lesson, tpl) => {
     .replace('{strumento}', lesson.instrument||lesson.strumento||'')
     .replace('{docente}',   lesson.teacher   ||lesson.docente  ||'')
     .replace('{aula}',      lesson.room      ||'')
-    .replace('{argomento}', lesson.topic     ||'')
+    .replace('{argomento}', fmTestoPiano(lesson.topic)||'')
     .replace('{tipo}',      lesson.tipo      ||'individuale')
     .replace('{ora}',       (lesson.hour||'').slice(0,5))
     .trim();
@@ -5947,9 +5947,9 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
           : React.createElement(Input, { label: "Sala", value: f.room || "—", readOnly: true })
 
         , React.createElement(SDiv, { label: "Contenuto", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4235}})
-        , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4236}}, React.createElement(Input, { label: "Argomento", value: f.topic, onChange: e => set("topic", e.target.value), placeholder: "Es. Scale maggiori, Chopin Notturno..."    , __self: this, __source: {fileName: _jsxFileName, lineNumber: 4236}}))
+        , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4236}}, React.createElement(FMEditorTesto, { label: "Argomento", value: f.topic, onChange: v => set("topic", v), rows: 2, placeholder: "Es. Scale maggiori, Chopin Notturno..." }))
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4237}}, React.createElement(Textarea, { label: "Note",   value: f.notes, onChange: e => set("notes", e.target.value), placeholder: "Note aggiuntive..." , __self: this, __source: {fileName: _jsxFileName, lineNumber: 4237}}))
-        , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4238}}, React.createElement(Textarea, { label: "Esercizi da svolgere"  , value: f.exercises, onChange: e => set("exercises", e.target.value), placeholder: "Es. Studiare scale in Do maggiore, ripetere battute 12-24..."        , __self: this, __source: {fileName: _jsxFileName, lineNumber: 4238}}))
+        , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4238}}, React.createElement(FMEditorTesto, { label: "Esercizi da svolgere", value: f.exercises, onChange: v => set("exercises", v), borderColor: C.blueBorder, placeholder: "Es. Studiare scale in Do maggiore, ripetere battute 12-24..." }))
 
         , React.createElement(SDiv, { label: "Presenza", __self: this, __source: {fileName: _jsxFileName, lineNumber: 4240}})
         , React.createElement('div', { style: {gridColumn:"1/-1", display:"flex", gap:8, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4241}}
@@ -6702,9 +6702,9 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
               , _info.assente && React.createElement('div', { style: {fontSize:12, color:C.textMuted, fontStyle:"italic", marginBottom:4}}
                   , "Allievo assente alla lezione precedente.")
               , _info.topic && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginBottom:4}}
-                  , React.createElement('strong', null, "Argomento: "), _info.topic)
+                  , React.createElement('strong', null, "Argomento: "), React.createElement(FMTestoFormattato, { testo: _info.topic, style: {display:"inline-block", verticalAlign:"top"} }))
               , _info.exercises && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginBottom:4}}
-                  , React.createElement('strong', null, "Esercizi: "), _info.exercises)
+                  , React.createElement('strong', null, "Esercizi: "), React.createElement(FMTestoFormattato, { testo: _info.exercises, style: {display:"inline-block", verticalAlign:"top"} }))
               , _info.brani.length > 0 && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginBottom:4}}
                   , React.createElement('strong', null, "Brani studiati: ")
                   , _info.brani.map((b, i) => React.createElement('span', { key: b.id || i}
@@ -6729,16 +6729,12 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
             , React.createElement(InlineLabel, {label:"Argomento", icon:"note"})
             , React.createElement(SaveDot, null)
           )
-          , canEdit
-            ? React.createElement('textarea', { value: localTopic, onChange: e=>setLocalTopic(e.target.value),
+          , canEdit /* [FM-TESTO-FORMATTATO] */
+            ? React.createElement(FMEditorTesto, { value: localTopic, onChange: setLocalTopic,
                 onBlur: () => saveField({topic: localTopic}),
-                rows: 3, placeholder: "Es. Scale maggiori, Chopin Notturno...",
-                style: {width:"100%", boxSizing:"border-box", padding:"8px 10px", borderRadius:7,
-                  border:`1px solid ${C.border}`, background:"rgba(255,255,255,0.08)",
-                  color:C.text, fontSize:13, fontFamily:"'Open Sans',sans-serif",
-                  outline:"none", resize:"vertical", lineHeight:1.5}})
-            : React.createElement('div', { style: {fontSize:13, color:localTopic?C.text:C.textDim, lineHeight:1.6, fontStyle:localTopic?"normal":"italic"}},
-                localTopic || "Nessun argomento")
+                rows: 3, placeholder: "Es. Scale maggiori, Chopin Notturno..." })
+            : React.createElement(FMTestoFormattato, { testo: localTopic, vuoto: "Nessun argomento",
+                style: {fontSize:13, color:localTopic?C.text:C.textDim, lineHeight:1.6, fontStyle:localTopic?"normal":"italic"}})
         )
 
         /* ── Note lezione (solo lettura) ── */
@@ -6756,16 +6752,12 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
               , React.createElement(InlineLabel, {label:"Esercizi da svolgere", icon:"check", color:C.blue})
               , React.createElement(SaveDot, null)
             )
-            , canEdit
-              ? React.createElement('textarea', { value: localExercises, onChange: e=>setLocalExercises(e.target.value),
-                  onBlur: () => saveField({exercises: localExercises}),
-                  rows: 3, placeholder: "Es. Studiare scale in Do maggiore, ripetere battute 12-24...",
-                  style: {width:"100%", boxSizing:"border-box", padding:"8px 10px", borderRadius:7,
-                    border:`1px solid ${C.blueBorder}`, background:"rgba(255,255,255,0.08)",
-                    color:C.text, fontSize:13, fontFamily:"'Open Sans',sans-serif",
-                    outline:"none", resize:"vertical", lineHeight:1.5}})
-              : React.createElement('div', { style: {fontSize:13, color:localExercises?C.text:C.textDim, lineHeight:1.6, fontStyle:localExercises?"normal":"italic"}},
-                  localExercises || "Nessun esercizio assegnato")
+            , canEdit /* [FM-TESTO-FORMATTATO] */
+              ? React.createElement(FMEditorTesto, { value: localExercises, onChange: setLocalExercises,
+                  onBlur: () => saveField({exercises: localExercises}), borderColor: C.blueBorder,
+                  rows: 3, placeholder: "Es. Studiare scale in Do maggiore, ripetere battute 12-24..." })
+              : React.createElement(FMTestoFormattato, { testo: localExercises, vuoto: "Nessun esercizio assegnato",
+                  style: {fontSize:13, color:localExercises?C.text:C.textDim, lineHeight:1.6, fontStyle:localExercises?"normal":"italic"}})
           )
         )
 
@@ -7526,7 +7518,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula }
               , React.createElement('div',{style:{fontSize:12,color:C.textMuted}}
                 , l.richiedente||l.student
                 , l._original&&l._original.telefono?" · 📞 "+l._original.telefono:"")
-              , l.topic&&l.topic!=="Sala Prove"&&React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginTop:4,fontStyle:"italic"}},"\"",l.topic,"\"")
+              , l.topic&&l.topic!=="Sala Prove"&&React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginTop:4,fontStyle:"italic"}},"\"",fmTestoPiano(l.topic),"\"")
             )
           );
         }
@@ -7603,7 +7595,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula }
                         , dotHex && React.createElement('div',{style:{width:6,height:6,borderRadius:"50%",background:dotHex,flexShrink:0}})
                       )
                       , React.createElement('div',{style:{fontSize:12,color:C.textMuted}},l.teacher)
-                      , l.topic && !l.topic.startsWith('🔄') && !l.topic.startsWith('Recupero') && React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2,fontStyle:"italic"}},'"',l.topic,'"')
+                      , l.topic && !l.topic.startsWith('🔄') && !l.topic.startsWith('Recupero') && React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2,fontStyle:"italic"}},'"',fmTestoPiano(l.topic),'"')
                     )
                   )
                 )
@@ -7639,7 +7631,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula }
                           ))
                         )
                       )
-                      , l.topic && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4824}}, "\"", l.topic, "\"")
+                      , l.topic && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4824}}, "\"", fmTestoPiano(l.topic), "\"")
                     )
                   ) : l.tipo==="prova" ? (
                     React.createElement(React.Fragment, null
@@ -7683,7 +7675,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula }
                         , l.room    && React.createElement('span', null, "· " , l.room)
                         , l.nuovoIscritto && l.phone && React.createElement('span', null, "· 📞 ", l.phone)
                       )
-                      , l.topic && !l.topic.startsWith('🔄') && !l.topic.startsWith('Recupero') && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}}, "\"", l.topic, "\"")
+                      , l.topic && !l.topic.startsWith('🔄') && !l.topic.startsWith('Recupero') && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:6, fontStyle:"italic"}}, "\"", fmTestoPiano(l.topic), "\"")
                     )
                   )
                 )
@@ -7775,7 +7767,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula }
     const compatta = hPx < 34;
     const larg = 100 / it.nCol;
     return React.createElement('div', { key: l.id, onClick: () => onSelect(l),
-        title: [orario, titolo, sotto, isProva(l) ? "Lezione prova" : "", l.topic ? '"' + l.topic + '"' : ""].filter(Boolean).join("\n"),
+        title: [orario, titolo, sotto, isProva(l) ? "Lezione prova" : "", l.topic ? '"' + fmTestoPiano(l.topic) + '"' : ""].filter(Boolean).join("\n"),
         onMouseEnter: e => { e.currentTarget.style.filter = "brightness(0.95)"; e.currentTarget.style.zIndex = 3; },
         onMouseLeave: e => { e.currentTarget.style.filter = "none"; e.currentTarget.style.zIndex = 2; },
         style: {position:"absolute", top: (it.s - H_START) * HOUR_H + 1, height: hPx,
@@ -9023,9 +9015,9 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
           , React.createElement(Sel, { label: "Sala *", value: form.room,
             onChange: e=>{ set("room",e.target.value); setErr(p=>({...p,room:undefined})); }, options: opzioniSala(initial&&initial.room), error: err.room })
         )
-        , React.createElement(Input, { label: "Argomento", value: form.topic,
-          onChange: e=>set("topic",e.target.value),
-          placeholder: `Es. Introduzione a ${selCourse.name}`, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5550}})
+        , React.createElement(FMEditorTesto, { label: "Argomento", value: form.topic, /* [FM-TESTO-FORMATTATO] */
+          onChange: v=>set("topic",v), rows: 2,
+          placeholder: `Es. Introduzione a ${selCourse.name}` })
         , React.createElement(Textarea, { label: "Note", value: form.notes,
           onChange: e=>set("notes",e.target.value), placeholder: "Annotazioni...", __self: this, __source: {fileName: _jsxFileName, lineNumber: 5553}})
 
@@ -9974,7 +9966,7 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
               , React.createElement('td',{style:{padding:'9px 12px',fontSize:12,color:C.textDim,maxWidth:160}}
                 , (l.topic && (l.topic.startsWith('🔄') || l.topic.startsWith('Recupero')))
                   ? React.createElement('span',{style:{background:C.tealBg,color:C.teal,border:`1px solid ${C.tealBorder}`,borderRadius:4,padding:'2px 7px',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}},l.topic)
-                  : React.createElement('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}},l.topic||'—')
+                  : React.createElement('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'block'}},fmTestoPiano(l.topic)||'—')
               )
               , React.createElement('td',{style:{padding:'9px 12px'}}
                 , att

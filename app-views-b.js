@@ -909,7 +909,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       , React.createElement('div', { style: {fontSize:11,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10334}}
                         , isColl(l)
                           ? `${(l.students||[]).length} allievi`
-                          : l.topic||"—"
+                          : fmTestoPiano(l.topic)||"—"
                       )
                     )
                     , React.createElement('div', { style: {fontSize:12,color:isColl(l)?C.purple:insHex2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10340}}
@@ -1074,7 +1074,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       , l.__prova && React.createElement('span', { style: {fontSize:10,background:`${C.gold}20`,color:C.gold,
                           border:`1px solid ${C.gold}50`,borderRadius:4,padding:"1px 6px",letterSpacing:"0.05em",fontWeight:700}}, "PROVA")
                     )
-                    , React.createElement('div', { style: {fontSize:11,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10468}}, l.topic||"—")
+                    , React.createElement('div', { style: {fontSize:11,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10468}}, fmTestoPiano(l.topic)||"—")
                   )
                   , React.createElement('div', { style: {textAlign:"right",display:"flex",alignItems:"center",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10470}}
                     , l.__prova
@@ -1229,7 +1229,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                         <td style="padding:8px 12px;font-size:13px;">${new Date(l.date+'T00:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'long'})}</td>
                         <td style="padding:8px 12px;font-size:13px;">${l.hour||'—'}</td>
                         <td style="padding:8px 12px;font-size:13px;">${isColl(l)?(l.courseName||'Collettiva'):(l.student||'—')}</td>
-                        <td style="padding:8px 12px;font-size:13px;">${l.topic||'—'}</td>
+                        <td style="padding:8px 12px;font-size:13px;">${fmTestoPiano(l.topic)||'—'}</td>
                         <td style="padding:8px 12px;font-size:13px;text-align:right;">€${selected.tariffaOra}</td>
                         <td style="padding:8px 12px;font-size:12px;text-align:center;"><span style="background:${l.attendance==='presente'?'#dcfce7':l.attendance==='assente'?'#fee2e2':'#fef3c7'};color:${l.attendance==='presente'?'#166534':l.attendance==='assente'?'#991b1b':'#92400e'};padding:2px 8px;border-radius:20px;">${(typeof ATT_STYLES!=="undefined"&&ATT_STYLES[l.attendance]&&ATT_STYLES[l.attendance].label)||l.attendance||'—'}</span></td>
                       </tr>`).join('');
