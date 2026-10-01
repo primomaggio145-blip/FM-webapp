@@ -5276,7 +5276,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
 const SchedaScuolaView = ({ config }) => {
   const cfg = config || CONFIG_DEFAULT;
   const handlePrint = () => {
-    const w = window.open("","_blank","width=794,height=1123");
+    const w = window.fmFinestraStampa({ titolo: `Scheda Scuola — ${cfg.nomeScuola||""}` });
     if(!w){ alert("Abilita i popup per stampare"); return; }
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8">
     <title>Scheda Scuola — ${cfg.nomeScuola||""}</title>

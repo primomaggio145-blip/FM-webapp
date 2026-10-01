@@ -1184,7 +1184,7 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
   };
 
   const handlePrint = () => {
-    const w = window.open('','_blank','width=794,height=1123');
+    const w = window.fmFinestraStampa({ titolo: 'Programma — '+(evento.titolo||'') });
     if (!w) { alert('Abilita i popup per stampare'); return; }
     const rows = items.map((s,i) => {
       const perfTesto = getPerformerConCorso(s.performer);
@@ -1640,7 +1640,7 @@ const EventoDetail = ({ evento, students, docenti:docentiED, brani:_braniED, onE
                 , React.createElement('div', {style:{display:"flex",gap:8}}
                   , evento.prenotazioni.length > 0 && React.createElement('button', {
                       onClick: () => {
-                        const w = window.open('','_blank','width=900,height=700');
+                        const w = window.fmFinestraStampa({ titolo: 'Controllo accessi — '+(evento.titolo||'') });
                         if(!w){alert('Abilita i popup per stampare');return;}
                         const dataEvento = evento.data ? new Date(evento.data+'T00:00:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}) : '';
                         const CAT_LABEL = {allievo:'🎓 Allievo', docente:'👤 Docente', pubblico:'🎫 Pubblico'};

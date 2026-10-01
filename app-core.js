@@ -982,6 +982,107 @@ window.FMBack = window.FMBack || (function () {
   return api;
 })();
 
+// ═════════════════════════════════════════════════════════════════
+// fmApriStampa — anteprima di stampa che non "intrappola" l'utente
+// ═════════════════════════════════════════════════════════════════
+// Nella PWA installata (e sui dispositivi touch) window.open apre una finestra senza
+// alcun modo di tornare all'app. Qui il documento viene invece mostrato in un overlay
+// a tutto schermo DENTRO l'app, con barra "‹ Indietro" / "Stampa", registrato in FMBack:
+// lo swipe dal bordo sinistro (iPhone), il gesto/tasto indietro (Android) e il tasto
+// Esc lo chiudono. Su desktop resta la classica finestra separata.
+//   fmApriStampa(html, { titolo, autoPrint=true, features })
+window.fmApriStampa = function (html, opts) {
+  opts = opts || {};
+  const autoPrint = opts.autoPrint !== false;
+  const isPwa = window.__IS_PWA__ || window.matchMedia('(display-mode: standalone)').matches
+    || window.navigator.standalone === true || sessionStorage.getItem('fm_pwa') === '1';
+  const touch = window.matchMedia('(pointer: coarse)').matches;
+  if (!isPwa && !touch) {
+    const w = window.open('', '_blank', opts.features || 'width=900,height=700');
+    if (w) {
+      w.document.write(html); w.document.close();
+      if (autoPrint) setTimeout(() => { try { w.print(); } catch (e) {} }, 500);
+      return;
+    }
+    // popup bloccato → ripiega sull'overlay interno
+  }
+  const vecchio = document.getElementById('fm-stampa'); if (vecchio && vecchio._chiudi) vecchio._chiudi(true);
+  const col = (k, d) => { try { return (C && C[k]) || d; } catch (e) { return d; } };
+  const ov = document.createElement('div');
+  ov.id = 'fm-stampa';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9700;background:#fff;display:flex;flex-direction:column;'
+    + 'padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);';
+  const bar = document.createElement('div');
+  bar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;'
+    + 'border-bottom:1px solid ' + col('border', '#e5e7eb') + ';background:' + col('surface', '#fff') + ';flex-shrink:0;';
+  const btnSt = 'display:flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;font-size:14px;font-weight:600;'
+    + "cursor:pointer;font-family:'Open Sans',sans-serif;";
+  const indietro = document.createElement('button');
+  indietro.type = 'button';
+  indietro.textContent = '‹ Indietro';
+  indietro.style.cssText = btnSt + 'border:1px solid ' + col('border', '#d0d9eb') + ';background:none;color:' + col('text', '#1a1a2e') + ';';
+  const titolo = document.createElement('div');
+  titolo.textContent = opts.titolo || 'Anteprima di stampa';
+  titolo.style.cssText = 'flex:1;min-width:0;text-align:center;font-size:13px;color:' + col('textMuted', '#6b7280')
+    + ';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+  const stampa = document.createElement('button');
+  stampa.type = 'button';
+  stampa.textContent = '🖨\uFE0F Stampa';
+  stampa.style.cssText = btnSt + 'border:none;background:' + col('gold', '#1a4fa0') + ';color:#fff;';
+  bar.appendChild(indietro); bar.appendChild(titolo); bar.appendChild(stampa);
+  const box = document.createElement('div');
+  box.style.cssText = 'flex:1;position:relative;overflow:auto;-webkit-overflow-scrolling:touch;';
+  const frame = document.createElement('iframe');
+  frame.title = opts.titolo || 'Anteprima di stampa';
+  frame.style.cssText = 'display:block;width:100%;height:100%;border:0;background:#fff;';
+  // Striscia sul bordo sinistro: i tocchi dentro l'iframe non arrivano al documento
+  // dell'app, quindi lo swipe "indietro" deve partire da qui.
+  const bordo = document.createElement('div');
+  bordo.style.cssText = 'position:absolute;left:0;top:0;bottom:0;width:24px;z-index:2;';
+  box.appendChild(frame); box.appendChild(bordo);
+  ov.appendChild(bar); ov.appendChild(box);
+
+  let voce = null, chiuso = false;
+  const onKey = (e) => { if (e.key === 'Escape') chiudi(true); };
+  function chiudi(daUI) {
+    if (chiuso) return;
+    chiuso = true;
+    document.removeEventListener('keydown', onKey);
+    ov.remove();
+    if (daUI && voce && window.FMBack) window.FMBack.remove(voce);  // toglie la voce di cronologia
+  }
+  ov._chiudi = chiudi;
+  const stampaOra = () => {
+    try { frame.contentWindow.focus(); frame.contentWindow.print(); }
+    catch (e) { console.warn('[FM] stampa:', e); }
+  };
+  indietro.onclick = () => chiudi(true);
+  stampa.onclick = stampaOra;
+  document.addEventListener('keydown', onKey);
+  let primoLoad = true;
+  frame.onload = () => { if (primoLoad && autoPrint) { primoLoad = false; setTimeout(stampaOra, 400); } };
+  document.body.appendChild(ov);
+  frame.srcdoc = html;
+  if (window.FMBack) voce = window.FMBack.push(() => chiudi(false));  // swipe / tasto indietro
+};
+
+// fmFinestraStampa — sostituto "drop-in" di window.open('','_blank') per le stampe:
+// restituisce un oggetto con document.write/close; alla close() il documento viene
+// mostrato con fmApriStampa (overlay interno con Indietro/swipe nella PWA, finestra
+// separata su desktop). Le pagine che si stampano da sole (script window.print) restano
+// invariate: per questo autoPrint è false di default.
+window.fmFinestraStampa = function (opts) {
+  opts = Object.assign({ autoPrint: false }, opts || {});
+  let buf = '', aperta = false;
+  const doc = {
+    open() { buf = ''; },
+    write(...h) { buf += h.join(''); },
+    writeln(...h) { buf += h.join('') + '\n'; },
+    close() { if (aperta) return; aperta = true; window.fmApriStampa(buf, opts); },
+  };
+  return { document: doc, focus() {}, print() {}, close() {} };
+};
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // FMRoute — indirizzi (link) delle schede e apertura in nuova finestra
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1511,7 +1612,7 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
   };
 
   const handlePrint = () => {
-    const w = window.open("","_blank","width=794,height=1123");
+    const w = window.fmFinestraStampa({ titolo: `Ricevuta ${numRic||''}` });
     if(!w) { alert("Abilita i popup per stampare"); return; }
     w.document.write(buildHtml());
     w.document.close();
@@ -1543,7 +1644,7 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
         }, 500);
       } else {
         // Fallback: apri in popup e stampa
-        const w = window.open("","_blank","width=794,height=1123");
+        const w = window.fmFinestraStampa({ titolo: `Ricevuta ${numRic||''} — PDF` });
         if(!w) { alert("Abilita i popup per esportare il PDF"); return; }
         // Modifica l'HTML per non auto-stampare ma salvare come PDF
         const pdfHtml = buildHtml().replace(

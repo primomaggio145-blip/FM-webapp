@@ -14965,7 +14965,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
               , React.createElement('h3', {style:{fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,margin:0}}, "Scaletta — ", evento.titolo)
               , hasProg2 && prog.length>0 && React.createElement('button', {
                   onClick:()=>{
-                    const w=window.open("","_blank");
+                    const w=window.fmFinestraStampa({ titolo: `Scaletta — ${evento.titolo||""}` });
                     const rows=prog.map((p,i)=>`<div class="brano"><div class="num">${i+1}</div><div>
                       <div class="title">${p.branoTitle||""}</div>
                       <div class="comp">${p.composer||""}</div>

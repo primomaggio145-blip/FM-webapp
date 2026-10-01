@@ -1271,8 +1271,8 @@ ${totAcconti ? `<div><div class="totale-label">Acconti</div><div style="font-siz
 <div style="border-left:2px solid #e5e7eb;padding-left:32px;"><div class="totale-label">Totale da versare</div><div style="font-size:26px;font-weight:800;color:${totNetto<0?'#991b1b':'#0f766e'};">${_eur(totNetto)}</div></div></div>
 <div class="footer">Futuro Musica — Resoconto compensi ${mLabel} · ${selected.nome||selected.name}</div>
 </body></html>`;
-                    const w = window.open('','_blank','width=900,height=700');
-                    if(w){w.document.write(html);w.document.close();setTimeout(()=>w.print(),500);}
+                    // Overlay interno con "Indietro" + swipe nella PWA; finestra separata su desktop
+                    window.fmApriStampa(html, { titolo: `Resoconto ${selected.nome||selected.name||''} — ${mLabel}` });
                   },
                   style:{display:'flex',alignItems:'center',gap:8,padding:'10px 22px',borderRadius:9,
                     border:'none',background:C.gold,color:'#fff',cursor:'pointer',
