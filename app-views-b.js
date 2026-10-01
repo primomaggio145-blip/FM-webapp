@@ -3159,6 +3159,53 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons, students, docent
 // ═══════════════════════════════════════════════════════════════════════════════
 // MESSAGGI VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
+// ── Allegati WhatsApp (vocali, foto, video, documenti) nella conversazione ───────
+// Il file è nel bucket privato "whatsapp-media" (leggibile solo dagli admin); si apre con un
+// link firmato temporaneo, tenuto in cache per non richiederlo a ogni ridisegno.
+const _FM_WA_MEDIA_URL = {};
+const MediaWhatsApp = ({ path, tipo, nome, mio }) => {
+  const [url, setUrl] = useState(_FM_WA_MEDIA_URL[path] && _FM_WA_MEDIA_URL[path].scade > Date.now() ? _FM_WA_MEDIA_URL[path].url : null);
+  const [errore, setErrore] = useState(false);
+  const [anteprima, setAnteprima] = useState(false);
+  React.useEffect(() => {
+    if (url || !path) return;
+    let vivo = true;
+    (async () => {
+      try {
+        const sb = window.supabaseClient;
+        const { data, error } = await sb.storage.from('whatsapp-media').createSignedUrl(path, 3600);
+        if (error || !data?.signedUrl) throw error || new Error('nessun link');
+        _FM_WA_MEDIA_URL[path] = { url: data.signedUrl, scade: Date.now() + 50*60*1000 };
+        if (vivo) setUrl(data.signedUrl);
+      } catch(e) { console.warn('[FM] media WhatsApp:', e?.message); if (vivo) setErrore(true); }
+    })();
+    return () => { vivo = false; };
+  }, [path]);
+  const t = String(tipo||'').toLowerCase();
+  const nomeFile = nome || String(path||'').split('/').pop();
+  const colLink = mio ? '#fff' : C.teal;
+  if (errore) return React.createElement('div',{style:{fontSize:11,opacity:.8,marginTop:4}},'⚠️ File non disponibile');
+  if (!url) return React.createElement('div',{style:{fontSize:11,opacity:.7,marginTop:4}},'⏳ Caricamento…');
+  const scarica = React.createElement('a',{href:url,download:nomeFile,target:'_blank',rel:'noopener',
+      style:{fontSize:11,color:colLink,textDecoration:'underline',display:'inline-block',marginTop:4}},'⬇️ Scarica');
+  let corpo;
+  if (t.startsWith('audio/')) {
+    corpo = React.createElement('audio',{controls:true,preload:'metadata',src:url,style:{width:260,maxWidth:'100%',display:'block',marginTop:4}});
+  } else if (t.startsWith('image/')) {
+    corpo = React.createElement('img',{src:url,alt:nomeFile,onClick:()=>setAnteprima(true),
+      style:{maxWidth:240,maxHeight:240,width:'100%',objectFit:'cover',borderRadius:8,display:'block',marginTop:4,cursor:'zoom-in'}});
+  } else if (t.startsWith('video/')) {
+    corpo = React.createElement('video',{controls:true,preload:'metadata',src:url,style:{maxWidth:260,width:'100%',borderRadius:8,display:'block',marginTop:4}});
+  } else {
+    corpo = React.createElement('button',{onClick:()=>setAnteprima(true),
+      style:{marginTop:4,display:'flex',alignItems:'center',gap:6,background:mio?'rgba(255,255,255,.18)':C.bg,border:`1px solid ${mio?'rgba(255,255,255,.4)':C.border}`,borderRadius:8,padding:'6px 10px',cursor:'pointer',color:mio?'#fff':C.text,fontSize:12,maxWidth:240}}
+      , '📄', React.createElement('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, nomeFile));
+  }
+  return React.createElement('div',null, corpo, scarica
+    , anteprima && typeof FilePreviewModal !== 'undefined' && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:10000}},
+        React.createElement(FilePreviewModal,{file:{url, name:nomeFile, type:t}, onClose:()=>setAnteprima(false)})));
+};
+
 const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, annoInizioAttivo }) => {
   // STILE CONVERSAZIONE: i messaggi sono raggruppati per interlocutore (thread).
   // Cliccando su una conversazione si apre lo storico completo (ricevuti + inviati)
@@ -3620,7 +3667,8 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
                   border: mio ? 'none' : `1px solid ${C.border}`, boxShadow:'0 1px 2px rgba(0,0,0,.06)'}}
                 , t.gruppo && !mio && React.createElement('div',{style:{fontSize:11,fontWeight:700,marginBottom:2,color:(RUOLO_COL[m.mittente_ruolo]||{c:C.teal}).c}}, m.mittente_nome || '—')
                 , !t.gruppo && mostraOgg && React.createElement('div',{style:{fontSize:11,fontWeight:700,marginBottom:3,opacity:mio?.9:1,color:mio?'#fff':C.teal}}, m.oggetto)
-                , React.createElement('div',{style:{fontSize:13,lineHeight:1.45,whiteSpace:'pre-wrap',wordBreak:'break-word'}}, m.testo)
+                , !(m.media_path && /^(🎤 Messaggio vocale|🎵 Audio|📷 Foto|🎬 Video)$/.test(String(m.testo||''))) && React.createElement('div',{style:{fontSize:13,lineHeight:1.45,whiteSpace:'pre-wrap',wordBreak:'break-word'}}, m.testo)
+                , m.media_path && React.createElement(MediaWhatsApp,{path:m.media_path,tipo:m.media_tipo,nome:m.media_nome,mio})
                 , React.createElement('div',{style:{display:'flex',gap:6,alignItems:'center',justifyContent:'flex-end',marginTop:4,fontSize:10,color:mio?'rgba(255,255,255,.8)':C.textDim,flexWrap:'wrap'}}
                   , badgeCanale(m)
                   , React.createElement('span',{title:fmtFull(m.created_at)}, fmtDate(m.created_at))
