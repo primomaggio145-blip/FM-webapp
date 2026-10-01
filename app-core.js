@@ -2407,3 +2407,45 @@ const fmAllieviIdsDaProfilo = (p) => {
   if (p.allievo_id != null && !out.includes(String(p.allievo_id))) out.unshift(String(p.allievo_id));
   return [...new Set(out)];
 };
+
+/* ── [FM-DOPPIO-RUOLO] Docente che è anche allievo ───────────────────────────
+   Un utente registrato come DOCENTE può essere anche ALLIEVO (studia uno strumento
+   o porta i figli a lezione). Il profilo resta ruolo='docente' su Supabase, con in
+   più profili.allievi_ids (sé stesso e/o figli). Nell'app l'utente sceglie la
+   "modalità" attiva: tutte le viste continuano a ragionare su user.ruolo, quindi
+   in modalità allievo l'oggetto utente diventa a tutti gli effetti un allievo
+   (ruolo='allievo', allievoId attivo, docenteId=null) e viceversa — nessuna vista
+   va riscritta. La scelta resta salvata SOLO su questo dispositivo.
+   user.ruoloBase conserva il ruolo reale del profilo ('docente'). */
+const FM_MODALITA_KEY = 'fm_modalita_';
+const fmPuoEssereAllievo = (u) =>
+  !!u && (u.ruoloBase || u.ruolo) === 'docente' && Array.isArray(u.allieviIds) && u.allieviIds.length > 0;
+const fmLeggiModalita = (u) => {
+  try {
+    const raw = localStorage.getItem(FM_MODALITA_KEY + ((u && u.userId) || ''));
+    const s = raw ? JSON.parse(raw) : null;
+    return (s && (s.modalita === 'allievo' || s.modalita === 'docente')) ? s : null;
+  } catch (e) { return null; }
+};
+const fmSalvaModalita = (u, modalita, allievoId) => {
+  try { localStorage.setItem(FM_MODALITA_KEY + ((u && u.userId) || ''), JSON.stringify({ modalita, allievoId: allievoId != null ? String(allievoId) : null })); } catch (e) {}
+};
+// Restituisce l'utente "effettivo" per la modalità scelta (o quella salvata sul dispositivo).
+// Utenti che non sono docenti con allievi collegati tornano invariati.
+const fmApplicaModalita = (u, scelta) => {
+  if (!u) return u;
+  const base = u.ruoloBase || u.ruolo;
+  if (base !== 'docente') return u;
+  const orig = u._idsOriginali || { docenteId: u.docenteId || null, allievoId: u.allievoId || null };
+  const out = { ...u, ruoloBase: base, _idsOriginali: orig };
+  if (!fmPuoEssereAllievo(out)) return { ...out, ruolo: 'docente', docenteId: orig.docenteId };
+  const ids = out.allieviIds.map(String);
+  const s = scelta !== undefined ? scelta : fmLeggiModalita(u);
+  if (s && s.modalita === 'allievo') {
+    const aid = ids.includes(String(s.allievoId)) ? String(s.allievoId)
+              : (orig.allievoId != null && ids.includes(String(orig.allievoId))) ? String(orig.allievoId)
+              : ids[0];
+    return { ...out, ruolo: 'allievo', allievoId: aid, docenteId: null };
+  }
+  return { ...out, ruolo: 'docente', docenteId: orig.docenteId, allievoId: null };
+};

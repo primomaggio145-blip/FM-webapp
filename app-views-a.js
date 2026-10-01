@@ -2595,6 +2595,18 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
                       ? (students||[]).map(s=>React.createElement('option',{key:s.id,value:String(s.id)},s.name||s.nome||''))
                       : (docenti||[]).map(d=>React.createElement('option',{key:d.id,value:String(d.id)},d.nome||d.name||''))
                   )
+                  /* [FM-DOPPIO-RUOLO] il docente può essere anche allievo (studia uno strumento o porta i figli) */
+                  , draft.ruolo==='docente' && React.createElement('div', {style:{marginTop:14,paddingTop:12,borderTop:`1px dashed ${C.border}`}}
+                    , React.createElement('div', {style:{fontSize:10,color:C.textMuted,letterSpacing:'.08em',textTransform:'uppercase',marginBottom:6}}
+                      , '🎵 Anche allievo')
+                    , React.createElement('p',{style:{fontSize:12,color:C.textDim,marginBottom:10,lineHeight:1.5}},
+                      'Se questo docente studia uno strumento o porta i figli a lezione, collega qui i record allievo (sé stesso e/o figli). Nell\'app potrà passare da \u201cDocente\u201d ad \u201cAllievo\u201d dalla barra in alto.')
+                    , React.createElement(FMCollegaAllievi, {
+                        students, value: draft.allieviIds||[], onChange: setAllieviIds,
+                        suggeriti: (typeof fmSuggerisciCollegamento==='function')
+                          ? (fmSuggerisciCollegamento({nome:draft.nome,nomeSocio:draft.nomeSocio,email:draft.email,ruolo:'allievo'}, students, docenti).candidati||[]) : []
+                      })
+                  )
                   , draft.ruolo==='allievo' && !draft.allievoId && React.createElement('div',{style:{marginTop:8,fontSize:11,color:C.orange,lineHeight:1.5}},
                       '⚠ Non collegato: l\'utente non vede le sue lezioni/pagamenti.')
                   , draft.ruolo==='docente' && !draft.docenteId && (()=>{
@@ -3723,7 +3735,8 @@ const UtentiView = ({ students:propStudents, docenti:propDocenti, quickAction, c
         const docenteIdVal = draft.docenteId ? (isNaN(Number(draft.docenteId)) ? draft.docenteId : Number(draft.docenteId)) : null;
         const allievoIdVal = draft.allievoId ? (isNaN(Number(draft.allievoId)) ? draft.allievoId : Number(draft.allievoId)) : null;
         const toId = v => (v==null||v==='') ? null : (isNaN(Number(v)) ? v : Number(v));
-        const allieviIdsVal = draft.ruolo==='allievo' ? (draft.allieviIds||[]).map(toId).filter(v=>v!=null) : [];
+        // [FM-DOPPIO-RUOLO] anche un docente può avere allievi collegati (sé stesso o figli)
+        const allieviIdsVal = (draft.ruolo==='allievo'||draft.ruolo==='docente') ? (draft.allieviIds||[]).map(toId).filter(v=>v!=null) : [];
         const rowUpd = {
           nome:       draft.nome,
           ruolo:      draft.ruolo,
