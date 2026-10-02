@@ -1157,14 +1157,30 @@ const CambioOraModal = ({ lesson, onSave, onDismiss }) => {
     const noteCambioOra = `CAMBIO ORA, LEZIONE DEL ${dataOrig}`;
     const nuoveNote = lesson.notes ? `${noteCambioOra}\n${lesson.notes}` : noteCambioOra;
     const sb = window.supabaseClient;
+    let dbOk = true;
     if (sb) {
-      await sb.from('lezioni').update({
+      const { error: coErr } = await sb.from('lezioni').update({
         data: nuovaData,
         ora:  nuoraOra + ':00',
         notes: nuoveNote,
       }).eq('id', lesson.id);
+      if (coErr) { dbOk = false; console.warn('[FM] cambio ora: update lezione fallito', coErr.message); }
     }
-    onSave({ ...lesson, date: nuovaData, hour: nuoraOra, notes: nuoveNote });
+    const updatedLesson = { ...lesson, date: nuovaData, hour: nuoraOra, notes: nuoveNote };
+    onSave(updatedLesson);
+    // GCAL-CAMBIO-ORA-FIX: il salvataggio presenza salta la sync GCal quando apre il
+    // Cambio ora ("quello aggiorna dopo"), quindi è QUI che va aggiornato l'evento
+    // con il nuovo giorno/orario. Si parte dalla versione più fresca della lezione
+    // nello state condiviso (presenza/argomento appena salvati) e si applica lo spostamento.
+    if (dbOk) {
+      try {
+        const cur = ((window.__FM_DATA__ && window.__FM_DATA__.lessons) || []).find(l => l.id === lesson.id) || lesson;
+        const gcalPayload = { ...lesson, ...cur, date: nuovaData, hour: nuoraOra, notes: nuoveNote };
+        const syncFn = (typeof gcalSyncLesson === 'function') ? gcalSyncLesson : window.gcalSyncLesson;
+        if (typeof syncFn === 'function') syncFn('sync_one', gcalPayload);
+        else console.warn('[FM][gcal] cambio ora: funzione di sync non disponibile');
+      } catch (e) { console.warn('[FM][gcal] cambio ora: sync errore', e && e.message); }
+    }
     setSaving(false);
     onDismiss();
   };
