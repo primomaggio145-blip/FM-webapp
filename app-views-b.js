@@ -20,7 +20,27 @@ const fmNumCorsiIndividuali = (s) => {
   }
   return n;
 };
-const fmNormMetodo = (m) => { const t = String(m || '').trim(); return t || 'Non indicato'; };
+// Nel resoconto si distinguono SOLO "Contanti" e "PayPal / Satispay": ogni altro metodo
+// (bonifico, carta/POS, assegno, …) confluisce in un unico gruppo "BANCA".
+const FM_ORDINE_METODI = ['Contanti', 'PayPal / Satispay', 'BANCA', 'Da definire'];
+const fmNormMetodo = (m) => {
+  const t = String(m || '').trim().toLowerCase();
+  if (t.includes('contant')) return 'Contanti';
+  if (t.includes('paypal') || t.includes('satispay')) return 'PayPal / Satispay';
+  return 'BANCA';
+};
+const fmOrdinaMetodi = (obj) => Object.entries(obj || {}).sort((a, b) => {
+  const ia = FM_ORDINE_METODI.indexOf(a[0]), ib = FM_ORDINE_METODI.indexOf(b[0]);
+  return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+});
+// Lezione INDIVIDUALE attribuita a un allievo: per ID, oppure per nome ESATTO se la
+// lezione non ha studentId (niente match parziale: "Anna" non deve prendere "Annalisa").
+const fmLezioneDiAllievo = (l, s) => {
+  if (!l || l.tipo === 'collettivo') return false;
+  if (l.studentId != null && l.studentId !== '') return String(l.studentId) === String(s.id);
+  const ln = String(l.student || l.contactName || '').trim().toLowerCase();
+  return !!ln && ln === String(s.name || '').trim().toLowerCase();
+};
 const fmQuotaDiAllievo = (q, s) => {
   const qid = q.studentId != null && q.studentId !== '' ? String(q.studentId) : null;
   if (qid) return qid === String(s.id);
@@ -29,7 +49,12 @@ const fmQuotaDiAllievo = (q, s) => {
 // allieviD: output di allievi(d) (ogni allievo ha _corsiConDocente)
 // entrate: quote/entrate (mese 1-12); compensoLezioni: n.lezioni × tariffa del mese
 // extraVoci: spese con docenteId del mese (isAcconto = anticipo già versato)
-const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extraVoci }) => {
+// lezioni: lezioni del docente nel mese che contano per il compenso (output di lezioniMese)
+// tariffa: compenso per lezione del docente (tariffaOra)
+const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extraVoci, lezioni, tariffa }) => {
+  const tar = Number(tariffa) || 0;
+  const lezArr = Array.isArray(lezioni) ? lezioni : null;
+  const lezAttribuite = new Set();
   const quoteMese = (entrate || []).filter(e => e && (e.categoria || 'quota') === 'quota'
     && Number(e.mese) === Number(m) && Number(e.anno) === Number(y));
   const righe = [];
@@ -39,15 +64,23 @@ const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extra
     const quotaParte = nDoc / nTot;
     const qs = quoteMese.filter(q => fmQuotaDiAllievo(q, s));
     const attivo = (s.status || 'attivo') === 'attivo';
-    if (!attivo && qs.length === 0) return; // inattivo e nessuna quota nel mese → non mostrare
+    const lezS = lezArr ? lezArr.filter(l => !lezAttribuite.has(l) && fmLezioneDiAllievo(l, s)) : [];
+    lezS.forEach(l => lezAttribuite.add(l));
+    if (!attivo && qs.length === 0 && lezS.length === 0) return; // inattivo, nessuna quota né lezione → non mostrare
     const pagate = qs.filter(q => q.stato === 'pagato');
     const pagatoTot = pagate.reduce((t, q) => t + (Number(q.importo) || 0), 0);
     const metodi = {};
     pagate.forEach(q => { const k = fmNormMetodo(q.metodo); metodi[k] = (metodi[k] || 0) + (Number(q.importo) || 0) * quotaParte; });
     const stato = pagate.length > 0 ? 'pagato' : (qs.some(q => q.stato === 'ritardo') ? 'ritardo' : 'attesa');
     const previsto = attivo ? (Number(s.monthlyFee) || 0) * quotaParte : 0;
+    // Metodo con cui pagare al docente le lezioni di questo allievo = metodo con cui
+    // l'allievo ha pagato (gruppo prevalente se ha pagato con più metodi).
+    const metodoDocente = stato === 'pagato'
+      ? (Object.entries(metodi).sort((p, q) => q[1] - p[1])[0] || ['BANCA'])[0]
+      : 'Da definire';
     righe.push({
       s, corsi: s._corsiConDocente || [], quotaParte, nTot, stato,
+      nLez: lezS.length, compLez: lezS.length * tar, metodoDocente,
       pagatoTot, pagatoQuota: pagatoTot * quotaParte, previsto,
       daIncassare: stato === 'pagato' ? 0 : previsto,
       metodi, metodiLabel: Object.keys(metodi).join(' + '),
@@ -59,13 +92,21 @@ const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extra
   const daIncassare = righe.reduce((t, r) => t + r.daIncassare, 0);
   const metodiTot = {};
   righe.forEach(r => Object.entries(r.metodi).forEach(([k, v]) => { metodiTot[k] = (metodiTot[k] || 0) + v; }));
+  // Da pagare al docente per metodo (solo lezioni individuali attribuite agli allievi)
+  const pagaDocentePerMetodo = {};
+  righe.forEach(r => { if (r.compLez > 0) pagaDocentePerMetodo[r.metodoDocente] = (pagaDocentePerMetodo[r.metodoDocente] || 0) + r.compLez; });
+  // Lezioni non attribuibili a un allievo in elenco (collettive, allievi di altri anni, ecc.)
+  const lezNonAttribuite = lezArr ? lezArr.filter(l => !lezAttribuite.has(l)).length : 0;
+  const compLezNonAttribuite = lezNonAttribuite * tar;
   const extra   = (extraVoci || []).filter(v => !v.isAcconto).reduce((t, v) => t + (Number(v.importo) || 0), 0);
   const acconti = (extraVoci || []).filter(v =>  v.isAcconto).reduce((t, v) => t + (Number(v.importo) || 0), 0);
   // Costo del docente per la scuola nel mese = lezioni × tariffa + extra.
   // Gli acconti sono una PARTE già anticipata di questo importo (non un costo in più).
-  const compenso = (Number(compensoLezioni) || 0) + extra;
+  const compLezTot = lezArr ? lezArr.length * tar : (Number(compensoLezioni) || 0);
+  const compenso = compLezTot + extra;
   return {
-    righe, incassato, daIncassare, metodiTot, compensoLezioni: Number(compensoLezioni) || 0,
+    righe, incassato, daIncassare, metodiTot, compensoLezioni: compLezTot,
+    pagaDocentePerMetodo, lezNonAttribuite, compLezNonAttribuite,
     extra, acconti, compenso, saldo: incassato - compenso,
     saldoPrevisto: incassato + daIncassare - compenso,
   };
@@ -501,10 +542,11 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     const mesiAnno = [9,10,11,12,1,2,3,4,5,6,7,8].map(m => ({ m, y: m >= 9 ? a : a + 1 }));
     const { m, y } = bilMese;
     const dati = (docenti||[]).map(d => {
-      const nLez = lezioniMese(d, m, y).length;
+      const lezM = lezioniMese(d, m, y);
+      const nLez = lezM.length;
       const b = fmCalcBilancioDocente({
         allieviD: allievi(d), entrate: entrateDV, m, y,
-        compensoLezioni: nLez * (Number(d.tariffaOra)||0),
+        lezioni: lezM, tariffa: Number(d.tariffaOra)||0,
         extraVoci: altreCompetenzeMese(d, m, y),
       });
       return { d, nLez, b };
@@ -546,7 +588,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
       )
       , Object.keys(metodiTot).length > 0 && React.createElement('div', {style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:18,alignItems:'center'}}
         , React.createElement('span', {style:{fontSize:11,color:C.textMuted,fontWeight:600,marginRight:4}}, 'Per metodo:')
-        , Object.entries(metodiTot).sort((p,q)=>q[1]-p[1]).map(([k,v]) => React.createElement('span', {key:k, style:{fontSize:12,background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:'3px 10px'}}, k, ': ', React.createElement('b', null, eur(v))))
+        , fmOrdinaMetodi(metodiTot).map(([k,v]) => React.createElement('span', {key:k, style:{fontSize:12,background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:'3px 10px'}}, k, ': ', React.createElement('b', null, eur(v))))
       )
       , dati.length === 0 && React.createElement('div', {style:{padding:40,textAlign:'center',color:C.textMuted,fontSize:13,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}}, `Nessun dato per ${MESI_L[m-1]} ${y}.`)
       /* card per docente */
@@ -576,14 +618,21 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                 , b.acconti > 0 && React.createElement('span', null, 'di cui già anticipato (acconti): ', React.createElement('b', {style:{color:C.text}}, eur(b.acconti)))
                 , b.daIncassare > 0 && React.createElement('span', null, 'Saldo a quote incassate: ', React.createElement('b', {style:{color:b.saldoPrevisto>=0?C.green:C.red}}, (b.saldoPrevisto>=0?'+':'')+eur(b.saldoPrevisto)))
               )
-              , Object.keys(b.metodiTot).length > 0 && React.createElement('div', {style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}
-                , Object.entries(b.metodiTot).map(([k,v]) => React.createElement('span', {key:k, style:{fontSize:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'3px 10px'}}, k, ': ', React.createElement('b', null, eur(v))))
+              , Object.keys(b.metodiTot).length > 0 && React.createElement('div', {style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}
+                , React.createElement('span', {style:{fontSize:11,color:C.textMuted,fontWeight:600,marginRight:4}}, 'Incassato da allievi:')
+                , fmOrdinaMetodi(b.metodiTot).map(([k,v]) => React.createElement('span', {key:k, style:{fontSize:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'3px 10px'}}, k, ': ', React.createElement('b', null, eur(v))))
+              )
+              , (Object.keys(b.pagaDocentePerMetodo).length > 0 || b.compLezNonAttribuite > 0 || b.extra > 0) && React.createElement('div', {style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}
+                , React.createElement('span', {style:{fontSize:11,color:C.textMuted,fontWeight:600,marginRight:4}}, 'Da pagare al docente:')
+                , fmOrdinaMetodi(b.pagaDocentePerMetodo).map(([k,v]) => React.createElement('span', {key:k, style:{fontSize:12,background:k==='Da definire'?C.orangeBg:C.goldBg,border:`1px solid ${k==='Da definire'?C.orangeBorder:C.border}`,borderRadius:10,padding:'3px 10px'}}, k, ': ', React.createElement('b', null, eur(v))))
+                , b.compLezNonAttribuite > 0 && React.createElement('span', {style:{fontSize:12,background:C.orangeBg,border:`1px solid ${C.orangeBorder}`,borderRadius:10,padding:'3px 10px'}}, `Collettive/altre (${b.lezNonAttribuite} lez.): `, React.createElement('b', null, eur(b.compLezNonAttribuite)))
+                , b.extra > 0 && React.createElement('span', {style:{fontSize:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'3px 10px'}}, 'Extra: ', React.createElement('b', null, eur(b.extra)))
               )
               , b.righe.length === 0
                 ? React.createElement('div', {style:{fontSize:13,color:C.textMuted,padding:'8px 0'}}, 'Nessun allievo individuale assegnato.')
                 : React.createElement('div', {style:{overflowX:'auto',background:C.surface,border:`1px solid ${C.border}`,borderRadius:10}}
-                  , React.createElement('table', {style:{width:'100%',borderCollapse:'collapse',minWidth:560}}
-                    , React.createElement('thead', null, React.createElement('tr', null, th('Allievo'), th('Corso'), th('Quota', true), th('Stato'), th('Metodo'), th('Data')))
+                  , React.createElement('table', {style:{width:'100%',borderCollapse:'collapse',minWidth:760}}
+                    , React.createElement('thead', null, React.createElement('tr', null, th('Allievo'), th('Corso'), th('Quota', true), th('Stato'), th('Metodo'), th('Data'), th('Lezioni', true), th('Paga docente con')))
                     , React.createElement('tbody', null
                       , b.righe.map(r => React.createElement('tr', {key:r.s.id}
                         , td(r.s.name, {fontWeight:600})
@@ -595,6 +644,14 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                         , td(statoBadge(r.stato))
                         , td(r.metodiLabel || '—', {fontSize:12})
                         , td(r.data ? r.data.split('-').reverse().join('/') : '—', {fontSize:12,color:C.textMuted,whiteSpace:'nowrap'})
+                        , td(r.nLez > 0
+                            ? React.createElement('div', null
+                                , React.createElement('div', {style:{fontWeight:700,color:C.orange}}, eur(r.compLez))
+                                , React.createElement('div', {style:{fontSize:10,color:C.textDim}}, `${r.nLez} × ${eur(d.tariffaOra)}`))
+                            : React.createElement('span', {style:{color:C.textDim}}, '0'), {textAlign:'right',whiteSpace:'nowrap'})
+                        , td(r.nLez > 0
+                            ? React.createElement('span', {style:{fontSize:12,fontWeight:600,color:r.metodoDocente==='Da definire'?C.orange:C.text}}, r.metodoDocente==='Da definire' ? 'Da definire (quota non pagata)' : r.metodoDocente)
+                            : React.createElement('span', {style:{color:C.textDim}}, '—'), {whiteSpace:'nowrap'})
                       ))
                     )
                   )
