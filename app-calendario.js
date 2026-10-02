@@ -13201,12 +13201,19 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
   const CATEGORIE = _catSpeseForm || CATEGORIE_DEFAULT;
   const [nuovaCat, setNuovaCat] = useState("");
   const [showAddCat, setShowAddCat] = useState(false);
-  const [f, setF] = useState(initial || {
+  const [f, setF] = useState(initial
+    // Modifica: esplicita il tipo (compenso/acconto/extra) anche per i record vecchi senza is_extra
+    ? { ...initial, isExtra: initial.categoria==="docenti" && initial.docenteId && !initial.isAcconto && typeof fmTipoVoceDocente === 'function'
+          ? fmTipoVoceDocente(initial) === 'extra' : !!initial.isExtra }
+    : {
     categoria:"docenti", desc:"", importo:"",
     mese:MESE_ATT, anno:ANNO_ATT,
     metodo:"", data:yyyymmdd(oggi),
-    docenteId:"", note:"", isAcconto:false,
+    docenteId:"", note:"", isAcconto:false, isExtra:false,
   });
+  const tipoDocente = f.isAcconto ? 'acconto' : (f.isExtra ? 'extra' : 'compenso');
+  const descAuto = (tipo, d) => !d ? '' : tipo === 'acconto' ? `Acconto compenso ${MESI[f.mese]} — ${d.nome||d.name}`
+    : tipo === 'extra' ? `Extra ${MESI[f.mese]} — ${d.nome||d.name}` : `Compenso mensile ${d.nome||d.name}`;
   const [err, setErr] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
 
@@ -13226,9 +13233,11 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
     let desc = f.desc;
     if(f.categoria==="docenti"&&f.docenteId&&!f.desc) {
       const d = (_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI).find(x=>x.id===f.docenteId);
-      if(d) desc = f.isAcconto ? `Acconto compenso ${MESI[f.mese]} — ${d.nome||d.name}` : `Compenso mensile ${d.nome||d.name}`;
+      if(d) desc = descAuto(tipoDocente, d);
     }
-    onSave({...f, desc, importo:Number(f.importo), isAcconto: !!f.isAcconto});
+    const isDoc = f.categoria==="docenti" && !!f.docenteId;
+    onSave({...f, desc, importo:Number(f.importo), isAcconto: !!f.isAcconto,
+      isExtra: isDoc ? (!f.isAcconto && !!f.isExtra) : null});
   };
 
   const cat = catById(f.categoria);
@@ -13289,17 +13298,29 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
         /* Se categoria = docenti, mostra select docente + spunta acconto */
         , f.categoria==="docenti" && (
           React.createElement(React.Fragment, null
-            , React.createElement(Sel, { label: "Docente", value: f.docenteId, onChange: e=>{ set("docenteId",e.target.value); const _dList=(_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI); const d=_dList.find(x=>x.id===e.target.value); if(d) set("desc",f.isAcconto?`Acconto compenso ${MESI[f.mese]} — ${d.nome||d.name}`:`Compenso mensile ${d.nome||d.name}`); },
+            , React.createElement(Sel, { label: "Docente", value: f.docenteId, onChange: e=>{ set("docenteId",e.target.value); const _dList=(_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI); const d=_dList.find(x=>x.id===e.target.value); if(d) set("desc",descAuto(tipoDocente, d)); },
                 options: [{value:"",label:"— seleziona docente —"},...(_docentiFSp&&_docentiFSp.length?_docentiFSp:DOCENTI).map(d=>({value:d.id,label:d.nome||d.name}))], __self: this, __source: {fileName: _jsxFileName, lineNumber: 6375}})
-            , React.createElement('label', { style: {display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, fontWeight:600, color:C.text, padding:"10px 0"} }
-              , React.createElement('input', { type:"checkbox", checked: !!f.isAcconto,
-                  onChange: e => {
-                    set("isAcconto", e.target.checked);
-                    if (docenteSel && !f.desc) set("desc", e.target.checked ? `Acconto compenso ${MESI[f.mese]} — ${docenteSel.nome||docenteSel.name}` : `Compenso mensile ${docenteSel.nome||docenteSel.name}`);
-                  }, style:{width:16, height:16, cursor:"pointer"} })
-              , "Questo pagamento è un ACCONTO (da detrarre dal compenso mensile finale)"
+            /* Tipo di pagamento al docente: compenso mensile / acconto / extra */
+            , React.createElement('div', { style: {padding:"8px 0"} }
+              , React.createElement('div', { style: {fontSize:12, fontWeight:600, color:C.textMuted, marginBottom:6} }, "Tipo di pagamento")
+              , React.createElement('div', { style: {display:"flex", gap:6, flexWrap:"wrap"} }
+                , [['compenso','Compenso mensile'],['acconto','Acconto'],['extra','Extra (bonus, rimborso…)']].map(([t,l]) => {
+                    const on = tipoDocente === t;
+                    return React.createElement('button', { key:t, type:"button",
+                      onClick: () => {
+                        const prevAuto = docenteSel ? descAuto(tipoDocente, docenteSel) : '';
+                        setF(p => ({...p, isAcconto: t==='acconto', isExtra: t==='extra',
+                          desc: (docenteSel && (!p.desc || p.desc === prevAuto)) ? descAuto(t, docenteSel) : p.desc }));
+                      },
+                      style:{padding:"6px 12px", borderRadius:16, border:`1px solid ${on?C.gold:C.border}`, background:on?C.gold:C.surface, color:on?"#fff":C.textMuted, fontSize:12, fontWeight:on?700:500, cursor:"pointer", fontFamily:"'Open Sans',sans-serif"} }, l);
+                  })
+              )
+              , React.createElement('div', { style: {fontSize:11, color:C.textDim, marginTop:6, lineHeight:1.4} },
+                  tipoDocente==='acconto' ? "Anticipo: viene detratto dal compenso mensile finale."
+                  : tipoDocente==='extra' ? "Competenza aggiuntiva: si somma a quanto spetta al docente per le lezioni."
+                  : "Pagamento del compenso delle lezioni del mese.")
             )
-            , !f.isAcconto && docenteSel && (
+            , tipoDocente==='compenso' && docenteSel && (
               React.createElement('div', { style: {padding:"12px 14px", background:C.goldBg, borderRadius:8, border:`1px solid ${C.goldDim}`, fontSize:12, display:"flex", flexDirection:"column", gap:6} }
                 , React.createElement('div', null
                   , React.createElement('strong', null, lezioniCompensoSF.length), " lezioni × ", fmt(Number(docenteSel.tariffaOra)||0), " = ", React.createElement('strong', null, fmt(compensoLordoSuggerito)), " compenso lordo stimato per ", MESI[f.mese], " ", f.anno

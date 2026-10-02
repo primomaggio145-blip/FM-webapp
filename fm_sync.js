@@ -198,6 +198,8 @@
       data: r.data || '', docenteId: r.docente_id || null, note: r.note || '',
       haAcconto: r.ha_acconto || false,
       isAcconto: r.is_acconto === true,
+      // Tipo pagamento docente: true=extra, false=compenso, null=record vecchio (vedi fmTipoVoceDocente)
+      isExtra: r.is_extra === true ? true : (r.is_extra === false ? false : null),
       accontoImporto: r.acconto_importo != null ? parseFloat(r.acconto_importo) : null,
       importoLordo: r.importo_lordo != null ? parseFloat(r.importo_lordo) : null,
     };
@@ -427,6 +429,7 @@
         data: s.data || null, docente_id: s.docenteId || null, note: s.note || null,
         ha_acconto: s.haAcconto || false,
         is_acconto: s.isAcconto === true,
+        is_extra: s.isExtra === true ? true : (s.isExtra === false ? false : null),
         acconto_importo: s.accontoImporto != null ? s.accontoImporto : null,
         importo_lordo: s.importoLordo != null ? s.importoLordo : null,
         updated_at: new Date().toISOString(),

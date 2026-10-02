@@ -41,6 +41,19 @@ const fmLezioneDiAllievo = (l, s) => {
   const ln = String(l.student || l.contactName || '').trim().toLowerCase();
   return !!ln && ln === String(s.name || '').trim().toLowerCase();
 };
+// Tipo di un pagamento al docente (spesa con docenteId):
+//  'acconto'  → anticipo sul compenso del mese
+//  'extra'    → competenza aggiuntiva (bonus, rimborso…): AUMENTA quanto spetta al docente
+//  'compenso' → pagamento del compenso mensile delle lezioni
+// I record registrati prima del campo is_extra (isExtra null) sono classificati dalla
+// descrizione: quella automatica del modulo spese inizia con "Compenso…".
+const fmTipoVoceDocente = (s) => {
+  if (!s) return 'compenso';
+  if (s.isAcconto) return 'acconto';
+  if (s.isExtra === true) return 'extra';
+  if (s.isExtra === false) return 'compenso';
+  return /^\s*compenso/i.test(String(s.desc || s.descrizione || '')) ? 'compenso' : 'extra';
+};
 const fmQuotaDiAllievo = (q, s) => {
   const qid = q.studentId != null && q.studentId !== '' ? String(q.studentId) : null;
   if (qid) return qid === String(s.id);
@@ -48,10 +61,11 @@ const fmQuotaDiAllievo = (q, s) => {
 };
 // allieviD: output di allievi(d) (ogni allievo ha _corsiConDocente)
 // entrate: quote/entrate (mese 1-12); compensoLezioni: n.lezioni × tariffa del mese
-// extraVoci: spese con docenteId del mese (isAcconto = anticipo già versato)
+// versati: TUTTE le spese con docenteId del mese (compensi, acconti, extra) = già versato al docente
+// extraVoci: (compatibilità) usato solo se versati non è passato
 // lezioni: lezioni del docente nel mese che contano per il compenso (output di lezioniMese)
 // tariffa: compenso per lezione del docente (tariffaOra)
-const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extraVoci, lezioni, tariffa }) => {
+const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extraVoci, lezioni, tariffa, versati }) => {
   const tar = Number(tariffa) || 0;
   const lezArr = Array.isArray(lezioni) ? lezioni : null;
   const lezAttribuite = new Set();
@@ -98,8 +112,16 @@ const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extra
   // Lezioni non attribuibili a un allievo in elenco (collettive, allievi di altri anni, ecc.)
   const lezNonAttribuite = lezArr ? lezArr.filter(l => !lezAttribuite.has(l)).length : 0;
   const compLezNonAttribuite = lezNonAttribuite * tar;
-  const extra   = (extraVoci || []).filter(v => !v.isAcconto).reduce((t, v) => t + (Number(v.importo) || 0), 0);
-  const acconti = (extraVoci || []).filter(v =>  v.isAcconto).reduce((t, v) => t + (Number(v.importo) || 0), 0);
+  const voci = Array.isArray(versati) ? versati : (extraVoci || []);
+  const sommaTipo = (t) => voci.filter(v => fmTipoVoceDocente(v) === t).reduce((a, v) => a + (Number(v.importo) || 0), 0);
+  const extra   = sommaTipo('extra');
+  const acconti = sommaTipo('acconto');
+  // Già versato al docente nel mese (compensi + acconti + extra), per metodo e per tipo
+  const versatiList = Array.isArray(versati) ? versati.slice().sort((p, q) => String(p.data || '').localeCompare(String(q.data || ''))) : [];
+  const versato = versatiList.reduce((a, v) => a + (Number(v.importo) || 0), 0);
+  const versatoPerMetodo = {};
+  versatiList.forEach(v => { const k = fmNormMetodo(v.metodo); versatoPerMetodo[k] = (versatoPerMetodo[k] || 0) + (Number(v.importo) || 0); });
+  const versatoPerTipo = { compenso: sommaTipo('compenso'), acconto: acconti, extra };
   // Costo del docente per la scuola nel mese = lezioni × tariffa + extra.
   // Gli acconti sono una PARTE già anticipata di questo importo (non un costo in più).
   const compLezTot = lezArr ? lezArr.length * tar : (Number(compensoLezioni) || 0);
@@ -109,6 +131,11 @@ const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extra
     pagaDocentePerMetodo, lezNonAttribuite, compLezNonAttribuite,
     extra, acconti, compenso, saldo: incassato - compenso,
     saldoPrevisto: incassato + daIncassare - compenso,
+    versatiList, versato, versatoPerMetodo, versatoPerTipo,
+    // Quanto resta da versare al docente (negativo = versato più del dovuto)
+    daVersare: compenso - versato,
+    // Saldo di cassa = incassato − già versato (quanto resta oggi in cassa per questo docente)
+    saldoCassa: incassato - versato,
   };
 };
 
@@ -374,8 +401,17 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   // Altre competenze registrate per il docente (spese con docenteId collegato:
   // es. compensi extra, rimborsi, bonus) — DIVERSE dal calcolo automatico lezioni×tariffa.
   // Nota: in "spese" il campo mese è 0-indexed (getMonth()), qui usiamo 1-indexed → +1
+  // Tutti i pagamenti al docente registrati nel mese (compensi, acconti, extra)
+  const versatiDocenteMese = (d, m, y) => spese.filter(s => {
+    if (!s || String(s.docenteId) !== String(d.id)) return false;
+    const sMese = (Number(s.mese)||0) + 1;
+    return sMese === m && Number(s.anno) === y;
+  });
+  // Solo extra e acconti: il pagamento del compenso mensile NON è una competenza aggiuntiva
+  // (prima veniva sommato al compenso → l'importo risultava contato due volte).
   const altreCompetenzeMese = (d, m, y) => spese.filter(s => {
     if (!s || String(s.docenteId) !== String(d.id)) return false;
+    if (fmTipoVoceDocente(s) === 'compenso') return false;
     const sMese = (Number(s.mese)||0) + 1;
     return sMese === m && Number(s.anno) === y;
   });
@@ -547,14 +583,22 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
       const b = fmCalcBilancioDocente({
         allieviD: allievi(d), entrate: entrateDV, m, y,
         lezioni: lezM, tariffa: Number(d.tariffaOra)||0,
-        extraVoci: altreCompetenzeMese(d, m, y),
+        versati: versatiDocenteMese(d, m, y),
       });
       return { d, nLez, b };
-    }).filter(x => x.b.righe.length > 0 || x.nLez > 0 || x.b.compenso > 0);
+    }).filter(x => x.b.righe.length > 0 || x.nLez > 0 || x.b.compenso > 0 || x.b.versato > 0);
     const tot = dati.reduce((t, x) => ({
       incassato: t.incassato + x.b.incassato, daIncassare: t.daIncassare + x.b.daIncassare,
       compenso: t.compenso + x.b.compenso, saldo: t.saldo + x.b.saldo,
-    }), { incassato:0, daIncassare:0, compenso:0, saldo:0 });
+      versato: t.versato + x.b.versato, daVersare: t.daVersare + x.b.daVersare, saldoCassa: t.saldoCassa + x.b.saldoCassa,
+    }), { incassato:0, daIncassare:0, compenso:0, saldo:0, versato:0, daVersare:0, saldoCassa:0 });
+    const versatoMetodiTot = {};
+    dati.forEach(x => Object.entries(x.b.versatoPerMetodo).forEach(([k,v]) => { versatoMetodiTot[k] = (versatoMetodiTot[k]||0) + v; }));
+    const sgn = (v) => (v>=0?'+':'') + eur(v);
+    const TIPO_LBL = { compenso:'Compenso', acconto:'Acconto', extra:'Extra' };
+    const chip = (k, label, v, bg, bd) => React.createElement('span', {key:k, style:{fontSize:12,background:bg||C.surface,border:`1px solid ${bd||C.border}`,borderRadius:10,padding:'3px 10px'}}, label, ': ', React.createElement('b', null, eur(v)));
+    const chipRow = (titolo, children, mb) => React.createElement('div', {style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:mb||8,alignItems:'center'}}
+      , React.createElement('span', {style:{fontSize:11,color:C.textMuted,fontWeight:600,marginRight:4,minWidth:150}}, titolo), children);
     const metodiTot = {};
     dati.forEach(x => Object.entries(x.b.metodiTot).forEach(([k,v]) => { metodiTot[k] = (metodiTot[k]||0) + v; }));
     const statoBadge = (st) => {
@@ -583,13 +627,15 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
       /* riepilogo scuola */
       , React.createElement('div', {style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:10,marginBottom:10}}
         , kpi(`Incassato ${MESI_L[m-1]}`, eur(tot.incassato), C.green, tot.daIncassare>0 ? `${eur(tot.daIncassare)} ancora da incassare` : 'Tutte le quote incassate')
-        , kpi('Compensi docenti', eur(tot.compenso), C.orange, 'lezioni × tariffa + extra')
-        , kpi('Saldo', (tot.saldo>=0?'+':'') + eur(tot.saldo), tot.saldo>=0?C.green:C.red, 'incassato − compensi')
+        , kpi('Compensi dovuti', eur(tot.compenso), C.orange, 'lezioni × tariffa + extra')
+        , kpi('Già versati', eur(tot.versato), C.blue, 'compensi, acconti ed extra pagati')
+        , kpi('Da versare', eur(Math.max(0, tot.daVersare)), tot.daVersare>0?C.orange:C.green, tot.daVersare<0 ? `versato in più: ${eur(-tot.daVersare)}` : 'compensi dovuti − già versati')
+        , kpi('Saldo di cassa', sgn(tot.saldoCassa), tot.saldoCassa>=0?C.green:C.red, 'incassato − già versato')
+        , kpi('Saldo finale', sgn(tot.saldo), tot.saldo>=0?C.green:C.red, 'incassato − (versato + da versare)')
       )
-      , Object.keys(metodiTot).length > 0 && React.createElement('div', {style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:18,alignItems:'center'}}
-        , React.createElement('span', {style:{fontSize:11,color:C.textMuted,fontWeight:600,marginRight:4}}, 'Per metodo:')
-        , fmOrdinaMetodi(metodiTot).map(([k,v]) => React.createElement('span', {key:k, style:{fontSize:12,background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:'3px 10px'}}, k, ': ', React.createElement('b', null, eur(v))))
-      )
+      , Object.keys(metodiTot).length > 0 && chipRow('Incassato per metodo:', fmOrdinaMetodi(metodiTot).map(([k,v]) => chip(k, k, v, C.bg)))
+      , Object.keys(versatoMetodiTot).length > 0 && chipRow('Versato per metodo:', fmOrdinaMetodi(versatoMetodiTot).map(([k,v]) => chip(k, k, v, C.blueBg, C.blueBorder)))
+      , React.createElement('div', {style:{height:10}})
       , dati.length === 0 && React.createElement('div', {style:{padding:40,textAlign:'center',color:C.textMuted,fontSize:13,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}}, `Nessun dato per ${MESI_L[m-1]} ${y}.`)
       /* card per docente */
       , dati.map(({ d, nLez, b }) => {
@@ -601,9 +647,12 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                 , React.createElement('div', {style:{fontSize:12,color:C.textMuted}}, `${b.righe.length} allievi · ${nLez} lezioni × ${eur(d.tariffaOra)}`)
               )
               , [
-                  {l:'Compenso', v:eur(b.compenso), c:C.orange},
                   {l:'Incassato', v:eur(b.incassato), c:C.green},
-                  {l:'Saldo', v:(b.saldo>=0?'+':'')+eur(b.saldo), c:b.saldo>=0?C.green:C.red},
+                  {l:'Dovuto', v:eur(b.compenso), c:C.orange},
+                  {l:'Versato', v:eur(b.versato), c:C.blue},
+                  {l:'Da versare', v:eur(Math.max(0,b.daVersare)), c:b.daVersare>0?C.orange:C.green},
+                  {l:'Saldo cassa', v:sgn(b.saldoCassa), c:b.saldoCassa>=0?C.green:C.red},
+                  {l:'Saldo finale', v:sgn(b.saldo), c:b.saldo>=0?C.green:C.red},
                 ].map(k => React.createElement('div', {key:k.l, style:{textAlign:'right',minWidth:80}}
                   , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,color:k.c,lineHeight:1}}, k.v)
                   , React.createElement('div', {style:{fontSize:10,color:C.textDim,textTransform:'uppercase',letterSpacing:'.07em',marginTop:3}}, k.l)
@@ -615,15 +664,35 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               , React.createElement('div', {style:{display:'flex',gap:16,flexWrap:'wrap',fontSize:12,color:C.textMuted,marginBottom:10}}
                 , React.createElement('span', null, 'Lezioni: ', React.createElement('b', {style:{color:C.text}}, `${nLez} × ${eur(d.tariffaOra)} = ${eur(b.compensoLezioni)}`))
                 , React.createElement('span', null, 'Extra: ', React.createElement('b', {style:{color:C.text}}, eur(b.extra)))
-                , b.acconti > 0 && React.createElement('span', null, 'di cui già anticipato (acconti): ', React.createElement('b', {style:{color:C.text}}, eur(b.acconti)))
-                , b.daIncassare > 0 && React.createElement('span', null, 'Saldo a quote incassate: ', React.createElement('b', {style:{color:b.saldoPrevisto>=0?C.green:C.red}}, (b.saldoPrevisto>=0?'+':'')+eur(b.saldoPrevisto)))
+                , React.createElement('span', null, 'Dovuto: ', React.createElement('b', {style:{color:C.orange}}, eur(b.compenso)))
+                , React.createElement('span', null, 'Già versato: ', React.createElement('b', {style:{color:C.blue}}, eur(b.versato)))
+                , React.createElement('span', null, b.daVersare>=0?'Da versare: ':'Versato in più: ', React.createElement('b', {style:{color:b.daVersare>0?C.orange:C.green}}, eur(Math.abs(b.daVersare))))
+                , b.daIncassare > 0 && React.createElement('span', null, 'Saldo finale a quote incassate: ', React.createElement('b', {style:{color:b.saldoPrevisto>=0?C.green:C.red}}, sgn(b.saldoPrevisto)))
               )
+              /* pagamenti già versati al docente nel mese */
+              , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,marginBottom:10,overflowX:'auto'}}
+                , React.createElement('div', {style:{padding:'8px 12px',fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',borderBottom:`1px solid ${C.border}`}}, 'Compensi ed extra già versati')
+                , b.versatiList.length === 0
+                  ? React.createElement('div', {style:{padding:'10px 12px',fontSize:12,color:C.textMuted}}, 'Nessun pagamento registrato per questo mese (Contabilità → Spese → categoria Compensi docenti).')
+                  : React.createElement('table', {style:{width:'100%',borderCollapse:'collapse',minWidth:520}}
+                    , React.createElement('thead', null, React.createElement('tr', null, th('Data'), th('Tipo'), th('Descrizione'), th('Metodo'), th('Importo', true)))
+                    , React.createElement('tbody', null
+                      , b.versatiList.map((v, i) => { const tp = fmTipoVoceDocente(v); return React.createElement('tr', {key:v.id||i}
+                        , td(v.data ? String(v.data).split('-').reverse().join('/') : '—', {fontSize:12,color:C.textMuted,whiteSpace:'nowrap'})
+                        , td(React.createElement('span', {style:{fontSize:11,fontWeight:700,color:tp==='extra'?C.purple:tp==='acconto'?C.gold:C.blue,background:tp==='extra'?C.purpleBg:tp==='acconto'?C.goldBg:C.blueBg,borderRadius:8,padding:'2px 8px'}}, TIPO_LBL[tp]))
+                        , td(v.desc || '—', {fontSize:12})
+                        , td(v.metodo || 'Non indicato', {fontSize:12})
+                        , td(eur(v.importo), {textAlign:'right',fontWeight:600,color:C.blue,whiteSpace:'nowrap'})); })
+                    )
+                  )
+              )
+              , Object.keys(b.versatoPerMetodo).length > 0 && chipRow('Versato per metodo:', fmOrdinaMetodi(b.versatoPerMetodo).map(([k,v]) => chip(k, k, v, C.blueBg, C.blueBorder)))
               , Object.keys(b.metodiTot).length > 0 && React.createElement('div', {style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8,alignItems:'center'}}
                 , React.createElement('span', {style:{fontSize:11,color:C.textMuted,fontWeight:600,marginRight:4}}, 'Incassato da allievi:')
                 , fmOrdinaMetodi(b.metodiTot).map(([k,v]) => React.createElement('span', {key:k, style:{fontSize:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'3px 10px'}}, k, ': ', React.createElement('b', null, eur(v))))
               )
               , (Object.keys(b.pagaDocentePerMetodo).length > 0 || b.compLezNonAttribuite > 0 || b.extra > 0) && React.createElement('div', {style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}
-                , React.createElement('span', {style:{fontSize:11,color:C.textMuted,fontWeight:600,marginRight:4}}, 'Da pagare al docente:')
+                , React.createElement('span', {style:{fontSize:11,color:C.textMuted,fontWeight:600,marginRight:4}}, 'Metodo per pagare le lezioni:')
                 , fmOrdinaMetodi(b.pagaDocentePerMetodo).map(([k,v]) => React.createElement('span', {key:k, style:{fontSize:12,background:k==='Da definire'?C.orangeBg:C.goldBg,border:`1px solid ${k==='Da definire'?C.orangeBorder:C.border}`,borderRadius:10,padding:'3px 10px'}}, k, ': ', React.createElement('b', null, eur(v))))
                 , b.compLezNonAttribuite > 0 && React.createElement('span', {style:{fontSize:12,background:C.orangeBg,border:`1px solid ${C.orangeBorder}`,borderRadius:10,padding:'3px 10px'}}, `Collettive/altre (${b.lezNonAttribuite} lez.): `, React.createElement('b', null, eur(b.compLezNonAttribuite)))
                 , b.extra > 0 && React.createElement('span', {style:{fontSize:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'3px 10px'}}, 'Extra: ', React.createElement('b', null, eur(b.extra)))
