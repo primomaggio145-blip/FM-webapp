@@ -7,12 +7,77 @@ const INIT_DOCENTI_EXT = [
   { id:"d4", corsi:["c9","c10"], nome:"Prof.ssa Lia Marino", teacherKey:"Prof. Marino",  email:"l.marino@accademia.it",   phone:"366 3344556", strumenti:"Canto · Solfeggio",      bio:"Soprano lirico, docente di tecnica vocale e teoria musicale.",  tariffaOra:35, contratto:"Tempo indeterminato", dataInizio:"2017-09-01", colore:C.purple  },
 ];
 
-const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV, spese:_speseDocView }) => {
+// ─── BILANCIO DOCENTI (tab "Bilancio" nella lista Docenti, solo admin) ─────────
+// Funzioni PURE (nessun hook/stato) → testabili isolatamente.
+// Le quote mensili (tabella quote, categoria "quota") NON registrano il corso: se un
+// allievo segue più corsi individuali con docenti diversi, la sua quota viene
+// ripartita in parti uguali tra i corsi (es. 2 corsi → 1/2 a ciascun docente).
+const fmNumCorsiIndividuali = (s) => {
+  let n = (s && s.instrument && s.teacher) ? 1 : 0;
+  if (s && s.extraTeachers && typeof s.extraTeachers === 'object') {
+    const attivi = new Set(s.extraInstruments || []);
+    Object.entries(s.extraTeachers).forEach(([corso, t]) => { if (corso && t && attivi.has(corso)) n++; });
+  }
+  return n;
+};
+const fmNormMetodo = (m) => { const t = String(m || '').trim(); return t || 'Non indicato'; };
+const fmQuotaDiAllievo = (q, s) => {
+  const qid = q.studentId != null && q.studentId !== '' ? String(q.studentId) : null;
+  if (qid) return qid === String(s.id);
+  return !!(q.studentName && s.name && q.studentName.trim().toLowerCase() === s.name.trim().toLowerCase());
+};
+// allieviD: output di allievi(d) (ogni allievo ha _corsiConDocente)
+// entrate: quote/entrate (mese 1-12); compensoLezioni: n.lezioni × tariffa del mese
+// extraVoci: spese con docenteId del mese (isAcconto = anticipo già versato)
+const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extraVoci }) => {
+  const quoteMese = (entrate || []).filter(e => e && (e.categoria || 'quota') === 'quota'
+    && Number(e.mese) === Number(m) && Number(e.anno) === Number(y));
+  const righe = [];
+  (allieviD || []).forEach(s => {
+    const nDoc = (s._corsiConDocente || []).length || 1;
+    const nTot = Math.max(fmNumCorsiIndividuali(s), nDoc);
+    const quotaParte = nDoc / nTot;
+    const qs = quoteMese.filter(q => fmQuotaDiAllievo(q, s));
+    const attivo = (s.status || 'attivo') === 'attivo';
+    if (!attivo && qs.length === 0) return; // inattivo e nessuna quota nel mese → non mostrare
+    const pagate = qs.filter(q => q.stato === 'pagato');
+    const pagatoTot = pagate.reduce((t, q) => t + (Number(q.importo) || 0), 0);
+    const metodi = {};
+    pagate.forEach(q => { const k = fmNormMetodo(q.metodo); metodi[k] = (metodi[k] || 0) + (Number(q.importo) || 0) * quotaParte; });
+    const stato = pagate.length > 0 ? 'pagato' : (qs.some(q => q.stato === 'ritardo') ? 'ritardo' : 'attesa');
+    const previsto = attivo ? (Number(s.monthlyFee) || 0) * quotaParte : 0;
+    righe.push({
+      s, corsi: s._corsiConDocente || [], quotaParte, nTot, stato,
+      pagatoTot, pagatoQuota: pagatoTot * quotaParte, previsto,
+      daIncassare: stato === 'pagato' ? 0 : previsto,
+      metodi, metodiLabel: Object.keys(metodi).join(' + '),
+      data: pagate.map(q => q.dataPagamento || q.data).filter(Boolean).sort().pop() || '',
+    });
+  });
+  righe.sort((a, b) => (a.s.name || '').localeCompare(b.s.name || ''));
+  const incassato   = righe.reduce((t, r) => t + r.pagatoQuota, 0);
+  const daIncassare = righe.reduce((t, r) => t + r.daIncassare, 0);
+  const metodiTot = {};
+  righe.forEach(r => Object.entries(r.metodi).forEach(([k, v]) => { metodiTot[k] = (metodiTot[k] || 0) + v; }));
+  const extra   = (extraVoci || []).filter(v => !v.isAcconto).reduce((t, v) => t + (Number(v.importo) || 0), 0);
+  const acconti = (extraVoci || []).filter(v =>  v.isAcconto).reduce((t, v) => t + (Number(v.importo) || 0), 0);
+  // Costo del docente per la scuola nel mese = lezioni × tariffa + extra.
+  // Gli acconti sono una PARTE già anticipata di questo importo (non un costo in più).
+  const compenso = (Number(compensoLezioni) || 0) + extra;
+  return {
+    righe, incassato, daIncassare, metodiTot, compensoLezioni: Number(compensoLezioni) || 0,
+    extra, acconti, compenso, saldo: incassato - compenso,
+    saldoPrevisto: incassato + daIncassare - compenso,
+  };
+};
+
+const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV, spese:_speseDocView, entrate:_entrateDocView }) => {
   const ruoloDocView = _ruoloDocView || "admin";
   const isMobile = useIsMobile();
   const students = _studentsRaw || [];
   const lessons = _lessonsRaw || [];
   const spese = _speseDocView || [];
+  const entrateDV = _entrateDocView || (window.__FM_DATA__ && window.__FM_DATA__.entrate) || [];
 
   // Auto-seleziona il proprio record se loggato come docente
   const _myDocRecord = React.useMemo(() => {
@@ -328,6 +393,18 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const [showAmountsDoc, setShowAmountsDoc] = useState(false);
   // Selettore anno scolastico per admin
   const [annoSelDoc, setAnnoSelDoc] = useState(annoInizio);
+  // Tab della vista lista (admin): "elenco" (card docenti) | "bilancio" (compensi vs incassi)
+  const [listTabDoc, setListTabDoc] = useState("elenco");
+  const [bilMese, setBilMese] = useState({ m: curMonth, y: curYear });
+  const [bilEspanso, setBilEspanso] = useState(null);
+  // Cambiando anno scolastico, il mese del bilancio si sposta dentro quell'anno
+  React.useEffect(() => {
+    const a = Number(annoSelDoc);
+    const dentro = (bilMese.m >= 9 && bilMese.y === a) || (bilMese.m <= 8 && bilMese.y === a + 1);
+    if (dentro) return;
+    const corrDentro = (curMonth >= 9 && curYear === a) || (curMonth <= 8 && curYear === a + 1);
+    setBilMese(corrDentro ? { m: curMonth, y: curYear } : { m: 9, y: a });
+  }, [annoSelDoc]);
   // Impostazioni docente (dashboard panels + profilo personale)
   const [docSettings, setDocSettings] = useState({
     panels: { lezioni:true, allievi:true, compenso:true, repertorio:true, allegati:true },
@@ -415,6 +492,123 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     )
   ) : null;
 
+  // ── TAB BILANCIO (solo admin) ───────────────────────────────────────────────
+  const renderBilancioDocenti = () => {
+    const eur = (v) => '€' + (Math.round((Number(v)||0)*100)/100).toLocaleString('it-IT', {minimumFractionDigits:0, maximumFractionDigits:2});
+    const MESI_N = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+    const MESI_L = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+    const a = Number(annoSelDoc);
+    const mesiAnno = [9,10,11,12,1,2,3,4,5,6,7,8].map(m => ({ m, y: m >= 9 ? a : a + 1 }));
+    const { m, y } = bilMese;
+    const dati = (docenti||[]).map(d => {
+      const nLez = lezioniMese(d, m, y).length;
+      const b = fmCalcBilancioDocente({
+        allieviD: allievi(d), entrate: entrateDV, m, y,
+        compensoLezioni: nLez * (Number(d.tariffaOra)||0),
+        extraVoci: altreCompetenzeMese(d, m, y),
+      });
+      return { d, nLez, b };
+    }).filter(x => x.b.righe.length > 0 || x.nLez > 0 || x.b.compenso > 0);
+    const tot = dati.reduce((t, x) => ({
+      incassato: t.incassato + x.b.incassato, daIncassare: t.daIncassare + x.b.daIncassare,
+      compenso: t.compenso + x.b.compenso, saldo: t.saldo + x.b.saldo,
+    }), { incassato:0, daIncassare:0, compenso:0, saldo:0 });
+    const metodiTot = {};
+    dati.forEach(x => Object.entries(x.b.metodiTot).forEach(([k,v]) => { metodiTot[k] = (metodiTot[k]||0) + v; }));
+    const statoBadge = (st) => {
+      const map = { pagato:{l:'Pagato',c:C.green,bg:C.greenBg,b:C.greenBorder}, ritardo:{l:'In ritardo',c:C.red,bg:C.redBg,b:C.redBorder}, attesa:{l:'Da pagare',c:C.orange,bg:C.orangeBg,b:C.orangeBorder} };
+      const x = map[st] || map.attesa;
+      return React.createElement('span', {style:{fontSize:11,fontWeight:700,color:x.c,background:x.bg,border:`1px solid ${x.b}`,borderRadius:10,padding:'2px 8px',whiteSpace:'nowrap'}}, x.l);
+    };
+    const kpi = (label, value, hex, sub) => React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:'12px 14px',minWidth:0}}
+      , React.createElement('div', {style:{fontSize:10,color:C.textDim,textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}, label)
+      , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:22,fontWeight:600,color:hex,lineHeight:1.1}}, value)
+      , sub && React.createElement('div', {style:{fontSize:11,color:C.textMuted,marginTop:3}}, sub)
+    );
+    const th = (t, right) => React.createElement('th', {style:{textAlign:right?'right':'left',fontSize:10,color:C.textDim,textTransform:'uppercase',letterSpacing:'.07em',padding:'8px 10px',borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap',fontWeight:600}}, t);
+    const td = (c, extra) => React.createElement('td', {style:{fontSize:13,padding:'8px 10px',borderBottom:`1px solid ${C.border}`,verticalAlign:'top',...(extra||{})}}, c);
+
+    return React.createElement('div', null
+      /* selettore mese */
+      , React.createElement('div', {style:{display:'flex',gap:6,overflowX:'auto',flexWrap:'nowrap',paddingBottom:6,marginBottom:14}}
+        , mesiAnno.map(x => {
+            const sel = x.m===m && x.y===y;
+            return React.createElement('button', {key:`${x.y}-${x.m}`, onClick:()=>setBilMese(x),
+              style:{flex:'0 0 auto',padding:'5px 12px',borderRadius:20,border:`1px solid ${sel?C.gold:C.border}`,background:sel?C.gold:C.surface,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:12,fontWeight:sel?700:400,fontFamily:"'Open Sans',sans-serif"}}
+              , MESI_N[x.m-1], ' ', String(x.y).slice(2));
+          })
+      )
+      /* riepilogo scuola */
+      , React.createElement('div', {style:{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:10,marginBottom:10}}
+        , kpi(`Incassato ${MESI_L[m-1]}`, eur(tot.incassato), C.green, tot.daIncassare>0 ? `${eur(tot.daIncassare)} ancora da incassare` : 'Tutte le quote incassate')
+        , kpi('Compensi docenti', eur(tot.compenso), C.orange, 'lezioni × tariffa + extra')
+        , kpi('Saldo', (tot.saldo>=0?'+':'') + eur(tot.saldo), tot.saldo>=0?C.green:C.red, 'incassato − compensi')
+      )
+      , Object.keys(metodiTot).length > 0 && React.createElement('div', {style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:18,alignItems:'center'}}
+        , React.createElement('span', {style:{fontSize:11,color:C.textMuted,fontWeight:600,marginRight:4}}, 'Per metodo:')
+        , Object.entries(metodiTot).sort((p,q)=>q[1]-p[1]).map(([k,v]) => React.createElement('span', {key:k, style:{fontSize:12,background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:'3px 10px'}}, k, ': ', React.createElement('b', null, eur(v))))
+      )
+      , dati.length === 0 && React.createElement('div', {style:{padding:40,textAlign:'center',color:C.textMuted,fontSize:13,background:C.surface,border:`1px solid ${C.border}`,borderRadius:12}}, `Nessun dato per ${MESI_L[m-1]} ${y}.`)
+      /* card per docente */
+      , dati.map(({ d, nLez, b }) => {
+          const aperto = bilEspanso === d.id;
+          return React.createElement('div', {key:d.id, style:{background:C.surface,border:`1px solid ${C.border}`,borderLeft:`4px solid ${d.colore||C.gold}`,borderRadius:12,marginBottom:12,overflow:'hidden'}}
+            , React.createElement('div', {onClick:()=>setBilEspanso(aperto?null:d.id), style:{padding:'14px 16px',cursor:'pointer',display:'flex',flexWrap:'wrap',gap:12,alignItems:'center'}}
+              , React.createElement('div', {style:{flex:'1 1 200px',minWidth:0}}
+                , React.createElement('div', {style:{fontSize:15,fontWeight:600}}, d.nome)
+                , React.createElement('div', {style:{fontSize:12,color:C.textMuted}}, `${b.righe.length} allievi · ${nLez} lezioni × ${eur(d.tariffaOra)}`)
+              )
+              , [
+                  {l:'Compenso', v:eur(b.compenso), c:C.orange},
+                  {l:'Incassato', v:eur(b.incassato), c:C.green},
+                  {l:'Saldo', v:(b.saldo>=0?'+':'')+eur(b.saldo), c:b.saldo>=0?C.green:C.red},
+                ].map(k => React.createElement('div', {key:k.l, style:{textAlign:'right',minWidth:80}}
+                  , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,color:k.c,lineHeight:1}}, k.v)
+                  , React.createElement('div', {style:{fontSize:10,color:C.textDim,textTransform:'uppercase',letterSpacing:'.07em',marginTop:3}}, k.l)
+                ))
+              , React.createElement('div', {style:{transform:aperto?'rotate(180deg)':'none',transition:'transform .2s',display:'flex'}}, React.createElement(Ic, {n:'chevD', size:16, stroke:C.textMuted}))
+            )
+            , aperto && React.createElement('div', {style:{borderTop:`1px solid ${C.border}`,padding:'12px 16px',background:C.bg}}
+              /* composizione compenso */
+              , React.createElement('div', {style:{display:'flex',gap:16,flexWrap:'wrap',fontSize:12,color:C.textMuted,marginBottom:10}}
+                , React.createElement('span', null, 'Lezioni: ', React.createElement('b', {style:{color:C.text}}, `${nLez} × ${eur(d.tariffaOra)} = ${eur(b.compensoLezioni)}`))
+                , React.createElement('span', null, 'Extra: ', React.createElement('b', {style:{color:C.text}}, eur(b.extra)))
+                , b.acconti > 0 && React.createElement('span', null, 'di cui già anticipato (acconti): ', React.createElement('b', {style:{color:C.text}}, eur(b.acconti)))
+                , b.daIncassare > 0 && React.createElement('span', null, 'Saldo a quote incassate: ', React.createElement('b', {style:{color:b.saldoPrevisto>=0?C.green:C.red}}, (b.saldoPrevisto>=0?'+':'')+eur(b.saldoPrevisto)))
+              )
+              , Object.keys(b.metodiTot).length > 0 && React.createElement('div', {style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}
+                , Object.entries(b.metodiTot).map(([k,v]) => React.createElement('span', {key:k, style:{fontSize:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'3px 10px'}}, k, ': ', React.createElement('b', null, eur(v))))
+              )
+              , b.righe.length === 0
+                ? React.createElement('div', {style:{fontSize:13,color:C.textMuted,padding:'8px 0'}}, 'Nessun allievo individuale assegnato.')
+                : React.createElement('div', {style:{overflowX:'auto',background:C.surface,border:`1px solid ${C.border}`,borderRadius:10}}
+                  , React.createElement('table', {style:{width:'100%',borderCollapse:'collapse',minWidth:560}}
+                    , React.createElement('thead', null, React.createElement('tr', null, th('Allievo'), th('Corso'), th('Quota', true), th('Stato'), th('Metodo'), th('Data')))
+                    , React.createElement('tbody', null
+                      , b.righe.map(r => React.createElement('tr', {key:r.s.id}
+                        , td(r.s.name, {fontWeight:600})
+                        , td(r.corsi.join(', '), {color:C.textMuted,fontSize:12})
+                        , td(React.createElement('div', null
+                            , React.createElement('div', {style:{fontWeight:600,color:r.stato==='pagato'?C.green:C.textMuted}}, eur(r.stato==='pagato'?r.pagatoQuota:r.previsto))
+                            , r.quotaParte < 1 && React.createElement('div', {style:{fontSize:10,color:C.textDim}}, `quota ripartita ${Math.round(r.quotaParte*r.nTot)}/${r.nTot}${r.stato==='pagato'?` (su ${eur(r.pagatoTot)})`:''}`)
+                          ), {textAlign:'right',whiteSpace:'nowrap'})
+                        , td(statoBadge(r.stato))
+                        , td(r.metodiLabel || '—', {fontSize:12})
+                        , td(r.data ? r.data.split('-').reverse().join('/') : '—', {fontSize:12,color:C.textMuted,whiteSpace:'nowrap'})
+                      ))
+                    )
+                  )
+                )
+            )
+          );
+        })
+      , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:8,lineHeight:1.5}},
+          'Il saldo considera solo le quote mensili effettivamente pagate degli allievi individuali del docente (iscrizioni escluse). ',
+          'Se un allievo segue più corsi con docenti diversi, la sua quota è divisa in parti uguali. ',
+          'Il compenso include anche le lezioni collettive, i cui allievi non sono attribuiti a un singolo docente.')
+    );
+  };
+
   // ── VISTA LISTA ──────────────────────────────────────────────────────────────
   if (!selected) {
     // Il docente non deve mai vedere la lista: mostra spinner mentre arrivano i dati
@@ -456,7 +650,15 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             })()
         )
 
-      , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9969}}
+      /* ── Tab vista lista (admin): Elenco | Bilancio ── */
+      , ruoloDocView==="admin" && React.createElement('div', {style:{display:'flex',gap:4,borderBottom:`1px solid ${C.border}`,marginBottom:18,overflowX:'auto'}}
+        , [{id:'elenco',label:'Elenco',icon:'users'},{id:'bilancio',label:'Bilancio',icon:'euro'}].map(t =>
+            React.createElement('button', {key:t.id, onClick:()=>setListTabDoc(t.id),
+              style:{display:'flex',alignItems:'center',gap:6,padding:'9px 14px',background:'none',border:'none',borderBottom:`2px solid ${listTabDoc===t.id?C.gold:'transparent'}`,color:listTabDoc===t.id?C.gold:C.textMuted,cursor:'pointer',fontSize:13,fontWeight:listTabDoc===t.id?700:500,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}}
+              , React.createElement(Ic, {n:t.icon, size:14, stroke:listTabDoc===t.id?C.gold:C.textMuted}), t.label))
+      )
+      , ruoloDocView==="admin" && listTabDoc==="bilancio" && renderBilancioDocenti()
+      , !(ruoloDocView==="admin" && listTabDoc==="bilancio") && React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:16}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9969}}
         , (ruoloDocView==="docente"
           ? (()=>{ const did=(_appUserDocView&&_appUserDocView.docenteId)||null; if(did) return (docenti||[]).filter(d=>String(d.id)===String(did)); const ln=(_appUserDocView&&_appUserDocView.nome)||""; return (docenti||[]).filter(d=>d.teacherKey===ln||(d.nome||"").toLowerCase().includes(ln.toLowerCase())); })()
           // Admin: mostra sempre tutti i docenti — l'anno scolastico selezionato filtra
