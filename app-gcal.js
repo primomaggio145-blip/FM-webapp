@@ -192,12 +192,9 @@ window.gcalSyncLesson = async function(action, lesson) {
     if (!sb) { console.warn('[FM][gcal] sync saltata: supabaseClient non disponibile'); return; }
     const { data: { session } } = await sb.auth.getSession();
     if (!session?.user?.id) { console.warn('[FM][gcal] sync saltata: nessuna sessione utente'); return; }
-    // Controlla se l'utente ha GCal connesso e abilitato
-    const { data: tokenRow, error: tokenErr } = await sb.from('google_calendar_tokens')
-      .select('sync_enabled').eq('user_id', session.user.id).maybeSingle();
-    if (tokenErr) { console.warn('[FM][gcal] sync saltata: errore lettura token', tokenErr); return; }
-    if (!tokenRow) { console.info('[FM][gcal] sync saltata: Google Calendar non connesso per questo utente'); return; }
-    if (!tokenRow.sync_enabled) { console.info('[FM][gcal] sync saltata: sync_enabled=false per questo utente'); return; }
+    // GCAL-PROPAGA: nessun controllo connessione qui — la Edge Function salta il
+    // calendario di chi chiama se non è collegato/abilitato, ma aggiorna comunque
+    // l'evento negli altri calendari collegati che già contengono questa lezione.
     // Fire & forget — non blocca l'UI, ma logga eventuali errori HTTP
     fetch(GCAL_EDGE, {
       method: 'POST',

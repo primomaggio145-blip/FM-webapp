@@ -5164,11 +5164,10 @@ const gcalSyncLesson = async (action, lesson) => {
     const sb = window.supabaseClient; if (!sb) { console.warn('[FM][gcal] sync saltata: supabaseClient non disponibile'); return; }
     const { data:{session} } = await sb.auth.getSession();
     if (!session?.user?.id) { console.warn('[FM][gcal] sync saltata: nessuna sessione utente'); return; }
-    const { data: tokenRow, error: tokenErr } = await sb.from('google_calendar_tokens')
-      .select('sync_enabled').eq('user_id', session.user.id).maybeSingle();
-    if (tokenErr) { console.warn('[FM][gcal] sync saltata: errore lettura token', tokenErr); return; }
-    if (!tokenRow) { console.info('[FM][gcal] sync saltata: Google Calendar non connesso per questo utente'); return; }
-    if (!tokenRow.sync_enabled) { console.info('[FM][gcal] sync saltata: sync_enabled=false per questo utente'); return; }
+    // GCAL-PROPAGA: la chiamata parte anche se QUESTO utente non ha Google collegato
+    // (o ha la sync disattivata): la Edge Function salta il suo calendario ma aggiorna
+    // l'evento della lezione nei calendari degli altri utenti che ce l'hanno già
+    // (es. docente/admin). Il controllo connessione/sync_enabled è ora lato server.
     const lessonOut = lesson ? { ...lesson, _gcalCaption: window.gcalBuildCaption(lesson) } : lesson;
     fetch(GCAL_EDGE, {
       method: 'POST',
