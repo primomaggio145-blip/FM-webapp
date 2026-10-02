@@ -1278,7 +1278,8 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
     const giornoToIdx = { "domenica":0,"lunedi":1,"lunedì":1,"martedi":2,"martedì":2,"mercoledi":3,"mercoledì":3,"giovedi":4,"giovedì":4,"venerdi":5,"venerdì":5,"sabato":6 };
 
     const allLessons = window.__FM_DATA__?.lessons || [];
-    const occupati = new Set(allLessons.map(l => l.date+'_'+(l.hour||'').slice(0,5)));
+    // Le lezioni "Da recuperare" (o già recuperate altrove) liberano il loro orario
+    const occupati = new Set(allLessons.filter(l => !(typeof fmLezioneLiberaSlot === 'function' && fmLezioneLiberaSlot(l))).map(l => l.date+'_'+(l.hour||'').slice(0,5)));
 
     // ── FIX DATA: usa date locali, NON toISOString() che usa UTC ──
     const toLocalDateStr = (d) => {
@@ -3881,13 +3882,8 @@ const EsportaRicevuteSection = ({ anniScolastici: propAnniExp, showToast }) => {
 // Funzioni PURE (testabili): costruiscono le righe a partire dai record GREZZI del DB.
 //  - Entrate = tabella quote (tutte le categorie: quota, iscrizione, concerto, evento, altro…), mese 1-12
 //  - Uscite  = tabella spese, mese 0-11 (getMonth)
-const fmMovGruppoMetodo = (m) => {
-  if (typeof fmNormMetodo === 'function') return fmNormMetodo(m); // stessa regola del Bilancio docenti
-  const t = String(m || '').trim().toLowerCase();
-  if (t.includes('contant')) return 'Contanti';
-  if (t.includes('paypal') || t.includes('satispay')) return 'PayPal / Satispay';
-  return 'BANCA';
-};
+// Metodo REALE del movimento (nessun raggruppamento): vuoto → "Non indicato"
+const fmMovMetodo = (m) => { const t = String(m || '').trim(); return t || 'Non indicato'; };
 const fmMovAnnoScolastico = (dataIso) => {
   const [y, m] = String(dataIso || '').split('-').map(Number);
   if (!y || !m) return null;
@@ -3911,7 +3907,7 @@ const fmMovBuild = ({ quote, spese, docenti, filtri }) => {
       tipo: 'Entrata', data, dataReale: !!r.data_pagamento,
       categoria: catLabelE(r.categoria || 'quota'), descrizione: r.descrizione || '',
       soggetto: r.studente_nome || r.ricevuta_intestatario || '',
-      importo: Number(r.importo) || 0, metodo: r.metodo || '', canale: fmMovGruppoMetodo(r.metodo),
+      importo: Number(r.importo) || 0, metodo: fmMovMetodo(r.metodo),
       stato, numRicevuta: r.no_ricevuta ? '' : (r.num_ricevuta || ''),
       competenza: mese && anno ? `${fmMovPad(mese)}/${anno}` : '',
       annoScolastico: r.anno_scolastico != null ? Number(r.anno_scolastico) : fmMovAnnoScolastico(data),
@@ -3928,7 +3924,7 @@ const fmMovBuild = ({ quote, spese, docenti, filtri }) => {
       categoria: catLabelU(r.categoria || 'altro'),
       descrizione: r.is_acconto ? `${desc}${desc ? ' ' : ''}(acconto)` : desc,
       soggetto: nomeDoc(r.docente_id),
-      importo: Number(r.importo) || 0, metodo: r.metodo || '', canale: fmMovGruppoMetodo(r.metodo),
+      importo: Number(r.importo) || 0, metodo: fmMovMetodo(r.metodo),
       stato: '', numRicevuta: '',
       competenza: mese0 != null && anno ? `${fmMovPad(mese0 + 1)}/${anno}` : '',
       annoScolastico: fmMovAnnoScolastico(data),
@@ -3940,14 +3936,14 @@ const fmMovBuild = ({ quote, spese, docenti, filtri }) => {
     if (f.dataA && (!x.data || x.data > f.dataA)) return false;
     if (f.annoScolastico !== undefined && f.annoScolastico !== '' && f.annoScolastico !== null
         && String(x.annoScolastico) !== String(f.annoScolastico)) return false;
-    if (f.canale && x.canale !== f.canale) return false;
+    if (f.metodo && x.metodo.toLowerCase() !== String(f.metodo).trim().toLowerCase()) return false;
     return true;
   });
   out.sort((a, b) => (a.data || '').localeCompare(b.data || '') || (a.tipo === b.tipo ? 0 : a.tipo === 'Entrata' ? -1 : 1));
-  const tot = { entrate: 0, uscite: 0, perCanale: {} };
+  const tot = { entrate: 0, uscite: 0, perMetodo: {} };
   out.forEach(x => {
     if (x.tipo === 'Entrata') tot.entrate += x.importo; else tot.uscite += x.importo;
-    const c = tot.perCanale[x.canale] || (tot.perCanale[x.canale] = { entrate: 0, uscite: 0 });
+    const c = tot.perMetodo[x.metodo] || (tot.perMetodo[x.metodo] = { entrate: 0, uscite: 0 });
     if (x.tipo === 'Entrata') c.entrate += x.importo; else c.uscite += x.importo;
   });
   tot.saldo = tot.entrate - tot.uscite;
@@ -3958,21 +3954,21 @@ const fmMovBuild = ({ quote, spese, docenti, filtri }) => {
 const fmMovEsc = (v) => { const t = v == null ? '' : String(v); return /[";\n\r]/.test(t) ? `"${t.replace(/"/g,'""')}"` : t; };
 const fmMovNum = (n) => (Math.round((Number(n) || 0) * 100) / 100).toFixed(2).replace('.', ',');
 const fmMovCSV = ({ righe, tot }) => {
-  const header = ['Data','Tipo','Categoria','Descrizione','Socio / Docente','Entrata €','Uscita €','Metodo','Canale','Stato','N. Ricevuta','Mese competenza','Anno scolastico','Note'];
+  const header = ['Data','Tipo','Categoria','Descrizione','Socio / Docente','Entrata €','Uscita €','Metodo','Stato','N. Ricevuta','Mese competenza','Anno scolastico','Note'];
   const dIt = (iso) => iso ? iso.split('-').reverse().join('/') : '';
   const as = (a) => a != null ? `${a}/${a + 1}` : '';
   const lines = righe.map(x => [
     dIt(x.data) + (x.data && !x.dataReale ? ' (stimata)' : ''), x.tipo, x.categoria, x.descrizione, x.soggetto,
     x.tipo === 'Entrata' ? fmMovNum(x.importo) : '', x.tipo === 'Uscita' ? fmMovNum(x.importo) : '',
-    x.metodo, x.canale, x.stato, x.numRicevuta, x.competenza, as(x.annoScolastico), x.note,
+    x.metodo, x.stato, x.numRicevuta, x.competenza, as(x.annoScolastico), x.note,
   ].map(fmMovEsc).join(';'));
   const vuota = () => new Array(header.length).fill('');
   const riga = (label, e, u) => { const r = vuota(); r[4] = label; r[5] = e; r[6] = u; return r.map(fmMovEsc).join(';'); };
   lines.push('');
   lines.push(riga('TOTALE', fmMovNum(tot.entrate), fmMovNum(tot.uscite)));
   lines.push(riga('SALDO (entrate − uscite)', fmMovNum(tot.saldo), ''));
-  ['Contanti','PayPal / Satispay','BANCA'].forEach(k => {
-    const c = tot.perCanale[k]; if (!c) return;
+  Object.keys(tot.perMetodo).sort((p, q) => p.localeCompare(q)).forEach(k => {
+    const c = tot.perMetodo[k];
     lines.push(riga(`di cui ${k}`, fmMovNum(c.entrate), fmMovNum(c.uscite)));
   });
   return '\uFEFF' + header.join(';') + '\n' + lines.join('\n');
@@ -3995,7 +3991,7 @@ const EsportaMovimentiSection = ({ anniScolastici: propAnniMov, showToast }) => 
   const [dataA, setDataA] = React.useState('');
   const [annoSel, setAnnoSel] = React.useState('');
   const [tipoSel, setTipoSel] = React.useState('tutti');
-  const [canaleSel, setCanaleSel] = React.useState('');
+  const [metodoSel, setMetodoSel] = React.useState('');
   const [soloPagate, setSoloPagate] = React.useState(true);
   const [loading, setLoading] = React.useState(false);
   const [localMsg, setLocalMsg] = React.useState(null);
@@ -4010,7 +4006,7 @@ const EsportaMovimentiSection = ({ anniScolastici: propAnniMov, showToast }) => 
         tipoSel === 'entrate' ? Promise.resolve([]) : fmMovFetchAll(sb, 'spese'),
       ]);
       const docenti = (window.__FM_DATA__ && window.__FM_DATA__.docenti) || [];
-      const res = fmMovBuild({ quote, spese, docenti, filtri: { tipo: tipoSel, dataDa, dataA, annoScolastico: annoSel, canale: canaleSel, soloPagate } });
+      const res = fmMovBuild({ quote, spese, docenti, filtri: { tipo: tipoSel, dataDa, dataA, annoScolastico: annoSel, metodo: metodoSel, soloPagate } });
       if (res.righe.length === 0) {
         const msg = 'Nessun movimento trovato con questi filtri — prova ad allargare il periodo o togliere qualche filtro';
         setLocalMsg({ ok:false, testo:msg }); showToast && showToast(false, msg); setLoading(false); return;
@@ -4041,7 +4037,7 @@ const EsportaMovimentiSection = ({ anniScolastici: propAnniMov, showToast }) => 
 
   return React.createElement(ImpSection, {title:"Esporta movimenti contabili", icon:"download"}
     , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginBottom:14,lineHeight:1.5}},
-        "Scarica in CSV (apribile con Excel) tutti i movimenti: entrate (quote, iscrizioni, concerti, eventi, altro) e uscite (compensi docenti, acconti, utenze, materiale…), con totali e saldo per Contanti, PayPal / Satispay e BANCA."
+        "Scarica in CSV (apribile con Excel) tutti i movimenti: entrate (quote, iscrizioni, concerti, eventi, altro) e uscite (compensi docenti, acconti, utenze, materiale…), con totali, saldo e riepilogo per ciascun metodo di pagamento."
       )
     , React.createElement('div', {style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14},className:'form-2col'}
       , React.createElement('div',null, lab('Data da'), React.createElement('input',{type:'date', value:dataDa, onChange:e=>setDataDa(e.target.value), style:inpSt}))
@@ -4054,9 +4050,9 @@ const EsportaMovimentiSection = ({ anniScolastici: propAnniMov, showToast }) => 
           , React.createElement('select',{value:tipoSel, onChange:e=>setTipoSel(e.target.value), style:inpSt}
             , [['tutti','Entrate e uscite'],['entrate','Solo entrate'],['uscite','Solo uscite']].map(([v,l]) => React.createElement('option',{key:v, value:v}, l))))
       , React.createElement('div',null, lab('Metodo')
-          , React.createElement('select',{value:canaleSel, onChange:e=>setCanaleSel(e.target.value), style:inpSt}
+          , React.createElement('select',{value:metodoSel, onChange:e=>setMetodoSel(e.target.value), style:inpSt}
             , React.createElement('option',{value:''}, 'Tutti')
-            , ['Contanti','PayPal / Satispay','BANCA'].map(m => React.createElement('option',{key:m, value:m}, m))))
+            , [...(typeof METODI_PAG !== 'undefined' ? METODI_PAG : ['Bonifico bancario','Contanti','Carta / POS','PayPal / Satispay','Assegno']), 'Non indicato'].map(m => React.createElement('option',{key:m, value:m}, m))))
       , React.createElement('label',{style:{display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.textMuted,marginTop:6}}
           , React.createElement('input',{type:'checkbox', checked:soloPagate, onChange:e=>setSoloPagate(e.target.checked), style:{width:15,height:15}})
           , 'Solo entrate effettivamente incassate (stato "pagato")')

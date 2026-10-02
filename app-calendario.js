@@ -1471,6 +1471,7 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
       var conflitto = tutteLezioni.some(function(l) {
         if (l.date !== s.data) return false;
         if (!l.hour) return false;
+        if (fmLezioneLiberaSlot(l)) return false; // "Da recuperare": orario libero
         var lIni = toMin(l.hour);
         var lFin = lIni + (l.durata || 45);
         // Sovrapposizione temporale
@@ -5306,14 +5307,21 @@ const infoLezionePrecedente = (prev, repertorio) => {
 // fasce orarie che si intersecano considerando la durata) e condividono lo stesso strumento
 // (solo tra due lezioni individuali) oppure lo stesso insegnante (qualunque tipo di lezione,
 // perché un docente non può fisicamente essere in due posti contemporaneamente).
+// Una lezione "DA RECUPERARE" (in_recupero) — o già recuperata in un'altra data (recuperata) —
+// non si svolge nel suo orario: lo lascia LIBERO, quindi non genera conflitti né li subisce.
+function fmLezioneLiberaSlot(l) {
+  return !!l && (l.inRecupero === true || l.attendance === 'in_recupero' || l.attendance === 'recuperata');
+}
 function trovaConflittiOrario(lezione, tutteLeLezioni) {
   if (!lezione || !lezione.date || !lezione.hour) return [];
+  if (fmLezioneLiberaSlot(lezione)) return [];
   const oraCompleta = h => (h && h.length === 5) ? h + ':00' : h;
   const inizio = new Date(`${lezione.date}T${oraCompleta(lezione.hour)}`);
   const fine = new Date(inizio.getTime() + (Number(lezione.durata) || 45) * 60000);
   if (isNaN(inizio.getTime())) return [];
   return (tutteLeLezioni || []).filter(l => {
     if (l.id === lezione.id || l.date !== lezione.date || !l.hour) return false;
+    if (fmLezioneLiberaSlot(l)) return false;
     if (isSalaProve(l) || isSalaProve(lezione)) return false; // la sala prove ha una gestione conflitti propria
     const lInizio = new Date(`${l.date}T${oraCompleta(l.hour)}`);
     if (isNaN(lInizio.getTime())) return false;
