@@ -9,6 +9,32 @@ function dedupeLessonsById(arr) {
   arr.forEach(item => { if (item && item.id != null) map.set(String(item.id), item); });
   return Array.from(map.values());
 }
+// ─── [FM-NOMI-ALLIEVI-COLLEGATI] helper (cache nomi per utente, su questo dispositivo) ───
+const FM_NOMI_ALLIEVI_KEY = 'fm_nomi_allievi_';
+function fmNomiAllieviCache(u) {
+  try { return JSON.parse(localStorage.getItem(FM_NOMI_ALLIEVI_KEY + ((u && u.userId) || '')) || '{}') || {}; }
+  catch (e) { return {}; }
+}
+function fmNomiAllieviSalva(u, nuovi) {
+  try {
+    const prev = fmNomiAllieviCache(u);
+    const next = { ...prev, ...nuovi };
+    if (JSON.stringify(prev) !== JSON.stringify(next))
+      localStorage.setItem(FM_NOMI_ALLIEVI_KEY + ((u && u.userId) || ''), JSON.stringify(next));
+  } catch (e) {}
+}
+// Nome da mostrare nel selettore profilo: mai l'ID tecnico.
+function fmNomeAllievoCollegato(id, idx, u, mieiAllievi, students) {
+  const sid = String(id);
+  const a = (mieiAllievi || []).find(x => String(x.id) === sid);
+  if (a && a.nome) return a.nome;
+  const st = (students || []).find(x => String(x.id) === sid);
+  if (st && (st.name || st.nome)) return st.name || st.nome;
+  const c = fmNomiAllieviCache(u)[sid];
+  if (c) return c;
+  const n = (u && Array.isArray(u.allieviIds)) ? u.allieviIds.length : 1;
+  return n > 1 ? `Allievo ${idx + 1}` : 'Allievo';
+}
 function App() {
   // ── TUTTI GLI HOOK IN CIMA — mai dopo un return condizionale ──
   const [user,           setUser]           = useState(null);
@@ -18,11 +44,40 @@ function App() {
   const _nAllieviCollegati = (user && user.ruolo==='allievo' && Array.isArray(user.allieviIds)) ? user.allieviIds.length : 0;
   // [FM-DOPPIO-RUOLO] docente con allievi collegati (sé stesso o figli): può passare da docente ad allievo
   const _doppioRuolo = (typeof fmPuoEssereAllievo === 'function') && fmPuoEssereAllievo(user);
+  // [FM-NOMI-ALLIEVI-COLLEGATI] Nomi degli allievi collegati per il selettore profilo.
+  // Prima il docente-allievo li cercava solo in sharedStudents, che per un docente contiene
+  // solo i SUOI allievi (e in modalità allievo solo quello attivo) → compariva "Allievo #ID".
+  // Ora: RPC fm_miei_allievi (SECURITY DEFINER) → lettura diretta studenti (RLS docente-allievo)
+  // → cache locale dei nomi già visti, così il nome resta anche cambiando modalità.
+  const _idsCollegatiKey = (user && Array.isArray(user.allieviIds)) ? user.allieviIds.map(String).join(',') : '';
   useEffect(() => {
-    // Per il docente-allievo i nomi arrivano da sharedStudents (l'RPC è pensata per profili allievo)
-    if (_doppioRuolo || _nAllieviCollegati < 2 || !window.FM_AUTH || !window.FM_AUTH.mieiAllievi) { setMieiAllievi([]); return; }
-    window.FM_AUTH.mieiAllievi().then(list => setMieiAllievi(list || [])).catch(() => setMieiAllievi([]));
-  }, [user && user.userId, _nAllieviCollegati]);
+    if (!user || !_idsCollegatiKey || (!_doppioRuolo && _nAllieviCollegati < 2)) { setMieiAllievi([]); return; }
+    let annullato = false;
+    const ids = _idsCollegatiKey.split(',');
+    const cache = fmNomiAllieviCache(user);
+    setMieiAllievi(ids.filter(id => cache[id]).map(id => ({ id, nome: cache[id] })));
+    (async () => {
+      const trovati = {};
+      try {
+        if (window.FM_AUTH && window.FM_AUTH.mieiAllievi) {
+          const list = await window.FM_AUTH.mieiAllievi();
+          (list || []).forEach(a => { if (a && a.id != null && a.nome) trovati[String(a.id)] = a.nome; });
+        }
+      } catch (e) {}
+      const mancanti = ids.filter(id => !trovati[id]);
+      if (mancanti.length && window.supabaseClient) {
+        try {
+          const { data } = await window.supabaseClient.from('studenti').select('id,nome').in('id', mancanti);
+          (data || []).forEach(r => { if (r && r.nome) trovati[String(r.id)] = r.nome; });
+        } catch (e) {}
+      }
+      if (annullato || !Object.keys(trovati).length) return;
+      fmNomiAllieviSalva(user, trovati);
+      const tutti = { ...fmNomiAllieviCache(user) };
+      setMieiAllievi(ids.filter(id => tutti[id]).map(id => ({ id, nome: tutti[id] })));
+    })();
+    return () => { annullato = true; };
+  }, [user && user.userId, _idsCollegatiKey, _doppioRuolo, _nAllieviCollegati]);
   const cambiaAllievoAttivo = async (id) => {
     if (!user || cambioAllievoInCorso) return;
     if (user.ruolo === 'allievo' && String(user.allievoId) === String(id)) return;
@@ -77,6 +132,16 @@ function App() {
   const [showEsciMsg,    setShowEsciMsg]    = useState(false);
   const _d = window.__FM_DATA__ || {};
   const [sharedStudents,       setSharedStudents]       = useState(_d.students   || INIT_STUDENTS);
+  // Memorizza i nomi degli allievi collegati quando compaiono in sharedStudents
+  useEffect(() => {
+    if (!user || !_idsCollegatiKey) return;
+    const nuovi = {};
+    _idsCollegatiKey.split(',').forEach(id => {
+      const st = (sharedStudents || []).find(x => String(x.id) === id);
+      if (st && st.name) nuovi[id] = st.name;
+    });
+    if (Object.keys(nuovi).length) fmNomiAllieviSalva(user, nuovi);
+  }, [user && user.userId, _idsCollegatiKey, sharedStudents]);
   const [sharedCourses,        setSharedCourses]        = useState(_d.courses    || []);
   const [sharedDocenti,        setSharedDocenti]        = useState(_d.docenti    || INIT_DOCENTI_EXT);
   const [sharedLessons,        setSharedLessons]        = useState(dedupeLessonsById(_d.lessons    || INIT_LESSONS));
@@ -1062,10 +1127,9 @@ function App() {
                     fontFamily:"'Open Sans',sans-serif",fontWeight:att?600:400,
                     border:`1.5px solid ${att?C.teal:C.border}`,background:att?C.tealBg:C.bg,color:att?C.teal:C.text} }, '🎓 Docente');
               })()
-            , user.allieviIds.map(id => {
+            , user.allieviIds.map((id, idx) => {
                 const att = user.ruolo === 'allievo' && String(id) === String(user.allievoId);
-                const nome = ((mieiAllievi.find(a => String(a.id) === String(id)) || (sharedStudents||[]).find(s => String(s.id) === String(id)) || {}).nome)
-                          || ((sharedStudents||[]).find(s => String(s.id) === String(id)) || {}).name || ('Allievo #' + id);
+                const nome = fmNomeAllievoCollegato(id, idx, user, mieiAllievi, sharedStudents);
                 return React.createElement('button', { key: id, disabled: cambioAllievoInCorso, onClick: () => cambiaAllievoAttivo(id),
                   style: {flexShrink:0,padding:'6px 14px',borderRadius:16,cursor:cambioAllievoInCorso?'wait':'pointer',fontSize:13,
                     fontFamily:"'Open Sans',sans-serif",fontWeight:att?600:400,
