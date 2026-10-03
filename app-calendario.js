@@ -6611,7 +6611,6 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                       , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4579}}
                         , React.createElement('span', { style: {fontSize:13, fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4580}}, s.name)
                         , React.createElement('span', { style: {fontSize:11, color:C.textMuted, marginLeft:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4581}}, s.instrument)
-                        , s.prova && React.createElement('span', { title: "Allievo già iscritto: lezione di prova di questo corso", style: {marginLeft:8, fontSize:10, fontWeight:700, color:C.orange, background:C.orangeBg, border:`1px solid ${C.orangeBorder}`, borderRadius:8, padding:"1px 7px"} }, "PROVA")
                       )
                       , React.createElement('div', { style: {display:"flex", gap:4, flexShrink:0} }
                         , ['presente','assente'].map(a => {
@@ -7368,36 +7367,39 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
 
         /* ── Pannello iscrizione (solo lezioni prova) ── */
         , lesson.tipo==="prova" && canEdit && (
-          React.createElement('div', { style: {padding:"14px 16px", background:lesson.iscritto?C.greenBg:C.tealBg,
-            border:`1px solid ${lesson.iscritto?C.greenBorder:C.tealBorder}`, borderRadius:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4689}}
+          React.createElement('div', { style: {padding:"14px 16px", background:(lesson.iscritto||lesson.giaIscritto)?C.greenBg:C.tealBg,
+            border:`1px solid ${(lesson.iscritto||lesson.giaIscritto)?C.greenBorder:C.tealBorder}`, borderRadius:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4689}}
             , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: showIscrizionePanel&&!lesson.iscritto ? 12 : 0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4691}}
               , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4692}}
-                , React.createElement(Ic, { n: lesson.iscritto?"check":"user", size: 15, stroke: lesson.iscritto?C.green:C.teal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4693}})
+                , React.createElement(Ic, { n: (lesson.iscritto||lesson.giaIscritto)?"check":"user", size: 15, stroke: (lesson.iscritto||lesson.giaIscritto)?C.green:C.teal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4693}})
                 , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 4694}}
-                  , React.createElement('div', { style: {fontSize:12, fontWeight:600, color:lesson.iscritto?C.green:C.teal}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4695}}
-                    , lesson.iscritto ? `Iscritto — ${lesson.student||""}` : "Allievo non ancora iscritto"
+                  , React.createElement('div', { style: {fontSize:12, fontWeight:600, color:(lesson.iscritto||lesson.giaIscritto)?C.green:C.teal}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4695}}
+                    , lesson.giaIscritto ? `Allievo già iscritto — ${lesson.student||lesson.contactName||""}`
+                      : lesson.iscritto ? `Iscritto — ${lesson.student||""}` : "Allievo non ancora iscritto"
                   )
-                  , !lesson.iscritto && (
+                  , lesson.giaIscritto && React.createElement('div', { style: {fontSize:11, color:C.green, opacity:0.85, marginTop:1} },
+                      `Lezione di prova di ${lesson.instrument||"un altro strumento"}`)
+                  , !lesson.iscritto && !lesson.giaIscritto && (
                     React.createElement('div', { style: {fontSize:11, color:C.teal, opacity:0.8, marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4699}}, "Collega a un allievo esistente quando si iscrive"
                     )
                   )
                 )
               )
-              , !lesson.iscritto && role === 'admin' && (
+              , !lesson.iscritto && !lesson.giaIscritto && role === 'admin' && (
                 React.createElement('button', { onClick: ()=>setShowIscrizionePanel(v=>!v),
                   style: {background:C.teal,color:"#ffffff",border:"none",borderRadius:7,padding:"6px 13px",
                     cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif",fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4706}}
                   , showIscrizionePanel ? "Annulla" : "Segna iscritto"
                 )
               )
-              , lesson.iscritto && onIscrizione && role === 'admin' && (
+              , lesson.iscritto && !lesson.giaIscritto && onIscrizione && role === 'admin' && (
                 React.createElement('button', { onClick: ()=>onIscrizione(lesson.id, "", false),
                   style: {background:"none",color:C.textDim,border:`1px solid ${C.border}`,borderRadius:7,
                     padding:"5px 10px",cursor:"pointer",fontSize:11,fontFamily:"'Open Sans',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4713}}, "Rimuovi iscrizione"
                 )
               )
             )
-            , showIscrizionePanel && !lesson.iscritto && role === 'admin' && (
+            , showIscrizionePanel && !lesson.iscritto && !lesson.giaIscritto && role === 'admin' && (
               React.createElement('div', { style: {display:"flex", gap:8, alignItems:"center", marginTop:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4721}}
                 , React.createElement('select', { value: iscrizioneStudent, onChange: e=>setIscrizioneStudent(e.target.value),
                   style: {flex:1, background:C.surface, border:`1px solid ${C.tealBorder}`, borderRadius:8,
@@ -8677,8 +8679,7 @@ const CalRepertorioTab = ({ repertorio, lessons, onAdd, onEdit, onDelete, canEdi
 // ─── FORM LEZIONE COLLETTIVA ─────────────────────────────────────────────────
 // Piccolo widget per aggiungere un allievo singolo "esterno" (non iscritto al corso / non nel gruppo)
 // alla lezione collettiva, mantenendo comunque il resto della selezione (gruppo + eventuali altri) invariato.
-const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd, label, color, colorBorder }) => {
-  const _col = color || C.purple, _colBd = colorBorder || C.purpleBorder;
+const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd }) => {
   const [open, setOpen] = useState(false);
   const [val,  setVal]  = useState('');
   const excluded = new Set((excludeIds||[]).map(String));
@@ -8686,9 +8687,9 @@ const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd, label, color, col
   if (!open) {
     return React.createElement('button', {
       onClick: () => setOpen(true),
-      style: {marginTop:10, padding:'7px 12px', borderRadius:8, border:`1px dashed ${_colBd}`,
-        background:'transparent', color:_col, fontSize:12, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
-    }, label || '+ Aggiungi allievo singolo esterno');
+      style: {marginTop:10, padding:'7px 12px', borderRadius:8, border:`1px dashed ${C.purpleBorder}`,
+        background:'transparent', color:C.purple, fontSize:12, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
+    }, '+ Aggiungi allievo singolo esterno');
   }
   return React.createElement('div', { style: {marginTop:10, display:'flex', gap:8} }
     , React.createElement('select', {
@@ -8701,7 +8702,7 @@ const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd, label, color, col
     , React.createElement('button', {
         disabled: !val,
         onClick: () => { if (val) { onAdd(val); setVal(''); setOpen(false); } },
-        style: {padding:'8px 14px', borderRadius:8, border:'none', background: val?_col:C.border,
+        style: {padding:'8px 14px', borderRadius:8, border:'none', background: val?C.purple:C.border,
           color:'#fff', fontSize:12, fontWeight:600, cursor: val?'pointer':'not-allowed', fontFamily:"'Open Sans',sans-serif"}
       }, 'Aggiungi')
     , React.createElement('button', {
@@ -8726,13 +8727,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
   const [conflittiOrario, setConflittiOrario] = useState(null);
   const [selCourse,   setSelCourse]  = useState(initCourse);
   const [selStudents, setSelStudents]= useState(
-    initial ? (initial.students || []).filter(s => s && !s.prova).map(s => String(s.id)).filter(Boolean) : []
-  );
-  // [FM-PROVA-COLLETTIVA] Allievi GIÀ ISCRITTI (ad altri corsi) che partecipano a questa
-  // collettiva come LEZIONE DI PROVA di un altro strumento/corso. Salvati in lesson.students
-  // con il flag prova:true (colonna jsonb esistente → nessuna migrazione).
-  const [selProva, setSelProva] = useState(
-    initial ? (initial.students || []).filter(s => s && s.prova).map(s => String(s.id)).filter(Boolean) : []
+    initial ? (initial.students || []).map(s => String(s.id)).filter(Boolean) : []
   );
   // Gruppo in modifica: quello salvato sulla lezione; per le lezioni salvate prima che il gruppo
   // venisse memorizzato, si riconosce il gruppo del corso i cui allievi sono tutti presenti nella
@@ -8836,7 +8831,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     if (!form.hour)                    e.hour      = "Orario obbligatorio";
     if (!form.teacherId)               e.teacherId = "Seleziona il docente";
     if (!(form.room||"").trim())       e.room      = "Seleziona la sala";
-    if (selStudents.length === 0 && selProva.length === 0) e.students  = "Seleziona almeno un allievo";
+    if (selStudents.length === 0)      e.students  = "Seleziona almeno un allievo";
     return e;
   };
 
@@ -8852,11 +8847,6 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
       if (!s) return null;
       return { id: s.id, name: s.name, instrument: s.instrument, level: s.level||"", attendance: prevAttById[String(id)] || '' };
     }).filter(Boolean);
-    const _selSet = new Set(selStudents.map(String));
-    selProva.filter(id => !_selSet.has(String(id))).forEach(id => {
-      const s = students.find(x => String(x.id) === String(id));
-      if (s) studObjs.push({ id: s.id, name: s.name, instrument: s.instrument, level: s.level||"", attendance: prevAttById[String(id)] || '', prova: true });
-    });
     const nuovaLezione = {
       id:         initial?.id || uid(),  // preserva id in edit mode
       tipo:       "collettivo",
@@ -9158,44 +9148,17 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
           /* Aggiungi allievo esterno (non iscritto formalmente al corso, o fuori dal gruppo) */
           , React.createElement(AggiungiAllievoEsterno, {
               students: students,
-              excludeIds: [...selStudents, ...selProva],
+              excludeIds: selStudents,
               onAdd: (studentId) => setSelStudents(prev => Array.from(new Set([...prev.map(String), String(studentId)]))),
             })
 
-          /* [FM-PROVA-COLLETTIVA] Allievo già iscritto che fa una lezione di prova di un altro strumento */
-          , React.createElement('div', { style: {marginTop:14, padding:"12px 14px", borderRadius:10, border:`1px solid ${C.orangeBorder}`, background:C.orangeBg} }
-            , React.createElement('div', { style: {fontSize:11, color:C.orange, fontWeight:700, letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:4} }, "🎯 Allievo già iscritto in prova")
-            , React.createElement('div', { style: {fontSize:12, color:C.textMuted, lineHeight:1.4} },
-                "Un allievo già iscritto a un altro corso che vuole fare una lezione di prova di " + (selCourse ? selCourse.name : "questo corso") + ".")
-            , selProva.length > 0 && React.createElement('div', { style: {marginTop:8, display:"flex", flexDirection:"column", gap:5} }
-              , selProva.map(id => students.find(s => String(s.id) === String(id))).filter(Boolean).map(s =>
-                  React.createElement('div', {key:s.id, style:{display:"flex", alignItems:"center", gap:10, padding:"7px 12px", borderRadius:8, border:`1.5px dashed ${C.orange}`, background:C.surface}}
-                    , React.createElement('div', { style: {width:26, height:26, borderRadius:"50%", flexShrink:0, background:C.orangeBg, border:`1px solid ${C.orangeBorder}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:700, color:C.orange} }, initials(s.name))
-                    , React.createElement('div', {style:{flex:1, minWidth:0}}
-                      , React.createElement('div', {style:{fontSize:13, fontWeight:500}}, s.name
-                        , React.createElement('span', {style:{marginLeft:8, fontSize:10, fontWeight:700, color:C.orange, background:C.orangeBg, border:`1px solid ${C.orangeBorder}`, borderRadius:8, padding:"1px 7px"}}, "PROVA"))
-                      , React.createElement('div', {style:{fontSize:11, color:C.textMuted}}, "Iscritto a: ", s.instrument || "—")
-                    )
-                    , React.createElement('button', {onClick: ()=>setSelProva(prev=>prev.filter(x=>String(x)!==String(s.id))),
-                        style:{padding:'4px 9px', borderRadius:6, border:'none', background:'transparent', color:C.red, fontSize:11, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}}, '✕')
-                  ))
-            )
-            , React.createElement(AggiungiAllievoEsterno, {
-                students: students,
-                excludeIds: [...selStudents, ...selProva, ...enrolled.map(s => String(s.id))],
-                label: '+ Aggiungi allievo in prova',
-                color: C.orange, colorBorder: C.orangeBorder,
-                onAdd: (studentId) => { setSelProva(prev => Array.from(new Set([...prev.map(String), String(studentId)]))); setErr(p=>({...p, students:undefined})); },
-              })
-          )
-
           /* Riepilogo */
-          , (selStudents.length + selProva.length) > 0 && (
+          , selStudents.length > 0 && (
             React.createElement('div', { style: {marginTop:8, padding:"8px 14px", background:C.purpleBg,
               border:`1px solid ${C.purpleBorder}`, borderRadius:8, fontSize:12,
               color:C.purple, display:"flex", alignItems:"center", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5639}}
               , React.createElement(Ic, { n: "group", size: 13, stroke: C.purple, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5642}})
-              , selStudents.length, " allievo/i", selProva.length > 0 ? ` + ${selProva.length} in prova` : "", " · 1 lezione con tutti gli allievi assegnati"
+              , selStudents.length, " allievo/i · 1 lezione con tutti gli allievi assegnati"
             )
           )
         )
@@ -9346,10 +9309,12 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
 const emptyProva = {
   date: yyyymmdd(today), hour:"09:00", teacher:"", instrument:"",
   room:"", phone:"", contactName:"", notes:"", student:"", iscritto:false, attendance:"",
-  durata: 30,
+  durata: 30, giaIscritto:false, studentId:null,
 };
 
-const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, onSave, onClose, date, lessons:_lessonsTLF }) => {
+const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, onSave, onClose, date, lessons:_lessonsTLF, students:_studentsTLF }) => {
+  const studentsTLF = (_studentsTLF || []).filter(s => s && (s.status || 'attivo') === 'attivo')
+    .slice().sort((a, b) => String(a.name||'').localeCompare(String(b.name||'')));
   const docenti = _docentiRaw || [];
   const courses = _coursesRaw || [];
   // Merge initial con emptyProva per garantire tutti i campi (phone potrebbe mancare nelle lezioni di prova salvate prima)
@@ -9378,7 +9343,9 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
     if(!f.date)       e.date       = "Data obbligatoria";
     if(!f.hour)       e.hour       = "Orario obbligatorio";
     if(!(f.room||'').trim())  e.room     = "Seleziona la sala";
-    if(!(f.phone||'').trim()) e.phone    = "Recapito obbligatorio";
+    // Allievo già iscritto: il recapito è già in anagrafica, non è obbligatorio qui
+    if(f.giaIscritto) { if(!f.studentId) e.studentId = "Seleziona l'allievo già iscritto"; }
+    else if(!(f.phone||'').trim()) e.phone    = "Recapito obbligatorio";
     return e;
   };
 
@@ -9390,7 +9357,9 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
       id: (initial && initial.id) || uid(),  // preserva id in edit mode
       tipo:"prova",
       student: f.student || "",
-      iscritto: f.iscritto || false,
+      iscritto: f.giaIscritto ? true : (f.iscritto || false),
+      giaIscritto: !!f.giaIscritto,
+      studentId: f.giaIscritto ? (f.studentId || null) : (f.studentId || null),
       attendance: f.attendance || "",
       recurrence:"Nessuna", repertorioIds:[],
       durata: f.durata || 30,
@@ -9409,9 +9378,54 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
           , React.createElement(Ic, { n: "user", size: 15, stroke: C.teal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5711}})
           , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 5712}}
             , React.createElement('div', { style: {fontSize:12, fontWeight:600, color:C.teal}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5713}}, "Lezione di prova"  )
-            , React.createElement('div', { style: {fontSize:11, color:C.teal, opacity:0.8, marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5714}}, "Nessun allievo ancora iscritto — il contatto verrà collegato all'allievo dopo l'iscrizione"
-
+            , React.createElement('div', { style: {fontSize:11, color:C.teal, opacity:0.8, marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5714}},
+                f.giaIscritto ? "Allievo già iscritto alla scuola che prova un altro strumento/corso"
+                              : "Nessun allievo ancora iscritto — il contatto verrà collegato all'allievo dopo l'iscrizione"
             )
+          )
+        )
+
+        /* [FM-PROVA-GIA-ISCRITTO] Nuovo contatto oppure allievo già iscritto che prova un altro strumento */
+        , React.createElement('div', null
+          , React.createElement('label', { style: {fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6} }, "Chi fa la prova")
+          , React.createElement('div', { style: {display:"flex", gap:6, flexWrap:"wrap"} }
+            , [[false,'Nuovo contatto'],[true,'Allievo già iscritto']].map(([v,l]) => {
+                const on = !!f.giaIscritto === v;
+                return React.createElement('button', { key:l, type:"button",
+                  onClick: () => {
+                    if (on) return;
+                    // Cambiando tipo si azzerano i dati collegati all'allievo, per non lasciare collegamenti sbagliati
+                    setF(p => v ? {...p, giaIscritto:true}
+                                : {...p, giaIscritto:false, studentId:null, student:"", iscritto:false, contactName:"", phone:""});
+                    setErr(p => ({...p, studentId:undefined, phone:undefined}));
+                  },
+                  style:{padding:"7px 14px", borderRadius:16, border:`1px solid ${on?C.teal:C.border}`, background:on?C.teal:C.surface, color:on?"#fff":C.textMuted, fontSize:12, fontWeight:on?700:500, cursor:"pointer", fontFamily:"'Open Sans',sans-serif"} }, l);
+              })
+          )
+          , f.giaIscritto && React.createElement('div', { style: {marginTop:10} }
+            , React.createElement('select', {
+                value: f.studentId != null ? String(f.studentId) : "",
+                onChange: e => {
+                  const s = studentsTLF.find(x => String(x.id) === e.target.value);
+                  setF(p => s ? {...p, studentId: s.id, student: s.name, contactName: s.name, phone: s.phone || p.phone || "", iscritto: true}
+                              : {...p, studentId: null, student: "", contactName: "", iscritto: false});
+                  setErr(p => ({...p, studentId:undefined, phone:undefined}));
+                },
+                style: {width:"100%",background:C.surface,border:`1px solid ${err.studentId?C.red:C.border}`,
+                  borderRadius:8,color:f.studentId?C.text:C.textMuted,fontSize:13,padding:"10px 14px",
+                  fontFamily:"'Open Sans',sans-serif",appearance:"none",cursor:"pointer"} }
+              , React.createElement('option', { value: "" }, studentsTLF.length ? "— seleziona allievo già iscritto —" : "Nessun allievo attivo")
+              , studentsTLF.map(s => React.createElement('option', { key: s.id, value: String(s.id) }, s.name, s.instrument ? " · iscritto a " + s.instrument : ""))
+            )
+            , err.studentId && React.createElement('div', { style: {fontSize:11,color:C.red,marginTop:4} }, err.studentId)
+            , (() => {
+                const s = studentsTLF.find(x => String(x.id) === String(f.studentId));
+                if (!s) return null;
+                const corsi = [s.instrument, ...(s.extraInstruments||[])].filter(Boolean);
+                return React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:6} },
+                  "Già iscritto a: ", React.createElement('b', null, corsi.join(", ") || "—"),
+                  " — scegli qui sotto il corso/strumento da provare.");
+              })()
           )
         )
 
@@ -11928,6 +11942,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           students:         mergedStudents.length > 0 ? mergedStudents : null, // [FM-STUDENTS-JSONB]
           contact_name:     dataNormFull.contactName || null,
           phone:            dataNormFull.phone       || null,
+          gia_iscritto:     dataNormFull.giaIscritto === true, // [FM-PROVA-GIA-ISCRITTO]
           motivo_assenza:   dataNormFull.motivoAssenza || null,
           gap_giorni:       dataNormFull.gapGiorni != null ? dataNormFull.gapGiorni : null,
         };
@@ -12911,6 +12926,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             ? React.createElement(Modal, { title: "Modifica lezione di prova", onClose: closeModal, wide: true}
                 , React.createElement(TrialLessonForm, {
                     initial: selLesson,
+                    students: propStudents,
                     docenti: propDocenti,
                     courses: propCourses,
                     lessons: lessons,
@@ -12990,6 +13006,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         , modal === "addprova" && (
           React.createElement(Modal, { title: "Lezione di prova"  , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6171}}
             , React.createElement(TrialLessonForm, {
+              students: propStudents,
               docenti: propDocenti,
               courses: propCourses,
               date: addDate,

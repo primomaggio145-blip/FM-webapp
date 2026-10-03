@@ -133,6 +133,8 @@
       // Flag "NUOVO ISCRITTO": lezione calendarizzata prima di aver inserito l'allievo
       // (o i suoi dati completi) in anagrafica — vedi checkNuoviIscrittiScaduti()
       nuovoIscritto: r.nuovo_iscritto || false,
+      // [FM-PROVA-GIA-ISCRITTO] lezione di prova di un altro strumento per un allievo già iscritto
+      giaIscritto: r.gia_iscritto === true,
       durata: r.durata
         ? parseInt(r.durata)
         : (r.tipo === 'collettivo' ? 60 : r.tipo === 'prova' ? 30 : 45),
@@ -369,6 +371,7 @@
         contact_name: l.contactName || null,
         phone: l.phone || null,
         nuovo_iscritto: l.nuovoIscritto || false,
+        gia_iscritto: l.giaIscritto === true,
         durata: l.durata ? parseInt(l.durata) : null,
         exercises: l.exercises || null,
         repertorio_ids: l.repertorioIds && l.repertorioIds.length > 0
