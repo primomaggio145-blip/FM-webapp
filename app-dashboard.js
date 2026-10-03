@@ -1539,8 +1539,10 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
 
   // 3. Lezioni di oggi senza presenza (ADMIN e DOCENTE, filtrate per ruolo)
   if (ruoloNB === "admin" || ruoloNB === "docente") {
+    // [FM-BELL-NO-DA-RECUPERARE] le lezioni "Da recuperare" non sono "senza presenza"
     const lezioniOggiSenzaPresenza = myLessons.filter(l => {
       const d = l.date||l.data||'';
+      if (l.inRecupero === true || l.attendance === 'in_recupero') return false;
       return d===todayStr && (!l.attendance||l.attendance==='');
     });
     if (lezioniOggiSenzaPresenza.length > 0) {
@@ -1584,7 +1586,8 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
 
   // 5. Recuperi scaduti/in scadenza (ADMIN e DOCENTE, filtrate; ALLIEVO vede i propri)
   const oggi_d = new Date(); oggi_d.setHours(0,0,0,0);
-  const lessonsForRecupero = ruoloNB === "allievo" ? myLessons : myLessons;
+  // Il DOCENTE non riceve notifiche sulle lezioni da recuperare (gestite nella tab Recuperi)
+  const lessonsForRecupero = ruoloNB === "docente" ? [] : myLessons;
   const recuperiScaduti = lessonsForRecupero.filter(l => l.inRecupero && l.recuperoScadenza && new Date(l.recuperoScadenza+'T00:00:00') < oggi_d);
   const recuperiInScadenza = lessonsForRecupero.filter(l => {
     if (!l.inRecupero || !l.recuperoScadenza) return false;

@@ -3363,8 +3363,11 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
       : allLessons;
 
     // Lezioni senza presenza passate
+    // [FM-BELL-NO-DA-RECUPERARE] le lezioni "Da recuperare" (inRecupero=true, attendance vuota)
+    // hanno un loro stato e sono gestite nella tab Recuperi: non sono "senza presenza".
+    const _daRecuperare = function(l){ return l.inRecupero === true || l.attendance === 'in_recupero'; };
     const senzaPresenza = mieLessons.filter(function(l){
-      return l.date && l.date < todayStr && !l.attendance && l.attendance !== 'recuperata' && l.attendance !== 'recupero';
+      return l.date && l.date < todayStr && !l.attendance && l.attendance !== 'recuperata' && l.attendance !== 'recupero' && !_daRecuperare(l);
     });
     if (senzaPresenza.length > 0) {
       results.push({ id:'__live_senza_presenza__', letto:false, destinatario_ruolo:myRuolo, tipo:'avviso_presenza',
@@ -3374,7 +3377,8 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
     }
 
     // Recuperi scaduti
-    const recuperiScaduti = mieLessons.filter(function(l){ return l.inRecupero && l.recuperoScadenza && l.recuperoScadenza < todayStr; });
+    // Per il DOCENTE nessuna notifica sulle lezioni da recuperare (gestite nella tab Recuperi)
+    const recuperiScaduti = myRuolo === 'docente' ? [] : mieLessons.filter(function(l){ return l.inRecupero && l.recuperoScadenza && l.recuperoScadenza < todayStr; });
     if (recuperiScaduti.length > 0) {
       results.push({ id:'__live_recuperi_scaduti__', letto:false, destinatario_ruolo:myRuolo, tipo:'recupero_scaduto',
         titolo: recuperiScaduti.length + (recuperiScaduti.length>1?' recuperi scaduti':' recupero scaduto'),

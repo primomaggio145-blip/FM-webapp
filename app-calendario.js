@@ -12610,8 +12610,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const ws           = startOfWeek(today);
     const we           = addDays(ws, 6);
     const weekLessons  = visibleLessons.filter(l => l.date >= yyyymmdd(ws) && l.date <= yyyymmdd(we));
-    const pending      = visibleLessons.filter(l => l.date <= todayStr && !l.attendance && l.attendance !== 'recuperata').length;
-    const pendingLessons = visibleLessons.filter(l => l.date <= todayStr && !l.attendance && l.attendance !== 'recuperata');
+    // Le lezioni "Da recuperare" (inRecupero) hanno già uno stato: non vanno tra le presenze da segnare
+    const pendingLessons = visibleLessons.filter(l => l.date <= todayStr && !l.attendance && l.attendance !== 'recuperata'
+      && !(l.inRecupero === true || l.attendance === 'in_recupero'));
+    const pending      = pendingLessons.length;
     const [showPending, setShowPending] = useState(false);
   
     return (
