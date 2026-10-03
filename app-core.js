@@ -892,14 +892,25 @@ window.FMBack = window.FMBack || (function () {
   const DEBUG = () => { try { return localStorage.getItem('fm_debug_back') === '1'; } catch (e) { return false; } };
   const dbg = (...a) => { if (DEBUG()) console.log('[FMBack]', ...a); };
 
-  // Chrome/Edge (desktop compresi) SALTANO con il tasto indietro le voci di cronologia
-  // aggiunte senza un'interazione recente dell'utente, e in quel caso tornano alla
-  // pagina precedente invece che alla vista precedente. Per non "avvelenare" la
-  // cronologia aggiungiamo voci solo subito dopo un clic/tocco/tasto dell'utente.
-  const haAttivazione = () => {
-    const ua = navigator.userActivation;
-    return !ua || ua.isActive;
+  // [FM-SWIPE-ANDROID] Chrome/Edge (Android compreso) SALTANO con il gesto/tasto indietro
+  // le voci di cronologia aggiunte SENZA un'interazione dell'utente avvenuta DOPO la voce
+  // precedente ("history manipulation intervention"). Prima controllavamo
+  // navigator.userActivation.isActive, che resta vero per ~5 secondi: se lo stesso tocco
+  // apriva due voci (es. cambio vista + finestra, notifica → vista + dettaglio) la seconda
+  // veniva marcata "da saltare" da Chrome → lo swipe indietro saltava due livelli o
+  // chiudeva l'app (comportamento "a volte funziona, a volte no", tipico di Android 14-16).
+  // Ora replichiamo la regola di Chrome: UNA voce per ogni interazione reale dell'utente.
+  // Gli eventi sono quelli che per Chrome attivano la pagina (touchend / pointerup non-mouse,
+  // mousedown, keydown non-Esc), ascoltati in fase di cattura prima di qualsiasi onClick.
+  let attivazioneFresca = false;
+  const _segnaAttivazione = (e) => {
+    if (e.type === 'keydown' && (e.key === 'Escape' || e.key === 'Esc')) return;
+    if (e.type === 'pointerup' && e.pointerType === 'mouse') return;
+    attivazioneFresca = true;
   };
+  ['touchend', 'pointerup', 'mousedown', 'keydown'].forEach(ev =>
+    window.addEventListener(ev, _segnaAttivazione, { capture: true, passive: true }));
+  const haAttivazione = () => attivazioneFresca;
 
   try {
     const st = history.state;
@@ -913,6 +924,7 @@ window.FMBack = window.FMBack || (function () {
     q.forEach(f => f());
   }
   function _pushState(extra) {
+    attivazioneFresca = false;          // l'interazione è "spesa" da questa voce
     curDepth = curDepth + 1;
     try { history.pushState(Object.assign({}, history.state || {}, extra || {}, { fmDepth: curDepth }), ''); } catch (e) {}
     return curDepth;
@@ -925,7 +937,14 @@ window.FMBack = window.FMBack || (function () {
   // Finestra aperta (Modal, overlay): aggiunge una voce; il gesto indietro la chiude
   function push(fn) {
     const voce = { id: ++seq, depth: 0, fn, vivo: true };
-    if (!haAttivazione()) { dbg('finestra aperta senza interazione: nessuna voce'); return voce; }
+    if (!haAttivazione()) {
+      // Nessuna interazione nuova (es. finestra aperta dallo stesso tocco che ha cambiato vista):
+      // una voce nuova sarebbe saltata da Chrome. La finestra si aggancia alla voce corrente,
+      // così il gesto indietro la chiude comunque (insieme a quella voce) invece di uscire dall'app.
+      voce.depth = curDepth; voce.condivisa = true; stack.push(voce);
+      dbg('finestra senza interazione nuova → agganciata alla voce', curDepth);
+      return voce;
+    }
     if (ignore > 0) inAttesa.push(() => { if (voce.vivo) _pushFinestra(voce); });
     else _pushFinestra(voce);
     return voce;
@@ -947,6 +966,10 @@ window.FMBack = window.FMBack || (function () {
     const i = stack.indexOf(voce);
     if (i < 0) return;                 // mai entrata in cronologia o già tolta
     stack.splice(i, 1);
+    if (voce.condivisa) { dbg('- finestra agganciata (UI)', voce.id); return; } // la voce di cronologia non è sua
+    // Altre finestre agganciate alla stessa voce ancora aperte: la voce passa a loro
+    const erede = stack.find(v => v.vivo && v.condivisa && v.depth === voce.depth);
+    if (erede) { erede.condivisa = false; dbg('- finestra (UI)', voce.id, '→ voce passata a', erede.id); return; }
     if (voce.depth === curDepth) {     // era in cima: la togliamo anche dalla cronologia
       ignore++;
       dbg('- finestra (UI)', voce.id, '→ back silenzioso');
@@ -959,6 +982,7 @@ window.FMBack = window.FMBack || (function () {
     const st = e.state || {};
     const target = typeof st.fmDepth === 'number' ? st.fmDepth : 0;
     curDepth = target;
+    attivazioneFresca = false;         // anche per Chrome la navigazione "consuma" l'interazione
     if (ignore > 0) { ignore--; if (ignore === 0) _svuotaAttesa(); return; }
     dbg('popstate → depth', target, 'vista', st.fmView);
     // 1) Indietro: chiude (dall'alto) le finestre più profonde della posizione raggiunta
@@ -1180,6 +1204,81 @@ function useFMBackClose(onClose, attivo) {
     voce._montato = true;
     return () => { voce._montato = false; voce._richiusa = true; window.FMBack.remove(voce); };
   }, [on]);
+}
+
+// ── [FM-SWIPE-CALENDARIO] Swipe orizzontale su un elemento (destra/sinistra) ──────
+// useFMSwipeOrizzontale(ref, onSwipe, attivo): onSwipe(+1) con swipe verso SINISTRA
+// (avanti), onSwipe(-1) con swipe verso DESTRA (indietro).
+//  • non parte dai 30px laterali dello schermo (riservati al gesto indietro di Android/iOS);
+//  • ignora campi di testo, gesti in prevalenza verticali (scroll) e gesti lenti;
+//  • se il dito è su un contenitore che può ancora scorrere in orizzontale, scorre quello;
+//  • non agisce con una finestra aperta sopra;
+//  • listener passivi: lo scroll normale non viene mai bloccato.
+function useFMSwipeOrizzontale(ref, onSwipe, attivo) {
+  const cbRef = React.useRef(onSwipe);
+  cbRef.current = onSwipe;
+  const on = attivo === undefined ? true : !!attivo;
+  React.useEffect(() => {
+    const el = ref && ref.current;
+    if (!on || !el || !('ontouchstart' in window)) return;
+    const BORDO = 30, MIN_DX = 60, MAX_MS = 800;
+    let g = null;
+    const scrollerOrizzontale = (n) => {
+      for (; n && n !== el.parentElement; n = n.parentElement) {
+        if (n.scrollWidth > n.clientWidth + 2) {
+          const ox = getComputedStyle(n).overflowX;
+          if (ox === 'auto' || ox === 'scroll') return n;
+        }
+      }
+      return null;
+    };
+    const start = (e) => {
+      g = null;
+      if (e.touches.length !== 1) return;
+      const t = e.touches[0];
+      if (t.clientX < BORDO || t.clientX > window.innerWidth - BORDO) return;
+      const tg = e.target;
+      if (tg && tg.closest && tg.closest('input,textarea,select,[contenteditable="true"]')) return;
+      if (window.FMBack && window.FMBack.aperte && window.FMBack.aperte() > 0) return;
+      g = { x0: t.clientX, y0: t.clientY, t0: Date.now(), sc: scrollerOrizzontale(tg) };
+    };
+    const move = (e) => {
+      if (!g) return;
+      const t = e.touches[0];
+      const dx = t.clientX - g.x0, dy = t.clientY - g.y0;
+      if (Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx)) g = null;   // è uno scroll verticale
+    };
+    const end = (e) => {
+      if (!g) return;
+      const t = e.changedTouches && e.changedTouches[0];
+      const st = g; g = null;
+      if (!t) return;
+      const dx = t.clientX - st.x0, dy = t.clientY - st.y0;
+      if (Date.now() - st.t0 > MAX_MS || Math.abs(dx) < MIN_DX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      if (st.sc) {
+        const maxL = st.sc.scrollWidth - st.sc.clientWidth;
+        if (dx < 0 && st.sc.scrollLeft < maxL - 1) return;   // il contenuto può ancora scorrere a destra
+        if (dx > 0 && st.sc.scrollLeft > 1) return;          // ... o a sinistra
+      }
+      const dir = dx < 0 ? 1 : -1;
+      try { cbRef.current && cbRef.current(dir); } catch (err) { console.warn('[FM] swipe:', err); }
+      if (el.animate) try {
+        el.animate([{ transform: `translateX(${dir > 0 ? 28 : -28}px)`, opacity: 0.35 }, { transform: 'none', opacity: 1 }],
+          { duration: 200, easing: 'ease-out' });
+      } catch (err) {}
+    };
+    const cancel = () => { g = null; };
+    el.addEventListener('touchstart', start, { passive: true });
+    el.addEventListener('touchmove', move, { passive: true });
+    el.addEventListener('touchend', end, { passive: true });
+    el.addEventListener('touchcancel', cancel, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', start);
+      el.removeEventListener('touchmove', move);
+      el.removeEventListener('touchend', end);
+      el.removeEventListener('touchcancel', cancel);
+    };
+  }, [on, ref, ref && ref.current]);   // riaggancia se l'elemento viene ri-montato
 }
 
 // ── Gesti touch: solo nella PWA installata ───────────────────────────────────

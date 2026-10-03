@@ -11515,6 +11515,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       if(viewMode === "month") d.setMonth(d.getMonth()+dir);
       setCurDate(d);
     };
+    // [FM-SWIPE-CALENDARIO] swipe sinistra = periodo successivo, destra = precedente
+    // (settimana in vista Settimana, giorno in vista Giorno, mese in vista Mese)
+    const swipeCalRef = React.useRef(null);
+    useFMSwipeOrizzontale(swipeCalRef, (dir) => navigate(dir),
+      appView === 'calendario' && (viewMode === 'day' || viewMode === 'week' || viewMode === 'month'));
   
     const navLabel = useMemo(() => {
       if(viewMode === "day")   return fmtFull(curDate);
@@ -12882,7 +12887,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           })()
 
           /* Contenuto */
-          , React.createElement('div', { style: {flex:1, padding: isMobile ? "0 8px 8px" : "0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
+          , React.createElement('div', { ref: swipeCalRef, style: {flex:1, padding: isMobile ? "0 8px 8px" : "0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
             , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"visible"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
               , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, isMobile: isMobile, config: calConfig, courses: propCourses, perAula: role === "admin", onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
               , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, config: calConfig, isMobile: isMobile, courses: propCourses, onDayClick: d => { setCurDate(d); setViewMode("day"); }, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
