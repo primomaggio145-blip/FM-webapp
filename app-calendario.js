@@ -6611,6 +6611,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                       , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4579}}
                         , React.createElement('span', { style: {fontSize:13, fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4580}}, s.name)
                         , React.createElement('span', { style: {fontSize:11, color:C.textMuted, marginLeft:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4581}}, s.instrument)
+                        , s.prova && React.createElement('span', { title: "Allievo già iscritto: lezione di prova di questo corso", style: {marginLeft:8, fontSize:10, fontWeight:700, color:C.orange, background:C.orangeBg, border:`1px solid ${C.orangeBorder}`, borderRadius:8, padding:"1px 7px"} }, "PROVA")
                       )
                       , React.createElement('div', { style: {display:"flex", gap:4, flexShrink:0} }
                         , ['presente','assente'].map(a => {
@@ -8676,7 +8677,8 @@ const CalRepertorioTab = ({ repertorio, lessons, onAdd, onEdit, onDelete, canEdi
 // ─── FORM LEZIONE COLLETTIVA ─────────────────────────────────────────────────
 // Piccolo widget per aggiungere un allievo singolo "esterno" (non iscritto al corso / non nel gruppo)
 // alla lezione collettiva, mantenendo comunque il resto della selezione (gruppo + eventuali altri) invariato.
-const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd }) => {
+const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd, label, color, colorBorder }) => {
+  const _col = color || C.purple, _colBd = colorBorder || C.purpleBorder;
   const [open, setOpen] = useState(false);
   const [val,  setVal]  = useState('');
   const excluded = new Set((excludeIds||[]).map(String));
@@ -8684,9 +8686,9 @@ const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd }) => {
   if (!open) {
     return React.createElement('button', {
       onClick: () => setOpen(true),
-      style: {marginTop:10, padding:'7px 12px', borderRadius:8, border:`1px dashed ${C.purpleBorder}`,
-        background:'transparent', color:C.purple, fontSize:12, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
-    }, '+ Aggiungi allievo singolo esterno');
+      style: {marginTop:10, padding:'7px 12px', borderRadius:8, border:`1px dashed ${_colBd}`,
+        background:'transparent', color:_col, fontSize:12, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
+    }, label || '+ Aggiungi allievo singolo esterno');
   }
   return React.createElement('div', { style: {marginTop:10, display:'flex', gap:8} }
     , React.createElement('select', {
@@ -8699,7 +8701,7 @@ const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd }) => {
     , React.createElement('button', {
         disabled: !val,
         onClick: () => { if (val) { onAdd(val); setVal(''); setOpen(false); } },
-        style: {padding:'8px 14px', borderRadius:8, border:'none', background: val?C.purple:C.border,
+        style: {padding:'8px 14px', borderRadius:8, border:'none', background: val?_col:C.border,
           color:'#fff', fontSize:12, fontWeight:600, cursor: val?'pointer':'not-allowed', fontFamily:"'Open Sans',sans-serif"}
       }, 'Aggiungi')
     , React.createElement('button', {
@@ -8724,7 +8726,13 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
   const [conflittiOrario, setConflittiOrario] = useState(null);
   const [selCourse,   setSelCourse]  = useState(initCourse);
   const [selStudents, setSelStudents]= useState(
-    initial ? (initial.students || []).map(s => String(s.id)).filter(Boolean) : []
+    initial ? (initial.students || []).filter(s => s && !s.prova).map(s => String(s.id)).filter(Boolean) : []
+  );
+  // [FM-PROVA-COLLETTIVA] Allievi GIÀ ISCRITTI (ad altri corsi) che partecipano a questa
+  // collettiva come LEZIONE DI PROVA di un altro strumento/corso. Salvati in lesson.students
+  // con il flag prova:true (colonna jsonb esistente → nessuna migrazione).
+  const [selProva, setSelProva] = useState(
+    initial ? (initial.students || []).filter(s => s && s.prova).map(s => String(s.id)).filter(Boolean) : []
   );
   // Gruppo in modifica: quello salvato sulla lezione; per le lezioni salvate prima che il gruppo
   // venisse memorizzato, si riconosce il gruppo del corso i cui allievi sono tutti presenti nella
@@ -8828,7 +8836,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     if (!form.hour)                    e.hour      = "Orario obbligatorio";
     if (!form.teacherId)               e.teacherId = "Seleziona il docente";
     if (!(form.room||"").trim())       e.room      = "Seleziona la sala";
-    if (selStudents.length === 0)      e.students  = "Seleziona almeno un allievo";
+    if (selStudents.length === 0 && selProva.length === 0) e.students  = "Seleziona almeno un allievo";
     return e;
   };
 
@@ -8844,6 +8852,11 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
       if (!s) return null;
       return { id: s.id, name: s.name, instrument: s.instrument, level: s.level||"", attendance: prevAttById[String(id)] || '' };
     }).filter(Boolean);
+    const _selSet = new Set(selStudents.map(String));
+    selProva.filter(id => !_selSet.has(String(id))).forEach(id => {
+      const s = students.find(x => String(x.id) === String(id));
+      if (s) studObjs.push({ id: s.id, name: s.name, instrument: s.instrument, level: s.level||"", attendance: prevAttById[String(id)] || '', prova: true });
+    });
     const nuovaLezione = {
       id:         initial?.id || uid(),  // preserva id in edit mode
       tipo:       "collettivo",
@@ -9145,17 +9158,44 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
           /* Aggiungi allievo esterno (non iscritto formalmente al corso, o fuori dal gruppo) */
           , React.createElement(AggiungiAllievoEsterno, {
               students: students,
-              excludeIds: selStudents,
+              excludeIds: [...selStudents, ...selProva],
               onAdd: (studentId) => setSelStudents(prev => Array.from(new Set([...prev.map(String), String(studentId)]))),
             })
 
+          /* [FM-PROVA-COLLETTIVA] Allievo già iscritto che fa una lezione di prova di un altro strumento */
+          , React.createElement('div', { style: {marginTop:14, padding:"12px 14px", borderRadius:10, border:`1px solid ${C.orangeBorder}`, background:C.orangeBg} }
+            , React.createElement('div', { style: {fontSize:11, color:C.orange, fontWeight:700, letterSpacing:"0.07em", textTransform:"uppercase", marginBottom:4} }, "🎯 Allievo già iscritto in prova")
+            , React.createElement('div', { style: {fontSize:12, color:C.textMuted, lineHeight:1.4} },
+                "Un allievo già iscritto a un altro corso che vuole fare una lezione di prova di " + (selCourse ? selCourse.name : "questo corso") + ".")
+            , selProva.length > 0 && React.createElement('div', { style: {marginTop:8, display:"flex", flexDirection:"column", gap:5} }
+              , selProva.map(id => students.find(s => String(s.id) === String(id))).filter(Boolean).map(s =>
+                  React.createElement('div', {key:s.id, style:{display:"flex", alignItems:"center", gap:10, padding:"7px 12px", borderRadius:8, border:`1.5px dashed ${C.orange}`, background:C.surface}}
+                    , React.createElement('div', { style: {width:26, height:26, borderRadius:"50%", flexShrink:0, background:C.orangeBg, border:`1px solid ${C.orangeBorder}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:9, fontWeight:700, color:C.orange} }, initials(s.name))
+                    , React.createElement('div', {style:{flex:1, minWidth:0}}
+                      , React.createElement('div', {style:{fontSize:13, fontWeight:500}}, s.name
+                        , React.createElement('span', {style:{marginLeft:8, fontSize:10, fontWeight:700, color:C.orange, background:C.orangeBg, border:`1px solid ${C.orangeBorder}`, borderRadius:8, padding:"1px 7px"}}, "PROVA"))
+                      , React.createElement('div', {style:{fontSize:11, color:C.textMuted}}, "Iscritto a: ", s.instrument || "—")
+                    )
+                    , React.createElement('button', {onClick: ()=>setSelProva(prev=>prev.filter(x=>String(x)!==String(s.id))),
+                        style:{padding:'4px 9px', borderRadius:6, border:'none', background:'transparent', color:C.red, fontSize:11, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}}, '✕')
+                  ))
+            )
+            , React.createElement(AggiungiAllievoEsterno, {
+                students: students,
+                excludeIds: [...selStudents, ...selProva, ...enrolled.map(s => String(s.id))],
+                label: '+ Aggiungi allievo in prova',
+                color: C.orange, colorBorder: C.orangeBorder,
+                onAdd: (studentId) => { setSelProva(prev => Array.from(new Set([...prev.map(String), String(studentId)]))); setErr(p=>({...p, students:undefined})); },
+              })
+          )
+
           /* Riepilogo */
-          , selStudents.length > 0 && (
+          , (selStudents.length + selProva.length) > 0 && (
             React.createElement('div', { style: {marginTop:8, padding:"8px 14px", background:C.purpleBg,
               border:`1px solid ${C.purpleBorder}`, borderRadius:8, fontSize:12,
               color:C.purple, display:"flex", alignItems:"center", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5639}}
               , React.createElement(Ic, { n: "group", size: 13, stroke: C.purple, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5642}})
-              , selStudents.length, " allievo/i · 1 lezione con tutti gli allievi assegnati"
+              , selStudents.length, " allievo/i", selProva.length > 0 ? ` + ${selProva.length} in prova` : "", " · 1 lezione con tutti gli allievi assegnati"
             )
           )
         )
