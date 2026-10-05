@@ -298,9 +298,9 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       return(!q||b.title.toLowerCase().includes(q)||b.composer.toLowerCase().includes(q)||matchTonalita)
         &&(!fStrumento||strumentiBrano.includes(fStrumento))
         &&(!fTipo||b.tipo===fTipo)
-        &&(!fTonalita||(b.versioni||[]).some(v=>v.tonalita===fTonalita))
-        &&(!fStato||(b.versioni||[]).some(v=>v.stato===fStato));
-    }),[braniVisibili,search,fStrumento,fTonalita,fStato]);
+        &&(!fTonalita||(b.versioni||[]).some(v=>v.tonalita===fTonalita));
+      // [FM-STATO-BRANO-LEZIONE] nessun filtro Stato nel catalogo: lo stato è per allievo/lezione
+    }),[braniVisibili,search,fStrumento,fTonalita]);
 
     // Stessi filtri della tab Catalogo, applicati alla lista allievi (tab "Per allievo"):
     // ricerca su nome allievo + titolo/compositore/tonalità dei suoi brani, Strumento/Corso
@@ -321,7 +321,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       // più recente / registro), non quello unico del catalogo
       const matchStato = !fStato || suoiBrani.some(b=>{
         const st = (typeof statoBranoAllievo==='function') ? statoBranoAllievo(a, b.id, _lessonsRep)
-          : (b.versioni||[]).some(v=>v.stato===fStato) ? fStato : '';
+          : ''; // mai lo stato del catalogo
         return st===fStato;
       });
       return matchQ && matchStrumento && matchTonalita && matchStato;
@@ -445,7 +445,6 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                       , [
                         {val:fStrumento,set:setFStrumento,opts:tuttiStrumenti.map(s=>({id:s,label:s})),ph:"Strumento/Corso"},
                         {val:fTonalita,set:setFTonalita,opts:tutteTonalita.map(t=>({id:t,label:t})),ph:"Tonalità"},
-                        {val:fStato,set:setFStato,opts:Object.entries(STATO_BRANO_CONFIG).map(([id,cfg])=>({id,label:cfg.icon+' '+cfg.label})),ph:"Stato"},
                       ].map((f,i)=>(
                         React.createElement('select', { key: i, value: f.val, onChange: e=>f.set(e.target.value),
                           style: {background:C.surface,border:`1px solid ${f.val?C.goldDim:C.border}`,
@@ -455,7 +454,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                           , f.opts.map(o=>React.createElement('option', { key: o.id, value: o.id, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7834}}, o.label))
                         )
                       ))
-                      , (search||fStrumento||fTonalita||fStato)&&(
+                      , (search||fStrumento||fTonalita)&&(
                         React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setSearch("");setFStrumento("");setFTonalita("");setFStato("");}, style:{flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7838}}
                           , React.createElement(Ic, { n: "x", size: 12, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7839}}), "Azzera"
                         )
@@ -473,7 +472,6 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                               , filtrati.map((b,i)=>{
                                 const primaTonalita = (b.versioni||[])[0]?.tonalita || '';
                                 const nVersioni = (b.versioni||[]).length;
-                                const primoStato = (b.versioni||[])[0]?.stato || '';
                                 return(
                                   React.createElement('div', { key: b.id, className: "card-anim", onClick: ()=>{setSelBrano(b);setModal('view');},
                                     style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,
@@ -496,7 +494,6 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                                         , b.strumento ? b.strumento : '🎭 Ensemble')
                                       , primaTonalita&&React.createElement('span', { style: {fontSize:10,padding:"2px 6px",borderRadius:4,border:`1px solid ${C.border}`,color:C.textMuted}}, primaTonalita)
                                       , nVersioni>1&&React.createElement('span', { style: {fontSize:10,padding:"2px 6px",borderRadius:4,background:C.bg,color:C.textDim,border:`1px solid ${C.border}`}}, nVersioni+' versioni')
-                                      , primoStato && React.createElement(StatoBranoBadge, {stato:primoStato})
                                     )
                                     , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center",
                                       paddingTop:8,borderTop:`1px solid ${C.border}20`}}
@@ -529,18 +526,17 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                     /* ── LIST ── */
                     , layout==="list"&&(
                       React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflowX:"auto",overflowY:"hidden",WebkitOverflowScrolling:"touch"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7956}}
-                        , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 1fr 0.8fr 0.8fr 0.9fr auto",minWidth:560,
+                        , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 1fr 0.8fr 0.8fr auto",minWidth:520,
                           padding:"8px 20px",borderBottom:`1px solid ${C.border}`,background:C.bg}}
-                          , ["Brano","Tipo","Strumento","Tonalità","Allievi","Lezioni","Stato",""].map(h=>(
+                          , ["Brano","Tipo","Strumento","Tonalità","Allievi","Lezioni",""].map(h=>(
                             React.createElement('div', { key: h, style: {fontSize:10,color:C.textMuted,letterSpacing:"0.08em",textTransform:"uppercase"}}, h)
                           ))
                         )
                         , filtrati.map((b,i)=>{
                           const primaTonalita = (b.versioni||[])[0]?.tonalita || '';
-                          const primoStato = (b.versioni||[])[0]?.stato || '';
                           return(
                             React.createElement('div', { key: b.id, onClick: ()=>{setSelBrano(b);setModal('view');},
-                              style: {display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 1fr 0.8fr 0.8fr 0.9fr auto",minWidth:560,
+                              style: {display:"grid",gridTemplateColumns:"2.5fr 1fr 1.2fr 1fr 0.8fr 0.8fr auto",minWidth:520,
                                 padding:"12px 20px",borderBottom:i<filtrati.length-1?`1px solid ${C.border}20`:"none",
                                 alignItems:"center",cursor:"pointer",transition:"background .1s"},
                               onMouseEnter: e=>e.currentTarget.style.background=C.surfaceHover,
@@ -554,7 +550,6 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                               , React.createElement('span', { style: {fontSize:12,color:C.textMuted}}, primaTonalita||'—')
                               , React.createElement('span', { style: {fontSize:12,color:C.textMuted}}, allieviCount(b.id))
                               , React.createElement('span', { style: {fontSize:12,color:C.textMuted}}, usageCount(b.id))
-                              , primoStato ? React.createElement(StatoBranoBadge, {stato:primoStato}) : React.createElement('span',{style:{fontSize:11,color:C.textDim}},'—')
                               , React.createElement(Ic, { n: "right", size: 14, stroke: C.textDim})
                             )
                           );
@@ -679,7 +674,6 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                         , React.createElement('span',{style:{fontWeight:600,fontSize:13,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}},label
                             , _focus && React.createElement('span',{style:{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,letterSpacing:'0.03em'}},'📍 Versione studiata a lezione'))
                         , React.createElement('div',{style:{display:'flex',gap:6,alignItems:'center'}}
-                          , v.stato && React.createElement(StatoBranoBadge, {stato:v.stato})
                           , React.createElement('span',{style:{fontSize:11,color:C.textDim}},`${(v.allievi||[]).length} 👤 · ${fileCount} 📎`)
                         )
                       )
