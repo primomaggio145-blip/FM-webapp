@@ -705,7 +705,12 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
   const renderForm = () => {
     // Candidati: iscritti al corso + eventuali membri attuali non più tra gli iscritti
     const extraMembri = (form.allievi||[]).filter(id => !enrolledStudents.some(s => String(s.id)===String(id))).map(findStudent).filter(Boolean);
-    const candidati = [...enrolledStudents, ...extraMembri];
+    // [FM-GRUPPI-NASCONDI-ALTRI] gli allievi già presenti in un ALTRO gruppo del corso non
+    // vengono mostrati: si scelgono solo tra i membri di questo gruppo e quelli senza gruppo.
+    const _inAltroGruppo = (s) => { const gg = gruppoDi.get(String(s.id)); return !!gg && String(gg.id) !== String(editingId); };
+    const _tutti = [...enrolledStudents, ...extraMembri];
+    const candidati = _tutti.filter(s => !_inAltroGruppo(s));
+    const nascosti = _tutti.length - candidati.length;
     const sel = new Set((form.allievi||[]).map(String));
     const toggle = (id) => setForm(p => {
       const cur = (p.allievi||[]).map(String);
@@ -727,20 +732,18 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
       , React.createElement('div', {style:{fontSize:11, color:C.textMuted, textTransform:'uppercase', letterSpacing:'0.07em', marginTop:4}}
         , 'Allievi (', sel.size, ')')
       , candidati.length === 0
-        ? React.createElement('div', {style:{fontSize:12, color:C.textDim}}, 'Nessun allievo attivo ha scelto questo corso collettivo')
+        ? React.createElement('div', {style:{fontSize:12, color:C.textDim}}, _tutti.length === 0 ? 'Nessun allievo attivo ha scelto questo corso collettivo' : 'Tutti gli allievi del corso sono già in altri gruppi')
         : React.createElement('div', {style:{display:'flex', flexDirection:'column', gap:4, maxHeight:240, overflowY:'auto', background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:6}}
           , candidati.map(s => {
-              const altro = gruppoDi.get(String(s.id));
-              const inAltro = altro && String(altro.id) !== String(editingId);
               const checked = sel.has(String(s.id));
               return React.createElement('label', {key:s.id, style:{display:'flex', alignItems:'center', gap:8, padding:'5px 6px', borderRadius:6, cursor:'pointer', fontSize:13, background: checked ? C.purpleBg : 'transparent'}}
                 , React.createElement('input', {type:'checkbox', checked, onChange: ()=>toggle(s.id)})
                 , React.createElement('span', {style:{flex:1}}, s.name)
-                , inAltro && React.createElement('span', {style:{fontSize:10, color: checked ? '#f59e0b' : C.textDim}}
-                    , checked ? `verrà spostato da ${altro.nome}` : `in ${altro.nome}`)
               );
             })
         )
+      , nascosti > 0 && React.createElement('div', {style:{fontSize:11, color:C.textDim}}
+          , nascosti, nascosti === 1 ? ' allievo già in un altro gruppo non è mostrato' : ' allievi già in altri gruppi non sono mostrati')
       , React.createElement('div', {style:{display:'flex', gap:8, justifyContent:'flex-end'}}
         , React.createElement('button', {onClick: resetForm,
             style:{padding:'7px 14px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.textMuted, fontSize:12, cursor:'pointer', fontFamily:ff}}, 'Annulla')
@@ -786,8 +789,8 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
           , gruppi.map(g => {
               const docente = findDocente(g.docenteId);
               const membri = (g.allievi||[]).map(findStudent).filter(Boolean);
-              // Aggiungibili: senza gruppo + quelli di altri gruppi (verranno spostati)
-              const aggiungibili = enrolledStudents.filter(s => { const gg = gruppoDi.get(String(s.id)); return !gg || String(gg.id) !== String(g.id); });
+              // [FM-GRUPPI-NASCONDI-ALTRI] Aggiungibili: solo gli allievi senza gruppo
+              const aggiungibili = enrolledStudents.filter(s => !gruppoDi.has(String(s.id)));
               const inModifica = showForm && canEdit && editingId === g.id;
               return (
                 React.createElement('div', {key:g.id, style:{border:`1px solid ${inModifica ? C.purpleBorder : C.border}`, borderRadius:10, overflow:'hidden'}}
@@ -831,8 +834,7 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
                                 defaultValue:'',
                                 style:{flex:1, minWidth:0, padding:'6px 8px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, fontFamily:ff, background:C.bg, color:C.text}}
                                 , React.createElement('option', {value:''}, aggiungibili.length? 'Seleziona allievo...' : 'Nessun allievo disponibile')
-                                , aggiungibili.map(s => { const gg = gruppoDi.get(String(s.id));
-                                    return React.createElement('option', {key:s.id, value:s.id}, s.name + (gg ? ` (sposta da ${gg.nome})` : '')); })
+                                , aggiungibili.map(s => React.createElement('option', {key:s.id, value:s.id}, s.name))
                               )
                             , React.createElement('button', {onClick: ()=>setAddingToGroupId(null),
                                 style:{padding:'6px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.textMuted, fontSize:11, cursor:'pointer'}}, 'Chiudi')
