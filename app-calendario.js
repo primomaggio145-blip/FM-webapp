@@ -8822,6 +8822,28 @@ const AggiungiAllievoEsterno = ({ students, excludeIds, onAdd }) => {
   );
 };
 
+// [FM-COLL-DOCENTE] Il docente di una lezione è salvato su DB solo come NOME (colonna teacher):
+// dopo un ricaricamento la lezione non ha teacherId. Il form collettiva inizializzava però
+// teacherId con il nome → nessun docente risultava selezionato e al salvataggio il docente
+// non veniva trovato (teacher = "") → il docente spariva. Qui si risale all'id corretto.
+function fmDocenteIdDaLezione(lezione, docenti, corso) {
+  const lista = docenti || [];
+  if (lezione) {
+    const tid = lezione.teacherId != null ? String(lezione.teacherId) : '';
+    if (tid && lista.some(d => String(d.id) === tid)) return tid;
+    const nome = String(lezione.teacher || '').toLowerCase().trim();
+    if (nome) {
+      const d = lista.find(x => String(x.nome || x.name || '').toLowerCase().trim() === nome);
+      if (d) return String(d.id);
+    }
+    // vecchie lezioni dove teacher conteneva già l'id
+    if (lezione.teacher && lista.some(d => String(d.id) === String(lezione.teacher))) return String(lezione.teacher);
+  }
+  // Nessun docente risolto: se il corso ne ha uno solo, lo propone
+  const delCorso = corso ? lista.filter(d => (corso.docenti || []).map(String).includes(String(d.id))) : [];
+  return delCorso.length === 1 ? String(delCorso[0].id) : '';
+}
+
 const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose, gruppi:_gruppiCLF, iscrizioniAnno:_iscrCLF, annoSel:_annoSelCLF, lessons:_lessonsCLF }) => {
   const docenti    = _docentiRaw    || [];
   const repertorio = _repertorioRaw || [];
@@ -8860,7 +8882,7 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     date:      initial?.date      || yyyymmdd(today),
     hour:      initial?.hour      || "15:00",
     durata:    initial?.durata    || 60,
-    teacherId: initial?.teacher   || "",
+    teacherId: initial ? fmDocenteIdDaLezione(initial, docenti, initCourse) : "",  // [FM-COLL-DOCENTE]
     room:      initial?.room      || "",
     topic:     initial?.topic     || "",
     notes:     initial?.notes     || "",
@@ -8874,8 +8896,11 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
   const setNB = (k,v) => setNewBranoForm(p=>({...p,[k]:v}));
 
   // Docenti assegnati al corso selezionato
+  // [FM-COLL-DOCENTE] confronto per stringa (id numerici vs stringa) e, se la lezione ha un
+  // docente non (più) assegnato al corso, lo si mostra comunque per non perderlo
   const courseDocenti = selCourse
-    ? docenti.filter(d => (selCourse.docenti||[]).includes(d.id))
+    ? docenti.filter(d => (selCourse.docenti||[]).map(String).includes(String(d.id))
+        || (form.teacherId && String(d.id) === String(form.teacherId)))
     : [];
 
   // Allievi iscritti all'anno scolastico attivo (stessa fonte usata altrove: iscrizioni_anno).
@@ -8930,8 +8955,8 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     setSelGruppoId('');
     setGroupMemberIds([]);
     // pre-seleziona il docente se c'è uno solo
-    const docs = docenti.filter(d => (c.docenti||[]).includes(d.id));
-    set("teacherId", docs.length === 1 ? docs[0].id : "");
+    const docs = docenti.filter(d => (c.docenti||[]).map(String).includes(String(d.id)));
+    set("teacherId", docs.length === 1 ? String(docs[0].id) : "");
   };
 
   const validate = () => {
@@ -8948,7 +8973,8 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
     if (saving) return; // previene doppio invio (doppio click) che creerebbe 2 lezioni distinte
     const e = validate();
     if (Object.keys(e).length) { setErr(e); return; }
-    const teacherObj = docenti.find(d => d.id === form.teacherId);
+    const teacherObj = docenti.find(d => String(d.id) === String(form.teacherId));
+    if (!teacherObj) { setErr({ teacherId: "Seleziona il docente" }); return; }  // [FM-COLL-DOCENTE] mai salvare senza docente
     const prevAttById = {};
     (initial?.students || []).forEach(s => { if (s && s.id) prevAttById[String(s.id)] = s.attendance || ''; });
     const studObjs   = selStudents.map(id => {
@@ -9079,9 +9105,9 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
           ) : (
             React.createElement('div', { style: {display:"flex", gap:8, flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5511}}
               , courseDocenti.map(d => {
-                const isS = form.teacherId === d.id;
+                const isS = String(form.teacherId) === String(d.id);
                 return (
-                  React.createElement('button', { key: d.id, onClick: () => set("teacherId", d.id),
+                  React.createElement('button', { key: d.id, onClick: () => set("teacherId", String(d.id)),
                     style: {display:"flex", alignItems:"center", gap:8, padding:"8px 14px",
                       borderRadius:10, cursor:"pointer", textAlign:"left",
                       border:`2px solid ${isS?C.gold:C.border}`,
