@@ -3243,6 +3243,56 @@ const PopoverCalcolo = ({ contenuto, children, width = 320 }) => {
   );
 };
 
+// [FM-HOVER-REPERTORIO-ALLIEVO] Passando sul nome dell'allievo (o toccandolo su mobile) mostra
+// tutto il repertorio della sua scheda Allievi → Repertorio (student.repertorio), diviso come
+// nella scheda: In studio / Completati / altri stati. Ogni brano ancora presente nel catalogo
+// è cliccabile e apre il Repertorio su quel brano.
+const RepertorioAllievoHover = ({ student, repertorioCatalogo, onApriBrano, children }) => {
+  if (!student) return children;
+  const rep = Array.isArray(student.repertorio) ? student.repertorio : [];
+  const norm = st => String(st || '').toLowerCase().replace(/_/g, ' ').trim();
+  const inStudio   = rep.filter(r => norm(r.stato) === 'in studio');
+  const completati = rep.filter(r => norm(r.stato) === 'completato');
+  const altri      = rep.filter(r => !['in studio', 'completato'].includes(norm(r.stato)));
+  const catalogo = repertorioCatalogo || [];
+  const voce = (r, i, col) => {
+    const nelCatalogo = onApriBrano && catalogo.some(b => String(b.id) === String(r.id));
+    const titolo = r.titolo || r.title || 'Brano senza titolo';
+    const sotto = [r.compositore || r.composer, r.periodo, r.tonalita].filter(Boolean).join(' · ');
+    return React.createElement('div', { key: r.id || i, style: { padding: '6px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' } }
+      , React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'baseline' } }
+        , nelCatalogo
+          ? React.createElement('a', { href: '#', onClick: e => { e.preventDefault(); e.stopPropagation(); onApriBrano(r.id); },
+              style: { fontWeight: 600, color: C.blue, textDecoration: 'underline', textUnderlineOffset: 2 } }, titolo)
+          : React.createElement('span', { style: { fontWeight: 600, color: C.text } }, titolo)
+        , r.dataInizio ? React.createElement('span', { style: { fontSize: 10, color: C.textDim, whiteSpace: 'nowrap' } }, 'dal ', fmtDate(r.dataInizio)) : null
+      )
+      , sotto ? React.createElement('div', { style: { fontSize: 11, color: C.textMuted } }, sotto) : null
+      , (col && r.stato && !['in studio','completato'].includes(norm(r.stato))) ? React.createElement('div', { style: { fontSize: 10, color: C.textDim, textTransform: 'uppercase' } }, r.stato) : null
+      , r.note ? React.createElement('div', { style: { fontSize: 11, color: C.textDim, fontStyle: 'italic' } }, r.note) : null
+    );
+  };
+  const sezione = (titolo, lista, hex, mostraStato) => lista.length === 0 ? null :
+    React.createElement('div', { style: { marginTop: 8 } }
+      , React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, letterSpacing: '0.07em', textTransform: 'uppercase', color: C.textMuted, marginBottom: 2 } }
+        , React.createElement('span', { style: { width: 7, height: 7, borderRadius: '50%', background: hex, display: 'inline-block' } })
+        , titolo, ' (', lista.length, ')')
+      , lista.map((r, i) => voce(r, i, mostraStato)));
+  const contenuto = React.createElement('div', null
+    , React.createElement('div', { style: { fontWeight: 700, fontSize: 12.5, color: C.text } }, '🎼 Repertorio di ', student.name || '')
+    , React.createElement('div', { style: { fontSize: 10.5, color: C.textDim } }
+        , rep.length, rep.length === 1 ? ' brano' : ' brani', ' nel registro · ', inStudio.length, ' in studio · ', completati.length, ' completati')
+    , rep.length === 0
+      ? React.createElement('div', { style: { marginTop: 8, fontSize: 12, color: C.textDim, fontStyle: 'italic' } }, 'Nessun brano nel registro.')
+      : React.createElement(React.Fragment, null
+          , sezione('In studio', inStudio, C.teal || C.blue, false)
+          , sezione('Completati', completati, C.green, false)
+          , sezione('Altri', altri, C.textDim, true))
+  );
+  return React.createElement(PopoverCalcolo, { contenuto, width: 340 }
+    , React.createElement('span', { title: '', style: { borderBottom: `1px dotted ${C.textMuted}`, cursor: 'pointer' } }, children));
+};
+
 // [FM-SOGLIA-MAN] Editor della soglia manuale di un corso per un mese (scheda allievo → Lezioni).
 const SogliaManualeEditor = ({ studenteId, anno, mese, corso, stat }) => {
   const [val, setVal]   = useState(stat.manuale ? String(stat.soglia) : '');
@@ -5998,6 +6048,9 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
             const nuoveVersioni = (b.versioni||[]).map((v,i) =>
               i === (parseInt(versioneIdx)||0) ? {...v, stato} : v
             );
+            // [FM-STATO-BRANO-LDM] allinea anche lo stato locale: prima restava quello vecchio e una
+            // modifica successiva delle versioni (es. dal modale lezione) riscriveva lo stato precedente.
+            if (_setRepertorioLF) _setRepertorioLF(p => p.map(r => r.id === branoId ? { ...r, versioni: nuoveVersioni } : r));
             try {
               await sb.from('brani').update({versioni: nuoveVersioni}).eq('id', branoId);
             } catch(err2) { console.warn('[FM] update stato brano:', err2?.message); }
@@ -6549,6 +6602,112 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
     ? React.createElement('span', {style:{fontSize:10,color:C.green,marginLeft:6}}, "✓ salvato")
     : null;
 
+  // [FM-HOVER-REPERTORIO-ALLIEVO] risolve l'allievo (per id, poi per nome) e apre un brano in Repertorio
+  const _trovaAllievo = (sid, nome) => {
+    const lista = students || (window.__FM_DATA__ && window.__FM_DATA__.students) || [];
+    let st = sid != null ? lista.find(x => String(x.id) === String(sid)) : null;
+    if (!st && nome) { const n = String(nome).toLowerCase().trim(); st = lista.find(x => String(x.name || '').toLowerCase().trim() === n); }
+    return st || null;
+  };
+  const _apriBranoRepertorio = (branoId) => {
+    if (!onQuickAction || !onNavigate) return;
+    onQuickAction('openBrano:' + branoId);
+    onNavigate('repertorio');
+  };
+  const _conHoverRepertorio = (sid, nome, children) => {
+    const st = _trovaAllievo(sid, nome);
+    if (!st) return children;
+    return React.createElement(RepertorioAllievoHover, {
+      student: st, repertorioCatalogo: _repertorioLDM || window.__repertorio__ || [],
+      onApriBrano: (onQuickAction && onNavigate) ? _apriBranoRepertorio : null }, children);
+  };
+
+  // [FM-AUTOSAVE-TESTI] Argomento ed esercizi si salvano MENTRE si scrive (debounce 800 ms),
+  // non più solo all'uscita dal campo: chiudendo il modale con la X, cliccando fuori o mettendo
+  // l'app in background il blur non scattava e il testo andava perso. In più:
+  //  - flush immediato alla chiusura del modale (unmount), su pagehide e su visibilitychange;
+  //  - bozza di sicurezza in localStorage, cancellata solo quando Supabase conferma il salvataggio:
+  //    se il salvataggio fallisce (rete assente, app chiusa) alla riapertura viene ripristinata;
+  //  - si inviano SEMPRE entrambi i campi insieme, con i valori più recenti (niente sovrascritture
+  //    di un campo con il valore vecchio dell'altro).
+  const _bozzaKey = 'fm_bozza_testi_lezione_' + lesson.id;
+  const [testiStato, setTestiStato] = useState(null); // null | 'modificato' | 'salvataggio' | 'salvato' | 'errore'
+  const [bozzaRipristinata, setBozzaRipristinata] = useState(false);
+  const _testiSalvati = React.useRef({ topic: lesson.topic || "", exercises: lesson.exercises || "" });
+  const _testiUltimi  = React.useRef({});
+  _testiUltimi.current = { lesson, onUpdateLesson, topic: localTopic, exercises: localExercises };
+  const _testiTimer   = React.useRef(null);
+  const _montato      = React.useRef(true);
+  const _flushTesti = () => {
+    if (_testiTimer.current) { clearTimeout(_testiTimer.current); _testiTimer.current = null; }
+    const u = _testiUltimi.current;
+    if (!canEdit || !u.onUpdateLesson) return;
+    if (u.topic === _testiSalvati.current.topic && u.exercises === _testiSalvati.current.exercises) return;
+    const inviati = { topic: u.topic, exercises: u.exercises };
+    _testiSalvati.current = inviati;
+    if (_montato.current) setTestiStato('salvataggio');
+    let esito;
+    try { esito = u.onUpdateLesson({ ...u.lesson, topic: inviati.topic, exercises: inviati.exercises }); } catch (e) { esito = Promise.resolve(false); }
+    Promise.resolve(esito).then(ok => {
+      if (ok === false) {
+        // fallito: segna di nuovo come "da salvare" così il prossimo flush ritenta
+        if (_testiSalvati.current === inviati) _testiSalvati.current = { topic: null, exercises: null };
+        if (_montato.current) setTestiStato('errore');
+        return;
+      }
+      try {
+        const bz = JSON.parse(localStorage.getItem(_bozzaKey) || 'null');
+        if (bz && bz.topic === inviati.topic && bz.exercises === inviati.exercises) localStorage.removeItem(_bozzaKey);
+      } catch (e) {}
+      if (_montato.current && _testiSalvati.current === inviati) setTestiStato('salvato');
+    });
+  };
+  // Ripristino bozza non salvata (solo se diversa da quanto c'è già sul DB)
+  useEffect(() => {
+    if (!canEdit) return;
+    try {
+      const bz = JSON.parse(localStorage.getItem(_bozzaKey) || 'null');
+      if (!bz) return;
+      const dbT = lesson.topic || "", dbE = lesson.exercises || "";
+      if (bz.topic === dbT && bz.exercises === dbE) { localStorage.removeItem(_bozzaKey); return; }
+      setLocalTopic(bz.topic != null ? bz.topic : dbT);
+      setLocalExercises(bz.exercises != null ? bz.exercises : dbE);
+      setBozzaRipristinata(true);
+    } catch (e) {}
+  }, []);
+  // Debounce: salva 800 ms dopo l'ultima battuta, e scrive subito la bozza locale
+  useEffect(() => {
+    if (!canEdit) return;
+    if (localTopic === _testiSalvati.current.topic && localExercises === _testiSalvati.current.exercises) return;
+    try { localStorage.setItem(_bozzaKey, JSON.stringify({ topic: localTopic, exercises: localExercises, ts: Date.now() })); } catch (e) {}
+    setTestiStato('modificato');
+    if (_testiTimer.current) clearTimeout(_testiTimer.current);
+    _testiTimer.current = setTimeout(_flushTesti, 800);
+  }, [localTopic, localExercises]);
+  // Flush alla chiusura del modale e quando la pagina/app va in background
+  useEffect(() => {
+    _montato.current = true;
+    const onHide = () => _flushTesti();
+    const onVis = () => { if (document.visibilityState === 'hidden') _flushTesti(); };
+    window.addEventListener('pagehide', onHide);
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      window.removeEventListener('pagehide', onHide);
+      document.removeEventListener('visibilitychange', onVis);
+      _montato.current = false;
+      _flushTesti();
+    };
+  }, []);
+  const TestiStatoDot = () => {
+    const cfg = {
+      modificato:  { t: "● modifiche in corso…", c: C.textDim },
+      salvataggio: { t: "⟳ salvataggio…",        c: C.textMuted },
+      salvato:     { t: "✓ salvato",              c: C.green },
+      errore:      { t: "⚠ non salvato — riprovo alla prossima modifica", c: C.red },
+    }[testiStato];
+    return cfg ? React.createElement('span', { style: { fontSize: 10, color: cfg.c, marginLeft: 6 } }, cfg.t) : null;
+  };
+
   // [FM-ALERT-PRESENZA] Promemoria "indica la presenza" — SOLO admin e docente.
   // Compare quando la lezione è già iniziata (data passata, o oggi con orario già
   // raggiunto) e la presenza non è stata ancora indicata: per le individuali/prove
@@ -6653,7 +6812,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
               )
             ) : (
               React.createElement(React.Fragment, null
-                , React.createElement('div', { style: {fontSize:17, fontWeight:600, fontFamily:"'Oswald',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4537}}, lesson.student || (lesson.nuovoIscritto ? (lesson.contactName || "🆕 Nuovo iscritto") : ""))
+                , React.createElement('div', { style: {fontSize:17, fontWeight:600, fontFamily:"'Oswald',sans-serif"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4537}}, (lesson.student && !lesson.nuovoIscritto) ? _conHoverRepertorio(lesson.studentId, lesson.student, lesson.student) : (lesson.student || (lesson.nuovoIscritto ? (lesson.contactName || "🆕 Nuovo iscritto") : "")))
                 , React.createElement('div', { style: {fontSize:13, color:hex, marginTop:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4538}}, lesson.instrument)
                 , lesson.nuovoIscritto && lesson.phone && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginTop:2} }, "📞 ", lesson.phone)
               )
@@ -6720,7 +6879,7 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                         , initials(s.name)
                       )
                       , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4579}}
-                        , React.createElement('span', { style: {fontSize:13, fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4580}}, s.name)
+                        , React.createElement('span', { style: {fontSize:13, fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4580}}, _conHoverRepertorio(s.id, s.name, s.name))
                         , React.createElement('span', { style: {fontSize:11, color:C.textMuted, marginLeft:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4581}}, s.instrument)
                       )
                       , React.createElement('div', { style: {display:"flex", gap:4, flexShrink:0} }
@@ -6849,11 +7008,13 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
         , React.createElement('div', { style: {padding:"12px 14px", background:C.bg, borderRadius:8, border:`1px solid ${C.border}`}}
           , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6}}
             , React.createElement(InlineLabel, {label:"Argomento", icon:"note"})
-            , React.createElement(SaveDot, null)
+            , canEdit ? React.createElement(TestiStatoDot, null) : null
           )
-          , canEdit /* [FM-TESTO-FORMATTATO] */
+          , bozzaRipristinata && canEdit && React.createElement('div', { style: {fontSize:11, color:C.orange, background:C.orangeBg, border:`1px solid ${C.orangeBorder}`, borderRadius:6, padding:"5px 8px", marginBottom:6} }
+              , "↺ Ripristinato testo non salvato dall'ultima volta: verrà salvato automaticamente.")
+          , canEdit /* [FM-TESTO-FORMATTATO] [FM-AUTOSAVE-TESTI] */
             ? React.createElement(FMEditorTesto, { value: localTopic, onChange: setLocalTopic,
-                onBlur: () => saveField({topic: localTopic}),
+                onBlur: _flushTesti,
                 rows: 3, placeholder: "Es. Scale maggiori, Chopin Notturno..." })
             : React.createElement(FMTestoFormattato, { testo: localTopic, vuoto: "Nessun argomento",
                 style: {fontSize:13, color:localTopic?C.text:C.textDim, lineHeight:1.6, fontStyle:localTopic?"normal":"italic"}})
@@ -6872,11 +7033,11 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
           React.createElement('div', { style: {padding:"12px 14px", background:C.blueBg, borderRadius:8, border:`1px solid ${C.blueBorder}`}}
             , React.createElement('div', { style: {display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6}}
               , React.createElement(InlineLabel, {label:"Esercizi da svolgere", icon:"check", color:C.blue})
-              , React.createElement(SaveDot, null)
+              , canEdit ? React.createElement(TestiStatoDot, null) : null
             )
-            , canEdit /* [FM-TESTO-FORMATTATO] */
+            , canEdit /* [FM-TESTO-FORMATTATO] [FM-AUTOSAVE-TESTI] */
               ? React.createElement(FMEditorTesto, { value: localExercises, onChange: setLocalExercises,
-                  onBlur: () => saveField({exercises: localExercises}), borderColor: C.blueBorder,
+                  onBlur: _flushTesti, borderColor: C.blueBorder,
                   rows: 3, placeholder: "Es. Studiare scale in Do maggiore, ripetere battute 12-24..." })
               : React.createElement(FMTestoFormattato, { testo: localExercises, vuoto: "Nessun esercizio assegnato",
                   style: {fontSize:13, color:localExercises?C.text:C.textDim, lineHeight:1.6, fontStyle:localExercises?"normal":"italic"}})
@@ -7041,6 +7202,48 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                           ))
                       )
                     )
+                    /* [FM-STATO-BRANO-LDM] Stato del brano modificabile direttamente dal modale lezione.
+                       Lo stato è per VERSIONE (versioni[i].stato, come in Repertorio e nel form lezione):
+                       si applica alla versione scelta per questa lezione, o all'unica versione esistente. */
+                    , (() => {
+                        const _vSelN = versioneSel != null && versioni[Number(versioneSel)] ? Number(versioneSel) : null;
+                        const _idxStato = _vSelN != null ? _vSelN : (versioni.length <= 1 ? 0 : null);
+                        const _statoAtt = _idxStato != null && versioni[_idxStato] ? (versioni[_idxStato].stato || "") : "";
+                        const _cfgStati = (typeof STATO_BRANO_CONFIG !== 'undefined' && STATO_BRANO_CONFIG) || {
+                          iniziato:{label:'Iniziato',icon:'🟡'}, in_studio:{label:'In studio',icon:'🔵'},
+                          completato:{label:'Completato',icon:'🟢'}, non_completato:{label:'Non completato',icon:'🔴'} };
+                        if (!canEdit) {
+                          return _statoAtt && typeof StatoBranoBadge !== 'undefined'
+                            ? React.createElement('div', { style: {marginTop:8} }, React.createElement(StatoBranoBadge, { stato: _statoAtt }))
+                            : null;
+                        }
+                        if (_idxStato == null) {
+                          return React.createElement('div', { style: {marginTop:8, fontSize:11, color:C.textDim, fontStyle:"italic"} }
+                            , "Seleziona una versione per impostarne lo stato.");
+                        }
+                        const _cambiaStato = (nuovoStato) => {
+                          const vEsistente = versioni[_idxStato];
+                          const base = vEsistente || {tonalita:"", strumento:isColl(lesson)?(lesson.courseName||""):(lesson.instrument||""), spartiti:[], allegati:[], link:[], allievi:[]};
+                          const nuovoIdx = salvaVersioneBrano(id, vEsistente ? _idxStato : null, {...base, stato: nuovoStato}, _repertorioLDM, _setRepertorioLDM);
+                          window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+                          window.__FM_RECENTLY_WRITTEN__.set(`brani:${id}`, Date.now());
+                          if (nuovoIdx != null && (lesson.repertorioVersioni||{})[id] !== nuovoIdx && (vEsistente == null || versioni.length > 1)) {
+                            onUpdateLesson({ ...lesson, repertorioVersioni: { ...(lesson.repertorioVersioni||{}), [id]: nuovoIdx } });
+                          }
+                        };
+                        return React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8, marginTop:8, flexWrap:"wrap"} }
+                          , React.createElement('span', { style: {fontSize:11, color:C.textMuted} }, "Stato:")
+                          , React.createElement('select', {
+                              value: _statoAtt,
+                              onChange: e => { if (e.target.value) _cambiaStato(e.target.value); },
+                              style: {fontSize:11, padding:"5px 8px", borderRadius:6, border:`1px solid ${typeBd}`,
+                                background:C.surface, color:C.text, flex:"1 1 150px"} }
+                            , !_statoAtt && React.createElement('option', { value: "" }, "— imposta stato —")
+                            , Object.keys(_cfgStati).map(k => React.createElement('option', { key: k, value: k }, (_cfgStati[k].icon||'') + ' ' + _cfgStati[k].label))
+                          )
+                          , _statoAtt && typeof StatoBranoBadge !== 'undefined' && React.createElement(StatoBranoBadge, { stato: _statoAtt })
+                        );
+                      })()
                     , canEdit && (
                       React.createElement('div', { style: {display:"flex", gap:10, marginTop:8} }
                         , React.createElement('button', {
@@ -13128,7 +13331,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               // Persisti su Supabase
               const sb = window.supabaseClient;
               if (sb && updated.id) {
-                sb.from('lezioni').update({
+                return sb.from('lezioni').update({
                   topic:          updated.topic        || null,
                   exercises:      updated.exercises    || null,
                   link_url:       updated.linkUrl      || null,
@@ -13144,9 +13347,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   motivo_assenza: updated.motivoAssenza || null,
                   updated_at:     new Date().toISOString(),
                 }).eq('id', updated.id).then(({ error }) => {
-                  if (error) console.warn('[FM] onUpdateLesson error:', error.message);
-                });
+                  if (error) { console.warn('[FM] onUpdateLesson error:', error.message); return false; }
+                  return true; // [FM-AUTOSAVE-TESTI] esito usato dall'autosalvataggio
+                }, (err) => { console.warn('[FM] onUpdateLesson error:', err && err.message); return false; });
               }
+              return Promise.resolve(false);
             },
             allegatiGlobali: propAllegati,
             students: propStudents,
