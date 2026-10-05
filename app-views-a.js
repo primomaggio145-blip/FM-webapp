@@ -46,9 +46,12 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
   React.useEffect(()=>{
     if(quickAction==="addBrano"){ setModal("add"); if(clearQuickAction)clearQuickAction(); }
     else if(typeof quickAction==="string" && quickAction.startsWith("openBrano:")) {
-      const bid = quickAction.slice("openBrano:".length);
+      // [FM-PREV-BRANO-LINK] formato: openBrano:<id> oppure openBrano:<id>:<indiceVersione>
+      const parts = quickAction.slice("openBrano:".length).split(":");
+      const bid = parts[0];
+      const vIdx = parts.length>1 && parts[1]!=="" && !isNaN(Number(parts[1])) ? Number(parts[1]) : null;
       const found = (propBrani||[]).find(b=>String(b.id)===bid);
-      if (found) { setSelBrano(found); setModal('view'); }
+      if (found) { setSelBrano(found); setFocusVers(vIdx); setModal('view'); }
       if(clearQuickAction)clearQuickAction();
     }
   },[quickAction]);
@@ -105,11 +108,12 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     const [drawer,    setDrawer]   = useState(null);
     const [modal,     setModal]    = useState(null); // "add"|"edit"|"confirm_delete"
     const [selBrano,  setSelBrano] = useState(null);
+    const [focusVers, setFocusVers]= useState(null); // [FM-PREV-BRANO-LINK] versione da evidenziare nel modal
     const [allievoPOV,setAllievoPOV]=useState(null);
     const [toast,     setToast]    = useState(null);
   
     const showToast=(msg,hex=C.green)=>{setToast({msg,hex});setTimeout(()=>setToast(null),3000);};
-    const closeModal=()=>{setModal(null);setSelBrano(null);};
+    const closeModal=()=>{setModal(null);setSelBrano(null);setFocusVers(null);};
 
     // ── Mappa brano JS → riga DB ──
     const toDbRow = (f, includeId=false) => ({
@@ -661,9 +665,13 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                 , (selBrano.versioni||[]).map((v,idx)=>{
                     const fileCount=(v.spartiti||[]).length+(v.allegati||[]).length+(v.link||[]).length;
                     const label=[selBrano.title,v.strumento||selBrano.strumento,v.tonalita].filter(Boolean).join(' - ')||`Versione ${idx+1}`;
-                    return React.createElement('div',{key:idx,style:{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}
-                      , React.createElement('div',{style:{padding:'12px 16px',background:C.bg,display:'flex',justifyContent:'space-between',alignItems:'center'}}
-                        , React.createElement('span',{style:{fontWeight:600,fontSize:13}},label)
+                    const _focus = focusVers!=null && focusVers===idx; // [FM-PREV-BRANO-LINK]
+                    return React.createElement('div',{key:idx,
+                        ref: _focus ? (el=>{ if(el && !el.__fmScrolled){ el.__fmScrolled=true; setTimeout(()=>{ try{ el.scrollIntoView({behavior:'smooth',block:'center'}); }catch(e){} },80); } }) : undefined,
+                        style:{border:_focus?`2px solid ${C.gold}`:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden',boxShadow:_focus?`0 0 0 3px ${C.gold}22`:'none'}}
+                      , React.createElement('div',{style:{padding:'12px 16px',background:C.bg,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}
+                        , React.createElement('span',{style:{fontWeight:600,fontSize:13,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}},label
+                            , _focus && React.createElement('span',{style:{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:20,background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,letterSpacing:'0.03em'}},'📍 Versione studiata a lezione'))
                         , React.createElement('div',{style:{display:'flex',gap:6,alignItems:'center'}}
                           , v.stato && React.createElement(StatoBranoBadge, {stato:v.stato})
                           , React.createElement('span',{style:{fontSize:11,color:C.textDim}},`${(v.allievi||[]).length} 👤 · ${fileCount} 📎`)
@@ -680,7 +688,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                   })
               )
               /* Footer */
-              , React.createElement('div',{style:{padding:'14px 22px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between'}}
+              , ruoloRep!=="allievo" && React.createElement('div',{style:{padding:'14px 22px',borderTop:`1px solid ${C.border}`,display:'flex',justifyContent:'space-between'}}
                 , React.createElement(Btn,{danger:true,onClick:()=>{setModal('confirm_delete');}},React.createElement(Ic,{n:'trash',size:13,stroke:C.red}),'Elimina')
                 , React.createElement(Btn,{variant:'secondary',onClick:()=>setModal('edit')},React.createElement(Ic,{n:'edit',size:13,stroke:C.textMuted}),'Modifica')
               )

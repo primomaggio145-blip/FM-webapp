@@ -5398,9 +5398,11 @@ const infoLezionePrecedente = (prev, repertorio) => {
     const b = rep.find(r => String(r.id) === String(id));
     if (!b) return null;
     const vs = b.versioni || [];
-    const vSel = vers[id] != null ? vs[vers[id]] : null;
-    const tonalita = vSel ? vSel.tonalita : (vs.length === 1 ? vs[0].tonalita : null);
-    return { id: b.id, title: b.title || b.titolo || 'Brano senza titolo', composer: b.composer || '', tonalita: tonalita || '' };
+    const vIdxRaw = vers[id] != null ? Number(vers[id]) : (vs.length === 1 ? 0 : null);
+    const versioneIdx = (vIdxRaw != null && !isNaN(vIdxRaw) && vs[vIdxRaw]) ? vIdxRaw : null; // [FM-PREV-BRANO-LINK]
+    const vSel = versioneIdx != null ? vs[versioneIdx] : null;
+    const tonalita = vSel ? vSel.tonalita : null;
+    return { id: b.id, title: b.title || b.titolo || 'Brano senza titolo', composer: b.composer || '', tonalita: tonalita || '', versioneIdx };
   }).filter(Boolean);
   const assente = !isColl(prev) && prev.attendance === 'assente';
   const mancanti = [];
@@ -6808,12 +6810,31 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                   , React.createElement('strong', null, "Esercizi: "), React.createElement(FMTestoFormattato, { testo: _info.exercises, style: {display:"inline-block", verticalAlign:"top"} }))
               , _info.brani.length > 0 && React.createElement('div', { style: {fontSize:12, color:C.textMuted, marginBottom:4}}
                   , React.createElement('strong', null, "Brani studiati: ")
-                  , _info.brani.map((b, i) => React.createElement('span', { key: b.id || i}
-                      , i > 0 ? " · " : ""
-                      , b.title
-                      , b.composer ? React.createElement('span', { style: {color:C.textDim}}, " (", b.composer, ")") : null
-                      , b.tonalita ? React.createElement('span', { style: {color:C.textDim}}, " – ", b.tonalita) : null
-                    ))
+                  /* [FM-PREV-BRANO-LINK] ogni brano è un link al Repertorio, aperto sulla versione studiata */
+                  , _info.brani.map((b, i) => {
+                      const _apri = (e) => {
+                        if (e) { e.preventDefault(); e.stopPropagation(); }
+                        if (!onQuickAction || !onNavigate) return;
+                        onQuickAction('openBrano:' + b.id + (b.versioneIdx != null ? ':' + b.versioneIdx : ''));
+                        onNavigate('repertorio');
+                      };
+                      const _cliccabile = !!(onQuickAction && onNavigate);
+                      return React.createElement('span', { key: b.id || i}
+                        , i > 0 ? " · " : ""
+                        , React.createElement('a', {
+                            href: "#", onClick: _apri,
+                            title: _cliccabile ? "Apri nel Repertorio" + (b.tonalita ? " (versione " + b.tonalita + ")" : "") : undefined,
+                            style: _cliccabile
+                              ? {color:C.blue, textDecoration:"underline", textUnderlineOffset:2, cursor:"pointer"}
+                              : {color:"inherit", textDecoration:"none", pointerEvents:"none"} }
+                          , b.title
+                          , b.composer ? React.createElement('span', { style: {color:C.textDim}}, " (", b.composer, ")") : null
+                          , b.tonalita ? React.createElement('span', { style: {color:C.textDim}}, " – ", b.tonalita) : null
+                          , _cliccabile ? React.createElement('span', { style: {display:"inline-block", marginLeft:3, verticalAlign:"middle"}}
+                              , React.createElement(Ic, { n:"link", size:10, stroke:C.blue})) : null
+                        )
+                      );
+                    })
                 )
               , _info.mancanti.length > 0 && React.createElement('div', { style: {display:"flex", alignItems:"flex-start", gap:6, marginTop:6, padding:"7px 9px", borderRadius:6, background:C.orangeBg, border:`1px solid ${C.orangeBorder}`}}
                   , React.createElement(Ic, { n:"alert", size:13, stroke:C.orange})
