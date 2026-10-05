@@ -1126,6 +1126,7 @@
         giorno:     r.giorno || '',
         ora:        r.ora || '',
         room:       r.room || '',
+        note:       r.note || '',   // [FM-GRUPPI-NOTE]
         annoInizio: r.anno_inizio != null ? r.anno_inizio : null,
         allievi:    Array.isArray(r.allievi) ? r.allievi : (() => { try { return JSON.parse(r.allievi||'[]'); } catch(e){ return []; } })(),
       }));

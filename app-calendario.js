@@ -563,13 +563,13 @@ function fmRicalcolaGruppiCorso(gruppi, gruppoId, nuoviAllievi) {
 
 const _fmAdattaGruppoDB = (r) => ({
   id: r.id, corsoId: r.corso_id || '', nome: r.nome || '', docenteId: r.docente_id || '',
-  giorno: r.giorno || '', ora: r.ora || '', room: r.room || '',
+  giorno: r.giorno || '', ora: r.ora || '', room: r.room || '', note: r.note || '',
   annoInizio: r.anno_inizio != null ? r.anno_inizio : null,
   allievi: Array.isArray(r.allievi) ? r.allievi : (() => { try { const v = JSON.parse(r.allievi || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } })(),
 });
 
 const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizioniAnno, annoSel, canEdit }) => {
-  const FORM_VUOTO = { nome:'', docenteId:'', giorno:'', ora:'', room:'', allievi:[] };
+  const FORM_VUOTO = { nome:'', docenteId:'', giorno:'', ora:'', room:'', note:'', allievi:[] };
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(FORM_VUOTO);
@@ -599,6 +599,7 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
           id: payload.id, corso_id: payload.corsoId, nome: payload.nome,
           docente_id: payload.docenteId || null, giorno: payload.giorno || null,
           ora: payload.ora || null, room: payload.room || null,
+          note: payload.note || null,   // [FM-GRUPPI-NOTE]
           anno_inizio: payload.annoInizio != null ? payload.annoInizio : null,
           allievi: JSON.stringify(payload.allievi || []),
           updated_at: new Date().toISOString(),
@@ -607,6 +608,7 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
         res = await sb.from('gruppi_collettivi').update({
           nome: payload.nome, docente_id: payload.docenteId || null,
           giorno: payload.giorno || null, ora: payload.ora || null, room: payload.room || null,
+          note: payload.note || null,   // [FM-GRUPPI-NOTE]
           allievi: JSON.stringify(payload.allievi || []),
           updated_at: new Date().toISOString(),
         }).eq('id', payload.id).select('id');
@@ -643,7 +645,7 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
 
   const handleSaveForm = () => {
     if (!form.nome.trim()) return;
-    const patch = { nome: form.nome.trim(), docenteId: form.docenteId||'', giorno: form.giorno||'', ora: form.ora||'', room: form.room||'' };
+    const patch = { nome: form.nome.trim(), docenteId: form.docenteId||'', giorno: form.giorno||'', ora: form.ora||'', room: form.room||'', note: (form.note||'').trim() };
     if (editingId) {
       applicaComposizione(editingId, form.allievi, patch);
     } else {
@@ -660,7 +662,7 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
   };
 
   const startEdit = (g) => {
-    setForm({ nome: g.nome||'', docenteId: g.docenteId||'', giorno: g.giorno||'', ora: g.ora||'', room: g.room||'', allievi: (g.allievi||[]).map(String) });
+    setForm({ nome: g.nome||'', docenteId: g.docenteId||'', giorno: g.giorno||'', ora: g.ora||'', room: g.room||'', note: g.note||'', allievi: (g.allievi||[]).map(String) });
     setEditingId(g.id);
     setShowForm(true);
     setAddingToGroupId(null);
@@ -727,6 +729,10 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
         , React.createElement('input', {type:'text', value:form.giorno, placeholder:'Giorno (es. Lunedì)', onChange: e=>setForm(p=>({...p, giorno:e.target.value})), style:inputSt})
         , React.createElement('input', {type:'text', value:form.ora, placeholder:'Ora (es. 17:00)', onChange: e=>setForm(p=>({...p, ora:e.target.value})), style:inputSt})
         , React.createElement('input', {type:'text', value:form.room, placeholder:'Aula', onChange: e=>setForm(p=>({...p, room:e.target.value})), style:{...inputSt, gridColumn:'1 / -1'}})
+        /* [FM-GRUPPI-NOTE] note libere sul gruppo */
+        , React.createElement('textarea', {value:form.note||'', rows:3, placeholder:'Note (es. livello, brani in preparazione, accordi con le famiglie…)',
+            onChange: e=>setForm(p=>({...p, note:e.target.value})),
+            style:{...inputSt, gridColumn:'1 / -1', resize:'vertical', lineHeight:1.4}})
       )
       /* Allievi del gruppo */
       , React.createElement('div', {style:{fontSize:11, color:C.textMuted, textTransform:'uppercase', letterSpacing:'0.07em', marginTop:4}}
@@ -815,6 +821,11 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
                   , inModifica
                     ? React.createElement('div', {style:{padding:'10px 14px'}}, renderForm())
                     : React.createElement('div', {style:{padding:'10px 14px', display:'flex', flexDirection:'column', gap:6}}
+                    /* [FM-GRUPPI-NOTE] */
+                    , g.note && React.createElement('div', {style:{display:'flex', gap:8, alignItems:'flex-start', padding:'8px 10px', marginBottom:4, background:C.purpleBg, border:`1px solid ${C.purpleBorder}`, borderRadius:8}}
+                        , React.createElement(Ic,{n:'edit',size:12,color:C.purple})
+                        , React.createElement('div', {style:{fontSize:12, color:C.text, whiteSpace:'pre-wrap', wordBreak:'break-word', flex:1}}, g.note)
+                      )
                     , membri.length === 0
                       ? React.createElement('div', {style:{fontSize:12, color:C.textDim}}, 'Nessun allievo in questo gruppo')
                       : membri.map(s => (
@@ -9154,6 +9165,10 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
             )
             , selGruppo && React.createElement('div', { style: {fontSize:11, color:C.purple, marginTop:5} }
                 , 'Allievi del gruppo precompilati. Puoi comunque aggiungere o togliere singoli allievi qui sotto.'
+              )
+            /* [FM-GRUPPI-NOTE] promemoria delle note del gruppo nel form lezione collettiva */
+            , selGruppo && selGruppo.note && React.createElement('div', { style: {fontSize:11, color:C.textMuted, marginTop:5, padding:'6px 9px', background:C.purpleBg, border:`1px solid ${C.purpleBorder}`, borderRadius:7, whiteSpace:'pre-wrap'} }
+                , React.createElement('b', {style:{color:C.purple}}, 'Note gruppo: '), selGruppo.note
               )
           )
         )
