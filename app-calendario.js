@@ -1620,6 +1620,9 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const repertorio = student.repertorio || [];
   const repInStudio   = repertorio.filter(r => r.stato === "in studio");
   const repCompletato = repertorio.filter(r => r.stato === "completato");
+  // [FM-STATO-BRANO-LEZIONE] stati "iniziato" / "non completato" impostati dalle lezioni: prima non
+  // comparivano in nessuna sezione della tab Repertorio (contati solo nel totale).
+  const repAltri = repertorio.filter(r => r.stato !== "in studio" && r.stato !== "completato");
 
   // Selettore mese UI
   const MeseSelector = () => (
@@ -2139,6 +2142,32 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
                   , React.createElement('div', { style: {textAlign:"right",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3487}}
                     , React.createElement('div', { style: {fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3488}}, "dal " , fmtDate(b.dataInizio))
                     , React.createElement('span', { style: {display:"inline-block",marginTop:4,fontSize:10,background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`,borderRadius:4,padding:"2px 8px",textTransform:"uppercase",letterSpacing:"0.07em"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3489}}, "completato")
+                  )
+                )
+              ))
+            )
+          )
+
+          /* [FM-STATO-BRANO-LEZIONE] Altri stati (iniziato / non completato) */
+          , repAltri.length > 0 && (
+            React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"} }
+              , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8} }
+                , React.createElement('div', { style: {width:8,height:8,borderRadius:"50%",background:C.orange} })
+                , React.createElement('span', { style: {fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted} }, "Altri stati")
+              )
+              , repAltri.map((b,i) => (
+                React.createElement('div', { key: b.id || i, style: {padding:"14px 20px",borderBottom:i<repAltri.length-1?`1px solid ${C.border}`:"none",
+                  display:"grid",gridTemplateColumns:"1fr auto",gap:12,alignItems:"start"} }
+                  , React.createElement('div', null
+                    , React.createElement('div', { style: {fontSize:14,fontWeight:500,marginBottom:3} }, b.titolo)
+                    , React.createElement('div', { style: {fontSize:12,color:C.textMuted} }, [b.compositore, b.periodo].filter(Boolean).join(" · "))
+                    , b.note && React.createElement('div', { style: {fontSize:12,color:C.textDim,marginTop:4,fontStyle:"italic"} }, b.note)
+                  )
+                  , React.createElement('div', { style: {textAlign:"right",flexShrink:0} }
+                    , b.dataInizio && React.createElement('div', { style: {fontSize:11,color:C.textDim} }, "dal ", fmtDate(b.dataInizio))
+                    , (statoRegistroToId(b.stato) && typeof StatoBranoBadge !== 'undefined')
+                        ? React.createElement('div', { style: {marginTop:4} }, React.createElement(StatoBranoBadge, { stato: statoRegistroToId(b.stato) }))
+                        : React.createElement('span', { style: {display:"inline-block",marginTop:4,fontSize:10,color:C.textMuted,textTransform:"uppercase"} }, b.stato || "—")
                   )
                 )
               ))
@@ -5452,7 +5481,8 @@ const infoLezionePrecedente = (prev, repertorio) => {
     const versioneIdx = (vIdxRaw != null && !isNaN(vIdxRaw) && vs[vIdxRaw]) ? vIdxRaw : null; // [FM-PREV-BRANO-LINK]
     const vSel = versioneIdx != null ? vs[versioneIdx] : null;
     const tonalita = vSel ? vSel.tonalita : null;
-    return { id: b.id, title: b.title || b.titolo || 'Brano senza titolo', composer: b.composer || '', tonalita: tonalita || '', versioneIdx };
+    const stato = (prev.repertorioStati || {})[id] || ''; // [FM-STATO-BRANO-LEZIONE] stato in quella lezione
+    return { id: b.id, title: b.title || b.titolo || 'Brano senza titolo', composer: b.composer || '', tonalita: tonalita || '', versioneIdx, stato };
   }).filter(Boolean);
   const assente = !isColl(prev) && prev.attendance === 'assente';
   const mancanti = [];
@@ -5557,6 +5587,100 @@ function persistiBranoDaLezione(nb, origine) {
     window.__FM_RECENTLY_WRITTEN__.set(`brani:${nb.id}`, Date.now());
     return true;
   });
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// [FM-STATO-BRANO-LEZIONE] Stato del brano legato a LEZIONE + ALLIEVO
+// Prima lo stato (iniziato / in studio / completato / non completato) era salvato dentro la
+// versione del brano nel catalogo (brani.versioni[i].stato), quindi era UNICO per tutti: un brano
+// "in studio" per un allievo risultava "in studio" anche per chiunque altro.
+// Ora:
+//  - ogni lezione salva lo stato dei propri brani in lezioni.repertorio_stati ({branoId: stato});
+//    per le collettive vale per tutto il gruppo di quella lezione;
+//  - il registro personale dell'allievo (studenti.repertorio[].stato, tab Allievi → Repertorio)
+//    viene aggiornato con lo stato della SUA lezione più recente che indica uno stato per quel
+//    brano: modificare una lezione vecchia non sovrascrive uno stato più recente;
+//  - lo stato nel catalogo (brani.versioni[i].stato) non viene più toccato dalle lezioni.
+// Id stato (lezione/catalogo) ↔ valore nel registro allievo (formato storico con lo spazio).
+// ════════════════════════════════════════════════════════════════════════════════
+var FM_STATI_BRANO_IDS = ['iniziato', 'in_studio', 'completato', 'non_completato'];
+function statoBranoToRegistro(id) {
+  return ({ in_studio: 'in studio', completato: 'completato', iniziato: 'iniziato', non_completato: 'non completato' })[id] || '';
+}
+function statoRegistroToId(v) {
+  const n = String(v || '').toLowerCase().replace(/_/g, ' ').trim();
+  return ({ 'in studio': 'in_studio', 'completato': 'completato', 'iniziato': 'iniziato', 'non completato': 'non_completato' })[n] || '';
+}
+function labelStatoBrano(id) {
+  const cfg = (typeof STATO_BRANO_CONFIG !== 'undefined' && STATO_BRANO_CONFIG && STATO_BRANO_CONFIG[id]) || null;
+  return cfg ? (cfg.icon + ' ' + cfg.label) : ({ iniziato: '🟡 Iniziato', in_studio: '🔵 In studio', completato: '🟢 Completato', non_completato: '🔴 Non completato' })[id] || id;
+}
+// L'allievo (oggetto studente) partecipa alla lezione?
+function lezioneCoinvolgeAllievo(l, stu) {
+  if (!l || !stu) return false;
+  if (isColl(l)) return (l.students || []).some(s => (s.id != null && String(s.id) === String(stu.id)) ||
+    (s.name && stu.name && String(s.name).toLowerCase().trim() === String(stu.name).toLowerCase().trim()));
+  if (l.studentId != null && stu.id != null) return String(l.studentId) === String(stu.id);
+  return !!(l.student && stu.name && String(l.student).toLowerCase().trim() === String(stu.name).toLowerCase().trim());
+}
+const _fmLezioneDopo = (a, b) => (a.date || '') > (b.date || '') || ((a.date || '') === (b.date || '') && (a.hour || '') > (b.hour || ''));
+// Stato attuale di un brano per un allievo: quello della sua lezione più recente che ne indica
+// uno; se nessuna lezione lo indica, quello del registro (dati storici).
+function statoBranoAllievo(stu, branoId, tutteLeLezioni) {
+  let best = null;
+  (tutteLeLezioni || []).forEach(l => {
+    const st = (l.repertorioStati || {})[branoId];
+    if (!st || !lezioneCoinvolgeAllievo(l, stu)) return;
+    if (!best || _fmLezioneDopo(l, best)) best = l;
+  });
+  if (best) return best.repertorioStati[branoId];
+  const r = ((stu && stu.repertorio) || []).find(x => String(x.id) === String(branoId));
+  return r ? statoRegistroToId(r.stato) : '';
+}
+// Calcola il nuovo registro (studenti.repertorio) di UN allievo dopo che `lesson` ha impostato lo
+// stato dei brani in `branoIds`. Restituisce lo stesso array se non cambia nulla (niente sync inutili).
+function applicaStatiLezioneARegistro(stu, lesson, branoIds, tutteLeLezioni, catalogo) {
+  const rep = Array.isArray(stu.repertorio) ? stu.repertorio : [];
+  if (!lezioneCoinvolgeAllievo(lesson, stu)) return rep;
+  let out = rep, cambiato = false;
+  (branoIds || []).forEach(bid => {
+    const statoId = (lesson.repertorioStati || {})[bid];
+    if (!statoId) return;
+    // una lezione PIÙ RECENTE dello stesso allievo indica già uno stato per questo brano → vince lei
+    const piuRecente = (tutteLeLezioni || []).some(l => l.id !== lesson.id && (l.repertorioStati || {})[bid] &&
+      _fmLezioneDopo(l, lesson) && lezioneCoinvolgeAllievo(l, stu));
+    if (piuRecente) return;
+    const valore = statoBranoToRegistro(statoId);
+    const idx = out.findIndex(r => String(r.id) === String(bid));
+    if (idx >= 0) {
+      if (out[idx].stato === valore) return;
+      out = out.map((r, i) => i === idx ? { ...r, stato: valore } : r); cambiato = true;
+    } else {
+      const b = (catalogo || []).find(x => String(x.id) === String(bid));
+      if (!b) return;
+      out = [...out, { id: bid, titolo: b.title || b.titolo || '', compositore: b.composer || b.compositore || '',
+        periodo: b.period || b.periodo || '', tonalita: b.tonality || b.tonalita || '', stato: valore, note: '',
+        dataInizio: lesson.date || '' }];
+      cambiato = true;
+    }
+  });
+  return cambiato ? out : rep;
+}
+// Aggiorna il registro di tutti gli allievi della lezione per i brani il cui stato è cambiato
+// rispetto a `lessonPrima` (null = lezione nuova → tutti i brani con uno stato).
+function sincronizzaStatiRegistroAllievi(lessonDopo, lessonPrima, tutteLeLezioni, setStudents) {
+  if (!lessonDopo || !setStudents) return;
+  const nuovi = lessonDopo.repertorioStati || {}, vecchi = (lessonPrima && lessonPrima.repertorioStati) || {};
+  const ids = (lessonDopo.repertorioIds || []).filter(id => nuovi[id] && nuovi[id] !== vecchi[id]);
+  if (ids.length === 0) return;
+  const altre = (tutteLeLezioni || []).filter(l => l.id !== lessonDopo.id);
+  const catalogo = window.__repertorio__ || [];
+  setStudents(prev => prev.map(stu => {
+    const rep = applicaStatiLezioneARegistro(stu, lessonDopo, ids, altre, catalogo);
+    if (rep === stu.repertorio) return stu;                                  // invariato
+    if (!Array.isArray(stu.repertorio) && rep.length === 0) return stu;      // nessun registro e nulla da aggiungere
+    return { ...stu, repertorio: rep };
+  }));
 }
 
 // Salva (aggiunge o modifica) una versione di un brano, scrivendo direttamente su Supabase
@@ -5949,7 +6073,23 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
     ? studentIndividualCourses.map(c => c.instrument)
     : dynamicInstruments;
   // statiBrani: {[branoId]: {versioneIdx: number, stato: string}}
-  // Inizializzato dai dati esistenti nel brano se disponibili
+  // [FM-STATO-BRANO-LEZIONE] Lo stato NON viene più dal catalogo (era unico per tutti gli allievi):
+  // 1) stato già salvato in questa lezione, 2) stato attuale dell'allievo per quel brano (sua
+  // lezione più recente / registro Allievi → Repertorio), 3) "in studio".
+  const _statoDefaultLF = (id) => {
+    if (initial && initial.repertorioStati && initial.repertorioStati[id]) return initial.repertorioStati[id];
+    try {
+      const nome = (f && f.student) || (initial && initial.student) || '';
+      const sid  = (f && f.studentId) || (initial && initial.studentId) || null;
+      const stu = (_studentsRaw || []).find(x => (sid != null && String(x.id) === String(sid)) ||
+        (nome && String(x.name || x.nome || '').toLowerCase().trim() === String(nome).toLowerCase().trim()));
+      if (stu) {
+        const st = statoBranoAllievo(stu, id, (_lessonsLF || []).filter(l => !initial || l.id !== initial.id));
+        if (st) return st;
+      }
+    } catch (e) {}
+    return 'in_studio';
+  };
   const [statiBrani, setStatiBrani] = useState(() => {
     const init = {};
     (initial?.repertorioIds||[]).forEach(id => {
@@ -5958,13 +6098,12 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
       // Se la lezione ha già una versione salvata per questo brano, riparti da quella
       const versioneSalvata = (initial?.repertorioVersioni||{})[id];
       const vIdx = versioneSalvata != null ? versioneSalvata : 0;
-      const vSel = (b.versioni||[])[vIdx];
-      init[id] = { versioneIdx: vIdx, stato: vSel?.stato||'in_studio' };
+      init[id] = { versioneIdx: vIdx, stato: _statoDefaultLF(id) };
     });
     return init;
   });
   const setStatoBrano = (branoId, campo, valore) => {
-    setStatiBrani(p => ({...p, [branoId]: {...(p[branoId]||{versioneIdx:0,stato:'in_studio'}), [campo]:valore}}));
+    setStatiBrani(p => ({...p, [branoId]: {...(p[branoId]||{versioneIdx:0,stato:_statoDefaultLF(branoId)}), [campo]:valore}}));
   };
   const [editingVersioneFor, setEditingVersioneFor] = useState(null); // { branoId, versioneIdx } | null (versioneIdx null = nuova)
   const [editingCampoFor, setEditingCampoFor] = useState(null); // { branoId, campo: 'genere'|'tonalita', valore } | null
@@ -6026,38 +6165,16 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
     // che viene inserita (l'update separato qui sotto poteva arrivare prima/dopo l'insert e,
     // partendo da una copia locale senza versioni, azzerava tonalità e corso).
     const _nuoviBr = {};
-    Object.entries(newlyCreatedBraniRef.current || {}).forEach(([id, nb]) => {
-      const st = statiBrani[id];
-      let out = nb;
-      if (st && st.stato) {
-        const vIdx = parseInt(st.versioneIdx) || 0;
-        out = { ...nb, versioni: (nb.versioni||[]).map((v,i) => i === vIdx ? { ...v, stato: st.stato } : v) };
-      }
-      _nuoviBr[id] = out;
+    Object.entries(newlyCreatedBraniRef.current || {}).forEach(([id, nb]) => { _nuoviBr[id] = nb; });
+    // [FM-STATO-BRANO-LEZIONE] lo stato di ogni brano va sulla LEZIONE (repertorioStati), non più nel
+    // catalogo: così vale solo per questo allievo/lezione. Include anche i brani mai toccati nel
+    // selettore, con il loro stato di default (quello mostrato nel form).
+    const _repertorioStati = {};
+    (f.repertorioIds || []).forEach(id => {
+      const st = (statiBrani[id] && statiBrani[id].stato) || _statoDefaultLF(id);
+      if (st) _repertorioStati[id] = st;
     });
-    // Salva subito la lezione — non aspettare l'update degli stati brani
-    onSave({ ...f, _newBrani: _nuoviBr, _statiBrani: statiBrani });
-    // Aggiorna gli stati dei brani in background (fire-and-forget)
-    if (Object.keys(statiBrani).some(id => !_nuoviBr[id])) {
-      const sb = window.supabaseClient;
-      if (sb) {
-        (async () => {
-          for (const [branoId, {versioneIdx, stato}] of Object.entries(statiBrani)) {
-            if (_nuoviBr[branoId]) continue; // [FM-BRANO-DA-LEZIONE] già incluso nell'insert
-            const b = repertorio.find(r=>r.id===branoId); if (!b) continue;
-            const nuoveVersioni = (b.versioni||[]).map((v,i) =>
-              i === (parseInt(versioneIdx)||0) ? {...v, stato} : v
-            );
-            // [FM-STATO-BRANO-LDM] allinea anche lo stato locale: prima restava quello vecchio e una
-            // modifica successiva delle versioni (es. dal modale lezione) riscriveva lo stato precedente.
-            if (_setRepertorioLF) _setRepertorioLF(p => p.map(r => r.id === branoId ? { ...r, versioni: nuoveVersioni } : r));
-            try {
-              await sb.from('brani').update({versioni: nuoveVersioni}).eq('id', branoId);
-            } catch(err2) { console.warn('[FM] update stato brano:', err2?.message); }
-          }
-        })();
-      }
-    }
+    onSave({ ...f, repertorioStati: _repertorioStati, _newBrani: _nuoviBr, _statiBrani: statiBrani });
   };
 
   // ATT_STYLES: vedi definizione globale
@@ -6166,7 +6283,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
                         {id:'completato',     label:'🟢 Completato',     color:'#15803d'},
                         {id:'non_completato', label:'🔴 Non completato', color:C.red},
                       ];
-                      const statoB = statiBrani[id] || {versioneIdx:0, stato:'in_studio'};
+                      const statoB = statiBrani[id] || {versioneIdx:0, stato:_statoDefaultLF(id)};
                       const versioni = b.versioni||[];
                       const tonalitaMostrata = versioni[statoB.versioneIdx] ? versioni[statoB.versioneIdx].tonalita : (versioni[0] && versioni[0].tonalita);
                       return (
@@ -6609,6 +6726,8 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
     if (!st && nome) { const n = String(nome).toLowerCase().trim(); st = lista.find(x => String(x.name || '').toLowerCase().trim() === n); }
     return st || null;
   };
+  // [FM-STATO-BRANO-LEZIONE] lezioni da considerare per lo "stato attuale" dell'allievo (esclusa questa)
+  const _lezioniPerStato = ((window.__FM_DATA__ && window.__FM_DATA__.lessons) || []).filter(l => l.id !== lesson.id);
   const _apriBranoRepertorio = (branoId) => {
     if (!onQuickAction || !onNavigate) return;
     onQuickAction('openBrano:' + branoId);
@@ -6992,6 +7111,9 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                           , _cliccabile ? React.createElement('span', { style: {display:"inline-block", marginLeft:3, verticalAlign:"middle"}}
                               , React.createElement(Ic, { n:"link", size:10, stroke:C.blue})) : null
                         )
+                        , b.stato && typeof StatoBranoBadge !== 'undefined'
+                            ? React.createElement('span', { style: {marginLeft:5, display:"inline-block", verticalAlign:"middle"} }, React.createElement(StatoBranoBadge, { stato: b.stato }))
+                            : null
                       );
                     })
                 )
@@ -7202,46 +7324,39 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                           ))
                       )
                     )
-                    /* [FM-STATO-BRANO-LDM] Stato del brano modificabile direttamente dal modale lezione.
-                       Lo stato è per VERSIONE (versioni[i].stato, come in Repertorio e nel form lezione):
-                       si applica alla versione scelta per questa lezione, o all'unica versione esistente. */
+                    /* [FM-STATO-BRANO-LDM] [FM-STATO-BRANO-LEZIONE] Stato del brano modificabile dal modale.
+                       È legato a QUESTA LEZIONE (lesson.repertorioStati) e quindi all'allievo (per le
+                       collettive a tutto il gruppo della lezione): non tocca più il catalogo, così lo
+                       stesso brano può essere "in studio" per un allievo e "completato" per un altro. */
                     , (() => {
-                        const _vSelN = versioneSel != null && versioni[Number(versioneSel)] ? Number(versioneSel) : null;
-                        const _idxStato = _vSelN != null ? _vSelN : (versioni.length <= 1 ? 0 : null);
-                        const _statoAtt = _idxStato != null && versioni[_idxStato] ? (versioni[_idxStato].stato || "") : "";
-                        const _cfgStati = (typeof STATO_BRANO_CONFIG !== 'undefined' && STATO_BRANO_CONFIG) || {
-                          iniziato:{label:'Iniziato',icon:'🟡'}, in_studio:{label:'In studio',icon:'🔵'},
-                          completato:{label:'Completato',icon:'🟢'}, non_completato:{label:'Non completato',icon:'🔴'} };
+                        const _statoLez = (lesson.repertorioStati || {})[id] || "";
+                        // stato attuale dell'allievo (sua lezione più recente / registro) come suggerimento
+                        const _stuInd = !isColl(lesson) ? _trovaAllievo(lesson.studentId, lesson.student) : null;
+                        const _statoAllievo = _stuInd ? statoBranoAllievo(_stuInd, id, _lezioniPerStato) : "";
                         if (!canEdit) {
-                          return _statoAtt && typeof StatoBranoBadge !== 'undefined'
-                            ? React.createElement('div', { style: {marginTop:8} }, React.createElement(StatoBranoBadge, { stato: _statoAtt }))
+                          const _st = _statoLez || _statoAllievo;
+                          return _st && typeof StatoBranoBadge !== 'undefined'
+                            ? React.createElement('div', { style: {marginTop:8} }, React.createElement(StatoBranoBadge, { stato: _st }))
                             : null;
                         }
-                        if (_idxStato == null) {
-                          return React.createElement('div', { style: {marginTop:8, fontSize:11, color:C.textDim, fontStyle:"italic"} }
-                            , "Seleziona una versione per impostarne lo stato.");
-                        }
-                        const _cambiaStato = (nuovoStato) => {
-                          const vEsistente = versioni[_idxStato];
-                          const base = vEsistente || {tonalita:"", strumento:isColl(lesson)?(lesson.courseName||""):(lesson.instrument||""), spartiti:[], allegati:[], link:[], allievi:[]};
-                          const nuovoIdx = salvaVersioneBrano(id, vEsistente ? _idxStato : null, {...base, stato: nuovoStato}, _repertorioLDM, _setRepertorioLDM);
-                          window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
-                          window.__FM_RECENTLY_WRITTEN__.set(`brani:${id}`, Date.now());
-                          if (nuovoIdx != null && (lesson.repertorioVersioni||{})[id] !== nuovoIdx && (vEsistente == null || versioni.length > 1)) {
-                            onUpdateLesson({ ...lesson, repertorioVersioni: { ...(lesson.repertorioVersioni||{}), [id]: nuovoIdx } });
-                          }
-                        };
                         return React.createElement('div', { style: {display:"flex", alignItems:"center", gap:8, marginTop:8, flexWrap:"wrap"} }
-                          , React.createElement('span', { style: {fontSize:11, color:C.textMuted} }, "Stato:")
+                          , React.createElement('span', { style: {fontSize:11, color:C.textMuted} }, isColl(lesson) ? "Stato (gruppo):" : "Stato:")
                           , React.createElement('select', {
-                              value: _statoAtt,
-                              onChange: e => { if (e.target.value) _cambiaStato(e.target.value); },
+                              value: _statoLez,
+                              onChange: e => {
+                                const v = e.target.value;
+                                const rs = { ...(lesson.repertorioStati || {}) };
+                                if (v) rs[id] = v; else delete rs[id];
+                                onUpdateLesson({ ...lesson, repertorioStati: rs });
+                              },
                               style: {fontSize:11, padding:"5px 8px", borderRadius:6, border:`1px solid ${typeBd}`,
                                 background:C.surface, color:C.text, flex:"1 1 150px"} }
-                            , !_statoAtt && React.createElement('option', { value: "" }, "— imposta stato —")
-                            , Object.keys(_cfgStati).map(k => React.createElement('option', { key: k, value: k }, (_cfgStati[k].icon||'') + ' ' + _cfgStati[k].label))
+                            , React.createElement('option', { value: "" }, "— non indicato —")
+                            , FM_STATI_BRANO_IDS.map(k => React.createElement('option', { key: k, value: k }, labelStatoBrano(k)))
                           )
-                          , _statoAtt && typeof StatoBranoBadge !== 'undefined' && React.createElement(StatoBranoBadge, { stato: _statoAtt })
+                          , _statoLez && typeof StatoBranoBadge !== 'undefined' && React.createElement(StatoBranoBadge, { stato: _statoLez })
+                          , !_statoLez && _statoAllievo && React.createElement('span', { style: {fontSize:10.5, color:C.textDim, fontStyle:"italic"} }
+                              , "attuale per l'allievo: ", labelStatoBrano(_statoAllievo))
                         );
                       })()
                     , canEdit && (
@@ -12078,6 +12193,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           .filter(Boolean);
         notifyRepertorioAggiunto(data.student, data.teacher, _titoliNuovi);
       }
+      // [FM-STATO-BRANO-LEZIONE] stato dei brani di questa lezione → registro dell'allievo
+      sincronizzaStatiRegistroAllievi(dataFinal, null, lessons, propSetStudents);
 
       // ── 3. Salva allegati della lezione con il nuovo lessonId ──
       // (i file sono già stati caricati su Storage dal form; qui li colleghiamo al DB,
@@ -12303,6 +12420,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                               ? JSON.stringify(dataNormFull.repertorioIds) : null,
           repertorio_versioni: dataNormFull.repertorioVersioni && Object.keys(dataNormFull.repertorioVersioni).length > 0
                               ? JSON.stringify(dataNormFull.repertorioVersioni) : null,
+          repertorio_stati: dataNormFull.repertorioStati && Object.keys(dataNormFull.repertorioStati).length > 0
+                              ? dataNormFull.repertorioStati : null, // [FM-STATO-BRANO-LEZIONE]
           corso_id:         mergedCourseId,
           corso_nome:       mergedCourseName,
           gruppo_id:        dataNormFull.gruppoId ? String(dataNormFull.gruppoId) : null,
@@ -12480,6 +12599,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           notifyRepertorioAggiunto(mergedStudents.map(s => s.name).filter(Boolean), dataNormFull.teacher, _titoliNuoviColl.filter(Boolean));
         }
       }
+      // [FM-STATO-BRANO-LEZIONE] stati cambiati in questa modifica → registro degli allievi
+      sincronizzaStatiRegistroAllievi({ ...dataNormFull, id: data.id }, existingLesson || null, lessons, propSetStudents);
 
       // ── Crea lezione successiva se ricorrente e viene segnata presenza ──
       const originalLesson = (lessons||[]).find(l => l.id === data.id);
@@ -13327,11 +13448,14 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             onAttendance: handleAttendance,
             onIscrizione: handleIscrizioneProva,
             onUpdateLesson: (updated) => {
+              const _primaUpd = (lessons || []).find(l => l.id === updated.id) || null;
               setLessons(p => p.map(l => l.id === updated.id ? {...l,...updated} : l));
+              // [FM-STATO-BRANO-LEZIONE] se è cambiato lo stato di un brano, aggiorna il registro allievi
+              sincronizzaStatiRegistroAllievi({ ...(_primaUpd || {}), ...updated }, _primaUpd, lessons, propSetStudents);
               // Persisti su Supabase
               const sb = window.supabaseClient;
               if (sb && updated.id) {
-                return sb.from('lezioni').update({
+                const _rigaUpd = {
                   topic:          updated.topic        || null,
                   exercises:      updated.exercises    || null,
                   link_url:       updated.linkUrl      || null,
@@ -13340,13 +13464,27 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                                     ? JSON.stringify(updated.repertorioIds) : null,
                   repertorio_versioni: updated.repertorioVersioni && Object.keys(updated.repertorioVersioni).length > 0
                                     ? JSON.stringify(updated.repertorioVersioni) : null,
+                  repertorio_stati: updated.repertorioStati && Object.keys(updated.repertorioStati).length > 0
+                                    ? updated.repertorioStati : null, // [FM-STATO-BRANO-LEZIONE]
                   manuali_ids:    updated.manualiIds && updated.manualiIds.length > 0
                                     ? JSON.stringify(updated.manualiIds) : null,
                   students:       updated.students && updated.students.length > 0
                                     ? updated.students : null, // [FM-STUDENTS-JSONB]
                   motivo_assenza: updated.motivoAssenza || null,
                   updated_at:     new Date().toISOString(),
-                }).eq('id', updated.id).then(({ error }) => {
+                };
+                // colonna non ancora creata (migrazione SQL non eseguita) → la si toglie e si riprova
+                const _updLez = async (r, tent) => {
+                  const res = await sb.from('lezioni').update(r).eq('id', updated.id);
+                  const m = res.error && /Could not find the '([^']+)' column/.exec(res.error.message || '');
+                  if (m && tent > 0 && Object.prototype.hasOwnProperty.call(r, m[1])) {
+                    console.warn(`[FM] colonna ${m[1]} assente su lezioni: eseguire la migrazione SQL`);
+                    const { [m[1]]: _om, ...resto } = r;
+                    return _updLez(resto, tent - 1);
+                  }
+                  return res;
+                };
+                return _updLez(_rigaUpd, 3).then(({ error }) => {
                   if (error) { console.warn('[FM] onUpdateLesson error:', error.message); return false; }
                   return true; // [FM-AUTOSAVE-TESTI] esito usato dall'autosalvataggio
                 }, (err) => { console.warn('[FM] onUpdateLesson error:', err && err.message); return false; });
@@ -16162,6 +16300,9 @@ const AllievoBraniView = ({allievo,allievoId,brani,allStudents,lessons,onBack})=
                       , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7631}}, b.composer, b.tonality?` · ${b.tonality}`:"")
                     )
                     , React.createElement('div', { style: {display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7633}}
+                      /* [FM-STATO-BRANO-LEZIONE] stato del brano PER QUESTO ALLIEVO */
+                      , (()=>{ const _st = _stu ? statoBranoAllievo(_stu, b.id, lessons||[]) : '';
+                          return _st && typeof StatoBranoBadge!=='undefined' ? React.createElement(StatoBranoBadge, { stato: _st }) : null; })()
                       , React.createElement(DiffBadge, { diff: b.difficulty, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7634}})
                       , b.periodo&&React.createElement('span', { style: {background:p.hex+"18",color:p.hex,border:`1px solid ${p.hex}30`,borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:600}, __source: {fileName: _jsxFileName, lineNumber: 7635}}, b.periodo)
                       , React.createElement('span', { style: {fontSize:11,color:C.textDim} }, (lessons||[]).filter(l=>(l.repertorioIds||[]).includes(b.id)).length, " lez." )

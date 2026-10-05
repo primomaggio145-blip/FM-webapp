@@ -146,6 +146,14 @@
         if (!r.repertorio_versioni) return {};
         try { return JSON.parse(r.repertorio_versioni); } catch(e) { return {}; }
       })(),
+      // [FM-STATO-BRANO-LEZIONE] stato di ciascun brano IN QUESTA LEZIONE ({branoId: stato});
+      // jsonb, ma accetta anche una stringa JSON per robustezza.
+      repertorioStati: (() => {
+        const v = r.repertorio_stati;
+        if (!v) return {};
+        if (typeof v === 'object') return v;
+        try { return JSON.parse(v) || {}; } catch(e) { return {}; }
+      })(),
       // Campi collettive
       courseId:   r.corso_id   || null,
       courseName: r.corso_nome || null,
@@ -380,6 +388,8 @@
         repertorio_versioni: l.repertorioVersioni && Object.keys(l.repertorioVersioni).length > 0
           ? JSON.stringify(l.repertorioVersioni)
           : null,
+        repertorio_stati: l.repertorioStati && Object.keys(l.repertorioStati).length > 0
+          ? l.repertorioStati : null, // [FM-STATO-BRANO-LEZIONE]
         manuali_ids: l.manualiIds && l.manualiIds.length > 0
           ? JSON.stringify(l.manualiIds)
           : null,

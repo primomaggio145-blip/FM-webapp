@@ -317,9 +317,15 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         || (a.instrument||'')===fStrumento
         || suoiBrani.some(b=>strumentiDelBrano(b).includes(fStrumento));
       const matchTonalita = !fTonalita || suoiBrani.some(b=>(b.versioni||[]).some(v=>v.tonalita===fTonalita));
-      const matchStato = !fStato || suoiBrani.some(b=>(b.versioni||[]).some(v=>v.stato===fStato));
+      // [FM-STATO-BRANO-LEZIONE] nella tab "Per allievo" lo stato è quello DELL'ALLIEVO (sua lezione
+      // più recente / registro), non quello unico del catalogo
+      const matchStato = !fStato || suoiBrani.some(b=>{
+        const st = (typeof statoBranoAllievo==='function') ? statoBranoAllievo(a, b.id, _lessonsRep)
+          : (b.versioni||[]).some(v=>v.stato===fStato) ? fStato : '';
+        return st===fStato;
+      });
       return matchQ && matchStrumento && matchTonalita && matchStato;
-    }),[_studBranoRep,brani,search,fStrumento,fTonalita,fStato]);
+    }),[_studBranoRep,brani,search,fStrumento,fTonalita,fStato,_lessonsRep]);
   
 
     // ── STATS ──
