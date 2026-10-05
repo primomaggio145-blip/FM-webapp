@@ -12122,7 +12122,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       const originalLesson = (lessons||[]).find(l => l.id === data.id);
       const attendanceNow = data.attendance && data.attendance !== '';
       if (attendanceNow && dataNormFull.recurrence && dataNormFull.recurrence !== "Nessuna") {
-        const isLezioneRecupero = dataNormFull.tipo === 'recupero' || dataNormFull.inRecupero === true;
+        // [FM-INRECUPERO-RICORRENTE] conta lo stato in recupero PRIMA del salvataggio: se la lezione
+        // viene segnata ora "Da recuperare", la serie prosegue e si genera la prossima.
+        const _eraInRecupero = originalLesson ? originalLesson.inRecupero === true : dataNormFull.inRecupero === true;
+        const isLezioneRecupero = dataNormFull.tipo === 'recupero' || _eraInRecupero;
         if (!isLezioneRecupero) {
           const gap      = gapProssimaLezione(dataNormFull);
           const nextDate = yyyymmdd(addDays(new Date((dataNormFull.date||"")+"T00:00:00"), gap));
@@ -12277,11 +12280,14 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           });
         }
 
-        // Se segno presenza REALE (non in_recupero) su lezione ricorrente → crea la prossima
+        // Se segno una presenza (anche "DA RECUPERARE") su lezione ricorrente → crea la prossima
+        // [FM-INRECUPERO-RICORRENTE] "Da recuperare" non interrompe più la serie: la lezione saltata
+        // verrà recuperata a parte, ma la prossima della ricorrenza va comunque generata.
+        // isLezioneRecupero usa lo stato PRECEDENTE al click: una lezione già in recupero non rigenera.
         // cambio_ora: crea la prossima lezione all'orario originale, poi apre modal per cambiare l'attuale
         // IMPORTANTE: le lezioni con recurrence='Nessuna' non creano ricorrenti — usato per lezioni già consumate
         const isLezioneRecupero = lesson && (lesson.tipo === 'recupero' || lesson.inRecupero === true);
-        const valCreaLezione = val && val !== "" && val !== "in_recupero";
+        const valCreaLezione = !!(val && val !== "");
         const isCambioOra = val === 'cambio_ora';
         // Se la lezione ha recurrence='Nessuna' (già consumata da un cambio_ora precedente) non creare ricorrente
         if (lesson && lesson.recurrence === 'Nessuna_consumed') {
