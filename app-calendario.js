@@ -539,96 +539,216 @@ const CourseDetail = ({ course, students, docenti:_docentiRaw, onBack, onEdit, o
 // Gestione admin dei sottogruppi fissi di un corso collettivo: creazione, modifica,
 // eliminazione gruppi + assegnazione/rimozione allievi. Un allievo può appartenere
 // al massimo a UN gruppo per ciascun corso a cui è iscritto (vincolo enforced qui sotto).
+// [FM-GRUPPI-EDIT] Calcola la nuova composizione dei gruppi di UN corso quando il gruppo
+// `gruppoId` deve contenere esattamente `nuoviAllievi`. Un allievo sta in un solo gruppo per
+// corso: se era in un altro gruppo viene spostato (rimosso dall'altro).
+// Restituisce { gruppi: nuovaLista, cambiati: [gruppi modificati] }.
+function fmRicalcolaGruppiCorso(gruppi, gruppoId, nuoviAllievi) {
+  const target = Array.from(new Set((nuoviAllievi || []).map(String)));
+  const setTarget = new Set(target);
+  const cambiati = [];
+  const out = (gruppi || []).map(g => {
+    const prima = (g.allievi || []).map(String);
+    let dopo;
+    if (String(g.id) === String(gruppoId)) dopo = target;
+    else dopo = prima.filter(id => !setTarget.has(id));
+    const uguale = dopo.length === prima.length && dopo.every((id, i) => id === prima[i]);
+    if (uguale) return g;
+    const ng = { ...g, allievi: dopo };
+    cambiati.push(ng);
+    return ng;
+  });
+  return { gruppi: out, cambiati };
+}
+
+const _fmAdattaGruppoDB = (r) => ({
+  id: r.id, corsoId: r.corso_id || '', nome: r.nome || '', docenteId: r.docente_id || '',
+  giorno: r.giorno || '', ora: r.ora || '', room: r.room || '',
+  annoInizio: r.anno_inizio != null ? r.anno_inizio : null,
+  allievi: Array.isArray(r.allievi) ? r.allievi : (() => { try { const v = JSON.parse(r.allievi || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } })(),
+});
+
 const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizioniAnno, annoSel, canEdit }) => {
+  const FORM_VUOTO = { nome:'', docenteId:'', giorno:'', ora:'', room:'', allievi:[] };
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState({ nome:'', docenteId:'', giorno:'', ora:'', room:'' });
+  const [form, setForm] = useState(FORM_VUOTO);
   const [addingToGroupId, setAddingToGroupId] = useState(null);
 
   const sb = window.supabaseClient;
+  const ff = "'Open Sans',sans-serif";
 
-  const persist = (action, payload) => {
+  // Ricarica i gruppi dal DB: usato quando un salvataggio fallisce, così la UI torna a
+  // mostrare la situazione REALE invece di una modifica solo locale.
+  const ricaricaDaDB = async () => {
     if (!sb) return;
-    if (action === 'insert') {
-      sb.from('gruppi_collettivi').insert({
-        id: payload.id, corso_id: payload.corsoId, nome: payload.nome,
-        docente_id: payload.docenteId || null, giorno: payload.giorno || null,
-        ora: payload.ora || null, room: payload.room || null,
-        anno_inizio: payload.annoInizio != null ? payload.annoInizio : null,
-        allievi: JSON.stringify(payload.allievi || []),
-        updated_at: new Date().toISOString(),
-      }).then(({ error }) => { if (error) console.warn('[FM] gruppo insert error:', error.message); });
-    } else if (action === 'update') {
-      sb.from('gruppi_collettivi').update({
-        nome: payload.nome, docente_id: payload.docenteId || null,
-        giorno: payload.giorno || null, ora: payload.ora || null, room: payload.room || null,
-        allievi: JSON.stringify(payload.allievi || []),
-        updated_at: new Date().toISOString(),
-      }).eq('id', payload.id).then(({ error }) => { if (error) console.warn('[FM] gruppo update error:', error.message); });
-    } else if (action === 'delete') {
-      sb.from('gruppi_collettivi').delete().eq('id', payload).then(({ error }) => { if (error) console.warn('[FM] gruppo delete error:', error.message); });
-    }
+    const { data, error } = await sb.from('gruppi_collettivi').select('*');
+    if (error) { console.warn('[FM] gruppi reload error:', error.message); return; }
+    setGruppi(() => (data || []).map(_fmAdattaGruppoDB));
   };
 
-  const resetForm = () => { setForm({ nome:'', docenteId:'', giorno:'', ora:'', room:'' }); setShowForm(false); setEditingId(null); };
+  // [FM-GRUPPI-EDIT] Prima l'esito della scrittura veniva ignorato: un UPDATE/DELETE bloccato
+  // dalle policy RLS non dà errore ma aggiorna 0 righe → la modifica sembrava fatta e spariva
+  // al ricaricamento. Ora verifichiamo le righe toccate (.select) e avvisiamo.
+  const persist = async (action, payload) => {
+    if (!sb) return true;
+    let res;
+    try {
+      if (action === 'insert') {
+        res = await sb.from('gruppi_collettivi').insert({
+          id: payload.id, corso_id: payload.corsoId, nome: payload.nome,
+          docente_id: payload.docenteId || null, giorno: payload.giorno || null,
+          ora: payload.ora || null, room: payload.room || null,
+          anno_inizio: payload.annoInizio != null ? payload.annoInizio : null,
+          allievi: JSON.stringify(payload.allievi || []),
+          updated_at: new Date().toISOString(),
+        }).select('id');
+      } else if (action === 'update') {
+        res = await sb.from('gruppi_collettivi').update({
+          nome: payload.nome, docente_id: payload.docenteId || null,
+          giorno: payload.giorno || null, ora: payload.ora || null, room: payload.room || null,
+          allievi: JSON.stringify(payload.allievi || []),
+          updated_at: new Date().toISOString(),
+        }).eq('id', payload.id).select('id');
+      } else if (action === 'delete') {
+        res = await sb.from('gruppi_collettivi').delete().eq('id', payload).select('id');
+      }
+    } catch (e) { res = { error: { message: e && e.message || String(e) } }; }
+    const { data, error } = res || {};
+    if (error || !data || data.length === 0) {
+      const motivo = error ? error.message : 'nessuna riga modificata (permessi Supabase/RLS sulla tabella gruppi_collettivi)';
+      console.warn('[FM] gruppo ' + action + ' NON salvato:', motivo);
+      window.alert('⚠️ Il gruppo NON è stato salvato su Supabase.\n\nMotivo: ' + motivo + '\n\nLa lista viene ricaricata con i dati reali.');
+      ricaricaDaDB();
+      return false;
+    }
+    window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
+    window.__FM_RECENTLY_WRITTEN__.set(`gruppi_collettivi:${action === 'delete' ? payload : payload.id}`, Date.now());
+    return true;
+  };
+
+  const resetForm = () => { setForm(FORM_VUOTO); setShowForm(false); setEditingId(null); };
+
+  // Applica una nuova composizione al gruppo (spostando gli allievi dagli altri gruppi del corso)
+  const applicaComposizione = (gruppoId, nuoviAllievi, patchGruppo) => {
+    const base = gruppi.map(g => String(g.id) === String(gruppoId) ? { ...g, ...(patchGruppo || {}) } : g);
+    const { gruppi: nuovi, cambiati } = fmRicalcolaGruppiCorso(base, gruppoId, nuoviAllievi);
+    // Includi il gruppo target anche se cambiano solo nome/orari
+    const target = nuovi.find(g => String(g.id) === String(gruppoId));
+    const daSalvare = cambiati.some(g => String(g.id) === String(gruppoId)) ? cambiati : (patchGruppo && target ? [...cambiati, target] : cambiati);
+    const perId = new Map(nuovi.map(g => [String(g.id), g]));
+    setGruppi(prev => (prev || []).map(g => perId.get(String(g.id)) || g));
+    daSalvare.forEach(g => persist('update', g));
+  };
 
   const handleSaveForm = () => {
     if (!form.nome.trim()) return;
+    const patch = { nome: form.nome.trim(), docenteId: form.docenteId||'', giorno: form.giorno||'', ora: form.ora||'', room: form.room||'' };
     if (editingId) {
-      const patch = { nome: form.nome.trim(), docenteId: form.docenteId||'', giorno: form.giorno||'', ora: form.ora||'', room: form.room||'' };
-      setGruppi(prev => (prev||[]).map(g => g.id===editingId ? {...g, ...patch} : g));
-      const full = { ...(gruppi.find(g=>g.id===editingId)||{}), ...patch };
-      persist('update', full);
+      applicaComposizione(editingId, form.allievi, patch);
     } else {
-      const newG = { id: uid(), corsoId: course.id, annoInizio: annoSel, allievi: [],
-        nome: form.nome.trim(), docenteId: form.docenteId||'', giorno: form.giorno||'', ora: form.ora||'', room: form.room||'' };
-      setGruppi(prev => [...(prev||[]), newG]);
-      persist('insert', newG);
+      const newG = { id: uid(), corsoId: course.id, annoInizio: annoSel, allievi: [], ...patch };
+      // Allievi scelti alla creazione: tolti da eventuali altri gruppi del corso
+      const { cambiati } = fmRicalcolaGruppiCorso([...gruppi, newG], newG.id, form.allievi);
+      const creato = cambiati.find(g => g.id === newG.id) || newG;
+      const altri = cambiati.filter(g => g.id !== newG.id);
+      const perId = new Map(altri.map(g => [String(g.id), g]));
+      setGruppi(prev => [...(prev||[]).map(g => perId.get(String(g.id)) || g), creato]);
+      persist('insert', creato).then(ok => { if (ok) altri.forEach(g => persist('update', g)); });
     }
     resetForm();
   };
 
   const startEdit = (g) => {
-    setForm({ nome: g.nome||'', docenteId: g.docenteId||'', giorno: g.giorno||'', ora: g.ora||'', room: g.room||'' });
+    setForm({ nome: g.nome||'', docenteId: g.docenteId||'', giorno: g.giorno||'', ora: g.ora||'', room: g.room||'', allievi: (g.allievi||[]).map(String) });
     setEditingId(g.id);
     setShowForm(true);
+    setAddingToGroupId(null);
   };
 
   const handleDeleteGruppo = (g) => {
     if (!window.confirm(`Eliminare il gruppo "${g.nome}"? Gli allievi torneranno senza gruppo assegnato.`)) return;
     setGruppi(prev => (prev||[]).filter(x => x.id!==g.id));
+    if (editingId === g.id) resetForm();
     persist('delete', g.id);
   };
 
   const addStudent = (gruppoId, studentId) => {
     const g = gruppi.find(x=>x.id===gruppoId);
     if (!g || !studentId) return;
-    const next = Array.from(new Set([...(g.allievi||[]).map(String), String(studentId)]));
-    setGruppi(prev => (prev||[]).map(x => x.id===gruppoId ? {...x, allievi: next} : x));
-    persist('update', {...g, allievi: next});
+    applicaComposizione(gruppoId, [...(g.allievi||[]).map(String), String(studentId)]);
     setAddingToGroupId(null);
   };
 
   const removeStudent = (gruppoId, studentId) => {
     const g = gruppi.find(x=>x.id===gruppoId);
     if (!g) return;
-    const next = (g.allievi||[]).filter(id=>String(id)!==String(studentId));
-    setGruppi(prev => (prev||[]).map(x => x.id===gruppoId ? {...x, allievi: next} : x));
-    persist('update', {...g, allievi: next});
+    applicaComposizione(gruppoId, (g.allievi||[]).filter(id=>String(id)!==String(studentId)));
   };
 
   // Allievi iscritti a questo corso: la fonte reale usata in tutta l'app è
-  // s.complementaryCourse (impostato dal form allievo), non iscrizioni_anno per corso
-  // (quella tabella traccia l'iscrizione all'anno scolastico in generale, non al singolo corso).
+  // s.complementaryCourse (impostato dal form allievo), non iscrizioni_anno per corso.
   // `students` qui è già filtrato a monte per l'anno scolastico attivo (studentsAnno in CorsiView).
   const enrolledStudents = (students||[]).filter(s => s.complementaryCourse === course.id && s.status === "attivo");
 
-  // Allievi già assegnati a QUALSIASI gruppo di questo corso (max 1 gruppo per corso)
-  const assignedIds = new Set(gruppi.flatMap(g => (g.allievi||[]).map(String)));
-  const unassigned = enrolledStudents.filter(s => !assignedIds.has(String(s.id)));
+  // Allievo → gruppo del corso in cui si trova (max 1 gruppo per corso)
+  const gruppoDi = new Map();
+  gruppi.forEach(g => (g.allievi||[]).forEach(id => gruppoDi.set(String(id), g)));
+  const unassigned = enrolledStudents.filter(s => !gruppoDi.has(String(s.id)));
 
   const findStudent = (id) => (students||[]).find(s => String(s.id)===String(id));
   const findDocente = (id) => (docenti||[]).find(d => String(d.id)===String(id));
+
+  const inputSt = {padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:ff, background:C.bg, color:C.text, minWidth:0};
+
+  // Form (nuovo o modifica) — in modifica viene mostrato DENTRO la card del gruppo
+  const renderForm = () => {
+    // Candidati: iscritti al corso + eventuali membri attuali non più tra gli iscritti
+    const extraMembri = (form.allievi||[]).filter(id => !enrolledStudents.some(s => String(s.id)===String(id))).map(findStudent).filter(Boolean);
+    const candidati = [...enrolledStudents, ...extraMembri];
+    const sel = new Set((form.allievi||[]).map(String));
+    const toggle = (id) => setForm(p => {
+      const cur = (p.allievi||[]).map(String);
+      return { ...p, allievi: cur.includes(String(id)) ? cur.filter(x=>x!==String(id)) : [...cur, String(id)] };
+    });
+    return React.createElement('div', {style:{margin: editingId ? '0' : '12px 20px 0', padding:'14px', background:C.purpleBg, border:`1px solid ${C.purpleBorder}`, borderRadius:10, display:'flex', flexDirection:'column', gap:8}}
+      , React.createElement('div', {style:{fontSize:12, fontWeight:600, color:C.purple}}, editingId ? 'Modifica gruppo' : 'Nuovo gruppo')
+      , React.createElement('div', {style:{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:8}}
+        , React.createElement('input', {type:'text', value:form.nome, placeholder:'Nome gruppo (es. Gruppo A)', onChange: e=>setForm(p=>({...p, nome:e.target.value})), style:inputSt})
+        , React.createElement('select', {value:form.docenteId, onChange: e=>setForm(p=>({...p, docenteId:e.target.value})), style:inputSt}
+            , React.createElement('option', {value:''}, 'Docente...')
+            , (docenti||[]).map(d => React.createElement('option', {key:d.id, value:d.id}, d.nome))
+          )
+        , React.createElement('input', {type:'text', value:form.giorno, placeholder:'Giorno (es. Lunedì)', onChange: e=>setForm(p=>({...p, giorno:e.target.value})), style:inputSt})
+        , React.createElement('input', {type:'text', value:form.ora, placeholder:'Ora (es. 17:00)', onChange: e=>setForm(p=>({...p, ora:e.target.value})), style:inputSt})
+        , React.createElement('input', {type:'text', value:form.room, placeholder:'Aula', onChange: e=>setForm(p=>({...p, room:e.target.value})), style:{...inputSt, gridColumn:'1 / -1'}})
+      )
+      /* Allievi del gruppo */
+      , React.createElement('div', {style:{fontSize:11, color:C.textMuted, textTransform:'uppercase', letterSpacing:'0.07em', marginTop:4}}
+        , 'Allievi (', sel.size, ')')
+      , candidati.length === 0
+        ? React.createElement('div', {style:{fontSize:12, color:C.textDim}}, 'Nessun allievo attivo ha scelto questo corso collettivo')
+        : React.createElement('div', {style:{display:'flex', flexDirection:'column', gap:4, maxHeight:240, overflowY:'auto', background:C.bg, border:`1px solid ${C.border}`, borderRadius:8, padding:6}}
+          , candidati.map(s => {
+              const altro = gruppoDi.get(String(s.id));
+              const inAltro = altro && String(altro.id) !== String(editingId);
+              const checked = sel.has(String(s.id));
+              return React.createElement('label', {key:s.id, style:{display:'flex', alignItems:'center', gap:8, padding:'5px 6px', borderRadius:6, cursor:'pointer', fontSize:13, background: checked ? C.purpleBg : 'transparent'}}
+                , React.createElement('input', {type:'checkbox', checked, onChange: ()=>toggle(s.id)})
+                , React.createElement('span', {style:{flex:1}}, s.name)
+                , inAltro && React.createElement('span', {style:{fontSize:10, color: checked ? '#f59e0b' : C.textDim}}
+                    , checked ? `verrà spostato da ${altro.nome}` : `in ${altro.nome}`)
+              );
+            })
+        )
+      , React.createElement('div', {style:{display:'flex', gap:8, justifyContent:'flex-end'}}
+        , React.createElement('button', {onClick: resetForm,
+            style:{padding:'7px 14px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.textMuted, fontSize:12, cursor:'pointer', fontFamily:ff}}, 'Annulla')
+        , React.createElement('button', {onClick: handleSaveForm, disabled: !form.nome.trim(),
+            style:{padding:'7px 16px', borderRadius:8, border:'none', background: form.nome.trim()?C.purple:C.border, color:'#fff', fontSize:12, fontWeight:600, cursor: form.nome.trim()?'pointer':'not-allowed', fontFamily:ff}}, editingId?'Salva modifiche':'Crea gruppo')
+      )
+    );
+  };
 
   return (
     React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",marginBottom:16}}
@@ -637,8 +757,8 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
         , React.createElement('span', { style: {fontSize:12,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted}}, "Gruppi collettivi")
         , React.createElement('span', { style: {fontSize:11,color:C.textDim}}, "(", gruppi.length, ")")
         , canEdit && React.createElement('button', {
-            onClick: () => { resetForm(); setShowForm(true); },
-            style:{marginLeft:'auto', padding:'6px 12px', borderRadius:8, border:'none', background:C.purple, color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
+            onClick: () => { resetForm(); setForm({ ...FORM_VUOTO, allievi: unassigned.map(s=>String(s.id)) }); setShowForm(true); },
+            style:{marginLeft:'auto', padding:'6px 12px', borderRadius:8, border:'none', background:C.purple, color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer', fontFamily:ff}
           }, '+ Nuovo gruppo')
       )
 
@@ -653,37 +773,8 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
         )
       )
 
-      /* Form nuovo/modifica gruppo */
-      , showForm && canEdit && (
-        React.createElement('div', {style:{margin:'12px 20px 0', padding:'14px', background:C.purpleBg, border:`1px solid ${C.purpleBorder}`, borderRadius:10, display:'flex', flexDirection:'column', gap:8}}
-          , React.createElement('div', {style:{fontSize:12, fontWeight:600, color:C.purple}}, editingId ? 'Modifica gruppo' : 'Nuovo gruppo')
-          , React.createElement('div', {style:{display:'grid', gridTemplateColumns:'1fr 1fr', gap:8}}
-            , React.createElement('input', {type:'text', value:form.nome, placeholder:'Nome gruppo (es. Gruppo A)',
-                onChange: e=>setForm(p=>({...p, nome:e.target.value})),
-                style:{padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif"}})
-            , React.createElement('select', {value:form.docenteId, onChange: e=>setForm(p=>({...p, docenteId:e.target.value})),
-                style:{padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif"}}
-                , React.createElement('option', {value:''}, 'Docente...')
-                , (docenti||[]).map(d => React.createElement('option', {key:d.id, value:d.id}, d.nome))
-              )
-            , React.createElement('input', {type:'text', value:form.giorno, placeholder:'Giorno (es. Lunedì)',
-                onChange: e=>setForm(p=>({...p, giorno:e.target.value})),
-                style:{padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif"}})
-            , React.createElement('input', {type:'text', value:form.ora, placeholder:'Ora (es. 17:00)',
-                onChange: e=>setForm(p=>({...p, ora:e.target.value})),
-                style:{padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif"}})
-            , React.createElement('input', {type:'text', value:form.room, placeholder:'Aula',
-                onChange: e=>setForm(p=>({...p, room:e.target.value})),
-                style:{padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif", gridColumn:'1 / -1'}})
-          )
-          , React.createElement('div', {style:{display:'flex', gap:8, justifyContent:'flex-end'}}
-            , React.createElement('button', {onClick: resetForm,
-                style:{padding:'7px 14px', borderRadius:8, border:`1px solid ${C.border}`, background:'transparent', color:C.textMuted, fontSize:12, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}}, 'Annulla')
-            , React.createElement('button', {onClick: handleSaveForm, disabled: !form.nome.trim(),
-                style:{padding:'7px 16px', borderRadius:8, border:'none', background: form.nome.trim()?C.purple:C.border, color:'#fff', fontSize:12, fontWeight:600, cursor: form.nome.trim()?'pointer':'not-allowed', fontFamily:"'Open Sans',sans-serif"}}, editingId?'Salva':'Crea gruppo')
-          )
-        )
-      )
+      /* Form NUOVO gruppo (la modifica appare dentro la card del gruppo) */
+      , showForm && canEdit && !editingId && renderForm()
 
       /* Lista gruppi */
       , gruppi.length === 0 && !showForm ? (
@@ -695,9 +786,11 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
           , gruppi.map(g => {
               const docente = findDocente(g.docenteId);
               const membri = (g.allievi||[]).map(findStudent).filter(Boolean);
-              const eligibili = enrolledStudents.filter(s => !assignedIds.has(String(s.id)));
+              // Aggiungibili: senza gruppo + quelli di altri gruppi (verranno spostati)
+              const aggiungibili = enrolledStudents.filter(s => { const gg = gruppoDi.get(String(s.id)); return !gg || String(gg.id) !== String(g.id); });
+              const inModifica = showForm && canEdit && editingId === g.id;
               return (
-                React.createElement('div', {key:g.id, style:{border:`1px solid ${C.border}`, borderRadius:10, overflow:'hidden'}}
+                React.createElement('div', {key:g.id, style:{border:`1px solid ${inModifica ? C.purpleBorder : C.border}`, borderRadius:10, overflow:'hidden'}}
                   , React.createElement('div', {style:{padding:'10px 14px', background:C.bg, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}}
                     , React.createElement('div', {style:{width:30,height:30,borderRadius:8,background:C.purpleBg,border:`1px solid ${C.purpleBorder}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
                       , React.createElement(Ic,{n:'group',size:14,color:C.purple})
@@ -709,14 +802,16 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
                       )
                     )
                     , React.createElement('span', {style:{fontSize:11, color:C.textDim, background:C.surfaceHover, padding:'3px 8px', borderRadius:12}}, membri.length, ' allievi')
-                    , canEdit && React.createElement('button', {onClick: ()=>startEdit(g),
-                        style:{padding:'5px 8px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', cursor:'pointer'}}
-                        , React.createElement(Ic,{n:'edit',size:13,color:C.textMuted}))
-                    , canEdit && React.createElement('button', {onClick: ()=>handleDeleteGruppo(g),
+                    , canEdit && React.createElement('button', {onClick: ()=> inModifica ? resetForm() : startEdit(g), title: inModifica ? 'Chiudi modifica' : 'Modifica gruppo e allievi',
+                        style:{padding:'5px 8px', borderRadius:6, border:`1px solid ${inModifica ? C.purpleBorder : C.border}`, background: inModifica ? C.purpleBg : 'transparent', cursor:'pointer'}}
+                        , React.createElement(Ic,{n:'edit',size:13,color: inModifica ? C.purple : C.textMuted}))
+                    , canEdit && React.createElement('button', {onClick: ()=>handleDeleteGruppo(g), title:'Elimina gruppo',
                         style:{padding:'5px 8px', borderRadius:6, border:`1px solid ${C.redBorder}`, background:'transparent', cursor:'pointer'}}
                         , React.createElement(Ic,{n:'trash',size:13,color:C.red}))
                   )
-                  , React.createElement('div', {style:{padding:'10px 14px', display:'flex', flexDirection:'column', gap:6}}
+                  , inModifica
+                    ? React.createElement('div', {style:{padding:'10px 14px'}}, renderForm())
+                    : React.createElement('div', {style:{padding:'10px 14px', display:'flex', flexDirection:'column', gap:6}}
                     , membri.length === 0
                       ? React.createElement('div', {style:{fontSize:12, color:C.textDim}}, 'Nessun allievo in questo gruppo')
                       : membri.map(s => (
@@ -725,7 +820,7 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
                               , initials(s.name))
                             , React.createElement('span', {style:{fontSize:13, flex:1}}, s.name)
                             , canEdit && React.createElement('button', {onClick: ()=>removeStudent(g.id, s.id),
-                                style:{padding:'3px 8px', borderRadius:6, border:'none', background:'transparent', color:C.red, fontSize:11, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}}, '✕ rimuovi')
+                                style:{padding:'3px 8px', borderRadius:6, border:'none', background:'transparent', color:C.red, fontSize:11, cursor:'pointer', fontFamily:ff}}, '✕ rimuovi')
                           )
                         ))
                     , canEdit && (
@@ -734,16 +829,17 @@ const GruppiManager = ({ course, students, docenti, gruppi, setGruppi, iscrizion
                             , React.createElement('select', {
                                 onChange: e => { if (e.target.value) addStudent(g.id, e.target.value); },
                                 defaultValue:'',
-                                style:{flex:1, padding:'6px 8px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, fontFamily:"'Open Sans',sans-serif"}}
-                                , React.createElement('option', {value:''}, eligibili.length? 'Seleziona allievo...' : 'Nessun allievo disponibile')
-                                , eligibili.map(s => React.createElement('option', {key:s.id, value:s.id}, s.name))
+                                style:{flex:1, minWidth:0, padding:'6px 8px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, fontFamily:ff, background:C.bg, color:C.text}}
+                                , React.createElement('option', {value:''}, aggiungibili.length? 'Seleziona allievo...' : 'Nessun allievo disponibile')
+                                , aggiungibili.map(s => { const gg = gruppoDi.get(String(s.id));
+                                    return React.createElement('option', {key:s.id, value:s.id}, s.name + (gg ? ` (sposta da ${gg.nome})` : '')); })
                               )
                             , React.createElement('button', {onClick: ()=>setAddingToGroupId(null),
                                 style:{padding:'6px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.textMuted, fontSize:11, cursor:'pointer'}}, 'Chiudi')
                           )
                         ) : (
                           React.createElement('button', {onClick: ()=>setAddingToGroupId(g.id),
-                            style:{alignSelf:'flex-start', padding:'6px 10px', borderRadius:6, border:`1px dashed ${C.purpleBorder}`, background:'transparent', color:C.purple, fontSize:11, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}}, '+ Aggiungi allievo')
+                            style:{alignSelf:'flex-start', padding:'6px 10px', borderRadius:6, border:`1px dashed ${C.purpleBorder}`, background:'transparent', color:C.purple, fontSize:11, cursor:'pointer', fontFamily:ff}}, '+ Aggiungi allievo')
                         )
                       )
                   )
