@@ -14662,7 +14662,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
             , React.createElement('div', {onClick:()=>{ setConvOn(v=>!v); setErr({}); }}
               , React.createElement('div', {style:{fontSize:13,fontWeight:600,color:convOn?C.gold:C.text,letterSpacing:"0.04em"}}, "🤝 CONVENZIONE")
               , React.createElement('div', {style:{fontSize:11,color:C.textDim}}, convOn
-                  ? "Più quote nella stessa registrazione; ricevuta solo per le quote spuntate, intestata alla convenzione."
+                  ? "Più quote nella stessa registrazione; ricevuta solo per le quote spuntate, intestata al socio (ente convenzionato) con le note."
                   : "Attiva per allievi in convenzione con associazioni/enti.")
             )
           )
@@ -14690,7 +14690,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
           , showConvCampi && React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:10}}
             , !isNewConv && convDatiMancanti && anyInRicevuta && React.createElement('div', {style:{fontSize:11,color:"#b45309"}},
                 "⚠️ Dati per l'intestazione della ricevuta non presenti: inseriscili ora, verranno salvati per le prossime volte.")
-            , React.createElement(Input, {label:"Intestatario ricevuta (denominazione) *", value:convDati.denominazione, onChange:e=>setConvDato("denominazione",e.target.value), error:err.convDen, placeholder:"Es. Associazione …"})
+            , React.createElement(Input, {label:"Socio intestatario ricevuta (denominazione) *", value:convDati.denominazione, onChange:e=>setConvDato("denominazione",e.target.value), error:err.convDen, placeholder:"Es. Associazione …"})
             , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:10}}
               , React.createElement(Input, {label: anyInRicevuta ? "Codice fiscale / P.IVA *" : "Codice fiscale / P.IVA", value:convDati.codiceFiscale, onChange:e=>setConvDato("codiceFiscale",e.target.value), error:err.convCf})
               , React.createElement(Input, {label:"Indirizzo", value:convDati.indirizzo, onChange:e=>setConvDato("indirizzo",e.target.value), placeholder:"Facoltativo"})
@@ -15138,7 +15138,9 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
           studentName: haStud ? (v.studentName||'') : d.studentName,
           importo: Number(v.importo), mese: Number(v.mese), anno: Number(v.anno),
           categoria: v.categoria, desc: v.desc, stato: d.stato||'pagato',
-          data: d.data, dataPagamento, metodo: d.metodo, note: '',
+          // In convenzione le note valgono per tutta la registrazione (vanno in ricevuta anche se
+          // la voce principale non è inclusa); fuori convenzione restano solo sulla principale.
+          data: d.data, dataPagamento, metodo: d.metodo, note: d.convenzioneId ? (d.note||'') : '',
           numRicevuta: inRic ? numRicevuta : '', noRicevuta: !inRic,
           convenzioneId: d.convenzioneId || null, convenzioneNome: d.convenzioneNome || '',
           ...(inRic ? { ricevutaIntestatario: d.ricevutaIntestatario||'', ricevutaCf: d.ricevutaCf||'', ricevutaIndirizzo: d.ricevutaIndirizzo||'' } : _noSnap),

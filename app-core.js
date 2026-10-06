@@ -1619,7 +1619,10 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
   const allieviConv = isConv ? allieviVoci : [];
   const intestatario = isConv ? convIntestatario : ((student && student.nomeRicevuta && student.nomeRicevuta.trim()) || (student && student.name) || entrata.studentName || "—");
   const cfIntestatario = isConv ? convCf : (student && student.codiceFiscale) || "";
-  const labelIntestatario = isConv ? "INTESTATARIO" : "SOCIO";
+  // Anche in convenzione la ricevuta è intestata al SOCIO (l'ente convenzionato), mai all'allievo
+  const labelIntestatario = "SOCIO";
+  // Note dell'entrata (campo "Note" del modale Nuova Entrata): in convenzione vanno stampate in ricevuta
+  const noteEntrata = isConv ? ((voci.find(v=>v && v.note && String(v.note).trim())||{}).note||"").trim() : "";
   const descVoce = (v) => (v.desc||"—") + (multiAllievo && v.studentName ? ` — ${v.studentName}` : "");
   const MESI_N = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const dataStampa = new Date().toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"});
@@ -1692,7 +1695,7 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
       ${stile.showNominativo!==false?`<tr><td class="k">${labelIntestatario}</td><td class="v">${intestatario}</td></tr>`:""}
       ${cfIntestatario?`<tr><td class="k">Codice fiscale / P.IVA</td><td class="v">${cfIntestatario}</td></tr>`:""}
       ${isConv&&convIndirizzo?`<tr><td class="k">Indirizzo</td><td class="v">${convIndirizzo}</td></tr>`:""}
-      ${isConv&&allieviConv.length?`<tr><td class="k">${multiAllievo?"Allievi":"Allievo"}</td><td class="v">${allieviConv.join(", ")}</td></tr>`:""}
+      ${noteEntrata?`<tr><td class="k">Note</td><td class="v" style="white-space:pre-wrap">${noteEntrata.replace(/</g,"&lt;")}</td></tr>`:""}
       ${nascitaRow}
       ${stile.showDataPagamento!==false?`<tr><td class="k">Data pagamento</td><td class="v">${dataPag}</td></tr>`:""}
       ${descrizioneHtml}
@@ -1768,10 +1771,10 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
   const rows = [
     {k:"Ricevuta n°", v:numRic},
     {k:"Data stampa",  v:dataStampa},
-    {k:isConv?"Intestatario":"Nominativo",   v:intestatario},
+    {k:isConv?"Socio":"Nominativo",   v:intestatario},
     ...(cfIntestatario ? [{k:isConv?"Codice fiscale / P.IVA":"Codice fiscale", v:cfIntestatario}] : []),
     ...(isConv && convIndirizzo ? [{k:"Indirizzo", v:convIndirizzo}] : []),
-    ...(isConv && allieviConv.length ? [{k:multiAllievo?"Allievi":"Allievo", v:allieviConv.join(", ")}] : []),
+    ...(noteEntrata ? [{k:"Note", v:noteEntrata}] : []),
     {k:"Data pagamento", v:dataPag},
     ...(!isMultiVoce ? [{k:"Descrizione",  v:entrata.desc||"Quota mensile"}] : []),
     ...(!isMultiVoce && meseLabel ? [{k:"Competenza", v:meseLabel}] : []),
