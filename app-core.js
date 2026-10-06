@@ -1598,32 +1598,49 @@ const RICEVUTA_STYLE_DEFAULT = {
   firmaPresidenteUrl: "",
 };
 
-const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
+const RicevutaModal = ({ entrata, righeExtra, student, students:_studentsRM, config, onClose }) => {
   const cfg = config || CONFIG_DEFAULT;
   const stile = {...RICEVUTA_STYLE_DEFAULT, ...(cfg.ricevutaStyle||{})};
   const voci = [entrata, ...((righeExtra||[]).filter(v=>v && v.id!==entrata.id))];
   const isMultiVoce = voci.length > 1;
 
   const numRic = entrata.noRicevuta ? "—" : (entrata.numRicevuta || (String(cfg.progressivoRicevute||1).padStart(3,"0") + "/" + (entrata.anno||new Date().getFullYear())));
-  // Convenzione: la ricevuta è intestata all'associazione/ente convenzionato (dati "fotografati"
-  // sull'entrata al momento dell'emissione), non all'allievo.
+  // ── Convenzione ──────────────────────────────────────────────────────────
+  // La ricevuta è INTESTATA all'ente convenzionato (dati "fotografati" sull'entrata al momento
+  // dell'emissione). Il SOCIO (o i SOCI, se ci sono più quote) è l'adulto iscritto a FM:
+  // il "nome per ricevuta" dell'allievo (genitore/tutore) oppure l'allievo stesso se maggiorenne.
   const _convSrc = voci.find(v=>v && (v.ricevutaIntestatario || v.convenzioneId)) || null;
   const isConv = !!_convSrc;
   const convIntestatario = isConv ? ((_convSrc.ricevutaIntestatario||"").trim() || _convSrc.convenzioneNome || "—") : "";
   const convCf = isConv ? (_convSrc.ricevutaCf||"") : "";
   const convIndirizzo = isConv ? (_convSrc.ricevutaIndirizzo||"") : "";
-  // Voci di allievi diversi sulla stessa ricevuta (convenzione o "aggiungi un'altra voce"):
-  // nel dettaglio pagamento ogni voce riporta il nome dell'allievo.
-  const allieviVoci = [...new Set(voci.map(v=>v.studentName).filter(Boolean))];
+  // Anagrafica allievi per risalire al socio di ogni voce (prop, oppure store globale esposto da App)
+  const _anagrafica = (_studentsRM && _studentsRM.length ? _studentsRM : (window.__fmStudents__ || []));
+  const _studentDi = (v) => {
+    if (!v) return null;
+    if (student && v.studentId != null && String(student.id) === String(v.studentId)) return student;
+    return _anagrafica.find(s => v.studentId != null && String(s.id) === String(v.studentId)) || null;
+  };
+  const socioDi = (v) => {
+    const st = _studentDi(v);
+    return (st && st.nomeRicevuta && st.nomeRicevuta.trim()) || (st && st.name) || v.studentName || "";
+  };
+  // Voci di allievi diversi sulla stessa ricevuta: nel dettaglio pagamento ogni voce riporta
+  // il nome del SOCIO (mai il nome dell'allievo).
+  const allieviVoci = [...new Set(voci.map(v=>v.studentId!=null?String(v.studentId):v.studentName).filter(Boolean))];
   const multiAllievo = allieviVoci.length > 1;
-  const allieviConv = isConv ? allieviVoci : [];
-  const intestatario = isConv ? convIntestatario : ((student && student.nomeRicevuta && student.nomeRicevuta.trim()) || (student && student.name) || entrata.studentName || "—");
-  const cfIntestatario = isConv ? convCf : (student && student.codiceFiscale) || "";
-  // Anche in convenzione la ricevuta è intestata al SOCIO (l'ente convenzionato), mai all'allievo
-  const labelIntestatario = "SOCIO";
+  const sociVoci = [...new Set(voci.map(socioDi).filter(Boolean))];
+  const _stSingolo = sociVoci.length === 1 ? _studentDi(voci.find(v=>socioDi(v)===sociVoci[0])) : null;
+  const intestatario = isConv
+    ? (sociVoci.join(", ") || "—")
+    : ((student && student.nomeRicevuta && student.nomeRicevuta.trim()) || (student && student.name) || entrata.studentName || "—");
+  const cfIntestatario = isConv ? ((_stSingolo && _stSingolo.codiceFiscale) || "") : (student && student.codiceFiscale) || "";
+  const labelIntestatario = isConv && sociVoci.length > 1 ? "SOCI" : "SOCIO";
   // Note dell'entrata (campo "Note" del modale Nuova Entrata): in convenzione vanno stampate in ricevuta
   const noteEntrata = isConv ? ((voci.find(v=>v && v.note && String(v.note).trim())||{}).note||"").trim() : "";
-  const descVoce = (v) => (v.desc||"—") + (multiAllievo && v.studentName ? ` — ${v.studentName}` : "");
+  const descVoce = (v) => { const so = socioDi(v); return (v.desc||"—") + (multiAllievo && so ? ` — ${so}` : ""); };
+  const ibanConv = isConv ? String(cfg.iban||"").trim() : "";
+  const _esc = (t) => String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;");
   const MESI_N = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const dataStampa = new Date().toLocaleDateString("it-IT",{day:"2-digit",month:"2-digit",year:"numeric"});
   const dataPag    = entrata.data ? new Date(entrata.data+"T00:00:00").toLocaleDateString("it-IT") : dataStampa;
@@ -1677,6 +1694,13 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
       .firma-box  { text-align:center; width:200px; }
       .firma-line { border-top:1px solid #333; margin-bottom:6px; }
       .firma-lbl  { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:.08em; }
+      .ente-box { margin:-8px 0 22px auto; text-align:right; max-width:60%; }
+      .ente-lbl { font-size:10px; color:#888; letter-spacing:.1em; text-transform:uppercase; }
+      .ente-nome { font-size:15px; font-weight:700; margin-top:2px; }
+      .ente-det { font-size:12px; color:#444; margin-top:2px; }
+      .iban-box { font-size:12px; color:#444; text-align:center; margin:-8px 0 16px; line-height:1.6; }
+      .iban-val { font-family:'Courier New',monospace; font-size:15px; font-weight:700; letter-spacing:.06em; color:#1a1a2e; }
+      .iban-int { font-size:11px; color:#888; }
       .footer { font-size:10px; color:#888; text-align:center; margin-top:32px; padding-top:12px; border-top:1px solid #ddd; line-height:1.7; }
     </style></head><body>
     <div class="header">
@@ -1691,10 +1715,15 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
         <div class="num-date">del ${dataStampa}</div>
       </div>
     </div>
+    ${isConv?`<div class="ente-box">
+      <div class="ente-lbl">Spett.le</div>
+      <div class="ente-nome">${_esc(convIntestatario)}</div>
+      ${convIndirizzo?`<div class="ente-det">${_esc(convIndirizzo)}</div>`:""}
+      ${convCf?`<div class="ente-det">c.f. ${_esc(convCf)}</div>`:""}
+    </div>`:""}
     <table>
-      ${stile.showNominativo!==false?`<tr><td class="k">${labelIntestatario}</td><td class="v">${intestatario}</td></tr>`:""}
-      ${cfIntestatario?`<tr><td class="k">Codice fiscale / P.IVA</td><td class="v">${cfIntestatario}</td></tr>`:""}
-      ${isConv&&convIndirizzo?`<tr><td class="k">Indirizzo</td><td class="v">${convIndirizzo}</td></tr>`:""}
+      ${stile.showNominativo!==false?`<tr><td class="k">${labelIntestatario}</td><td class="v">${_esc(intestatario)}</td></tr>`:""}
+      ${cfIntestatario?`<tr><td class="k">Codice fiscale${isConv?" socio":""}</td><td class="v">${cfIntestatario}</td></tr>`:""}
       ${noteEntrata?`<tr><td class="k">Note</td><td class="v" style="white-space:pre-wrap">${noteEntrata.replace(/</g,"&lt;")}</td></tr>`:""}
       ${nascitaRow}
       ${stile.showDataPagamento!==false?`<tr><td class="k">Data pagamento</td><td class="v">${dataPag}</td></tr>`:""}
@@ -1707,6 +1736,8 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
       <div class="importo-val">${importoStr}</div>
       <div class="importo-lbl">Importo ricevuto</div>
     </div>
+    ${ibanConv?`<div class="iban-box">Il versamento può essere effettuato sul c/c di ${_esc(cfg.nomeScuola||"")} al seguente IBAN:
+      <div class="iban-val">${_esc(ibanConv)}</div>${cfg.intestatarioConto?`<div class="iban-int">intestato a ${_esc(cfg.intestatarioConto)}</div>`:""}</div>`:""}
     ${firmeHtml}
     ${footerHtml}
     <script>window.onload=function(){window.print();}<\/script>
@@ -1738,7 +1769,7 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
         setTimeout(() => {
           doc.html(iframe.contentDocument.body, {
             callback: (doc2) => {
-              doc2.save(`Ricevuta_${numRic.replace('/','_')}_${intestatario.replace(/\s+/g,'_')}.pdf`);
+              doc2.save(`Ricevuta_${numRic.replace('/','_')}_${(isConv?convIntestatario:intestatario).replace(/\s+/g,'_')}.pdf`);
               document.body.removeChild(iframe);
             },
             x:0, y:0, width:210, windowWidth:794
@@ -1771,14 +1802,16 @@ const RicevutaModal = ({ entrata, righeExtra, student, config, onClose }) => {
   const rows = [
     {k:"Ricevuta n°", v:numRic},
     {k:"Data stampa",  v:dataStampa},
-    {k:isConv?"Socio":"Nominativo",   v:intestatario},
-    ...(cfIntestatario ? [{k:isConv?"Codice fiscale / P.IVA":"Codice fiscale", v:cfIntestatario}] : []),
-    ...(isConv && convIndirizzo ? [{k:"Indirizzo", v:convIndirizzo}] : []),
+    ...(isConv ? [{k:"Intestata a", v:convIntestatario + (convCf?` (c.f. ${convCf})`:"")}] : []),
+    ...(isConv && convIndirizzo ? [{k:"Indirizzo ente", v:convIndirizzo}] : []),
+    {k:isConv?(sociVoci.length>1?"Soci":"Socio"):"Nominativo",   v:intestatario},
+    ...(cfIntestatario ? [{k:isConv?"Codice fiscale socio":"Codice fiscale", v:cfIntestatario}] : []),
     ...(noteEntrata ? [{k:"Note", v:noteEntrata}] : []),
     {k:"Data pagamento", v:dataPag},
     ...(!isMultiVoce ? [{k:"Descrizione",  v:entrata.desc||"Quota mensile"}] : []),
     ...(!isMultiVoce && meseLabel ? [{k:"Competenza", v:meseLabel}] : []),
     {k:"Metodo",       v:entrata.metodo||"—"},
+    ...(ibanConv ? [{k:"IBAN per il versamento", v:ibanConv}] : []),
     ...(stile.notePersonalizzate ? [{k:"Note", v:stile.notePersonalizzate}] : []),
   ];
 

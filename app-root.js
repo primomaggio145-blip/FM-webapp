@@ -132,6 +132,9 @@ function App() {
   const [showEsciMsg,    setShowEsciMsg]    = useState(false);
   const _d = window.__FM_DATA__ || {};
   const [sharedStudents,       setSharedStudents]       = useState(_d.students   || INIT_STUDENTS);
+  // Anagrafica allievi esposta globalmente: serve a RicevutaModal per risalire al SOCIO di ogni voce
+  // (es. ricevute in convenzione con quote di più allievi, aperte anche dalla scheda allievo).
+  window.__fmStudents__ = sharedStudents;
   // Memorizza i nomi degli allievi collegati quando compaiono in sharedStudents
   useEffect(() => {
     if (!user || !_idsCollegatiKey) return;

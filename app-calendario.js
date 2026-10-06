@@ -15654,6 +15654,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
             entrata: selQuota,
             righeExtra: selQuota.numRicevuta ? entrate.filter(e=>e.numRicevuta===selQuota.numRicevuta) : [],
             student: students.find(s=>s.id===selQuota.studentId),
+            students: students,
             config: config,
             onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7237}}
           )
