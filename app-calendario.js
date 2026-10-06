@@ -15423,7 +15423,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                   const catQuota = ["quota","iscrizione"].includes(e.categoria||"quota");
                   if(tab==="quote" && !catQuota) return false;
                   if(tab==="altre_entrate" && catQuota) return false;
-                  return (!q||((e.studentName||"").toLowerCase().includes(q)||(e.desc||"").toLowerCase().includes(q)))
+                  return (!q||((e.studentName||"").toLowerCase().includes(q)||(e.desc||"").toLowerCase().includes(q)||(e.convenzioneId&&((e.convenzioneNome||"").toLowerCase().includes(q)||"convenzione".includes(q)))))
                     && (!filterQMese||Number(filterQMese)===e.mese);
                 }), (e,k) => {
                   if(k==="data")        return e.data||"";
@@ -15524,6 +15524,13 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                           , (()=>{const c=catEntrate.find(x=>x.id===e.categoria)||{label:"Quota",icon:"receipt"};
                             return React.createElement('span', { style: {fontSize:11,padding:"2px 8px",borderRadius:10,background:C.greenBg,
                               color:C.green,border:`1px solid ${C.greenBorder}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7189}}, c.label);})()
+                          /* Flag CONVENZIONE: quota pagata in convenzione con un ente */
+                          , e.convenzioneId && React.createElement('div', {title: e.convenzioneNome ? `In convenzione: ${e.convenzioneNome}` : "Quota in convenzione",
+                              style:{display:"inline-flex",alignItems:"center",gap:4,marginTop:4,fontSize:10.5,fontWeight:600,letterSpacing:"0.04em",
+                                padding:"2px 8px",borderRadius:10,background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,
+                                maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}
+                            , "🤝 ", e.convenzioneNome || "Convenzione"
+                          )
                         )
                         , React.createElement('div', { style: {fontSize:13,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7192}}
                           , e.data ? new Date(e.data+"T00:00:00").toLocaleDateString("it-IT") : "—"
