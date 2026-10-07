@@ -247,7 +247,8 @@
     // Funziona anche per chi è stato approvato ma non ha mai ricevuto l'invito
     // (l'utente esiste già in auth.users). Il link riporta alla webapp con type=recovery.
     async inviaLinkPassword(email) {
-      const redirectTo = window.location.origin + window.location.pathname;
+      // Pagina dedicata: gestisce sia ?token_hash= (template personalizzato) sia #access_token=
+      const redirectTo = window.location.origin + window.location.pathname.replace(/[^/]*$/, '') + 'set-password.html';
       const { error } = await sb.auth.resetPasswordForEmail(String(email).trim().toLowerCase(), { redirectTo });
       if (error) throw error;
       return { ok: true };

@@ -297,6 +297,13 @@ function App() {
         // [FM-AUTH-LINK] hash catturato da supabase_integration.js prima di ogni pulizia URL
         const hash = window.__FM_AUTH_HASH__ || window.location.hash || '';
         try { window.__FM_AUTH_HASH__ = null; } catch(e){}
+        // [FM-AUTH-LINK] arrivo da "Richiedi un nuovo link" (set-password.html con link scaduto)
+        if (/[?&]recupera=1/.test(window.location.search)) {
+          setAuthAvviso("Il link ricevuto è scaduto o è già stato usato. Inserisci la tua email per riceverne uno nuovo.");
+          setSchermata("recover");
+          window.history.replaceState(null, '', window.location.pathname);
+          return;
+        }
         if (hash && /error_code=|error_description=/.test(hash)) {
           // Link scaduto o già usato (es. aperto in anticipo dallo scanner antivirus di Outlook/Hotmail)
           const _code = (hash.match(/error_code=([^&]+)/)||[])[1] || '';
