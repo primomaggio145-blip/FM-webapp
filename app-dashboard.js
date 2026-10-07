@@ -2410,8 +2410,11 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     const morosi           = ruolo==="docente" ? 0 : _studentsAnno.filter(a=>a.status==="scaduto"||a.stato==="scaduto").length;
     const oraNum  = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
     const nowMins = dashNow.getHours()*60+dashNow.getMinutes();
-    const lezioniOggi      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(dashNow) && l.attendance !== 'recuperata';}).length;
-    const lezComplete      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(dashNow)&&l.attendance !== 'recuperata'&&oraNum(l.hour||l.time||l.ora||"0:0")+(l.duration||l.durata||0)<=nowMins;}).length;
+    // [FM-OGGI-NO-DA-RECUPERARE] le lezioni "Da recuperare" (inRecupero / in_recupero) o già
+    // recuperate altrove non si svolgono oggi: escluse dalla card "Lezioni di oggi" e dai contatori.
+    const _nonSiSvolge = l => !!l && (l.inRecupero === true || l.attendance === 'in_recupero' || l.attendance === 'recuperata');
+    const lezioniOggi      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(dashNow) && !_nonSiSvolge(l);}).length;
+    const lezComplete      = _lessons.filter(l=>{const d=l.date||l.data||""; return d===yyyymmdd(dashNow)&&!_nonSiSvolge(l)&&oraNum(l.hour||l.time||l.ora||"0:0")+(l.duration||l.durata||0)<=nowMins;}).length;
     // Settimana corrente (lunedì-domenica) per la KPI "Lezioni settimana" del docente
     const inizioSettDoc = new Date(dashNow);
     inizioSettDoc.setDate(inizioSettDoc.getDate() - ((inizioSettDoc.getDay()+6)%7));
@@ -2489,7 +2492,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
     // LEZIONI_OGGI live: lezioni di oggi con formato compatibile AlertPanel
     const todayStr = yyyymmdd(oggi);
     const LEZIONI_OGGI_LIVE = _lessons
-      .filter(l => (l.date || l.data || '') === todayStr)
+      .filter(l => (l.date || l.data || '') === todayStr && !_nonSiSvolge(l))
       .sort((a, b) => (a.hour || a.ora || '').localeCompare(b.hour || b.ora || ''))
       .map(l => ({
         id: l.id,
@@ -2824,7 +2827,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
               , ruolo==="docente" ? React.createElement(React.Fragment, null
                   /* [FM-KPI-DOC] Lezioni di oggi → Calendario, vista giorno su oggi */
                   , React.createElement(KpiCard, { icon: "clock", label: "Lezioni oggi",
-                      value: _lessons.filter(function(l){return matchDocLezione(l) && l.attendance !== "recuperata" && (l.date||l.data||"")===yyyymmdd(dashNow);}).length,
+                      value: _lessons.filter(function(l){return matchDocLezione(l) && !_nonSiSvolge(l) && (l.date||l.data||"")===yyyymmdd(dashNow);}).length,
                       sub: "mie lezioni di oggi", hex: C.blue,
                       onClick: () => { onQuickAction && onQuickAction('showOggi'); onNavigate('calendario'); }})
                   /* [FM-KPI-DOC] Lezioni settimana → Calendario, vista settimana corrente */

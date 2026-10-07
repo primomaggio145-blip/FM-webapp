@@ -2077,6 +2077,17 @@ const NOTIFICHE_CONFIG_TYPES = [
     defaultDest: ['allievo', 'docente', 'admin'],
   },
   {
+    id: 'promemoria_esercizi',
+    label: 'Promemoria esercizi (24h prima)',
+    icon: 'bell',
+    color: C.teal,
+    colorBg: C.tealBg,
+    colorBorder: C.tealBorder,
+    desc: 'Push all\'allievo 24 ore prima della lezione: "Ciao [allievo], ricordati degli esercizi di musica per domani 😉"',
+    defaultAnticipoMin: 1440,
+    defaultDest: ['allievo'],
+  },
+  {
     id: 'sala_prove',
     label: 'Sala Prove',
     icon: 'drum',
@@ -2594,8 +2605,11 @@ CREATE POLICY "admin_all" ON public.notifiche_config FOR ALL USING (true);`
                     )
                   )
 
+                  /* Promemoria esercizi: anteprima destinatari + test (Edge Function send-push v7) */
+                  , tipo.id === 'promemoria_esercizi' && React.createElement(PromemoriaEserciziPanel, { tipo, showToast })
+
                   /* Selettore destinatari */
-                  , React.createElement('div', null
+                  , tipo.id !== 'promemoria_esercizi' && React.createElement('div', null
                     , React.createElement('label', { style: { fontSize: 11, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.07em', display: 'block', marginBottom: 8 } }
                       , '👥 Chi riceve la notifica push'
                     )
@@ -2622,6 +2636,65 @@ CREATE POLICY "admin_all" ON public.notifiche_config FOR ALL USING (true);`
               );
             })
         )
+  );
+};
+
+// Pannello della card "Promemoria esercizi" in Config. Notifiche (logica nell'Edge Function send-push v7)
+const PromemoriaEserciziPanel = ({ tipo, showToast }) => {
+  const [busy, setBusy] = React.useState('');
+  const [anteprima, setAnteprima] = React.useState(null);
+  const chiama = async (body) => {
+    const sb = window.supabaseClient; if (!sb) throw new Error('Supabase non inizializzato');
+    const { data: { session } } = await sb.auth.getSession();
+    const token = session && session.access_token;
+    if (!token) throw new Error('Sessione scaduta: rientra nell\'app');
+    const res = await fetch('https://ocsxrjommtrjelnbihfr.supabase.co/functions/v1/send-push', {
+      method: 'POST', headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    if (res.status === 404) throw new Error('Edge Function "send-push" non trovata su Supabase');
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || j.ok === false) throw new Error(j.error || ('Errore ' + res.status));
+    return j;
+  };
+  const test = async () => {
+    setBusy('test');
+    try {
+      const j = await chiama({ promemoria: 'test' });
+      if (j.test !== true) throw new Error('send-push non è ancora aggiornata alla v7');
+      if (!j.total) showToast(false, 'Nessun dispositivo collegato al tuo account: attiva le notifiche su questo dispositivo');
+      else showToast(true, `✅ Test inviato a ${j.sent}/${j.total} tuoi dispositivi`);
+    }
+    catch (e) { showToast(false, e.message || String(e)); }
+    setBusy('');
+  };
+  const verifica = async () => {
+    setBusy('dry');
+    try {
+      const j = await chiama({ promemoria: 'anteprima' });
+      if (j.anteprima !== true) throw new Error('send-push non è ancora aggiornata alla v7');
+      setAnteprima(j);
+    }
+    catch (e) { showToast(false, e.message || String(e)); }
+    setBusy('');
+  };
+  const btn = { padding: '7px 14px', borderRadius: 8, border: `1px solid ${tipo.color}`, background: tipo.colorBg, color: tipo.color,
+    cursor: busy ? 'wait' : 'pointer', fontSize: 12, fontWeight: 600, fontFamily: "'Open Sans',sans-serif" };
+  return React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 10 } }
+    , React.createElement('div', { style: { fontSize: 12, color: C.textMuted, lineHeight: 1.55 } },
+        'Inviata solo agli allievi (e ai genitori collegati) con l\'app installata e le notifiche attive, circa 24 ore prima dell\'inizio della lezione. ',
+        'Non viene inviata per lezioni "Da recuperare", già recuperate, spostate, con assenza segnata, prove e sala prove. Ogni allievo la riceve al massimo una volta al giorno.')
+    , React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } }
+      , React.createElement('button', { style: btn, disabled: !!busy, onClick: test }, busy === 'test' ? '⏳ Invio…' : '🧪 Invia un test a me')
+      , React.createElement('button', { style: { ...btn, background: C.bg, color: C.text, borderColor: C.border }, disabled: !!busy, onClick: verifica }, busy === 'dry' ? '⏳ Controllo…' : '🔍 Chi lo riceverà nei prossimi 15 minuti')
+    )
+    , anteprima && React.createElement('div', { style: { fontSize: 12, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px' } }
+      , (anteprima.dettagli || []).length === 0
+        ? 'Nessuna lezione tra 23 ore e 24 ore e 15 minuti da adesso: al momento non partirebbe nessun promemoria.'
+        : React.createElement('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } }
+          , (anteprima.dettagli || []).map((d, i) => React.createElement('div', { key: i, style: { color: d.dispositivi ? C.text : C.textDim } }
+              , `${d.allievo || 'Allievo ' + d.allievoId} — lezione ${new Date(d.inizio).toLocaleString('it-IT', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+              , d.giaInviato ? ' · già inviato' : !d.dispositivi ? ' · ⚠ nessun dispositivo con notifiche attive' : ` · ${d.dispositivi} dispositiv${d.dispositivi===1?'o':'i'}`))
+        )
+    )
   );
 };
 
