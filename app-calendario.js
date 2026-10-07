@@ -3785,143 +3785,200 @@ const supabaseUpsertConFallbackColonne = async (sb, table, row, { isUpdate=false
   return secondo;
 };
 
-// ─── Report pagamenti allievi (quote mensili + iscrizioni, raggruppato per allievo) ────
+// ─── Report pagamenti allievi: griglia allievi × mesi dell'anno scolastico (quote + iscrizione) ────
+// Mesi dell'a.s. da Settembre (annoInizio) fino alla fine dell'anno scolastico:
+//  - se l'a.s. ha dataFineAnno → fino a quel mese incluso;
+//  - altrimenti → fino all'ultimo mese attivo (mesiAttivi, 0-based) tra Gennaio e Agosto (default Maggio).
+// Restituisce [{mese:1..12, anno}] filtrando i mesi esclusi da mesiAttivi.
+const mesiAnnoScolasticoReport = (annoRec, annoInizio) => {
+  const ai = Number(annoInizio);
+  const mesiAttivi = (annoRec && Array.isArray(annoRec.mesiAttivi) && annoRec.mesiAttivi.length)
+    ? annoRec.mesiAttivi.map(Number) : [0,1,2,3,4,8,9,10,11];
+  let fineMese, fineAnno, daDataFine = false; // fineMese 1..12
+  const dfa = annoRec && annoRec.dataFineAnno ? new Date(annoRec.dataFineAnno+"T00:00:00") : null;
+  if (dfa && !isNaN(dfa) && dfa.getFullYear()===ai+1 && dfa.getMonth()<8) {
+    fineMese = dfa.getMonth()+1; fineAnno = ai+1; daDataFine = true;
+  } else {
+    const primaParte = mesiAttivi.filter(m => m>=0 && m<8);
+    fineMese = (primaParte.length ? Math.max(...primaParte) : 4) + 1; fineAnno = ai+1;
+  }
+  const out = [];
+  let m = 9, y = ai;
+  while (y < fineAnno || (y===fineAnno && m<=fineMese)) {
+    // Il mese della data di fine a.s. (se impostata esplicitamente) è sempre incluso
+    if (mesiAttivi.includes(m-1) || (daDataFine && y===fineAnno && m===fineMese)) out.push({ mese:m, anno:y });
+    m++; if (m>12) { m=1; y++; }
+  }
+  return out;
+};
+
 const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoSel }) => {
   const now4 = new Date();
-  const [reportMese, setReportMese] = useState(now4.getMonth()+1);
-  const [reportAnno, setReportAnno] = useState(now4.getFullYear());
-  const [filtro, setFiltro] = useState("tutti"); // tutti | pagato | nonpagato
+  const [filtro, setFiltro] = useState("tutti"); // tutti | inregola | arretrati
   const [search, setSearch] = useState("");
-  const MESI_FULL = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
   const MESI_SHORT = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const MESI_FULL  = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 
-  const inAnnoScolastico = (e) => (Number(e.mese)>=9 ? Number(e.anno)===annoSel : Number(e.anno)===annoSel+1);
-  const isMeseFuturo = new Date(reportAnno, reportMese-1, 1) > new Date(now4.getFullYear(), now4.getMonth(), 1);
+  const annoRec = (anniDisp||[]).find(a => String(a.annoInizio)===String(annoSel)) || null;
+  const mesi = mesiAnnoScolasticoReport(annoRec, annoSel);
+  const meseCorrenteKey = now4.getFullYear()*100 + (now4.getMonth()+1);
+  const keyOf = (mm) => mm.anno*100 + mm.mese;
 
-  const entrateQuota      = (entrate||[]).filter(e=>e.categoria==="quota");
+  const inAnnoScolastico = (e) => (Number(e.mese)>=9 ? Number(e.anno)===Number(annoSel) : Number(e.anno)===Number(annoSel)+1);
+  const matchAllievo = (e, s) => e.studentId!=null
+    ? String(e.studentId)===String(s.id)
+    : (e.studentName||'').toLowerCase().trim()===(s.name||s.nome||'').toLowerCase().trim();
+
+  const entrateQuota      = (entrate||[]).filter(e=>e.categoria==="quota" && inAnnoScolastico(e));
   const entrateIscrizione = (entrate||[]).filter(e=>e.categoria==="iscrizione" && inAnnoScolastico(e));
 
-  const trovaQuota = (s) => entrateQuota.find(e =>
-    Number(e.mese)===reportMese && Number(e.anno)===reportAnno &&
-    (e.studentId!=null ? String(e.studentId)===String(s.id) : (e.studentName||'').toLowerCase().trim()===(s.name||s.nome||'').toLowerCase().trim())
-  );
-  const trovaIscrizione = (s) => entrateIscrizione.find(e =>
-    e.studentId!=null ? String(e.studentId)===String(s.id) : (e.studentName||'').toLowerCase().trim()===(s.name||s.nome||'').toLowerCase().trim()
-  );
-
-  // Tutti gli allievi attivi — non solo chi ha pagato
+  // Tutti gli allievi attivi iscritti all'a.s. selezionato — non solo chi ha pagato
   const attivi = (students||[]).filter(s=>s.status==='attivo'||!s.status);
 
   const righeComplete = attivi.map(s => {
     const enrollDate = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
-    const primaDelIscrizione = enrollDate && (reportAnno < enrollDate.getFullYear() ||
-      (reportAnno===enrollDate.getFullYear() && reportMese < enrollDate.getMonth()+1));
-    const quota = trovaQuota(s);
-    const iscr  = trovaIscrizione(s);
-    const statoQuota = primaDelIscrizione ? "nd" : quota ? "pagato" : isMeseFuturo ? "futuro" : "nonpagato";
-    return { studentId:s.id, nome:s.name||s.nome||'—', quota, iscr, statoQuota };
+    const enrollKey  = enrollDate && !isNaN(enrollDate) ? enrollDate.getFullYear()*100 + enrollDate.getMonth()+1 : null;
+    const quoteAllievo = entrateQuota.filter(e => matchAllievo(e, s));
+    const celle = mesi.map(mm => {
+      const k = keyOf(mm);
+      const quota = quoteAllievo.find(e => Number(e.mese)===mm.mese && Number(e.anno)===mm.anno) || null;
+      const stato = quota ? "pagato"
+        : (enrollKey!=null && k<enrollKey) ? "nd"
+        : k>meseCorrenteKey ? "futuro"
+        : "nonpagato";
+      return { ...mm, quota, stato };
+    });
+    const iscr = entrateIscrizione.find(e => matchAllievo(e, s)) || null;
+    const nArretrati = celle.filter(c=>c.stato==="nonpagato").length;
+    const totPagato  = celle.reduce((t,c)=>t+(c.quota?Number(c.quota.importo)||0:0),0);
+    return { studentId:s.id, nome:s.name||s.nome||'—', celle, iscr, nArretrati, totPagato };
   });
 
   let righe = righeComplete;
-  if(search.trim()) {
+  if (search.trim()) {
     const q = search.trim().toLowerCase();
     righe = righe.filter(r=>r.nome.toLowerCase().includes(q));
   }
   righe = righe.slice().sort((a,b)=>a.nome.localeCompare(b.nome));
 
-  const pagatiCount    = righeComplete.filter(r=>r.statoQuota==="pagato").length;
-  const nonPagatiCount = righeComplete.filter(r=>r.statoQuota==="nonpagato").length;
+  const inRegolaCount  = righeComplete.filter(r=>r.nArretrati===0).length;
+  const arretratiCount = righeComplete.filter(r=>r.nArretrati>0).length;
   const iscrPagateCount = righeComplete.filter(r=>!!r.iscr).length;
 
-  const filtrato = filtro==="pagato" ? righe.filter(r=>r.statoQuota==="pagato")
-    : filtro==="nonpagato" ? righe.filter(r=>r.statoQuota==="nonpagato")
+  const filtrato = filtro==="inregola" ? righe.filter(r=>r.nArretrati===0)
+    : filtro==="arretrati" ? righe.filter(r=>r.nArretrati>0)
     : righe;
 
-  const totIncassatoMese = righeComplete.reduce((t,r)=>t+(r.quota?Number(r.quota.importo)||0:0),0);
+  const totIncassatoAS = righeComplete.reduce((t,r)=>t+r.totPagato,0);
+  const pagatiPerMese  = mesi.map((_,i)=>righeComplete.filter(r=>r.celle[i].stato==="pagato").length);
+  const dovutiPerMese  = mesi.map((_,i)=>righeComplete.filter(r=>r.celle[i].stato==="pagato"||r.celle[i].stato==="nonpagato").length);
+
+  const labelAS = (a) => `${a.annoInizio}/${String(a.annoFine||Number(a.annoInizio)+1).slice(2)}`;
+  // Pulsanti A.S.: sempre visibile almeno quello corrente (anche se è l'unico disponibile)
+  const anniBtn = (anniDisp && anniDisp.length) ? anniDisp : [{annoInizio:annoSel, annoFine:Number(annoSel)+1}];
+
+  const thBase = {padding:"9px 8px",fontSize:10,textTransform:"uppercase",letterSpacing:"0.07em",color:C.textMuted,fontWeight:600,whiteSpace:'nowrap',background:C.bg};
+  const stickyCol = (bg) => ({position:'sticky',left:0,zIndex:1,background:bg});
+
+  const badge = (c) => {
+    const tip = c.quota
+      ? `${MESI_FULL[c.mese-1]} ${c.anno}: €${Number(c.quota.importo||0).toLocaleString('it-IT')}`
+        + ((c.quota.dataPagamento||c.quota.data) ? ` · ${new Date((c.quota.dataPagamento||c.quota.data)+"T00:00:00").toLocaleDateString('it-IT')}` : '')
+        + (c.quota.metodo ? ` · ${c.quota.metodo}` : '')
+      : c.stato==="nd" ? `${MESI_FULL[c.mese-1]} ${c.anno}: non ancora iscritto`
+      : c.stato==="futuro" ? `${MESI_FULL[c.mese-1]} ${c.anno}: mese futuro, non ancora pagato`
+      : `${MESI_FULL[c.mese-1]} ${c.anno}: quota non pagata`;
+    if (c.stato==="nd") return React.createElement('span', {title:tip, style:{fontSize:11,color:C.textDim}}, '—');
+    const pag = c.stato==="pagato";
+    const fut = c.stato==="futuro";
+    return React.createElement('span', {title:tip, style:{
+        display:'inline-block',fontSize:9.5,fontWeight:700,letterSpacing:'.03em',whiteSpace:'nowrap',
+        padding:'3px 7px',borderRadius:4,
+        background: pag?C.greenBg : fut?C.bg : C.redBg,
+        color:      pag?C.green   : fut?C.textDim : C.red,
+        border:`1px solid ${pag?C.greenBorder : fut?C.border : C.redBorder}`,
+      }}, pag ? 'PAGATO' : 'NON PAGATO');
+  };
 
   return (
     React.createElement('div', null
-      /* Header: anno scolastico + mese + ricerca */
+      /* Header: anno scolastico + ricerca + totale incassato */
       , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:8,marginBottom:14,flexWrap:'wrap'}}
-        , anniDisp && anniDisp.length>1 && React.createElement(React.Fragment, null
-          , React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontWeight:600,letterSpacing:'.07em',textTransform:'uppercase'}},'A.S.:')
-          , anniDisp.map(a => {
-              const label = `${a.annoInizio}/${String(a.annoFine||a.annoInizio+1).slice(2)}`;
-              const sel = String(a.annoInizio) === String(annoSel);
-              return React.createElement('button',{key:a.annoInizio, onClick:()=>setAnnoSel(a.annoInizio),
-                style:{padding:'4px 12px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.teal:C.bg,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:12,fontWeight:sel?700:400,fontFamily:"'Open Sans',sans-serif"}}
-                , label
-              );
-            })
-        )
-        , React.createElement('select',{value:reportMese,onChange:e=>setReportMese(Number(e.target.value)),
-            style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
-          , MESI_SHORT.map((m,i)=>React.createElement('option',{key:i,value:i+1},m)))
-        , React.createElement('select',{value:reportAnno,onChange:e=>setReportAnno(Number(e.target.value)),
-            style:{padding:'6px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
-          , [now4.getFullYear()-1,now4.getFullYear(),now4.getFullYear()+1].map(y=>React.createElement('option',{key:y,value:y},y)))
+        , React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontWeight:600,letterSpacing:'.07em',textTransform:'uppercase'}},'A.S.:')
+        , anniBtn.map(a => {
+            const sel = String(a.annoInizio) === String(annoSel);
+            return React.createElement('button',{key:a.annoInizio, onClick:()=>setAnnoSel(a.annoInizio),
+              style:{padding:'4px 12px',borderRadius:20,border:`1px solid ${sel?C.teal:C.border}`,background:sel?C.teal:C.bg,color:sel?'#fff':C.textMuted,cursor:'pointer',fontSize:12,fontWeight:sel?700:400,fontFamily:"'Open Sans',sans-serif"}}
+              , labelAS(a)
+            );
+          })
         , React.createElement('input', {type:'text', placeholder:'Cerca allievo…', value:search, onChange:e=>setSearch(e.target.value),
             style:{padding:'7px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:C.text,fontSize:13,minWidth:160}})
         , React.createElement('div', {style:{marginLeft:'auto',textAlign:'right'}}
-          , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:C.green}}, `€${totIncassatoMese.toLocaleString('it-IT')}`)
-          , React.createElement('div', {style:{fontSize:11,color:C.textMuted}}, `incassato ${MESI_FULL[reportMese-1]} ${reportAnno}`)
+          , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,color:C.green}}, `€${totIncassatoAS.toLocaleString('it-IT')}`)
+          , React.createElement('div', {style:{fontSize:11,color:C.textMuted}}, `quote incassate A.S. ${annoSel}/${String(Number(annoSel)+1).slice(2)}`)
         )
       )
       /* Filtro pillole */
       , React.createElement('div', {style:{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}
         , [
             {id:'tutti',     label:`Tutti (${righeComplete.length})`},
-            {id:'pagato',    label:`✅ Pagato (${pagatiCount})`},
-            {id:'nonpagato', label:`❌ Non pagato (${nonPagatiCount})`},
+            {id:'inregola',  label:`✅ In regola (${inRegolaCount})`},
+            {id:'arretrati', label:`❌ Con mesi non pagati (${arretratiCount})`},
           ].map(f=>React.createElement('button',{key:f.id,onClick:()=>setFiltro(f.id),
               style:{padding:'5px 13px',borderRadius:20,border:`1px solid ${filtro===f.id?C.gold:C.border}`,
                 background:filtro===f.id?C.goldBg:'none',color:filtro===f.id?C.gold:C.textMuted,
                 cursor:'pointer',fontSize:12,fontWeight:filtro===f.id?700:400,fontFamily:"'Open Sans',sans-serif"}},f.label))
         , React.createElement('span', {style:{fontSize:11,color:C.textDim,marginLeft:8,alignSelf:'center'}}, `Iscrizione A.S. pagata: ${iscrPagateCount}/${righeComplete.length}`)
       )
-      /* Tabella: tutti gli allievi attivi */
-      , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:'hidden'}}
-        , React.createElement('table', {style:{width:'100%',borderCollapse:'collapse'}}
+      /* Tabella: allievi × mesi (scroll orizzontale, prima colonna fissa) */
+      , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflowX:'auto'}}
+        , React.createElement('table', {style:{width:'100%',borderCollapse:'collapse',minWidth: 260 + mesi.length*92}}
           , React.createElement('thead', null
-            , React.createElement('tr', {style:{background:C.bg,borderBottom:`2px solid ${C.border}`}}
-              , ["Allievo",`Quota ${MESI_SHORT[reportMese-1]}`,"Data pagamento","Metodo","Iscrizione A.S.","Stato"].map(h=>(
-                React.createElement('th', {key:h, style:{padding:"9px 16px",textAlign:"left",fontSize:10,textTransform:"uppercase",letterSpacing:"0.07em",color:C.textMuted,fontWeight:600}}, h)
-              ))
+            , React.createElement('tr', {style:{borderBottom:`2px solid ${C.border}`}}
+              , React.createElement('th', {style:{...thBase,...stickyCol(C.bg),textAlign:'left',padding:'9px 14px'}}, 'Allievo')
+              , React.createElement('th', {style:{...thBase,textAlign:'center'}}, 'Iscrizione')
+              , mesi.map(mm => {
+                  const corrente = keyOf(mm)===meseCorrenteKey;
+                  return React.createElement('th', {key:keyOf(mm), title:`${MESI_FULL[mm.mese-1]} ${mm.anno}`,
+                    style:{...thBase,textAlign:'center',color:corrente?C.gold:C.textMuted,borderBottom:corrente?`2px solid ${C.gold}`:undefined}}
+                    , `${MESI_SHORT[mm.mese-1]} ${String(mm.anno).slice(2)}`);
+                })
             )
           )
           , React.createElement('tbody', null
             , filtrato.length===0 ? (
-              React.createElement('tr', null, React.createElement('td', {colSpan:6, style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}}, 'Nessun allievo in questa categoria'))
+              React.createElement('tr', null, React.createElement('td', {colSpan:mesi.length+2, style:{padding:'20px',textAlign:'center',color:C.textDim,fontSize:13}}, 'Nessun allievo in questa categoria'))
             ) : filtrato.map((r,i) => {
-              const clr = r.statoQuota==="pagato"?C.green : r.statoQuota==="nonpagato"?C.red : C.textDim;
-              const bg  = r.statoQuota==="pagato"?C.greenBg : r.statoQuota==="nonpagato"?C.redBg : C.bg;
-              const bd  = r.statoQuota==="pagato"?C.greenBorder : r.statoQuota==="nonpagato"?C.redBorder : C.border;
-              const lbl = r.statoQuota==="pagato"?"✅ Pagato" : r.statoQuota==="nonpagato"?"❌ Non pagato" : r.statoQuota==="futuro"?"Mese futuro":"Non ancora iscritto";
-              return (
-                React.createElement('tr', {key:r.studentId||r.nome,
-                  style:{borderBottom:`1px solid ${C.border}`,background:i%2===0?C.surface:C.bg}}
-                  , React.createElement('td', {style:{padding:"10px 16px",fontSize:13,fontWeight:600,color:C.text}}, r.nome)
-                  , React.createElement('td', {style:{padding:"10px 16px",fontFamily:"'Oswald',sans-serif",fontSize:14,fontWeight:600,color:r.quota?C.green:C.textDim}}
-                    , r.quota ? `€${Number(r.quota.importo).toLocaleString('it-IT')}` : "—")
-                  , React.createElement('td', {style:{padding:"10px 16px",color:C.textMuted,whiteSpace:"nowrap",fontSize:12.5}}
-                    , r.quota && (r.quota.dataPagamento||r.quota.data) ? new Date((r.quota.dataPagamento||r.quota.data)+"T00:00:00").toLocaleDateString("it-IT") : "—")
-                  , React.createElement('td', {style:{padding:"10px 16px",color:C.textMuted,fontSize:12.5}}, r.quota ? (r.quota.metodo||"—") : "—")
-                  , React.createElement('td', {style:{padding:"10px 16px"}}
-                    , r.iscr
-                      ? React.createElement('span', {style:{fontSize:11,padding:"2px 8px",borderRadius:4,background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`}}, `✅ €${Number(r.iscr.importo).toLocaleString('it-IT')}`)
-                      : React.createElement('span', {style:{fontSize:11,padding:"2px 8px",borderRadius:4,background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`}}, "❌ Non pagata")
-                  )
-                  , React.createElement('td', {style:{padding:"10px 16px"}}
-                    , React.createElement('span', {style:{fontSize:11,fontWeight:600,background:bg,color:clr,border:`1px solid ${bd}`,borderRadius:20,padding:"3px 10px"}}, lbl)
-                  )
+              const rowBg = i%2===0?C.surface:C.bg;
+              return React.createElement('tr', {key:r.studentId||r.nome, style:{borderBottom:`1px solid ${C.border}`,background:rowBg}}
+                , React.createElement('td', {style:{...stickyCol(rowBg),padding:"9px 14px",fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}
+                  , r.nome
+                  , r.nArretrati>0 && React.createElement('span', {title:`${r.nArretrati} mesi non pagati`, style:{marginLeft:6,fontSize:10,fontWeight:700,color:C.red}}, `(${r.nArretrati})`)
                 )
+                , React.createElement('td', {style:{padding:"9px 8px",textAlign:'center'}}
+                  , r.iscr
+                    ? React.createElement('span', {title:`€${Number(r.iscr.importo||0).toLocaleString('it-IT')}`, style:{fontSize:9.5,fontWeight:700,padding:"3px 7px",borderRadius:4,background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`,whiteSpace:'nowrap'}}, 'PAGATO')
+                    : React.createElement('span', {style:{fontSize:9.5,fontWeight:700,padding:"3px 7px",borderRadius:4,background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`,whiteSpace:'nowrap'}}, 'NON PAGATO')
+                )
+                , r.celle.map(c => React.createElement('td', {key:keyOf(c), style:{padding:"9px 6px",textAlign:'center'}}, badge(c)))
               );
             })
+          )
+          , filtrato.length>0 && React.createElement('tfoot', null
+            , React.createElement('tr', {style:{borderTop:`2px solid ${C.border}`}}
+              , React.createElement('td', {style:{...stickyCol(C.bg),padding:"9px 14px",fontSize:11,fontWeight:600,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em'}}, 'Pagati')
+              , React.createElement('td', {style:{padding:"9px 8px",textAlign:'center',fontSize:11,color:C.textMuted,background:C.bg}}, `${iscrPagateCount}/${righeComplete.length}`)
+              , mesi.map((mm,idx) => React.createElement('td', {key:keyOf(mm), style:{padding:"9px 6px",textAlign:'center',fontSize:11,color:C.textMuted,background:C.bg}}
+                  , dovutiPerMese[idx] ? `${pagatiPerMese[idx]}/${dovutiPerMese[idx]}` : (pagatiPerMese[idx] ? String(pagatiPerMese[idx]) : '—')))
+            )
           )
         )
       )
       , React.createElement('div', {style:{padding:'10px 4px',fontSize:11,color:C.textDim}}
-        , `${righeComplete.length} allievi attivi · quota mensile riferita a ${MESI_FULL[reportMese-1]} ${reportAnno} · iscrizione riferita all'anno scolastico ${annoSel}/${String(annoSel+1).slice(2)}`
+        , `${righeComplete.length} allievi attivi · A.S. ${annoSel}/${String(Number(annoSel)+1).slice(2)}`
+          + (mesi.length ? ` · da ${MESI_FULL[mesi[0].mese-1]} ${mesi[0].anno} a ${MESI_FULL[mesi[mesi.length-1].mese-1]} ${mesi[mesi.length-1].anno}` : '')
+          + ' · i mesi futuri non ancora pagati sono in grigio · passa sul flag per vedere importo, data e metodo'
       )
     )
   );
