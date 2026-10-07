@@ -3878,16 +3878,22 @@ const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoS
     const quoteAllievo = entrateQuota.filter(e => matchAllievo(e, s));
     const celle = mesi.map(mm => {
       const k = keyOf(mm);
-      const quota = quoteAllievo.find(e => Number(e.mese)===mm.mese && Number(e.anno)===mm.anno) || null;
-      const stato = quota ? "pagato"
+      // Più registrazioni nello stesso mese (es. pagamento in due rate) vengono sommate
+      const quoteMese = quoteAllievo.filter(e => Number(e.mese)===mm.mese && Number(e.anno)===mm.anno);
+      const quota = quoteMese[0] || null;
+      const importoMese = quoteMese.reduce((t,e)=>t+(Number(e.importo)||0),0);
+      const esonero = quoteMese.some(e => e.agevolazione==="esonero");
+      const sconto  = quoteMese.find(e => e.agevolazione==="sconto") || null;
+      const stato = esonero ? "esonero"
+        : quoteMese.length ? "pagato"
         : (enrollKey!=null && k<enrollKey) ? "nd"
         : k>meseCorrenteKey ? "futuro"
         : "nonpagato";
-      return { ...mm, quota, stato };
+      return { ...mm, quota, quoteMese, importoMese, sconto, stato };
     });
     const iscr = entrateIscrizione.find(e => matchAllievo(e, s)) || null;
     const nArretrati = celle.filter(c=>c.stato==="nonpagato").length;
-    const totPagato  = celle.reduce((t,c)=>t+(c.quota?Number(c.quota.importo)||0:0),0);
+    const totPagato  = celle.reduce((t,c)=>t+(c.importoMese||0),0);
     return { studentId:s.id, nome:s.name||s.nome||'—', celle, iscr, nArretrati, totPagato };
   });
 
@@ -3907,8 +3913,9 @@ const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoS
     : righe;
 
   const totIncassatoAS = righeComplete.reduce((t,r)=>t+r.totPagato,0);
-  const pagatiPerMese  = mesi.map((_,i)=>righeComplete.filter(r=>r.celle[i].stato==="pagato").length);
-  const dovutiPerMese  = mesi.map((_,i)=>righeComplete.filter(r=>r.celle[i].stato==="pagato"||r.celle[i].stato==="nonpagato").length);
+  // Gli esonerati contano come "in regola" nel conteggio del mese
+  const pagatiPerMese  = mesi.map((_,i)=>righeComplete.filter(r=>r.celle[i].stato==="pagato"||r.celle[i].stato==="esonero").length);
+  const dovutiPerMese  = mesi.map((_,i)=>righeComplete.filter(r=>["pagato","esonero","nonpagato"].includes(r.celle[i].stato)).length);
 
   const labelAS = (a) => `${a.annoInizio}/${String(a.annoFine||Number(a.annoInizio)+1).slice(2)}`;
   // Pulsanti A.S.: sempre visibile almeno quello corrente (anche se è l'unico disponibile)
@@ -3917,24 +3924,29 @@ const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoS
   const thBase = {padding:"9px 8px",fontSize:10,textTransform:"uppercase",letterSpacing:"0.07em",color:C.textMuted,fontWeight:600,whiteSpace:'nowrap',background:C.bg};
   const stickyCol = (bg) => ({position:'sticky',left:0,zIndex:1,background:bg});
 
+  const fmtEuro = (v) => `€${(Math.round((Number(v)||0)*100)/100).toLocaleString('it-IT')}`;
+  const stileFlag = (bg, fg, bd) => ({display:'inline-block',fontSize:9.5,fontWeight:700,letterSpacing:'.03em',whiteSpace:'nowrap',
+    padding:'3px 7px',borderRadius:4,background:bg,color:fg,border:`1px solid ${bd}`});
   const badge = (c) => {
-    const tip = c.quota
-      ? `${MESI_FULL[c.mese-1]} ${c.anno}: €${Number(c.quota.importo||0).toLocaleString('it-IT')}`
-        + ((c.quota.dataPagamento||c.quota.data) ? ` · ${new Date((c.quota.dataPagamento||c.quota.data)+"T00:00:00").toLocaleDateString('it-IT')}` : '')
-        + (c.quota.metodo ? ` · ${c.quota.metodo}` : '')
-      : c.stato==="nd" ? `${MESI_FULL[c.mese-1]} ${c.anno}: quota non dovuta (prima dell'iscrizione / della prima lezione)`
-      : c.stato==="futuro" ? `${MESI_FULL[c.mese-1]} ${c.anno}: mese futuro, non ancora pagato`
-      : `${MESI_FULL[c.mese-1]} ${c.anno}: quota non pagata`;
-    if (c.stato==="nd") return React.createElement('span', {title:tip, style:{fontSize:11,color:C.textDim}}, '—');
-    const pag = c.stato==="pagato";
+    const nomeMese = `${MESI_FULL[c.mese-1]} ${c.anno}`;
+    if (c.stato==="esonero") {
+      const mot = c.quoteMese.map(e=>e.motivoAgevolazione).filter(Boolean)[0];
+      return React.createElement('span', {title:`${nomeMese}: esonerato${mot?` (${mot})`:''}`, style:stileFlag(C.tealBg, C.teal, C.tealBorder)}, 'ESONERATO');
+    }
+    if (c.stato==="pagato") {
+      const q = c.quota || {};
+      const dt = q.dataPagamento||q.data;
+      const tip = `${nomeMese}: ${fmtEuro(c.importoMese)}`
+        + (dt ? ` · ${new Date(dt+"T00:00:00").toLocaleDateString('it-IT')}` : '')
+        + (q.metodo ? ` · ${q.metodo}` : '')
+        + (c.sconto ? ` · sconto da ${fmtEuro(c.sconto.importoPieno)}${c.sconto.motivoAgevolazione?` (${c.sconto.motivoAgevolazione})`:''}` : '');
+      return React.createElement('span', {title:tip, style:stileFlag(C.greenBg, C.green, C.greenBorder)}
+        , fmtEuro(c.importoMese), c.sconto ? React.createElement('span', {style:{marginLeft:3,fontWeight:600,opacity:.75}}, '*') : null);
+    }
+    if (c.stato==="nd") return React.createElement('span', {title:`${nomeMese}: allievo non ancora iscritto / senza lezioni`, style:stileFlag(C.bg, C.textDim, C.border)}, 'NON ISCRITTO');
     const fut = c.stato==="futuro";
-    return React.createElement('span', {title:tip, style:{
-        display:'inline-block',fontSize:9.5,fontWeight:700,letterSpacing:'.03em',whiteSpace:'nowrap',
-        padding:'3px 7px',borderRadius:4,
-        background: pag?C.greenBg : fut?C.bg : C.redBg,
-        color:      pag?C.green   : fut?C.textDim : C.red,
-        border:`1px solid ${pag?C.greenBorder : fut?C.border : C.redBorder}`,
-      }}, pag ? 'PAGATO' : 'NON PAGATO');
+    return React.createElement('span', {title:`${nomeMese}: ${fut?'mese non ancora iniziato':'quota non pagata'}`,
+      style:fut ? stileFlag(C.bg, C.textDim, C.border) : stileFlag(C.redBg, C.red, C.redBorder)}, 'NON PAGATO');
   };
 
   return (
@@ -3994,9 +4006,12 @@ const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoS
                   , r.nArretrati>0 && React.createElement('span', {title:`${r.nArretrati} mesi non pagati`, style:{marginLeft:6,fontSize:10,fontWeight:700,color:C.red}}, `(${r.nArretrati})`)
                 )
                 , React.createElement('td', {style:{padding:"9px 8px",textAlign:'center'}}
-                  , r.iscr
-                    ? React.createElement('span', {title:`€${Number(r.iscr.importo||0).toLocaleString('it-IT')}`, style:{fontSize:9.5,fontWeight:700,padding:"3px 7px",borderRadius:4,background:C.greenBg,color:C.green,border:`1px solid ${C.greenBorder}`,whiteSpace:'nowrap'}}, 'PAGATO')
-                    : React.createElement('span', {style:{fontSize:9.5,fontWeight:700,padding:"3px 7px",borderRadius:4,background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`,whiteSpace:'nowrap'}}, 'NON PAGATO')
+                  , r.iscr && r.iscr.agevolazione==="esonero"
+                    ? React.createElement('span', {title:`Iscrizione esonerata${r.iscr.motivoAgevolazione?` (${r.iscr.motivoAgevolazione})`:''}`, style:stileFlag(C.tealBg, C.teal, C.tealBorder)}, 'ESONERATO')
+                    : r.iscr
+                    ? React.createElement('span', {title: r.iscr.agevolazione==="sconto" ? `Sconto da ${fmtEuro(r.iscr.importoPieno)}` : '', style:stileFlag(C.greenBg, C.green, C.greenBorder)}
+                        , fmtEuro(r.iscr.importo), r.iscr.agevolazione==="sconto" ? React.createElement('span', {style:{marginLeft:3,fontWeight:600,opacity:.75}}, '*') : null)
+                    : React.createElement('span', {style:stileFlag(C.redBg, C.red, C.redBorder)}, 'NON PAGATO')
                 )
                 , r.celle.map(c => React.createElement('td', {key:keyOf(c), style:{padding:"9px 6px",textAlign:'center'}}, badge(c)))
               );
@@ -4012,10 +4027,17 @@ const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoS
           )
         )
       )
-      , React.createElement('div', {style:{padding:'10px 4px',fontSize:11,color:C.textDim}}
-        , `${righeComplete.length} allievi attivi · A.S. ${annoSel}/${String(Number(annoSel)+1).slice(2)}`
-          + (mesi.length ? ` · da ${MESI_FULL[mesi[0].mese-1]} ${mesi[0].anno} a ${MESI_FULL[mesi[mesi.length-1].mese-1]} ${mesi[mesi.length-1].anno}` : '')
-          + ' · i mesi futuri non ancora pagati sono in grigio · passa sul flag per vedere importo, data e metodo'
+      /* Legenda */
+      , React.createElement('div', {style:{display:'flex',flexWrap:'wrap',alignItems:'center',gap:'6px 14px',padding:'12px 4px',fontSize:11,color:C.textMuted}}
+        , React.createElement('span', null, `${righeComplete.length} allievi attivi`)
+        , [
+            [stileFlag(C.greenBg, C.green, C.greenBorder), '€', 'importo pagato (* = con sconto)'],
+            [stileFlag(C.redBg, C.red, C.redBorder), 'NON PAGATO', 'mese scaduto o in corso'],
+            [stileFlag(C.bg, C.textDim, C.border), 'NON PAGATO', 'mese futuro'],
+            [stileFlag(C.tealBg, C.teal, C.tealBorder), 'ESONERATO', 'socio esonerato'],
+            [stileFlag(C.bg, C.textDim, C.border), 'NON ISCRITTO', 'prima di iscrizione / prima lezione'],
+          ].map(([st, flag, txt], i) => React.createElement('span', {key:i, style:{display:'inline-flex',alignItems:'center',gap:5}}
+              , React.createElement('span', {style:st}, flag), txt))
       )
     )
   );
@@ -14599,19 +14621,79 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
   const needStudent = catObj.student;
   const selStudent  = needStudent ? students.find(s=>s.id===Number(f.studentId)) : null;
 
+  // ── AGEVOLAZIONE SOCIO (sconto / esonero) ───────────────────────────────
+  // Solo per quota mensile e iscrizione, fuori convenzione. Lo sconto registra l'importo
+  // effettivamente pagato + l'importo pieno; l'esonero registra la quota a €0, senza ricevuta,
+  // così il mese risulta coperto nel Report pagamenti. Campi DB: agevolazione, importo_pieno,
+  // motivo_agevolazione (vedi migrazione SQL).
+  const [agev, setAgev] = useState((initial && initial.agevolazione) || "");
+  const [importoPieno, setImportoPieno] = useState(initial && initial.importoPieno!=null ? String(initial.importoPieno) : "");
+  const [scontoTipo, setScontoTipo] = useState("euro"); // euro | perc
+  const [scontoVal, setScontoVal] = useState(
+    initial && initial.agevolazione==='sconto' && initial.importoPieno!=null
+      ? String(Math.max(0, Math.round((Number(initial.importoPieno)-Number(initial.importo||0))*100)/100)) : "");
+  const [motivoAgev, setMotivoAgev] = useState((initial && initial.motivoAgevolazione) || "");
+  const [esoneroFino, setEsoneroFino] = useState(""); // "AAAA-M" ultimo mese esonerato (solo creazione, quota)
+  const agevDisponibile = needStudent && (f.categoria==="quota" || f.categoria==="iscrizione") && !convOn;
+  const agevEff = agevDisponibile ? agev : "";
+  const importoPrevisto = () => f.categoria==="quota"
+    ? (selStudent && selStudent.monthlyFee ? Number(selStudent.monthlyFee) : "")
+    : importoIscrizioneCfg;
+  const calcolaScontato = (pieno, val, tipo) => {
+    const p = Number(pieno), v = Number(val);
+    if (!(p>0) || isNaN(v)) return "";
+    const sc = tipo==="perc" ? p*v/100 : v;
+    return String(Math.round(Math.max(0, p - sc)*100)/100);
+  };
+  const aggiornaSconto = (pieno, val, tipo) => {
+    setImportoPieno(pieno); setScontoVal(val); setScontoTipo(tipo);
+    const imp = calcolaScontato(pieno, val, tipo);
+    if (imp !== "") set("importo", imp);
+  };
+  const scegliAgev = (v) => {
+    setErr({});
+    const pieno = importoPieno || String(importoPrevisto() || f.importo || "");
+    if (v === "sconto") { setAgev(v); aggiornaSconto(pieno, scontoVal, scontoTipo); }
+    else if (v === "esonero") { setAgev(v); setImportoPieno(pieno); set("noRicevuta", true); }
+    else { setAgev(""); if (pieno) set("importo", pieno); set("noRicevuta", false); setEsoneroFino(""); }
+  };
+  // Mesi successivi selezionabili per estendere l'esonero (fino ad Agosto dell'a.s. della quota)
+  const opzioniEsoneroFino = (() => {
+    if (f.categoria!=="quota" || modoModifica) return [];
+    const m0 = Number(f.mese), a0 = Number(f.anno);
+    const asInizio = m0>=9 ? a0 : a0-1;
+    const out = []; let m = m0, a = a0;
+    for (let i=0; i<12; i++) {
+      m++; if (m>12) { m=1; a++; }
+      if (a>asInizio+1 || (a===asInizio+1 && m>8)) break;
+      out.push({ mese:m, anno:a, key:`${a}-${m}` });
+    }
+    return out;
+  })();
+
   const handleStudentChange = (e) => {
     const s = students.find(st=>st.id===Number(e.target.value));
     set("studentId", e.target.value);
-    if(s && f.categoria==="quota") set("importo", s.monthlyFee);
-    if(s && f.categoria==="iscrizione") set("importo", importoIscrizioneCfg);
+    const prev = s ? (f.categoria==="quota" ? s.monthlyFee : f.categoria==="iscrizione" ? importoIscrizioneCfg : null) : null;
+    if (prev==null) return;
+    if (agevEff==="sconto") { aggiornaSconto(String(prev), scontoVal, scontoTipo); return; }
+    if (agevEff==="esonero") { setImportoPieno(String(prev)); return; }
+    set("importo", prev);
   };
 
   const validate = () => {
     const e = {};
     if(needStudent && !f.studentId) e.studentId = "Seleziona un allievo";
-    if(!f.importo||isNaN(f.importo)||Number(f.importo)<=0) e.importo = "Importo non valido";
+    if(agevEff!=="esonero" && (!f.importo||isNaN(f.importo)||Number(f.importo)<=0)) e.importo = "Importo non valido";
+    if(agevEff==="sconto") {
+      const p = Number(importoPieno), imp = Number(f.importo);
+      if (!(p>0)) e.sconto = "Indica l'importo pieno della quota";
+      else if (!(Number(scontoVal)>0)) e.sconto = "Indica lo sconto (in € o in %)";
+      else if (imp<=0) e.sconto = "Sconto pari all'intera quota: usa «Esonero»";
+      else if (imp>=p) e.sconto = "Lo sconto non può superare l'importo pieno";
+    }
     if(!f.data)                     e.data      = "Data obbligatoria";
-    if(!f.metodo)                   e.metodo    = "Metodo di pagamento obbligatorio";
+    if(!f.metodo && agevEff!=="esonero") e.metodo = "Metodo di pagamento obbligatorio";
     if(!needStudent && !f.desc.trim()) e.desc   = "Descrizione obbligatoria";
     extraVoci.forEach(v => { if(!v.importo||isNaN(v.importo)||Number(v.importo)<=0) e[`voce_${v.id}`] = "Importo non valido"; });
     if (modoModifica && !f.noRicevuta && ricNum.trim()) {
@@ -14701,6 +14783,14 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
       : cat==="iscrizione"
       ? `Iscrizione ${anno}/${Number(anno)+1}`
       : (CAT_ENTRATE_USE.find(c=>c.id===cat)||{}).label || "";
+    const suffAgev = agevEff==="esonero" ? " — esonero"
+      : agevEff==="sconto" ? ` — sconto €${(Math.round((Number(importoPieno)-Number(f.importo))*100)/100).toLocaleString('it-IT')}` : "";
+    const pienoFinale = agevEff ? (Number(importoPieno) || Number(importoPrevisto()) || null) : null;
+    // Esonero esteso a più mesi: un record a €0 per ogni mese successivo fino a quello scelto
+    const mesiEsonero = (agevEff==="esonero" && esoneroFino)
+      ? opzioniEsoneroFino.slice(0, opzioniEsoneroFino.findIndex(o=>o.key===esoneroFino)+1)
+          .map(o => ({ mese:o.mese, anno:o.anno, desc:`Quota mensile ${MESI_ALL[o.mese-1]} ${o.anno} — esonero` }))
+      : [];
     onSave({
       ...f,
       studentId:    needStudent ? Number(f.studentId) : null,
@@ -14708,8 +14798,12 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
       importo:      Number(f.importo),
       mese:         Number(f.mese),
       anno:         Number(f.anno),
-      desc:         autoDesc || f.desc,
+      desc:         (autoDesc || f.desc) + suffAgev,
       stato:        f.stato || 'pagato',
+      agevolazione:       agevEff || null,
+      importoPieno:       pienoFinale,
+      motivoAgevolazione: agevEff ? motivoAgev.trim() : "",
+      ...(agevEff==="esonero" ? { importo:0, metodo:"Esonero", noRicevuta:true, stato:"pagato", mesiEsonero } : {}),
       dataPagamento: f.data || f.dataPagamento || '',
       ...(modoModifica ? { numRicevutaManuale: f.noRicevuta ? "" : ricNuovo } : {}),
       // Convenzione (snapshot intestazione: le ricevute già emesse non cambiano se la convenzione viene modificata)
@@ -14719,7 +14813,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
       ricevutaCf:           convFinale && anyInRicevuta ? convFinale.codiceFiscale : "",
       ricevutaIndirizzo:    convFinale && anyInRicevuta ? convFinale.indirizzo : "",
       ...(perVoceRicevuta ? { inRicevuta: primariaInRicevuta } : {}),
-      extraVoci: extraVoci.map(v => {
+      extraVoci: agevEff==="esonero" ? [] : extraVoci.map(v => {
         const base = {
           categoria: v.categoria,
           importo:   Number(v.importo),
@@ -14860,6 +14954,49 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
           )
         )
 
+        /* ── AGEVOLAZIONE SOCIO: sconto / esonero ── */
+        , agevDisponibile && React.createElement('div', {style:{padding:"12px 14px",borderRadius:10,border:`1px solid ${agevEff?C.teal:C.border}`,background:agevEff?C.tealBg:C.bg,display:"flex",flexDirection:"column",gap:10}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block"}}, "Agevolazione socio")
+          , React.createElement('div', {style:{display:"flex",gap:6,flexWrap:"wrap"}}
+            , [{v:"",l:"Nessuna"},{v:"sconto",l:"🏷️ Sconto"},{v:"esonero",l:"🎁 Esonero"}].map(o => {
+                const sel = agevEff===o.v;
+                return React.createElement('button', {key:o.v||"none", type:"button", onClick:()=>scegliAgev(o.v),
+                  style:{padding:"6px 14px",borderRadius:20,border:`2px solid ${sel?C.teal:C.border}`,background:sel?C.surface:"none",
+                    color:sel?C.teal:C.textMuted,cursor:"pointer",fontSize:12,fontWeight:sel?600:400,fontFamily:"'Open Sans',sans-serif"}}, o.l);
+              })
+          )
+          , agevEff==="sconto" && React.createElement('div', {style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:10,alignItems:"end"}}
+            , React.createElement(Input, {label:"Importo pieno (€)", type:"number", value:importoPieno, onChange:e=>aggiornaSconto(e.target.value, scontoVal, scontoTipo)})
+            , React.createElement('div', null
+              , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}}, "Sconto")
+              , React.createElement('div', {style:{display:"flex",gap:6}}
+                , React.createElement('input', {type:"number", min:0, value:scontoVal, onChange:e=>aggiornaSconto(importoPieno, e.target.value, scontoTipo), placeholder:scontoTipo==="perc"?"es. 20":"es. 10",
+                    style:{flex:1,minWidth:0,background:C.surface,border:`1px solid ${err.sconto?C.red:C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"10px 12px",fontFamily:"'Open Sans',sans-serif"}})
+                , ["euro","perc"].map(t => React.createElement('button', {key:t, type:"button", onClick:()=>aggiornaSconto(importoPieno, scontoVal, t),
+                    style:{padding:"0 12px",borderRadius:8,border:`1px solid ${scontoTipo===t?C.teal:C.border}`,background:scontoTipo===t?C.teal:C.surface,color:scontoTipo===t?"#fff":C.textMuted,cursor:"pointer",fontSize:13,fontWeight:600}}, t==="euro"?"€":"%"))
+              )
+            )
+            , React.createElement('div', {style:{padding:"8px 12px",borderRadius:8,background:C.surface,border:`1px solid ${C.tealBorder}`}}
+              , React.createElement('div', {style:{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.07em"}}, "Da pagare")
+              , React.createElement('div', {style:{fontFamily:"'Oswald',sans-serif",fontSize:18,fontWeight:600,color:C.teal}}, f.importo!=="" && f.importo!=null ? `€${Number(f.importo).toLocaleString('it-IT')}` : "—")
+            )
+          )
+          , agevEff==="esonero" && React.createElement('div', {style:{fontSize:12,color:C.teal}}
+            , `Quota registrata a €0, senza ricevuta. Nel Report pagamenti il mese risulta "ESONERATO".`
+            , importoPieno ? ` Quota non incassata: €${Number(importoPieno).toLocaleString('it-IT')}${f.categoria==="quota"?"/mese":""}.` : "")
+          , agevEff==="esonero" && opzioniEsoneroFino.length>0 && React.createElement('div', null
+            , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:6}}, "Applica l'esonero")
+            , React.createElement('select', {value:esoneroFino, onChange:e=>setEsoneroFino(e.target.value),
+                style:{width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"10px 14px",fontFamily:"'Open Sans',sans-serif",appearance:"none"}}
+              , React.createElement('option', {value:""}, `Solo ${MESI_ALL[Number(f.mese)-1]} ${f.anno}`)
+              , opzioniEsoneroFino.map(o => React.createElement('option', {key:o.key, value:o.key}, `Da ${MESI_ALL[Number(f.mese)-1]} ${f.anno} fino a ${MESI_ALL[o.mese-1]} ${o.anno}`))
+            )
+          )
+          , agevEff && React.createElement(Input, {label:"Motivo", value:motivoAgev, onChange:e=>setMotivoAgev(e.target.value), placeholder:"Es. socio fondatore, fratelli iscritti, accordo con il consiglio…"})
+          , err.sconto && React.createElement('div', {style:{fontSize:11,color:C.red}}, err.sconto)
+        )
+
+
         /* Descrizione (per categorie senza allievo o Altro) */
         , (!needStudent || f.categoria==="altro") && (
           React.createElement(Input, { label: "Descrizione *" , value: f.desc, onChange: e=>set("desc",e.target.value),
@@ -14878,10 +15015,10 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
             )
           )
           , React.createElement(Input, { label: "Anno", type: "number", value: f.anno, onChange: e=>set("anno",Number(e.target.value)), __self: this, __source: {fileName: _jsxFileName, lineNumber: 6783}})
-          , React.createElement(Input, { label: "Importo (€) *"  , type: "number", value: f.importo, onChange: e=>set("importo",e.target.value), error: err.importo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6784}})
+          , React.createElement(Input, { label: agevEff==="sconto" ? "Importo scontato (€)" : "Importo (€) *"  , type: "number", value: agevEff==="esonero" ? 0 : f.importo, disabled: !!agevEff, onChange: e=>set("importo",e.target.value), error: err.importo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6784}})
           , React.createElement(Input, { label: "Data *" , type: "date", value: f.data, onChange: e=>set("data",e.target.value), error: err.data, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6785}})
         )
-        , React.createElement(Sel, { label: "Metodo di pagamento"  , value: f.metodo, onChange: e=>set("metodo",e.target.value), options: METODI_PAG, error: err.metodo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6787}})
+        , agevEff!=="esonero" && React.createElement(Sel, { label: "Metodo di pagamento"  , value: f.metodo, onChange: e=>set("metodo",e.target.value), options: METODI_PAG, error: err.metodo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6787}})
 
         /* Voce principale in ricevuta? (convenzione o entrata con più voci) */
         , perVoceRicevuta && React.createElement('label', {style:{display:"flex",alignItems:"center",gap:8,fontSize:12,color:primariaInRicevuta?C.text:C.textMuted,cursor:"pointer"}}
@@ -14951,7 +15088,7 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
         )
 
         /* Voci aggiuntive — solo in creazione, non in modifica. Ogni voce sceglie se andare in ricevuta. */
-        , !modoModifica && !convOn && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
+        , !modoModifica && !convOn && agevEff!=="esonero" && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}
             , "Altre voci"
           )
@@ -15219,7 +15356,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
         numRicevuta = formatNumRicevuta(progressivo, anno);
         await salvaContatoreRicevute(config, setConfig, anno, progressivo + 1);
       }
-      const { extraVoci: _extraVoci, inRicevuta: _inRicPrim, ...dPrimaria } = d;
+      const { extraVoci: _extraVoci, inRicevuta: _inRicPrim, mesiEsonero: _mesiEsonero, ...dPrimaria } = d;
       const _noSnap = { ricevutaIntestatario: '', ricevutaCf: '', ricevutaIndirizzo: '' };
       const primaria = {...dPrimaria, id:uid(), numRicevuta: _primInRic ? numRicevuta : '', dataPagamento,
         noRicevuta: !_primInRic, ...(_primInRic ? {} : _noSnap)};
@@ -15240,7 +15377,12 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
           ...(inRic ? { ricevutaIntestatario: d.ricevutaIntestatario||'', ricevutaCf: d.ricevutaCf||'', ricevutaIndirizzo: d.ricevutaIndirizzo||'' } : _noSnap),
         };
       });
-      setEntrate(p=>[...p, primaria, ...extra]);
+      // Esonero esteso a più mesi: un record a €0 (senza ricevuta) per ciascun mese successivo
+      const esoneriExtra = (_mesiEsonero||[]).map(mm => ({
+        ...dPrimaria, id: uid(), mese: Number(mm.mese), anno: Number(mm.anno), desc: mm.desc,
+        importo: 0, numRicevuta: '', noRicevuta: true, dataPagamento, ..._noSnap,
+      }));
+      setEntrate(p=>[...p, primaria, ...extra, ...esoneriExtra]);
       if (extraLessonIdPendente) {
         const sb = window.supabaseClient;
         if (sb) sb.from('lezioni').update({ extra_contabilizzata: true }).eq('id', extraLessonIdPendente)

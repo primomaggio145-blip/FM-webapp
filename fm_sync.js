@@ -198,6 +198,10 @@
       ricevutaIntestatario: r.ricevuta_intestatario || '',
       ricevutaCf: r.ricevuta_cf || '',
       ricevutaIndirizzo: r.ricevuta_indirizzo || '',
+      // Agevolazioni socio: 'sconto' | 'esonero' | null
+      agevolazione: r.agevolazione || null,
+      importoPieno: r.importo_pieno != null ? parseFloat(r.importo_pieno) : null,
+      motivoAgevolazione: r.motivo_agevolazione || '',
     };
   }
   function adaptSpesa(r) {
@@ -432,6 +436,9 @@
         ricevuta_intestatario: q.ricevutaIntestatario || null,
         ricevuta_cf: q.ricevutaCf || null,
         ricevuta_indirizzo: q.ricevutaIndirizzo || null,
+        agevolazione: q.agevolazione || null,
+        importo_pieno: q.importoPieno != null && q.importoPieno !== '' ? parseFloat(q.importoPieno) : null,
+        motivo_agevolazione: q.motivoAgevolazione || null,
       };
     },
     spese(s) {
