@@ -129,6 +129,7 @@ function App() {
   const [view,           setView]           = useState(_rottaIniziale ? _rottaIniziale.view : "dashboard");
   const [panKey,         setPanKey]         = useState(0);
   const [schermata,      setSchermata]      = useState("login");
+  const [authAvviso,     setAuthAvviso]     = useState(""); // [FM-AUTH-LINK] messaggio per link scaduto/non valido
   const [showEsciMsg,    setShowEsciMsg]    = useState(false);
   const _d = window.__FM_DATA__ || {};
   const [sharedStudents,       setSharedStudents]       = useState(_d.students   || INIT_STUDENTS);
@@ -293,9 +294,21 @@ function App() {
     (async()=>{
       try {
         // Controlla se siamo arrivati da un link di invito/reset (hash nell'URL)
-        const hash = window.location.hash;
-        if (hash && hash.includes('access_token') && hash.includes('type=invite')) {
-          // Supabase ha già gestito il token e creato la sessione
+        // [FM-AUTH-LINK] hash catturato da supabase_integration.js prima di ogni pulizia URL
+        const hash = window.__FM_AUTH_HASH__ || window.location.hash || '';
+        try { window.__FM_AUTH_HASH__ = null; } catch(e){}
+        if (hash && /error_code=|error_description=/.test(hash)) {
+          // Link scaduto o già usato (es. aperto in anticipo dallo scanner antivirus di Outlook/Hotmail)
+          const _code = (hash.match(/error_code=([^&]+)/)||[])[1] || '';
+          setAuthAvviso(_code==='otp_expired'
+            ? "Il link ricevuto è scaduto o è già stato utilizzato. Inserisci qui la tua email per riceverne uno nuovo (oppure usa il codice a 6 cifre contenuto nell'email)."
+            : "Il link non è valido. Inserisci la tua email per riceverne uno nuovo.");
+          setSchermata("recover");
+          window.history.replaceState(null, '', window.location.pathname);
+          return;
+        }
+        if (hash && hash.includes('access_token') && /type=(invite|recovery|signup|magiclink)/.test(hash)) {
+          // Supabase ha già gestito il token e creato la sessione: invito o recupero → imposta password
           setSchermata("setpassword");
           // Pulisci l'URL
           window.history.replaceState(null, '', window.location.pathname);
@@ -1009,7 +1022,7 @@ function App() {
               )
               , schermata==="register" && React.createElement(FormRegistrazione, { onBack: ()=>cambiaSchermata("login"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10758}})
               , schermata==="band"     && React.createElement(FormRegistrazioneBand, { onBack: ()=>cambiaSchermata("login") })
-              , schermata==="recover"  && React.createElement(FormRecupero, { onBack: ()=>cambiaSchermata("login"), __self: this, __source: {fileName: _jsxFileName, lineNumber: 10759}})
+              , schermata==="recover"  && React.createElement(FormRecupero, { onBack: ()=>{setAuthAvviso("");cambiaSchermata("login");}, avviso: authAvviso, onCodiceOk: ()=>{setAuthAvviso("");cambiaSchermata("setpassword");}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10759}})
               , schermata==="setpassword" && React.createElement(FormSetPassword, {
                   onSuccess: async () => {
                     // Dopo aver impostato la password, carica il profilo e fa login

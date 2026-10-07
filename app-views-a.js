@@ -2435,8 +2435,8 @@ const UtenteDrawer = ({utente,onClose,onSave,onSospendi,onElimina,isCurrentAdmin
     setInviteState({loading:true});
     try {
       if(!window.FM_AUTH || !window.FM_AUTH.reinviaInvito) throw new Error('Funzione non disponibile');
-      await window.FM_AUTH.reinviaInvito({email:utente.email});
-      setInviteState({loading:false, ok:true, msg:'Invito reinviato ✓'});
+      const _ri = await window.FM_AUTH.reinviaInvito({email:utente.email});
+      setInviteState({loading:false, ok:true, msg:(_ri&&_ri.tipo==='recupero')?'Account già attivo: inviata email per reimpostare la password ✓':'Invito reinviato ✓'});
     } catch(e) {
       setInviteState({loading:false, ok:false, msg:e.message});
     }

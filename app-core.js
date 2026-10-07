@@ -2412,16 +2412,51 @@ const FormRegistrazioneBand = ({onBack})=>{
 
 
 // ─── FORM RECUPERO PASSWORD ───────────────────────────────────────────────────
-const FormRecupero = ({onBack})=>{
+const FormRecupero = ({onBack, onCodiceOk, avviso})=>{
   const [email,   setEmail]   = useState("");
   const [loading, setLoading] = useState(false);
   const [sent,    setSent]    = useState(false);
   const [err,     setErr]     = useState("");
+  // [FM-AUTH-LINK] verifica con codice a 6 cifre (alternativa al link)
+  const [codice,  setCodice]  = useState("");
+  const [cLoad,   setCLoad]   = useState(false);
+  const [cErr,    setCErr]    = useState("");
+  const [rinvio,  setRinvio]  = useState("");
 
-  const handleInvia=()=>{
+  // [FM-AUTH-LINK] prima era un setTimeout finto: ora invia davvero l'email via Supabase
+  const handleInvia=async()=>{
     if(!email.trim()||!/\S+@\S+\.\S+/.test(email)){setErr("Email non valida");return;}
-    setLoading(true);
-    setTimeout(()=>{setLoading(false);setSent(true);},1000);
+    setLoading(true); setErr("");
+    try {
+      if(!window.FM_AUTH||!window.FM_AUTH.inviaLinkPassword) throw new Error("Servizio non disponibile, riprova tra poco");
+      await window.FM_AUTH.inviaLinkPassword(email);
+      setSent(true);
+    } catch(e) {
+      const m = (e&&e.message)||"";
+      // Non riveliamo se l'account esiste: errori "utente non trovato" → stessa schermata di successo
+      if(/rate limit|too many|seconds/i.test(m)) setErr("Troppe richieste ravvicinate: attendi qualche minuto e riprova");
+      else if(/not found|no user/i.test(m)) setSent(true);
+      else setErr(m||"Invio non riuscito, riprova");
+    } finally { setLoading(false); }
+  };
+
+  const handleRinvia=async()=>{
+    setRinvio("…");
+    try { await window.FM_AUTH.inviaLinkPassword(email); setRinvio("Email reinviata ✓"); }
+    catch(e){ setRinvio(/rate limit|too many|seconds/i.test((e&&e.message)||"")?"Attendi qualche minuto prima di un nuovo invio":"Invio non riuscito"); }
+  };
+
+  const handleCodice=async()=>{
+    const c=codice.replace(/\D/g,"");
+    if(c.length<6){setCErr("Inserisci il codice di 6 cifre ricevuto via email");return;}
+    setCLoad(true); setCErr("");
+    try {
+      await window.FM_AUTH.verificaCodice(email, c);
+      if(onCodiceOk) onCodiceOk();
+    } catch(e) {
+      setCErr("Codice non valido o scaduto. Richiedi una nuova email.");
+      setCLoad(false);
+    }
   };
 
   if(sent) return(
@@ -2436,6 +2471,21 @@ const FormRecupero = ({onBack})=>{
                , React.createElement('br', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 1086}}), "per reimpostare la password a"    , React.createElement('br', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 1086}})
           , React.createElement('strong', { style: {color:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1087}}, email)
         )
+        , React.createElement('p', {style:{fontSize:12,color:C.textMuted,lineHeight:1.6,marginTop:10}},
+            "Non la trovi? Controlla Spam / Posta indesiderata (Hotmail, Outlook, Libero). Se l'email contiene un codice a 6 cifre puoi inserirlo qui sotto.")
+      )
+      // [FM-AUTH-LINK] inserimento codice OTP
+      , React.createElement('div', {style:{width:"100%",display:"flex",flexDirection:"column",gap:10,textAlign:"left"}}
+        , React.createElement(AuthInput, { label: "Codice dall'email (facoltativo)", type: "text", icon: "lock", value: codice,
+            onChange: e=>{setCodice(e.target.value.replace(/\D/g,"").slice(0,10));setCErr("");},
+            error: cErr, placeholder: "123456" })
+        , React.createElement('button', { className: "btn-gold", onClick: handleCodice, disabled: cLoad,
+            style:{width:"100%",padding:"12px 0",borderRadius:12,border:"none",background:cLoad?C.goldDim:C.gold,color:"#ffffff",
+              fontSize:14,fontWeight:600,cursor:cLoad?"not-allowed":"pointer",fontFamily:"'Open Sans',sans-serif"}}
+          , cLoad?"Verifica in corso…":"Verifica codice")
+        , React.createElement('button', { onClick: handleRinvia,
+            style:{background:"none",border:"none",color:C.textMuted,fontSize:12,cursor:"pointer",textDecoration:"underline",fontFamily:"'Open Sans',sans-serif"}}
+          , rinvio && rinvio!=="…" ? rinvio : (rinvio==="…"?"Invio…":"Non è arrivata? Reinvia l'email"))
       )
       , React.createElement('button', { onClick: onBack,
         style: {padding:"11px 24px",borderRadius:10,background:"transparent",
@@ -2460,9 +2510,11 @@ const FormRecupero = ({onBack})=>{
         , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1110}}, "Password dimenticata?"
 
         )
-        , React.createElement('p', { style: {fontSize:13,color:C.textMuted,lineHeight:1.6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1113}}, "Inserisci la tua email e ti invieremo un link per reimpostare la password."
+        , React.createElement('p', { style: {fontSize:13,color:C.textMuted,lineHeight:1.6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1113}}, "Inserisci la tua email e ti invieremo un link per impostare o reimpostare la password. Vale anche se sei stato approvato ma non hai mai ricevuto l'email di invito."
 
         )
+        , avviso && React.createElement('div', {style:{marginTop:12,background:"rgba(234,88,12,0.06)",border:"1px solid rgba(234,88,12,0.25)",
+            borderRadius:10,padding:"9px 13px",fontSize:12,color:"#92400e",lineHeight:1.6}}, avviso)
       )
       , React.createElement('div', { className: "st2", __self: this, __source: {fileName: _jsxFileName, lineNumber: 1117}}
         , React.createElement(AuthInput, { label: "Indirizzo email" , type: "email", icon: "mail", value: email,

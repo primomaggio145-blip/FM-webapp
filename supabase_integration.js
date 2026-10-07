@@ -11,6 +11,13 @@
   const EDGE_APPROVE  = `${SUPABASE_URL}/functions/v1/approve-user`;
   // ─────────────────────────────────────────────────────────────
 
+  // [FM-AUTH-LINK] Cattura l'hash del link email (invito / recupero / errore) PRIMA che
+  // Supabase o il router interno lo puliscano: App lo legge da qui all'avvio.
+  try {
+    const _h = window.location.hash || '';
+    if (/access_token=|error_code=|error_description=/.test(_h)) window.__FM_AUTH_HASH__ = _h;
+  } catch (e) {}
+
   const { createClient } = window.supabase;
   const sb = createClient(SUPABASE_URL, SUPABASE_ANON, {
     auth: {
@@ -234,6 +241,32 @@
       const json = await res.json().catch(()=>({}));
       if (!res.ok || json.error) throw new Error(json.error || `Errore HTTP ${res.status}`);
       return json;
+    },
+
+    // [FM-AUTH-LINK] Self-service: invia l'email per impostare/reimpostare la password.
+    // Funziona anche per chi è stato approvato ma non ha mai ricevuto l'invito
+    // (l'utente esiste già in auth.users). Il link riporta alla webapp con type=recovery.
+    async inviaLinkPassword(email) {
+      const redirectTo = window.location.origin + window.location.pathname;
+      const { error } = await sb.auth.resetPasswordForEmail(String(email).trim().toLowerCase(), { redirectTo });
+      if (error) throw error;
+      return { ok: true };
+    },
+
+    // [FM-AUTH-LINK] Verifica il codice a 6 cifre presente nell'email (template con {{ .Token }}).
+    // Alternativa al link: i codici non vengono "bruciati" dagli scanner antivirus delle
+    // caselle Outlook/Hotmail/Libero che aprono in anticipo i link nelle email.
+    async verificaCodice(email, codice) {
+      const em = String(email).trim().toLowerCase();
+      const token = String(codice).replace(/\D/g, '');
+      let res = await sb.auth.verifyOtp({ email: em, token, type: 'recovery' });
+      if (res.error) {
+        // Il codice potrebbe provenire dall'email di INVITO anziché da quella di recupero
+        const res2 = await sb.auth.verifyOtp({ email: em, token, type: 'invite' });
+        if (!res2.error) res = res2;
+      }
+      if (res.error) throw res.error;
+      return res.data;
     },
 
     // Admin: rifiuta richiesta — aggiorna direttamente il DB (non serve Edge Function)
