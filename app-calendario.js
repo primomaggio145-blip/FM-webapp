@@ -3824,7 +3824,7 @@ const chiaveMeseReport = (v) => {
   return isNaN(d) ? null : d.getFullYear()*100 + d.getMonth()+1;
 };
 
-const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoSel, lessons, iscrizioniAnno }) => {
+const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoSel, lessons, iscrizioniAnno, onSelectAllievo }) => {
   const now4 = new Date();
   const [filtro, setFiltro] = useState("tutti"); // tutti | inregola | arretrati
   const [search, setSearch] = useState("");
@@ -4002,7 +4002,14 @@ const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoS
               const rowBg = i%2===0?C.surface:C.bg;
               return React.createElement('tr', {key:r.studentId||r.nome, style:{borderBottom:`1px solid ${C.border}`,background:rowBg}}
                 , React.createElement('td', {style:{...stickyCol(rowBg),padding:"9px 14px",fontSize:13,fontWeight:600,color:C.text,whiteSpace:'nowrap'}}
-                  , r.nome
+                  , (onSelectAllievo && r.studentId!=null)
+                    ? React.createElement('button', {type:"button", title:"Apri la scheda allievo",
+                        onClick:()=>{ const st=(students||[]).find(x=>String(x.id)===String(r.studentId)); if(st) onSelectAllievo(st); },
+                        style:{background:"none",border:"none",padding:0,margin:0,cursor:"pointer",font:"inherit",fontWeight:600,
+                          color:C.teal,textDecoration:"underline",textDecorationColor:C.tealBorder,textUnderlineOffset:3},
+                        onMouseEnter:e=>{e.currentTarget.style.color=C.gold;},
+                        onMouseLeave:e=>{e.currentTarget.style.color=C.teal;}}, r.nome)
+                    : r.nome
                   , r.nArretrati>0 && React.createElement('span', {title:`${r.nArretrati} mesi non pagati`, style:{marginLeft:6,fontSize:10,fontWeight:700,color:C.red}}, `(${r.nArretrati})`)
                 )
                 , React.createElement('td', {style:{padding:"9px 8px",textAlign:'center'}}
@@ -4096,6 +4103,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const setEntrate  = _nullishCoalesce(propSetEntrate, () => ( (()=>{})));
   const [view,     setView]     = useState(_ruoloAV==="allievo" ? "detail" : "list");
   const [selected, setSelected] = useState(_ruoloAV==="allievo" ? (students[0]||null) : null);
+  const [detailFromAV, setDetailFromAV] = useState("list");   // vista da cui si è aperta la scheda allievo
   const [modal,    setModal]    = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   // Riepilogo primo pagamento mostrato obbligatoriamente dopo la creazione di un nuovo allievo
@@ -4512,12 +4520,13 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
 
         , view==="report" && _ruoloAV==="admin" && React.createElement(ReportPagamentiAllievi, {
             students: studentsAnno, entrate, anniDisp, annoSel, setAnnoSel, lessons, iscrizioniAnno,
+            onSelectAllievo: (s) => { setSelected(s); setDetailFromAV('report'); setView('detail'); },
           })
 
         /* ── Report Lezioni Mensile (solo admin, tab dedicata) ── */
         , view==="lezioni" && _ruoloAV==="admin" && React.createElement(ReportLezioniMensile, {
             lessons, students, config: propConfig, anniScolastici: propAnniScolasticiAV, iscrizioniAnno,
-            onSelectAllievo: (s) => { setSelected(s); setView('detail'); },
+            onSelectAllievo: (s) => { setSelected(s); setDetailFromAV('lezioni'); setView('detail'); },
           })
 
         /* ── Selettore Anno Scolastico (solo admin, solo in vista lista) ── */
@@ -4563,7 +4572,8 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             userRuolo: _ruoloAV,
             onEdit: _ruoloAV==="admin" ? ()=>setModal("edit") : undefined,
             onDelete: _ruoloAV==="admin" ? ()=>setModal("delete") : undefined,
-            onBack: _ruoloAV!=="allievo" ? ()=>setView("list") : undefined,
+            // Torna alla vista di provenienza (es. Report pagamenti) invece che sempre all'elenco
+            onBack: _ruoloAV!=="allievo" ? ()=>{ setView(detailFromAV||"list"); setDetailFromAV("list"); } : undefined,
             onAddLesson: handleAddLesson,
             gruppi: propGruppiAV || [],
             setLessons: setLessons,
