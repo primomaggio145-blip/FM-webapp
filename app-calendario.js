@@ -3812,7 +3812,19 @@ const mesiAnnoScolasticoReport = (annoRec, annoInizio) => {
   return out;
 };
 
-const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoSel }) => {
+// Converte una data (YYYY-MM-DD, ISO con orario, DD/MM/YYYY) in chiave mese YYYYMM; null se non valida
+const chiaveMeseReport = (v) => {
+  if (!v) return null;
+  const str = String(v).trim();
+  let m = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return Number(m[1])*100 + Number(m[2]);
+  m = str.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})/);
+  if (m) return Number(m[3])*100 + Number(m[2]);
+  const d = new Date(str);
+  return isNaN(d) ? null : d.getFullYear()*100 + d.getMonth()+1;
+};
+
+const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoSel, lessons, iscrizioniAnno }) => {
   const now4 = new Date();
   const [filtro, setFiltro] = useState("tutti"); // tutti | inregola | arretrati
   const [search, setSearch] = useState("");
@@ -3835,9 +3847,34 @@ const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoS
   // Tutti gli allievi attivi iscritti all'a.s. selezionato — non solo chi ha pagato
   const attivi = (students||[]).filter(s=>s.status==='attivo'||!s.status);
 
+  // Prima lezione dell'allievo nell'a.s. selezionato (esclusi prove e sala prove):
+  // i mesi precedenti non sono dovuti. Indicizzata per id e per nome per evitare N×M.
+  const inizioAS = Number(annoSel)*100 + 9, fineAS = (Number(annoSel)+1)*100 + 8;
+  const primaLezPerId = new Map(), primaLezPerNome = new Map();
+  (lessons||[]).forEach(l => {
+    if (!l || l.tipo==='prova' || l.tipo==='sala_prove') return;
+    const k = chiaveMeseReport(l.date);
+    if (k==null || k<inizioAS || k>fineAS) return;
+    const upd = (map, key) => { if (key==null || key==='') return; const prev = map.get(key); if (prev==null || k<prev) map.set(key, k); };
+    if (l.studentId!=null) upd(primaLezPerId, String(l.studentId));
+    upd(primaLezPerNome, (l.student||'').toLowerCase().trim());
+  });
+  // Data di iscrizione all'a.s. (tabella iscrizioni_anno), usata solo se l'allievo non ha ancora lezioni
+  const iscrAnnoPerId = new Map();
+  (iscrizioniAnno||[]).forEach(i => {
+    if (String(i.annoInizio)!==String(annoSel)) return;
+    const k = chiaveMeseReport(i.dataIscrizione);
+    if (k!=null) iscrAnnoPerId.set(String(i.studentId), k);
+  });
+
   const righeComplete = attivi.map(s => {
-    const enrollDate = s.enrollDate ? new Date(s.enrollDate+"T00:00:00") : null;
-    const enrollKey  = enrollDate && !isNaN(enrollDate) ? enrollDate.getFullYear()*100 + enrollDate.getMonth()+1 : null;
+    // Mese da cui la quota è dovuta = il più recente tra data di iscrizione e prima lezione dell'a.s.
+    // (se non ci sono lezioni nell'a.s., si usa la data di iscrizione all'anno in iscrizioni_anno).
+    const kEnroll = chiaveMeseReport(s.enrollDate);
+    const kPrimaLez = primaLezPerId.get(String(s.id)) ?? primaLezPerNome.get((s.name||s.nome||'').toLowerCase().trim()) ?? null;
+    const kIscrAnno = kPrimaLez==null ? (iscrAnnoPerId.get(String(s.id)) ?? null) : null;
+    const candidati = [kEnroll, kPrimaLez, kIscrAnno].filter(k => k!=null);
+    const enrollKey = candidati.length ? Math.max(...candidati) : null;
     const quoteAllievo = entrateQuota.filter(e => matchAllievo(e, s));
     const celle = mesi.map(mm => {
       const k = keyOf(mm);
@@ -3885,7 +3922,7 @@ const ReportPagamentiAllievi = ({ students, entrate, anniDisp, annoSel, setAnnoS
       ? `${MESI_FULL[c.mese-1]} ${c.anno}: €${Number(c.quota.importo||0).toLocaleString('it-IT')}`
         + ((c.quota.dataPagamento||c.quota.data) ? ` · ${new Date((c.quota.dataPagamento||c.quota.data)+"T00:00:00").toLocaleDateString('it-IT')}` : '')
         + (c.quota.metodo ? ` · ${c.quota.metodo}` : '')
-      : c.stato==="nd" ? `${MESI_FULL[c.mese-1]} ${c.anno}: non ancora iscritto`
+      : c.stato==="nd" ? `${MESI_FULL[c.mese-1]} ${c.anno}: quota non dovuta (prima dell'iscrizione / della prima lezione)`
       : c.stato==="futuro" ? `${MESI_FULL[c.mese-1]} ${c.anno}: mese futuro, non ancora pagato`
       : `${MESI_FULL[c.mese-1]} ${c.anno}: quota non pagata`;
     if (c.stato==="nd") return React.createElement('span', {title:tip, style:{fontSize:11,color:C.textDim}}, '—');
@@ -4452,7 +4489,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         )
 
         , view==="report" && _ruoloAV==="admin" && React.createElement(ReportPagamentiAllievi, {
-            students: studentsAnno, entrate, anniDisp, annoSel, setAnnoSel,
+            students: studentsAnno, entrate, anniDisp, annoSel, setAnnoSel, lessons, iscrizioniAnno,
           })
 
         /* ── Report Lezioni Mensile (solo admin, tab dedicata) ── */
