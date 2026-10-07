@@ -1163,6 +1163,11 @@ function App() {
           , renderCurrentView()
         )
       )
+      /* ── Avviso nuovi messaggi: solo admin, in qualsiasi vista ── */
+      , user && (user.ruolo||'admin')==='admin' && React.createElement(AvvisoMessaggiAdmin, {
+          appUser: user, view: view, onApri: ()=>setView('messaggi'),
+          suonoUrl: sharedConfig && sharedConfig.suonoMessaggiUrl,
+        })
       , ricercaGlobaleAperta && React.createElement(GlobalSearchModal, {
           ruolo: user?.ruolo||"admin",
           onClose: ()=>setRicercaGlobaleAperta(false),
@@ -3647,6 +3652,306 @@ const NotificheView = ({ notifiche: propNotifiche, setNotifiche, ruolo, appUser,
   );
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// AVVISO NUOVI MESSAGGI (solo ADMIN) — visibile in qualsiasi vista dell'app
+// ───────────────────────────────────────────────────────────────────────────────
+// - Realtime su INSERT della tabella `messaggi` + polling di sicurezza ogni 60s e al
+//   ritorno sulla scheda (il realtime può cadere su mobile/schermo spento).
+// - Considera "per l'admin" gli stessi messaggi che MessaggiView mostra come ricevuti.
+// - L'avviso resta a video finché non lo chiudi o apri la scheda Messaggi.
+// - Suono: file personalizzato (Impostazioni → Generale, salvato su Supabase Storage,
+//   chiave sito_config `suonoMessaggiUrl`) oppure, in mancanza, un "ding" generato.
+// - Se la scheda del browser è in background mostra anche la notifica di sistema
+//   (solo se il permesso notifiche è già stato concesso) e il contatore nel titolo.
+// ═══════════════════════════════════════════════════════════════════════════════
+const FM_SUONO_MSG = (() => {
+  let ctx = null, audioEl = null, url = null, sbloccato = false;
+  const KEY_OFF = 'fm_msg_suono_off';
+  const isMuto = () => { try { return localStorage.getItem(KEY_OFF) === '1'; } catch(e) { return false; } };
+  const setMuto = (v) => { try { v ? localStorage.setItem(KEY_OFF, '1') : localStorage.removeItem(KEY_OFF); } catch(e) {} };
+  const getCtx = () => {
+    if (ctx) return ctx;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    try { ctx = new AC(); } catch(e) { ctx = null; }
+    return ctx;
+  };
+  // "Ding" a due note generato al volo (nessun file necessario)
+  const ding = () => {
+    const c = getCtx(); if (!c) return;
+    try {
+      if (c.state === 'suspended') c.resume();
+      const t0 = c.currentTime + 0.02;
+      [[880, 0], [1318.5, 0.16]].forEach(([freq, dt]) => {
+        const o = c.createOscillator(), g = c.createGain();
+        o.type = 'sine'; o.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, t0 + dt);
+        g.gain.exponentialRampToValueAtTime(0.35, t0 + dt + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.45);
+        o.connect(g); g.connect(c.destination);
+        o.start(t0 + dt); o.stop(t0 + dt + 0.5);
+      });
+    } catch(e) {}
+  };
+  const setUrl = (u) => {
+    const nu = (u && String(u).trim()) || null;
+    if (nu === url) return;
+    url = nu; audioEl = null;
+    if (url) { try { audioEl = new Audio(url); audioEl.preload = 'auto'; } catch(e) { audioEl = null; } }
+  };
+  // I browser bloccano l'audio finché l'utente non interagisce con la pagina:
+  // al primo tocco/clic/tasto "sblocchiamo" sia l'AudioContext sia il file audio.
+  const sblocca = () => {
+    if (sbloccato) return; sbloccato = true;
+    const c = getCtx(); if (c && c.state === 'suspended') { try { c.resume(); } catch(e) {} }
+    if (audioEl) {
+      try {
+        audioEl.muted = true;
+        const p = audioEl.play();
+        const fine = () => { try { audioEl.pause(); audioEl.currentTime = 0; audioEl.muted = false; } catch(e) {} };
+        if (p && p.then) p.then(fine).catch(() => { audioEl.muted = false; }); else fine();
+      } catch(e) {}
+    }
+  };
+  const play = (forza) => {
+    if (!forza && isMuto()) return;
+    if (audioEl) {
+      try {
+        audioEl.muted = false; audioEl.currentTime = 0;
+        const p = audioEl.play();
+        if (p && p.catch) p.catch(() => ding());
+        return;
+      } catch(e) {}
+    }
+    ding();
+  };
+  if (typeof window !== 'undefined') {
+    ['pointerdown', 'keydown', 'touchstart'].forEach(ev =>
+      window.addEventListener(ev, sblocca, { once: true, passive: true, capture: true }));
+  }
+  return { setUrl, play, isMuto, setMuto, sblocca };
+})();
+window.FM_SUONO_MSG = FM_SUONO_MSG;
+
+// Il messaggio è destinato all'admin? Stessa logica di MessaggiView (isIn) + risposte WhatsApp in ingresso.
+const fmMessaggioPerAdmin = (m, myId, mieiIds) => {
+  if (!m) return false;
+  if (myId && m.mittente_id && String(m.mittente_id) === String(myId)) return false;
+  if (m.mittente_ruolo === 'admin' && !m.destinatario_id && !m.destinatario_scheda_id && m.destinatario_ruolo !== 'admin') return false;
+  const ids = (mieiIds || []).map(String);
+  if (m.destinatario_id && ids.includes(String(m.destinatario_id))) return true;
+  if (m.destinatario_scheda_id && ids.includes(String(m.destinatario_scheda_id))) return true;
+  if (!m.destinatario_id && m.destinatario_ruolo === 'admin') return true;
+  if (m.canale === 'whatsapp' && m.mittente_ruolo !== 'admin' && !m.destinatario_id) return true;
+  return false;
+};
+
+const AvvisoMessaggiAdmin = ({ appUser, view, onApri, suonoUrl }) => {
+  const [avvisi, setAvvisi] = useState([]);
+  const [muto, setMuto] = useState(FM_SUONO_MSG.isMuto());
+  const isMobile = useIsMobile();
+  const visti = React.useRef(new Set());
+  const ultimoIso = React.useRef(null);
+  const myIdRef = React.useRef(null);
+  const viewRef = React.useRef(view);
+  viewRef.current = view;
+
+  React.useEffect(() => { FM_SUONO_MSG.setUrl(suonoUrl); }, [suonoUrl]);
+
+  const mieiIds = () => [...new Set([myIdRef.current, appUser && appUser.userId, appUser && appUser.id, appUser && appUser.docenteId,
+      appUser && appUser.allievoId, ...((appUser && appUser.allieviIds) || [])].filter(v => v != null && v !== '').map(String))];
+
+  const notificaSistema = (m) => {
+    try {
+      if (!document.hidden || !('Notification' in window) || Notification.permission !== 'granted') return;
+      const titolo = '💬 Nuovo messaggio' + (m.mittente_nome ? ' da ' + m.mittente_nome : '');
+      const body = String(m.oggetto ? m.oggetto + ' — ' : '') + String(m.testo || '').slice(0, 140);
+      const opts = { body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', tag: 'fm-msg-' + m.id };
+      if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+        navigator.serviceWorker.ready.then(reg => reg.showNotification(titolo, opts)).catch(() => { try { new Notification(titolo, opts); } catch(e) {} });
+      } else { new Notification(titolo, opts); }
+    } catch(e) {}
+  };
+
+  // daPolling=true: il "segnalibro" avanza SOLO con i risultati del polling (ordinati per data).
+  // Se avanzasse anche con le righe del realtime, un messaggio perso dal realtime ma
+  // creato poco prima di uno ricevuto non verrebbe più recuperato.
+  const gestisci = React.useCallback((righe, daPolling) => {
+    const nuovi = [];
+    (righe || []).forEach(m => {
+      if (!m || m.id == null) return;
+      const k = String(m.id);
+      if (daPolling && m.created_at && (!ultimoIso.current || m.created_at > ultimoIso.current)) ultimoIso.current = m.created_at;
+      if (visti.current.has(k)) return;
+      visti.current.add(k);
+      if (fmMessaggioPerAdmin(m, myIdRef.current, mieiIds())) nuovi.push(m);
+    });
+    if (!nuovi.length) return;
+    FM_SUONO_MSG.play();
+    nuovi.forEach(notificaSistema);
+    // Nella scheda Messaggi la lista si aggiorna da sola: basta il suono
+    if (viewRef.current === 'messaggi') return;
+    setAvvisi(p => [...nuovi.slice().reverse(), ...p].slice(0, 30));
+  }, [appUser]);
+
+  // Inizializzazione: id utente + "punto di partenza" (ultimo messaggio già esistente, ora server)
+  React.useEffect(() => {
+    const sb = window.supabaseClient; if (!sb) return;
+    let vivo = true, ch = null, timer = null, deb = null;
+    const poll = async () => {
+      if (!ultimoIso.current) return;
+      try {
+        const { data, error } = await sb.from('messaggi').select('*')
+          .gt('created_at', ultimoIso.current).order('created_at', { ascending: true }).limit(50);
+        if (!error && vivo) gestisci(data, true);
+      } catch(e) {}
+    };
+    (async () => {
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        myIdRef.current = session && session.user ? session.user.id : null;
+        const { data } = await sb.from('messaggi').select('id,created_at').order('created_at', { ascending: false }).limit(1);
+        ultimoIso.current = (data && data[0] && data[0].created_at) || new Date().toISOString();
+        (data || []).forEach(r => visti.current.add(String(r.id)));
+      } catch(e) { ultimoIso.current = new Date().toISOString(); }
+      if (!vivo) return;
+      try {
+        ch = sb.channel('fm-messaggi-avviso-admin')
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messaggi' }, (payload) => {
+            if (payload && payload.new) gestisci([payload.new]);
+            clearTimeout(deb); deb = setTimeout(poll, 1500); // recupera eventuali righe perse
+          })
+          .subscribe();
+      } catch(e) { console.warn('[FM] avviso messaggi realtime:', e && e.message); }
+      timer = setInterval(poll, 60000);
+    })();
+    const onVis = () => { if (!document.hidden) poll(); };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('online', poll);
+    return () => {
+      vivo = false; clearInterval(timer); clearTimeout(deb);
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('online', poll);
+      try { if (ch) sb.removeChannel(ch); } catch(e) {}
+    };
+  }, [gestisci]);
+
+  // Aprendo la scheda Messaggi gli avvisi si considerano visti
+  React.useEffect(() => { if (view === 'messaggi') setAvvisi([]); }, [view]);
+
+  // Contatore nel titolo della scheda del browser
+  React.useEffect(() => {
+    const base = String(document.title || '').replace(/^\(\d+\)\s*/, '');
+    document.title = avvisi.length ? `(${avvisi.length}) ${base}` : base;
+  }, [avvisi.length]);
+
+  if (!avvisi.length) return null;
+
+  const chiudi = (id) => setAvvisi(p => p.filter(m => String(m.id) !== String(id)));
+  const apri = () => { setAvvisi([]); onApri && onApri(); };
+  const toggleMuto = () => { const v = !muto; FM_SUONO_MSG.setMuto(v); setMuto(v); };
+  const ora = (iso) => { try { return new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }); } catch(e) { return ''; } };
+  const mostrati = avvisi.slice(0, 3);
+  const altri = avvisi.length - mostrati.length;
+  const btn = (primario) => ({ padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Open Sans',sans-serif",
+    border: primario ? 'none' : `1px solid ${C.border}`, background: primario ? C.gold : C.surface, color: primario ? '#fff' : C.textMuted });
+
+  return React.createElement('div', { role: 'alert', 'aria-live': 'assertive',
+      style: { position: 'fixed', zIndex: 100000, top: isMobile ? 'calc(env(safe-area-inset-top,0px) + 10px)' : 18,
+        right: isMobile ? 10 : 18, left: isMobile ? 10 : 'auto', width: isMobile ? 'auto' : 360,
+        display: 'flex', flexDirection: 'column', gap: 8, animation: 'slideIn 0.3s ease' } }
+    , avvisi.length > 1 && React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 10,
+        background: C.gold, color: '#fff', boxShadow: '0 8px 24px rgba(0,0,0,.18)', fontSize: 13, fontWeight: 700 } }
+      , React.createElement('span', { style: { flex: 1 } }, `💬 ${avvisi.length} nuovi messaggi`)
+      , React.createElement('button', { onClick: toggleMuto, title: muto ? 'Riattiva suono' : 'Silenzia suono',
+          style: { background: 'rgba(255,255,255,.2)', border: 'none', color: '#fff', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 13 } }, muto ? '🔕' : '🔔')
+      , React.createElement('button', { onClick: () => setAvvisi([]),
+          style: { background: 'rgba(255,255,255,.2)', border: 'none', color: '#fff', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600 } }, 'Chiudi tutti')
+    )
+    , mostrati.map(m => {
+        const wa = m.canale === 'whatsapp';
+        const da = m.mittente_nome || (m.telefono ? '+' + String(m.telefono).replace(/^\+/, '') : 'Mittente sconosciuto');
+        return React.createElement('div', { key: m.id, style: { background: C.surface, border: `1px solid ${C.border}`, borderLeft: `4px solid ${wa ? '#16a34a' : C.gold}`,
+            borderRadius: 12, boxShadow: '0 10px 32px rgba(0,0,0,.18)', padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' } }
+          , React.createElement('div', { style: { width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17,
+              background: wa ? '#dcfce7' : C.goldBg } }, wa ? '📲' : '💬')
+          , React.createElement('div', { style: { flex: 1, minWidth: 0 } }
+            , React.createElement('div', { style: { display: 'flex', alignItems: 'baseline', gap: 6 } }
+              , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 } }, da)
+              , React.createElement('span', { style: { fontSize: 11, color: C.textDim, flexShrink: 0 } }, (wa ? 'WhatsApp · ' : '') + ora(m.created_at))
+            )
+            , m.oggetto && React.createElement('div', { style: { fontSize: 12, fontWeight: 600, color: C.teal, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, m.oggetto)
+            , React.createElement('div', { style: { fontSize: 12.5, color: C.textMuted, marginTop: 3, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', wordBreak: 'break-word' } }, m.testo || '')
+            , React.createElement('div', { style: { display: 'flex', gap: 8, marginTop: 9 } }
+              , React.createElement('button', { onClick: apri, style: btn(true) }, 'Apri messaggi')
+              , React.createElement('button', { onClick: () => chiudi(m.id), style: btn(false) }, 'Chiudi')
+              , avvisi.length === 1 && React.createElement('button', { onClick: toggleMuto, title: muto ? 'Riattiva suono' : 'Silenzia suono', style: { ...btn(false), marginLeft: 'auto', padding: '6px 9px' } }, muto ? '🔕' : '🔔')
+            )
+          )
+        );
+      })
+    , altri > 0 && React.createElement('button', { onClick: apri, style: { ...btn(false), alignSelf: 'flex-end', boxShadow: '0 4px 14px rgba(0,0,0,.12)' } }, `+ altri ${altri} — apri Messaggi`)
+  );
+};
+
+// Impostazioni → Generale: suono personalizzato per l'avviso messaggi (file su Supabase Storage)
+const SuonoMessaggiSection = ({ config, setConfig, setD, showToast }) => {
+  const [url, setUrl] = useState((config && config.suonoMessaggiUrl) || '');
+  const [busy, setBusy] = useState(false);
+  const [muto, setMutoS] = useState(FM_SUONO_MSG.isMuto());
+  const inputRef = React.useRef(null);
+  const salvaUrl = async (nuovo) => {
+    const sb = window.supabaseClient; if (!sb) throw new Error('Database non disponibile');
+    const { error } = await sb.from('sito_config').upsert(
+      { chiave: 'suonoMessaggiUrl', valore: nuovo || '', updated_at: new Date().toISOString() }, { onConflict: 'chiave' });
+    if (error) throw error;
+    setUrl(nuovo || '');
+    if (setD) setD('suonoMessaggiUrl', nuovo || '');
+    if (setConfig) setConfig(p => ({ ...p, suonoMessaggiUrl: nuovo || '' }));
+    FM_SUONO_MSG.setUrl(nuovo || null);
+  };
+  const carica = async (file) => {
+    if (!file) return;
+    if (!/^audio\//.test(file.type || '') && !/\.(mp3|wav|ogg|m4a|aac)$/i.test(file.name)) { showToast && showToast(false, 'Seleziona un file audio (mp3, wav, ogg, m4a)'); return; }
+    if (file.size > 1024 * 1024) { showToast && showToast(false, 'File troppo grande: usa un suono breve, sotto 1 MB'); return; }
+    const sb = window.supabaseClient; if (!sb) return;
+    setBusy(true);
+    try {
+      const ext = (file.name.match(/\.([a-z0-9]+)$/i) || [, 'mp3'])[1].toLowerCase();
+      const path = `suoni/avviso-messaggi-${Date.now()}.${ext}`;
+      const { error: upErr } = await sb.storage.from('allegati').upload(path, file, { upsert: true, contentType: file.type || undefined });
+      if (upErr) throw upErr;
+      const { data } = sb.storage.from('allegati').getPublicUrl(path);
+      await salvaUrl(data && data.publicUrl);
+      showToast && showToast(true, 'Suono caricato ✅');
+    } catch(e) { showToast && showToast(false, 'Caricamento non riuscito: ' + (e && e.message || e)); }
+    finally { setBusy(false); if (inputRef.current) inputRef.current.value = ''; }
+  };
+  const rimuovi = async () => {
+    setBusy(true);
+    try { await salvaUrl(''); showToast && showToast(true, 'Ripristinato il suono predefinito'); }
+    catch(e) { showToast && showToast(false, 'Errore: ' + (e && e.message || e)); }
+    finally { setBusy(false); }
+  };
+  const nomeFile = url ? decodeURIComponent(url.split('/').pop().split('?')[0]) : '';
+  const b = { padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: busy ? 'wait' : 'pointer', fontFamily: "'Open Sans',sans-serif", border: `1px solid ${C.border}`, background: C.bg, color: C.text };
+  return React.createElement('div', null
+    , React.createElement('p', { style: { fontSize: 12, color: C.textMuted, marginBottom: 12, lineHeight: 1.5 } },
+        'Quando arriva un nuovo messaggio, l\'amministratore vede un avviso in qualsiasi schermata, accompagnato da un suono. Puoi usare il suono predefinito oppure caricare un file audio breve (mp3/wav/ogg, max 1 MB), che viene salvato nello storage di Supabase.')
+    , React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 12px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 10 } }
+      , React.createElement('span', { style: { fontSize: 13, color: C.text, flex: '1 1 200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+          url ? '🎵 ' + nomeFile : '🔔 Suono predefinito (ding)')
+      , React.createElement('button', { type: 'button', style: b, onClick: () => { FM_SUONO_MSG.setUrl(url || null); FM_SUONO_MSG.play(true); } }, '▶ Prova')
+      , React.createElement('button', { type: 'button', style: b, disabled: busy, onClick: () => inputRef.current && inputRef.current.click() }, busy ? 'Caricamento…' : (url ? 'Sostituisci file' : 'Carica file audio'))
+      , url && React.createElement('button', { type: 'button', style: { ...b, color: C.red }, disabled: busy, onClick: rimuovi }, 'Usa predefinito')
+      , React.createElement('input', { ref: inputRef, type: 'file', accept: 'audio/*,.mp3,.wav,.ogg,.m4a', style: { display: 'none' }, onChange: e => carica(e.target.files && e.target.files[0]) })
+    )
+    , React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.textMuted, cursor: 'pointer' } }
+      , React.createElement('input', { type: 'checkbox', checked: muto, onChange: e => { FM_SUONO_MSG.setMuto(e.target.checked); setMutoS(e.target.checked); } })
+      , 'Silenzia il suono su questo dispositivo (l\'avviso a video resta attivo)')
+  );
+};
+
 // ─── IMPOSTAZIONI VIEW (standalone page) ──────────────────────────────────────
 // ⚠ ImpToggle e ImpSection DEVONO essere FUORI da ImpostazioniView.
 //   Se fossero dentro, React li tratta come tipi nuovi a ogni render
@@ -5551,6 +5856,11 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
             onChange: e => setD("sogliaLezioniCollettive", Math.max(1, parseInt(e.target.value)||4)),
             placeholder:"4"})
       )
+    )
+
+    /* ── Avviso nuovi messaggi (suono) ──────────────────────────────────── */
+    , activeTab==="generale" && isAdminImp && React.createElement(ImpSection, {title:"Avviso nuovi messaggi", icon:"alert"}
+      , React.createElement(SuonoMessaggiSection, {config, setConfig, setD, showToast})
     )
 
     /* ── Google Calendar ─────────────────────────────────────────────────── */
