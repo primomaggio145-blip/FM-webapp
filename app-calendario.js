@@ -5805,24 +5805,47 @@ function fmTrovaBrano(catalogo, id) {
 // della serie (calcolati allo stesso modo, a ritroso), esclusi quelli completati lì.
 // L'eredità diventa "propria" della lezione (salvata su DB) appena la si modifica.
 // ════════════════════════════════════════════════════════════════════════
-function fmBraniEffettiviLezione(lesson, tutteLeLezioni, _prof) {
-  if (!lesson) return [];
+// Repertorio "effettivo" di una lezione: ids dei brani + STATO e VERSIONE di ciascuno.
+// Lezione con brani propri → i suoi; altrimenti quelli della lezione precedente (a ritroso),
+// esclusi i completati, CON lo stato e la versione che avevano lì (così ereditando non si
+// rischia di cambiare lo stato: es. "Iniziato" non torna "In studio").
+function fmRepertorioEffettivoLezione(lesson, tutteLeLezioni, _prof) {
+  const vuoto = { ids: [], stati: {}, versioni: {} };
+  if (!lesson) return vuoto;
   const own = Array.isArray(lesson.repertorioIds) ? lesson.repertorioIds : [];
-  if (own.length > 0) return own;
-  if (lesson.tipo === 'prova' || lesson.tipo === 'sala_prove') return [];
+  if (own.length > 0) return { ids: own, stati: lesson.repertorioStati || {}, versioni: lesson.repertorioVersioni || {} };
+  if (lesson.tipo === 'prova' || lesson.tipo === 'sala_prove') return vuoto;
   const prof = _prof || 0;
-  if (prof > 80) return [];
+  if (prof > 80) return vuoto;
   const prev = trovaLezionePrecedente(lesson, tutteLeLezioni);
-  if (!prev) return [];
-  const ids = fmBraniEffettiviLezione(prev, tutteLeLezioni, prof + 1);
-  const stati = prev.repertorioStati || {};
-  return ids.filter(id => stati[id] !== 'completato');
+  if (!prev) return vuoto;
+  const p = fmRepertorioEffettivoLezione(prev, tutteLeLezioni, prof + 1);
+  const ids = p.ids.filter(id => p.stati[id] !== 'completato');
+  const stati = {}, versioni = {};
+  ids.forEach(id => {
+    if (p.stati[id]) stati[id] = p.stati[id];
+    if (p.versioni[id] != null) versioni[id] = p.versioni[id];
+  });
+  return { ids, stati, versioni };
 }
-// Ids ereditati (non ancora propri della lezione)
-function fmBraniEreditatiLezione(lesson, tutteLeLezioni) {
+function fmBraniEffettiviLezione(lesson, tutteLeLezioni) {
+  return fmRepertorioEffettivoLezione(lesson, tutteLeLezioni).ids;
+}
+// Repertorio ereditato (solo se la lezione non ha ancora brani propri), con stati e versioni
+function fmRepertorioEreditatoLezione(lesson, tutteLeLezioni) {
   const own = (lesson && lesson.repertorioIds) || [];
-  if (own.length > 0) return [];
-  return fmBraniEffettiviLezione(lesson, tutteLeLezioni);
+  if (own.length > 0) return { ids: [], stati: {}, versioni: {} };
+  return fmRepertorioEffettivoLezione(lesson, tutteLeLezioni);
+}
+function fmBraniEreditatiLezione(lesson, tutteLeLezioni) {
+  return fmRepertorioEreditatoLezione(lesson, tutteLeLezioni).ids;
+}
+// Applica a una lezione il repertorio ereditato (ids + stati + versioni; quelli propri vincono)
+function fmLezioneConEreditati(lesson, ered) {
+  if (!lesson || !ered || !ered.ids.length) return lesson;
+  return { ...lesson, repertorioIds: ered.ids,
+    repertorioStati: { ...ered.stati, ...(lesson.repertorioStati || {}) },
+    repertorioVersioni: { ...ered.versioni, ...(lesson.repertorioVersioni || {}) } };
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -6286,8 +6309,12 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
   const newlyCreatedBraniRef = React.useRef({});
   const [showBranoForm, setShowBranoForm] = useState(false);
   // [FM-BRANI-EREDITATI] in modifica, una lezione senza brani propri parte da quelli ereditati
-  const _ereditatiInitLF = React.useMemo(() => (initial && initial.id) ? fmBraniEreditatiLezione(initial, _lessonsLF || []) : [], []);
-  const [f, setF] = useState(() => (initial && _ereditatiInitLF.length) ? { ...initial, repertorioIds: _ereditatiInitLF } : (initial || emptyLesson));
+  const _eredInitLF = React.useMemo(() => (initial && initial.id) ? fmRepertorioEreditatoLezione(initial, _lessonsLF || []) : { ids: [], stati: {}, versioni: {} }, []);
+  const _ereditatiInitLF = _eredInitLF.ids;
+  // Stati/versioni ereditati dai brani proposti (lezione esistente senza brani o nuova lezione)
+  const _eredStatiLF = React.useRef({ ..._eredInitLF.stati });
+  const _eredVersLF  = React.useRef({ ..._eredInitLF.versioni });
+  const [f, setF] = useState(() => (initial && _ereditatiInitLF.length) ? fmLezioneConEreditati(initial, _eredInitLF) : (initial || emptyLesson));
   const _braniToccatiLF = React.useRef(false);
   const [err, setErr] = useState({});
   const [conflittiOrario, setConflittiOrario] = useState(null); // array di lezioni in conflitto, o null
@@ -6317,6 +6344,8 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
   // lezione più recente / registro Allievi → Repertorio), 3) "in studio".
   const _statoDefaultLF = (id) => {
     if (initial && initial.repertorioStati && initial.repertorioStati[id]) return initial.repertorioStati[id];
+    // [FM-BRANI-EREDITATI] brano ereditato: mantiene lo stato che aveva nella lezione precedente
+    if (_eredStatiLF.current && _eredStatiLF.current[id]) return _eredStatiLF.current[id];
     try {
       const nome = (f && f.student) || (initial && initial.student) || '';
       const sid  = (f && f.studentId) || (initial && initial.studentId) || null;
@@ -6335,7 +6364,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
       const b = repertorio.find(r=>r.id===id);
       if (!b) return;
       // Se la lezione ha già una versione salvata per questo brano, riparti da quella
-      const versioneSalvata = (initial?.repertorioVersioni||{})[id];
+      const versioneSalvata = (initial?.repertorioVersioni||{})[id] != null ? (initial?.repertorioVersioni||{})[id] : _eredVersLF.current[id];
       const vIdx = versioneSalvata != null ? versioneSalvata : 0;
       init[id] = { versioneIdx: vIdx, stato: _statoDefaultLF(id) };
     });
@@ -6353,13 +6382,16 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
     if (initial && initial.id) return;
     if (_braniToccatiLF.current) return;
     if (!f.date) return;
-    const ered = fmBraniEffettiviLezione({ ...f, id: f.id || '__nuova__', repertorioIds: [] }, _lessonsLF || []);
+    const _er = fmRepertorioEffettivoLezione({ ...f, id: f.id || '__nuova__', repertorioIds: [] }, _lessonsLF || []);
+    const ered = _er.ids;
+    _eredStatiLF.current = { ..._er.stati };
+    _eredVersLF.current  = { ..._er.versioni };
     const attuali = f.repertorioIds || [];
     if (ered.length === attuali.length && ered.every((id, i) => String(id) === String(attuali[i]))) return;
     setF(p => ({ ...p, repertorioIds: ered }));
     setStatiBrani(p => {
       const n = { ...p };
-      ered.forEach(id => { if (!n[id]) n[id] = { versioneIdx: 0, stato: _statoDefaultLF(id) }; });
+      ered.forEach(id => { if (!n[id]) n[id] = { versioneIdx: _er.versioni[id] != null ? _er.versioni[id] : 0, stato: _er.stati[id] || _statoDefaultLF(id) }; });
       return n;
     });
   }, [f.date, f.studentId, f.student, f.instrument, f.courseId, f.gruppoId, f.type, f.tipo]);
@@ -6921,15 +6953,15 @@ const LessonPill = ({ lesson, onClick, compact=false, courses }) => {
 const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLesson:_prevLessonRawLDM, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses, repertorio:_repertorioLDM, setRepertorio:_setRepertorioLDM, biblioteca:_bibliotecaLDM }) => {
   // [FM-BRANI-EREDITATI] lezione con i brani ereditati dalla precedente (finché non "Completato").
   // Ogni modifica fatta da qui li rende propri della lezione (onUpdateLesson parte da questo oggetto).
-  const _ereditatiLDM = React.useMemo(() => fmBraniEreditatiLezione(_lessonRawLDM, _lessonsLDM || []), [_lessonRawLDM, _lessonsLDM]);
-  const lesson = React.useMemo(() => (_ereditatiLDM.length && _lessonRawLDM)
-    ? { ..._lessonRawLDM, repertorioIds: _ereditatiLDM } : _lessonRawLDM, [_lessonRawLDM, _ereditatiLDM]);
+  const _eredLDM = React.useMemo(() => fmRepertorioEreditatoLezione(_lessonRawLDM, _lessonsLDM || []), [_lessonRawLDM, _lessonsLDM]);
+  const _ereditatiLDM = _eredLDM.ids;
+  // ids + stato + versione ereditati (lo stato non viene "resettato" passando di lezione)
+  const lesson = React.useMemo(() => fmLezioneConEreditati(_lessonRawLDM, _eredLDM), [_lessonRawLDM, _eredLDM]);
   const _setEreditatiLDM = new Set(_ereditatiLDM.map(String));
   // Lezione precedente: anche i suoi brani possono essere ereditati (riepilogo "Brani studiati")
   const prevLesson = React.useMemo(() => {
     if (!_prevLessonRawLDM) return _prevLessonRawLDM;
-    const eff = fmBraniEffettiviLezione(_prevLessonRawLDM, _lessonsLDM || []);
-    return eff === _prevLessonRawLDM.repertorioIds ? _prevLessonRawLDM : { ..._prevLessonRawLDM, repertorioIds: eff };
+    return fmLezioneConEreditati(_prevLessonRawLDM, fmRepertorioEreditatoLezione(_prevLessonRawLDM, _lessonsLDM || []));
   }, [_prevLessonRawLDM, _lessonsLDM]);
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
