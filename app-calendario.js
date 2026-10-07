@@ -5695,24 +5695,134 @@ function allineaCorsoBrano(nb, lezione) {
     .map((v, i) => i === 0 ? { ...v, strumento: corso } : v);
   return { ...nb, strumento: corso, versioni };
 }
-function persistiBranoDaLezione(nb, origine) {
-  const sb = window.supabaseClient;
-  if (!sb) return Promise.resolve(false);
-  return sb.from('brani').insert({
+// ════════════════════════════════════════════════════════════════════════
+// [FM-BRANO-SUBITO] Brani creati "al volo" da una lezione: scrittura IMMEDIATA e robusta.
+// Problema: il brano esisteva solo nello stato React finché la lezione non veniva salvata (form)
+// oppure veniva inserito con un insert "fire-and-forget". In più l'eco realtime del nostro stesso
+// insert ricaricava la tabella `brani` ESCLUDENDO le righe scritte negli ultimi 4s e ripartendo
+// da uno snapshot (_prev.brani) che non conteneva il brano nuovo → il brano spariva dallo stato
+// e la lezione non lo mostrava più; se l'insert falliva, era perso del tutto.
+// Ora:
+//  - il brano viene registrato in window.__FM_BRANI_LOCALI__ e scritto SUBITO con un upsert
+//    (idempotente: lo stesso id può essere riscritto al salvataggio della lezione con i dati
+//    definitivi, es. corso riallineato), con fino a 5 tentativi a intervalli crescenti;
+//  - ogni ricarica dei brani (realtime o refresh) passa da fmMergeBraniLocali, che rimette nello
+//    stato i brani locali non ancora presenti nel DB letto, e li dimentica solo quando il DB
+//    li restituisce davvero;
+//  - se tutti i tentativi falliscono l'utente viene avvisato e si ritenta al ritorno della rete.
+// ════════════════════════════════════════════════════════════════════════
+function _fmBraniLocali() {
+  window.__FM_BRANI_LOCALI__ = window.__FM_BRANI_LOCALI__ || new Map();
+  return window.__FM_BRANI_LOCALI__;
+}
+function _fmRigaBrano(nb) {
+  return {
     id: nb.id,
-    titolo: nb.title || '',
-    compositore: nb.composer || '',
+    titolo: nb.title || nb.titolo || '',
+    compositore: nb.composer || nb.compositore || '',
     strumento: nb.strumento || null,
     genere: nb.genere || '',
-    eventi_ids: [],
+    eventi_ids: nb.eventiIds || nb.eventi_ids || [],
     versioni: nb.versioni || [],
     note: nb.note || '',
-  }).then(({ error }) => {
-    if (error) { console.warn(`[FM] nuovo brano (${origine}) DB error:`, error.message); return false; }
+  };
+}
+function persistiBranoDaLezione(nb, origine) {
+  if (!nb || !nb.id) return Promise.resolve(false);
+  const locali = _fmBraniLocali();
+  const key = String(nb.id);
+  const prec = locali.get(key) || {};
+  // versione più recente del brano (es. riallineamento corso al salvataggio della lezione)
+  const giaSalvato = prec.salvato === true || prec.giaSalvato === true; // il record esiste già su DB
+  const entry = { brano: nb, salvato: false, giaSalvato, tentativi: 0, ts: prec.ts || Date.now(), seq: (prec.seq || 0) + 1 };
+  locali.set(key, entry);
+  const mySeq = entry.seq;
+  const attesa = ms => new Promise(r => setTimeout(r, ms));
+  const tenta = async (n) => {
+    const cur = locali.get(key);
+    if (!cur || cur.seq !== mySeq) return true; // superato da una scrittura più recente dello stesso brano
+    const sb = window.supabaseClient;
+    if (!sb) { if (n < 4) { await attesa(800 * (n + 1)); return tenta(n + 1); } cur.errore = 'client non disponibile'; return false; }
     window.__FM_RECENTLY_WRITTEN__ = window.__FM_RECENTLY_WRITTEN__ || new Map();
     window.__FM_RECENTLY_WRITTEN__.set(`brani:${nb.id}`, Date.now());
-    return true;
+    let error = null;
+    try { ({ error } = await sb.from('brani').upsert(_fmRigaBrano(nb), { onConflict: 'id' })); }
+    catch (e) { error = { message: (e && e.message) || String(e) }; }
+    cur.tentativi = n + 1;
+    if (!error) {
+      cur.salvato = true; cur.errore = null;
+      window.__FM_RECENTLY_WRITTEN__.set(`brani:${nb.id}`, Date.now());
+      return true;
+    }
+    console.warn(`[FM] nuovo brano (${origine}) tentativo ${n + 1} fallito:`, error.message);
+    if (n < 4) { await attesa(600 * Math.pow(2, n)); return tenta(n + 1); }
+    cur.errore = error.message;
+    // Il brano è già su DB (fallito solo l'aggiornamento con i dati definitivi, es. permessi
+    // UPDATE): niente allarme, il brano non è perso.
+    if (cur.giaSalvato) { cur.salvato = true; return true; }
+    try {
+      alert(`⚠️ Il brano «${nb.title || nb.titolo || ''}» non è stato salvato sul database (${error.message}).\n` +
+        `Resta visibile in questa sessione e verrà ritentato automaticamente al ritorno della connessione: non ricaricare la pagina finché non risulta salvato.`);
+    } catch (e) {}
+    return false;
+  };
+  return tenta(0);
+}
+// Ritenta i brani locali non ancora salvati (es. al ritorno della rete)
+function fmRitentaBraniLocali() {
+  _fmBraniLocali().forEach((e) => { if (e && !e.salvato) persistiBranoDaLezione(e.brano, 'ritento'); });
+}
+if (typeof window !== 'undefined' && !window.__FM_BRANI_ONLINE_HOOK__) {
+  window.__FM_BRANI_ONLINE_HOOK__ = true;
+  try { window.addEventListener('online', fmRitentaBraniLocali); } catch (e) {}
+}
+// Unisce a una lista di brani letta dal DB i brani creati localmente non ancora presenti.
+// Un brano locale viene dimenticato solo quando il DB lo restituisce ED è stato salvato.
+function fmMergeBraniLocali(lista) {
+  const locali = window.__FM_BRANI_LOCALI__;
+  if (!locali || locali.size === 0 || !Array.isArray(lista)) return lista;
+  const ids = new Set(lista.map(b => String(b.id)));
+  const extra = [];
+  locali.forEach((e, id) => {
+    if (ids.has(id)) { if (e.salvato) locali.delete(id); return; }
+    extra.push(e.brano);
   });
+  return extra.length ? [...lista, ...extra] : lista;
+}
+// Cerca un brano nel catalogo, con ripiego sui brani appena creati in locale
+function fmTrovaBrano(catalogo, id) {
+  const b = (catalogo || []).find(r => String(r.id) === String(id));
+  if (b) return b;
+  const e = window.__FM_BRANI_LOCALI__ && window.__FM_BRANI_LOCALI__.get(String(id));
+  return e ? e.brano : null;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// [FM-BRANI-EREDITATI] I brani di una lezione restano anche nelle lezioni SUCCESSIVE della
+// stessa serie (stesso allievo e corso; stesso corso/gruppo per le collettive) finché non
+// vengono segnati "Completato". Una lezione con una propria selezione di brani usa quella
+// (è stata curata a mano); una lezione senza brani eredita quelli della lezione precedente
+// della serie (calcolati allo stesso modo, a ritroso), esclusi quelli completati lì.
+// L'eredità diventa "propria" della lezione (salvata su DB) appena la si modifica.
+// ════════════════════════════════════════════════════════════════════════
+function fmBraniEffettiviLezione(lesson, tutteLeLezioni, _prof) {
+  if (!lesson) return [];
+  const own = Array.isArray(lesson.repertorioIds) ? lesson.repertorioIds : [];
+  if (own.length > 0) return own;
+  if (lesson.tipo === 'prova' || lesson.tipo === 'sala_prove') return [];
+  const prof = _prof || 0;
+  if (prof > 80) return [];
+  const prev = trovaLezionePrecedente(lesson, tutteLeLezioni);
+  if (!prev) return [];
+  const ids = fmBraniEffettiviLezione(prev, tutteLeLezioni, prof + 1);
+  const stati = prev.repertorioStati || {};
+  return ids.filter(id => stati[id] !== 'completato');
+}
+// Ids ereditati (non ancora propri della lezione)
+function fmBraniEreditatiLezione(lesson, tutteLeLezioni) {
+  const own = (lesson && lesson.repertorioIds) || [];
+  if (own.length > 0) return [];
+  return fmBraniEffettiviLezione(lesson, tutteLeLezioni);
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
@@ -6175,7 +6285,10 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
   // Usato da handleSave per includere i brani nel payload senza dipendere da window.__repertorio__
   const newlyCreatedBraniRef = React.useRef({});
   const [showBranoForm, setShowBranoForm] = useState(false);
-  const [f, setF] = useState(initial || emptyLesson);
+  // [FM-BRANI-EREDITATI] in modifica, una lezione senza brani propri parte da quelli ereditati
+  const _ereditatiInitLF = React.useMemo(() => (initial && initial.id) ? fmBraniEreditatiLezione(initial, _lessonsLF || []) : [], []);
+  const [f, setF] = useState(() => (initial && _ereditatiInitLF.length) ? { ...initial, repertorioIds: _ereditatiInitLF } : (initial || emptyLesson));
+  const _braniToccatiLF = React.useRef(false);
   const [err, setErr] = useState({});
   const [conflittiOrario, setConflittiOrario] = useState(null); // array di lezioni in conflitto, o null
 
@@ -6218,7 +6331,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
   };
   const [statiBrani, setStatiBrani] = useState(() => {
     const init = {};
-    (initial?.repertorioIds||[]).forEach(id => {
+    ((initial && _ereditatiInitLF.length) ? _ereditatiInitLF : (initial?.repertorioIds||[])).forEach(id => {
       const b = repertorio.find(r=>r.id===id);
       if (!b) return;
       // Se la lezione ha già una versione salvata per questo brano, riparti da quella
@@ -6233,7 +6346,23 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
   };
   const [editingVersioneFor, setEditingVersioneFor] = useState(null); // { branoId, versioneIdx } | null (versioneIdx null = nuova)
   const [editingCampoFor, setEditingCampoFor] = useState(null); // { branoId, campo: 'genere'|'tonalita', valore } | null
-  const set = (k, v) => setF(p => ({ ...p, [k]:v }));
+  const set = (k, v) => { if (k === "repertorioIds") _braniToccatiLF.current = true; setF(p => ({ ...p, [k]:v })); };
+  // [FM-BRANI-EREDITATI] nuova lezione: appena allievo/corso/data sono noti, propone i brani non
+  // ancora completati della lezione precedente della serie (solo finché l'utente non tocca i brani)
+  React.useEffect(() => {
+    if (initial && initial.id) return;
+    if (_braniToccatiLF.current) return;
+    if (!f.date) return;
+    const ered = fmBraniEffettiviLezione({ ...f, id: f.id || '__nuova__', repertorioIds: [] }, _lessonsLF || []);
+    const attuali = f.repertorioIds || [];
+    if (ered.length === attuali.length && ered.every((id, i) => String(id) === String(attuali[i]))) return;
+    setF(p => ({ ...p, repertorioIds: ered }));
+    setStatiBrani(p => {
+      const n = { ...p };
+      ered.forEach(id => { if (!n[id]) n[id] = { versioneIdx: 0, stato: _statoDefaultLF(id) }; });
+      return n;
+    });
+  }, [f.date, f.studentId, f.student, f.instrument, f.courseId, f.gruppoId, f.type, f.tipo]);
 
   const hours = Array.from({length:56}, (_, i) => {
     const h = Math.floor(i/4)+8;
@@ -6555,6 +6684,9 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
                           // Salva nel ref locale per handleSave
                           newlyCreatedBraniRef.current[newId] = newBrano;
                           onAddBrano(newBrano);
+                          // [FM-BRANO-SUBITO] scritto SUBITO su DB (upsert); al salvataggio della lezione
+                          // lo stesso record viene aggiornato con i dati definitivi (corso finale).
+                          persistiBranoDaLezione(newBrano, 'form lezione');
                           set("repertorioIds", [...(f.repertorioIds||[]), newId]);
                           setShowBranoForm(false);
                         },
@@ -6786,7 +6918,19 @@ const LessonPill = ({ lesson, onClick, compact=false, courses }) => {
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses, repertorio:_repertorioLDM, setRepertorio:_setRepertorioLDM, biblioteca:_bibliotecaLDM }) => {
+const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLesson:_prevLessonRawLDM, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses, repertorio:_repertorioLDM, setRepertorio:_setRepertorioLDM, biblioteca:_bibliotecaLDM }) => {
+  // [FM-BRANI-EREDITATI] lezione con i brani ereditati dalla precedente (finché non "Completato").
+  // Ogni modifica fatta da qui li rende propri della lezione (onUpdateLesson parte da questo oggetto).
+  const _ereditatiLDM = React.useMemo(() => fmBraniEreditatiLezione(_lessonRawLDM, _lessonsLDM || []), [_lessonRawLDM, _lessonsLDM]);
+  const lesson = React.useMemo(() => (_ereditatiLDM.length && _lessonRawLDM)
+    ? { ..._lessonRawLDM, repertorioIds: _ereditatiLDM } : _lessonRawLDM, [_lessonRawLDM, _ereditatiLDM]);
+  const _setEreditatiLDM = new Set(_ereditatiLDM.map(String));
+  // Lezione precedente: anche i suoi brani possono essere ereditati (riepilogo "Brani studiati")
+  const prevLesson = React.useMemo(() => {
+    if (!_prevLessonRawLDM) return _prevLessonRawLDM;
+    const eff = fmBraniEffettiviLezione(_prevLessonRawLDM, _lessonsLDM || []);
+    return eff === _prevLessonRawLDM.repertorioIds ? _prevLessonRawLDM : { ..._prevLessonRawLDM, repertorioIds: eff };
+  }, [_prevLessonRawLDM, _lessonsLDM]);
   const canEdit = role === 'admin' || role === 'docente';
   const studentsList = students || [];
   // Per l'allievo: risolve il proprio id/nome per filtrare la presenza individuale
@@ -7351,8 +7495,9 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
           , (lesson.repertorioIds||[]).length > 0 ? (
             React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4614}}
               , (lesson.repertorioIds||[]).map(id => {
-                const b = (_repertorioLDM||window.__repertorio__||[]).find(r=>r.id===id);
+                const b = fmTrovaBrano(_repertorioLDM||window.__repertorio__||[], id);
                 if(!b) return null;
+                const _ereditato = _setEreditatiLDM.has(String(id));
                 const typeHex = (b.tipo||b.type)==="collettivo"?C.purple:C.gold;
                 const typeBg  = (b.tipo||b.type)==="collettivo"?C.purpleBg:"#e8edf5";
                 const typeBd  = (b.tipo||b.type)==="collettivo"?C.purpleBorder:C.goldDim;
@@ -7382,7 +7527,9 @@ const LessonDetailModal = ({ lesson, prevLesson, onEdit, onDelete, onAttendance,
                     , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:10} }
                       , React.createElement(Ic, { n: "note", size: 14, stroke: typeHex, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4624}})
                       , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4625}}
-                        , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4626}}, b.title)
+                        , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4626}}, b.title
+                          , _ereditato && React.createElement('span', { title: "Brano della lezione precedente: resta nelle lezioni successive finché non lo segni «Completato»",
+                              style: {marginLeft:8, fontSize:10, fontWeight:600, color:C.textMuted, border:`1px solid ${C.border}`, borderRadius:10, padding:"1px 7px", background:C.surface, whiteSpace:"nowrap"} }, "↻ dalla lezione precedente"))
                         , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4627}}, b.composer)
                         , React.createElement('div', { style: {fontSize:11, color:C.textMuted, marginTop:2, display:"flex", gap:12, flexWrap:"wrap"} }
                           , editingCampoFor && editingCampoFor.branoId===id && editingCampoFor.campo==='genere' ? (
@@ -13565,6 +13712,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           React.createElement(LessonDetailModal, {
             lesson: lessons.find(l => l.id === selLesson.id) || selLesson,
             prevLesson: trovaLezionePrecedente(lessons.find(l => l.id === selLesson.id) || selLesson, lessons),
+            lessons: lessons,
             courses: propCourses,
             repertorio: repertorio,
             setRepertorio: setRepertorio,

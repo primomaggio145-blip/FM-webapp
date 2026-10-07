@@ -405,7 +405,8 @@ function App() {
       if (data.courses)        setSharedCourses(data.courses);
       if (data.docenti)        setSharedDocenti(data.docenti);
       if (data.lessons)        setSharedLessons(dedupeLessonsById(data.lessons));
-      if (data.brani)          setSharedRepertorio(data.brani);
+      // [FM-BRANO-SUBITO] non perdere i brani appena creati e non ancora restituiti dal DB
+      if (data.brani)          setSharedRepertorio(typeof fmMergeBraniLocali === 'function' ? fmMergeBraniLocali(data.brani) : data.brani);
       if (data.spese)          setSharedSpese(data.spese);
       if (data.entrate)        setSharedEntrate(data.entrate);
       if (data.concerti)       setSharedConcerti(data.concerti);
