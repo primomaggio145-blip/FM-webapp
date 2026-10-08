@@ -22,9 +22,10 @@ const fmNumCorsiIndividuali = (s) => {
 };
 // Nel resoconto si distinguono SOLO "Contanti" e "PayPal / Satispay": ogni altro metodo
 // (bonifico, carta/POS, assegno, …) confluisce in un unico gruppo "BANCA".
-const FM_ORDINE_METODI = ['Contanti', 'PayPal / Satispay', 'BANCA', 'Da definire'];
+const FM_ORDINE_METODI = ['Contanti', 'PayPal / Satispay', 'BANCA', 'Compensazione', 'Da definire'];
 const fmNormMetodo = (m) => {
   const t = String(m || '').trim().toLowerCase();
+  if (t.includes('compensaz')) return 'Compensazione'; // [FM-COMPENSAZIONE-DOCENTE] non è un incasso di cassa
   if (t.includes('contant')) return 'Contanti';
   if (t.includes('paypal') || t.includes('satispay')) return 'PayPal / Satispay';
   return 'BANCA';
@@ -65,7 +66,9 @@ const fmQuotaDiAllievo = (q, s) => {
 // extraVoci: (compatibilità) usato solo se versati non è passato
 // lezioni: lezioni del docente nel mese che contano per il compenso (output di lezioniMese)
 // tariffa: compenso per lezione del docente (tariffaOra)
-const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extraVoci, lezioni, tariffa, versati }) => {
+// compensazione: quote da allievo del docente stesso (o dei figli) trattenute dal compenso
+// (output .totale di fmCalcCompensazioneMese) — riduce quanto resta da versare.
+const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extraVoci, lezioni, tariffa, versati, compensazione }) => {
   const tar = Number(tariffa) || 0;
   const lezArr = Array.isArray(lezioni) ? lezioni : null;
   const lezAttribuite = new Set();
@@ -89,8 +92,11 @@ const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extra
     const previsto = attivo ? (Number(s.monthlyFee) || 0) * quotaParte : 0;
     // Metodo con cui pagare al docente le lezioni di questo allievo = metodo con cui
     // l'allievo ha pagato (gruppo prevalente se ha pagato con più metodi).
+    // [FM-COMPENSAZIONE-DOCENTE] una quota compensata non porta denaro in cassa: il docente
+    // dell'allievo va pagato comunque con un metodo reale → si esclude 'Compensazione'.
+    const metodiReali = Object.entries(metodi).filter(([k]) => k !== 'Compensazione');
     const metodoDocente = stato === 'pagato'
-      ? (Object.entries(metodi).sort((p, q) => q[1] - p[1])[0] || ['BANCA'])[0]
+      ? (metodiReali.length ? metodiReali.sort((p, q) => q[1] - p[1])[0][0] : 'Da definire')
       : 'Da definire';
     righe.push({
       s, corsi: s._corsiConDocente || [], quotaParte, nTot, stato,
@@ -132,14 +138,114 @@ const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extra
     extra, acconti, compenso, saldo: incassato - compenso,
     saldoPrevisto: incassato + daIncassare - compenso,
     versatiList, versato, versatoPerMetodo, versatoPerTipo,
+    // [FM-COMPENSAZIONE-DOCENTE] quote da allievo trattenute dal compenso
+    compensazione: Number(compensazione) || 0,
     // Quanto resta da versare al docente (negativo = versato più del dovuto)
-    daVersare: compenso - versato,
+    daVersare: compenso - versato - (Number(compensazione) || 0),
     // Saldo di cassa = incassato − già versato (quanto resta oggi in cassa per questo docente)
     saldoCassa: incassato - versato,
   };
 };
 
-const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV, spese:_speseDocView, entrate:_entrateDocView }) => {
+/* ═══════════════════════════════════════════════════════════════════════════
+   [FM-COMPENSAZIONE-DOCENTE] Docente che è anche allievo (sé stesso e/o figli)
+   Le quote mensili di questi allievi si COMPENSANO col compenso del docente:
+   netto da versare = compenso (lezioni × tariffa + extra − acconti) − compensazione.
+   Allievi compensati di un docente:
+     • 'se_stesso' → studenti.docente_id = docente (scheda allievo → "È anche docente")
+     • 'collegato' → profili.allievi_ids del profilo docente (Utenti → "Anche allievo": figli)
+   Stato della quota di un mese, per ciascun allievo:
+     • registrata    → c'è una quota col metodo "Compensazione…": vale il suo importo
+     • pagata/esonero→ quota già saldata in altro modo: niente da compensare
+     • da_registrare → quota dovuta e non ancora registrata: vale la quota mensile
+     • non_dovuta    → mese futuro, fuori dai mesi di lezione, prima dell'iscrizione,
+                       allievo non attivo o quota mensile a 0
+   ═══════════════════════════════════════════════════════════════════════════ */
+const FM_METODO_COMPENSAZIONE = 'Compensazione compenso docente';
+const fmIsCompensazione = (m) => /compensaz/i.test(String(m || ''));
+const fmMeseKey = (y, m) => Number(y) * 12 + (Number(m) - 1);
+
+// links: righe dell'RPC fm_allievi_compensazione (normalizzate) oppure null se non disponibile.
+const fmAllieviCompensazione = ({ docenteId, students, links }) => {
+  if (docenteId == null || docenteId === '') return [];
+  const did = String(docenteId);
+  const out = new Map();
+  const locale = (id) => (students || []).find(x => String(x.id) === String(id)) || null;
+  (links || []).forEach(r => {
+    if (!r || String(r.docenteId) !== did) return;
+    const s = locale(r.studenteId);
+    out.set(String(r.studenteId), {
+      id: String(r.studenteId),
+      name: (s && (s.name || s.nome)) || r.nome || '',
+      monthlyFee: s ? (Number(s.monthlyFee) || 0) : (Number(r.monthlyFee) || 0),
+      status: (s && s.status) || r.status || 'attivo',
+      enrollDate: (s && s.enrollDate) || r.enrollDate || '',
+      relazione: r.relazione === 'se_stesso' ? 'se_stesso' : 'collegato',
+      quote: Array.isArray(r.quote) ? r.quote : [],
+    });
+  });
+  // Collegamento appena salvato in scheda allievo (l'RPC potrebbe non averlo ancora)
+  (students || []).forEach(s => {
+    if (!s || s.docenteId == null || s.docenteId === '' || String(s.docenteId) !== did) return;
+    const k = String(s.id);
+    if (out.has(k)) { out.get(k).relazione = 'se_stesso'; return; }
+    out.set(k, { id: k, name: s.name || s.nome || '', monthlyFee: Number(s.monthlyFee) || 0,
+      status: s.status || 'attivo', enrollDate: s.enrollDate || '', relazione: 'se_stesso', quote: [] });
+  });
+  return [...out.values()].sort((a, b) =>
+    (a.relazione === b.relazione ? 0 : a.relazione === 'se_stesso' ? -1 : 1) || String(a.name).localeCompare(String(b.name)));
+};
+
+// allievi: output di fmAllieviCompensazione · entrate: quote locali (mese 1-12)
+// mesiAttivi: mesi di lezione dell'a.s. (0-11, come anni_scolastici.mesi_attivi) — opzionale
+// soloEntrateLocali: true per l'admin (vede tutte le quote: lo stato locale è il più aggiornato)
+const fmCalcCompensazioneMese = ({ allievi, entrate, m, y, oggi, mesiAttivi, soloEntrateLocali }) => {
+  const k = fmMeseKey(y, m);
+  const now = oggi instanceof Date ? oggi : new Date(oggi || Date.now());
+  const kNow = fmMeseKey(now.getFullYear(), now.getMonth() + 1);
+  const meseDiLezione = !Array.isArray(mesiAttivi) || mesiAttivi.length === 0
+    || mesiAttivi.map(Number).includes(Number(m) - 1);
+  const somma = (arr) => arr.reduce((t, q) => t + (Number(q.importo) || 0), 0);
+  const righe = (allievi || []).map(a => {
+    const perId = new Map();
+    if (!soloEntrateLocali) (a.quote || []).forEach(q => { if (q && q.id != null) perId.set(String(q.id), { ...q, studentId: a.id }); });
+    (entrate || []).forEach(q => {
+      if (q && q.id != null && fmQuotaDiAllievo(q, { id: a.id, name: a.name })) perId.set(String(q.id), q);
+    });
+    const qm = [...perId.values()].filter(q => (q.categoria || 'quota') === 'quota'
+      && Number(q.mese) === Number(m) && Number(q.anno) === Number(y));
+    const comp = qm.filter(q => fmIsCompensazione(q.metodo));
+    if (comp.length) return { a, stato: 'registrata', importo: somma(comp), quote: comp };
+    if (qm.some(q => q.agevolazione === 'esonero')) return { a, stato: 'esonero', importo: 0, quote: qm };
+    if (qm.length) return { a, stato: 'pagata', importo: 0, quote: qm };
+    const [ey, em] = String(a.enrollDate || '').split('-').map(Number);
+    const kEnroll = (ey && em) ? fmMeseKey(ey, em) : null;
+    const dovuta = (a.status || 'attivo') === 'attivo' && k <= kNow && meseDiLezione
+      && (kEnroll == null || k >= kEnroll) && (Number(a.monthlyFee) || 0) > 0;
+    return dovuta
+      ? { a, stato: 'da_registrare', importo: Number(a.monthlyFee) || 0, quote: [] }
+      : { a, stato: 'non_dovuta', importo: 0, quote: [] };
+  });
+  const registrata = righe.filter(r => r.stato === 'registrata').reduce((t, r) => t + r.importo, 0);
+  const daRegistrare = righe.filter(r => r.stato === 'da_registrare').reduce((t, r) => t + r.importo, 0);
+  return { righe, registrata, daRegistrare, totale: registrata + daRegistrare };
+};
+
+// Quote da creare in Contabilità per le compensazioni ancora da registrare di un mese.
+const fmQuoteCompensazioneDaRegistrare = ({ calc, docente, m, y, oggiISO, nuovoId }) => {
+  const MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno","Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
+  const data = oggiISO || new Date().toISOString().slice(0, 10);
+  return ((calc && calc.righe) || []).filter(r => r.stato === 'da_registrare' && r.importo > 0).map(r => ({
+    id: nuovoId(), categoria: 'quota', studentId: r.a.id, studentName: r.a.name,
+    importo: r.importo, mese: Number(m), anno: Number(y), stato: 'pagato',
+    metodo: FM_METODO_COMPENSAZIONE, data, dataPagamento: data,
+    desc: `Quota ${MESI[Number(m) - 1]} ${y} — compensata con il compenso di ${(docente && docente.nome) || 'docente'}`,
+    note: 'Compensazione automatica (docente anche allievo)',
+    numRicevuta: '', noRicevuta: true,
+  }));
+};
+
+const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV, spese:_speseDocView, entrate:_entrateDocView, setEntrate:_setEntrateDocView }) => {
   const ruoloDocView = _ruoloDocView || "admin";
   const isMobile = useIsMobile();
   const students = _studentsRaw || [];
@@ -464,6 +570,55 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const defaultSelMese = MESI_AS.find(x=>x.m===curMonth && x.y===curYear) || MESI_AS[MESI_AS.length-1];
   // ← useState QUI, prima di qualsiasi return condizionale
   const [selMese, setSelMese] = useState(defaultSelMese);
+  // ── [FM-COMPENSAZIONE-DOCENTE] allievi (sé stesso / figli) le cui quote si compensano col compenso ──
+  // RPC SECURITY DEFINER: il docente in modalità docente non vede per RLS le quote dei figli.
+  // Se la migrazione non è stata eseguita (RPC assente) si ripiega sui dati locali
+  // (studenti.docente_id + quote visibili), senza bloccare la vista.
+  const [compLinks, setCompLinks] = useState(null);
+  const [compTick, setCompTick] = useState(0);
+  const [compSalvando, setCompSalvando] = useState(false);
+  React.useEffect(() => {
+    const sb = window.supabaseClient;
+    if (!sb || !sb.rpc) return;
+    let annullato = false;
+    sb.rpc('fm_allievi_compensazione').then(({ data, error }) => {
+      if (annullato) return;
+      if (error) { console.warn('[FM] fm_allievi_compensazione non disponibile (eseguire fm_docente_allievo_compensazione.sql):', error.message); setCompLinks(null); return; }
+      setCompLinks((data || []).map(r => ({
+        docenteId: String(r.docente_id), studenteId: String(r.studente_id),
+        relazione: r.relazione, nome: r.nome || '', monthlyFee: Number(r.monthly_fee) || 0,
+        status: r.status || 'attivo', enrollDate: r.enroll_date || '',
+        quote: (Array.isArray(r.quote) ? r.quote : []).map(q => ({
+          id: String(q.id), studentId: String(r.studente_id), mese: Number(q.mese), anno: Number(q.anno),
+          importo: Number(q.importo) || 0, metodo: q.metodo || '', agevolazione: q.agevolazione || null,
+          categoria: q.categoria || 'quota' })),
+      })));
+    }, (e) => { if (!annullato) setCompLinks(null); });
+    return () => { annullato = true; };
+  }, [selected && selected.id, compTick, (students || []).length]);
+  const mesiAttiviDi = (m, y) => {
+    const ai = Number(m) >= 9 ? Number(y) : Number(y) - 1;
+    const as = (_propAnniDV || []).find(a => Number(a.annoInizio) === ai);
+    return as && Array.isArray(as.mesiAttivi) ? as.mesiAttivi : null;
+  };
+  const allieviCompDi = (d) => d ? fmAllieviCompensazione({ docenteId: d.id, students, links: compLinks }) : [];
+  const compensazioneMese = (d, m, y, allieviPre) => fmCalcCompensazioneMese({
+    allievi: allieviPre || allieviCompDi(d), entrate: entrateDV, m, y, oggi: new Date(),
+    mesiAttivi: mesiAttiviDi(m, y), soloEntrateLocali: ruoloDocView === 'admin',
+  });
+  const registraCompensazione = (d, m, y) => {
+    if (ruoloDocView !== 'admin' || typeof _setEntrateDocView !== 'function' || compSalvando) return;
+    const calc = compensazioneMese(d, m, y);
+    const nuove = fmQuoteCompensazioneDaRegistrare({ calc, docente: d, m, y,
+      oggiISO: (typeof yyyymmdd === 'function') ? yyyymmdd(new Date()) : new Date().toISOString().slice(0, 10),
+      nuovoId: (typeof uid === 'function') ? uid : () => String(Date.now()) + Math.random().toString(36).slice(2) });
+    if (!nuove.length) return;
+    const tot = nuove.reduce((t, q) => t + q.importo, 0);
+    if (!window.confirm(`Registrare in Contabilità ${nuove.length} quot${nuove.length === 1 ? 'a' : 'e'} (€${tot.toLocaleString('it-IT')}) come pagate tramite compensazione con il compenso di ${d.nome}?`)) return;
+    setCompSalvando(true);
+    _setEntrateDocView(p => [...(p || []), ...nuove]);
+    setTimeout(() => { setCompSalvando(false); setCompTick(t => t + 1); }, 1500);
+  };
   const [sortKeyDP, sortDirDP, handleSortDP, sortFnDP] = useSortable("mese", "asc");
   const [sortKeyDC, sortDirDC, handleSortDC, sortFnDC] = useSortable("mese", "asc");
   // Mostra/nascondi importi (per il docente loggato)
@@ -584,6 +739,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
         allieviD: allievi(d), entrate: entrateDV, m, y,
         lezioni: lezM, tariffa: Number(d.tariffaOra)||0,
         versati: versatiDocenteMese(d, m, y),
+        compensazione: compensazioneMese(d, m, y).totale, // [FM-COMPENSAZIONE-DOCENTE]
       });
       return { d, nLez, b };
     }).filter(x => x.b.righe.length > 0 || x.nLez > 0 || x.b.compenso > 0 || x.b.versato > 0);
@@ -629,7 +785,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
         , kpi(`Incassato ${MESI_L[m-1]}`, eur(tot.incassato), C.green, tot.daIncassare>0 ? `${eur(tot.daIncassare)} ancora da incassare` : 'Tutte le quote incassate')
         , kpi('Compensi dovuti', eur(tot.compenso), C.orange, 'lezioni × tariffa + extra')
         , kpi('Già versati', eur(tot.versato), C.blue, 'compensi, acconti ed extra pagati')
-        , kpi('Da versare', eur(Math.max(0, tot.daVersare)), tot.daVersare>0?C.orange:C.green, tot.daVersare<0 ? `versato in più: ${eur(-tot.daVersare)}` : 'compensi dovuti − già versati')
+        , kpi('Da versare', eur(Math.max(0, tot.daVersare)), tot.daVersare>0?C.orange:C.green, tot.daVersare<0 ? `versato in più: ${eur(-tot.daVersare)}` : 'compensi dovuti − già versati − compensazioni')
         , kpi('Saldo di cassa', sgn(tot.saldoCassa), tot.saldoCassa>=0?C.green:C.red, 'incassato − già versato')
         , kpi('Saldo finale', sgn(tot.saldo), tot.saldo>=0?C.green:C.red, 'incassato − (versato + da versare)')
       )
@@ -666,6 +822,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                 , React.createElement('span', null, 'Extra: ', React.createElement('b', {style:{color:C.text}}, eur(b.extra)))
                 , React.createElement('span', null, 'Dovuto: ', React.createElement('b', {style:{color:C.orange}}, eur(b.compenso)))
                 , React.createElement('span', null, 'Già versato: ', React.createElement('b', {style:{color:C.blue}}, eur(b.versato)))
+                , b.compensazione > 0 && React.createElement('span', {title:'Quote da allievo (sé stesso / figli) trattenute dal compenso'}, 'Compensazione quote: ', React.createElement('b', {style:{color:C.purple||C.gold}}, '−'+eur(b.compensazione)))
                 , React.createElement('span', null, b.daVersare>=0?'Da versare: ':'Versato in più: ', React.createElement('b', {style:{color:b.daVersare>0?C.orange:C.green}}, eur(Math.abs(b.daVersare))))
                 , b.daIncassare > 0 && React.createElement('span', null, 'Saldo finale a quote incassate: ', React.createElement('b', {style:{color:b.saldoPrevisto>=0?C.green:C.red}}, sgn(b.saldoPrevisto)))
               )
@@ -892,6 +1049,11 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const stipLezSel  = lezSel.length * selected.tariffaOra;
   const stipSel  = stipLezSel + totAltreSel;
   const stipPrev = lezPrev.length * selected.tariffaOra + totAltrePrev;
+  // [FM-COMPENSAZIONE-DOCENTE] quote da allievo (sé stesso / figli) trattenute dal compenso del mese
+  const allieviCompSel = allieviCompDi(selected);
+  const haCompSel = allieviCompSel.length > 0;
+  const compSel = compensazioneMese(selected, selMese.m, selMese.y, allieviCompSel);
+  const nettoSel = stipSel - compSel.totale;
   const lezSelAll = tutteLezioniMese(selected, selMese.m, selMese.y);
 
   // andamento anno scolastico (tutte le lezioni per il grafico)
@@ -984,6 +1146,9 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
             , React.createElement(Avatar, { initials: selected.nome.replace("Prof.ssa ","").replace("Prof. ","").split(" ").map(p=>p[0]).join("").slice(0,2).toUpperCase(), hex: selected.colore, size: 56, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10126}})
             , React.createElement('div', {style:{minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10127}}
               , React.createElement('h1', { style: {fontFamily:"'Oswald',sans-serif",fontSize:"clamp(18px,5vw,26px)",fontWeight:600,marginBottom:4,wordBreak:"break-word"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10128}}, selected.nome)
+              /* [FM-COMPENSAZIONE-DOCENTE] il docente è anche allievo (sé stesso e/o figli) */
+              , haCompSel && React.createElement('div', { style: {display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:C.gold,background:C.goldBg,border:`1px solid ${C.goldDim||C.border}`,borderRadius:8,padding:"2px 8px",marginBottom:6} }
+                  , "\uD83C\uDFB5 Anche allievo: ", allieviCompSel.map(a=>a.name||("#"+a.id)).join(", "))
               , React.createElement('div', { style: {fontSize:13,color:C.textMuted,marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10129}}, corsiAssegnatiDocente(selected))
               , React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10130}}
                 , React.createElement('span', { style: {fontSize:11,background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,borderRadius:4,padding:"2px 8px"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10131}}, selected.contratto)
@@ -1365,6 +1530,17 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                  ? `di cui €${totAltreSel.toLocaleString("it-IT")} altre competenze`
                  : `mese prec.: €${stipPrev.toLocaleString("it-IT")}`,
                hex:C.green},
+              /* [FM-COMPENSAZIONE-DOCENTE] */
+              ...(haCompSel ? [
+                {label:`Compensazione ${MESI_LABEL_S[selMese.m-1]}`,
+                 value:`${compSel.totale>0?"−":""}€${compSel.totale.toLocaleString("it-IT")}`,
+                 desc: compSel.daRegistrare>0 ? `di cui €${compSel.daRegistrare.toLocaleString("it-IT")} da registrare` : "quote da allievo trattenute",
+                 hex:C.purple||C.gold},
+                {label:`Netto da ricevere`,
+                 value:`${nettoSel<0?"-":""}€${Math.abs(nettoSel).toLocaleString("it-IT")}`,
+                 desc: nettoSel<0 ? "le quote superano il compenso" : "compenso − compensazione",
+                 hex:nettoSel<0?C.red:C.teal},
+              ] : []),
             ].map(k=>(
               React.createElement('div', { key: k.label, style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"18px 20px",borderTop:`3px solid ${k.hex}30`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10440}}
                 , React.createElement('div', { style: {fontFamily:"'Oswald',sans-serif",fontSize:28,fontWeight:600,color:k.hex,lineHeight:1,marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10441}}, k.value)
@@ -1443,6 +1619,45 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               ))
             )
           )
+          /* [FM-COMPENSAZIONE-DOCENTE] Compensazione quote da allievo (sé stesso / figli) */
+          , haCompSel && React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden",marginBottom:16} }
+            , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"} }
+              , React.createElement('span', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase"} }, "Compensazione quote allievo " , MESI_LABEL_L[selMese.m-1], " " , selMese.y)
+              , React.createElement('span', { style: {fontSize:13,color:compSel.totale>0?(C.purple||C.gold):C.textDim,fontWeight:600} }, compSel.totale>0?"−":"", "€", compSel.totale.toLocaleString("it-IT"))
+            )
+            , compSel.righe.map((r,i)=>{
+                const ST = {
+                  registrata:    {l:"Compensata",          c:C.green,    bg:C.greenBg},
+                  da_registrare: {l:"Da registrare",       c:C.orange,   bg:C.orangeBg},
+                  pagata:        {l:"Già pagata",          c:C.textMuted,bg:C.bg},
+                  esonero:       {l:"Esonero",             c:C.textMuted,bg:C.bg},
+                  non_dovuta:    {l:"Non dovuta",          c:C.textDim,  bg:C.bg},
+                }[r.stato] || {l:r.stato,c:C.textMuted,bg:C.bg};
+                return React.createElement('div', { key: r.a.id, style: {display:"grid",gridTemplateColumns:"1fr auto auto",gap:12,alignItems:"center",
+                    padding:"11px 20px",borderBottom:i<compSel.righe.length-1?`1px solid ${C.border}`:"none"} }
+                  , React.createElement('div', null
+                    , React.createElement('div', { style: {fontSize:13,fontWeight:500} }, r.a.name || ("Allievo " + r.a.id))
+                    , React.createElement('div', { style: {fontSize:11,color:C.textMuted} },
+                        r.a.relazione === 'se_stesso' ? "Sé stesso" : "Allievo collegato (figlio/a)",
+                        " · quota mensile €", (Number(r.a.monthlyFee)||0).toLocaleString("it-IT"))
+                  )
+                  , React.createElement('span', { style: {fontSize:11,fontWeight:700,color:ST.c,background:ST.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:"2px 8px",whiteSpace:"nowrap"} }, ST.l)
+                  , React.createElement('div', { style: {textAlign:"right",fontSize:13,fontWeight:600,minWidth:70,color:r.importo>0?(C.purple||C.gold):C.textDim} }, r.importo>0?`−€${r.importo.toLocaleString("it-IT")}`:"—")
+                );
+              })
+            , React.createElement('div', { style: {padding:"10px 20px",borderTop:`1px solid ${C.border}`,background:C.bg,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexWrap:"wrap"} }
+              , React.createElement('span', { style: {fontSize:11,color:C.textDim,lineHeight:1.5,flex:"1 1 220px"} },
+                  compSel.daRegistrare>0
+                    ? (ruoloDocView==='admin'
+                        ? "Le quote “da registrare” sono già scalate dal netto. Registrale in Contabilità per segnarle come pagate (metodo “Compensazione compenso docente”)."
+                        : "Le quote “da registrare” sono già scalate dal netto: la segreteria le registrerà come pagate tramite compensazione.")
+                    : "Le quote compensate risultano pagate in Contabilità con metodo “Compensazione compenso docente”.")
+              , ruoloDocView==='admin' && typeof _setEntrateDocView==='function' && compSel.daRegistrare>0 && React.createElement('button', {
+                  onClick: ()=>registraCompensazione(selected, selMese.m, selMese.y), disabled: compSalvando,
+                  style: {padding:"7px 14px",borderRadius:8,border:"none",background:C.gold,color:"#fff",fontSize:12,fontWeight:600,cursor:compSalvando?"wait":"pointer",opacity:compSalvando?0.6:1,fontFamily:"'Open Sans',sans-serif",whiteSpace:"nowrap"} },
+                  compSalvando ? "Registrazione…" : `Registra in Contabilità (€${compSel.daRegistrare.toLocaleString("it-IT")})`)
+            )
+          )
           /* Tabella compensi anno scolastico */
           , React.createElement('div', { style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,overflow:"hidden"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10479}}
             , React.createElement('div', { style: {padding:"14px 20px",borderBottom:`1px solid ${C.border}`}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10480}}
@@ -1456,6 +1671,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   , React.createElement(SortTh,{label:"Lezioni", sortKey:"n",       currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Compenso",sortKey:"c",       currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Extra",   sortKey:"extra",   currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
+                  , haCompSel && React.createElement(SortTh,{label:"Compensaz.", sortKey:"comp", currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement(SortTh,{label:"Totale",  sortKey:"tot",     currentKey:sortKeyDC, dir:sortDirDC, onSort:handleSortDC, style:{padding:"10px 18px",fontSize:10}})
                   , React.createElement('th',{style:{padding:"10px 18px",textAlign:"left",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",color:C.textMuted,fontWeight:500}}, "vs mese prec.")
                 )
@@ -1470,16 +1686,19 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   const delta = n - np;
                   // TOTALE da versare = compenso lezioni + extra (competenze aggiuntive) − acconti.
                   // totaleAltreCompetenzeMese è già una somma algebrica: gli acconti vi entrano col segno meno.
-                  const tot = c + extra;
-                  return { x, i, n, np, c, extra, tot, delta, mese: x.y*100+x.m };
+                  // [FM-COMPENSAZIONE-DOCENTE] − quote da allievo (sé stesso / figli) trattenute dal compenso
+                  const comp = haCompSel ? compensazioneMese(selected, x.m, x.y, allieviCompSel).totale : 0;
+                  const tot = c + extra - comp;
+                  return { x, i, n, np, c, extra, comp, tot, delta, mese: x.y*100+x.m };
                 }), (r,k) => {
                   if(k==="mese") return r.mese;
                   if(k==="n")    return r.n;
                   if(k==="c")    return r.c;
                   if(k==="extra")return r.extra;
+                  if(k==="comp") return r.comp;
                   if(k==="tot")  return r.tot;
                   return 0;
-                }).map(({x,i,n,np,c,extra,tot,delta})=>{
+                }).map(({x,i,n,np,c,extra,comp,tot,delta})=>{
                   const isS = x.m===selMese.m&&x.y===selMese.y;
                   const isF = isFuture(x);
                   return (
@@ -1501,8 +1720,11 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       , React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:extra!==0?600:400,color:isF?C.textDim:extra>0?C.gold:extra<0?C.red:C.textDim}}
                         , isF?"—":extra!==0?`${extra<0?"-":""}€${Math.abs(extra).toLocaleString("it-IT")}`:"—"
                       )
-                      , React.createElement('td', { title: "Compenso + extra − acconti", style: {padding:"11px 18px",fontSize:14,fontWeight:700,color:isF?C.textDim:tot<0?C.red:tot>0?C.teal:C.textDim}}
-                        , isF?"—":(n>0||extra!==0)?`${tot<0?"-":""}€${Math.abs(tot).toLocaleString("it-IT")}`:"—"
+                      , haCompSel && React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:comp>0?600:400,color:isF?C.textDim:comp>0?(C.purple||C.gold):C.textDim}}
+                        , isF?"—":comp>0?`−€${comp.toLocaleString("it-IT")}`:"—"
+                      )
+                      , React.createElement('td', { title: haCompSel ? "Compenso + extra − acconti − compensazione quote" : "Compenso + extra − acconti", style: {padding:"11px 18px",fontSize:14,fontWeight:700,color:isF?C.textDim:tot<0?C.red:tot>0?C.teal:C.textDim}}
+                        , isF?"—":(n>0||extra!==0||comp!==0)?`${tot<0?"-":""}€${Math.abs(tot).toLocaleString("it-IT")}`:"—"
                       )
                       , React.createElement('td', { style: {padding:"11px 18px"}}
                         , !isF && np>0 && (
@@ -1531,8 +1753,13 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                       , totExtraAnno<0?"-":"", "€", Math.abs(totExtraAnno).toLocaleString("it-IT")
                     );
                   })()
-                  , (() => { const totNettoAnno = MESI_AS.reduce((t,x)=>t+lezioniMese(selected,x.m,x.y).length*selected.tariffaOra+totaleAltreCompetenzeMese(selected,x.m,x.y),0);
-                    return React.createElement('td', { title: "Compenso + extra − acconti", style: {padding:"11px 18px",fontSize:14,fontWeight:700,color:totNettoAnno<0?C.red:C.teal}, __self: this }
+                  , haCompSel && (() => { const totCompAnno = MESI_AS.filter(x=>!isFuture(x)).reduce((t,x)=>t+compensazioneMese(selected,x.m,x.y,allieviCompSel).totale,0);
+                    return React.createElement('td', { style: {padding:"11px 18px",fontSize:13,fontWeight:600,color:totCompAnno>0?(C.purple||C.gold):C.textDim} }
+                      , totCompAnno>0?`−€${totCompAnno.toLocaleString("it-IT")}`:"—");
+                  })()
+                  , (() => { const totNettoAnno = MESI_AS.reduce((t,x)=>t+lezioniMese(selected,x.m,x.y).length*selected.tariffaOra+totaleAltreCompetenzeMese(selected,x.m,x.y)
+                      - (haCompSel && !isFuture(x) ? compensazioneMese(selected,x.m,x.y,allieviCompSel).totale : 0),0);
+                    return React.createElement('td', { title: haCompSel ? "Compenso + extra − acconti − compensazione quote" : "Compenso + extra − acconti", style: {padding:"11px 18px",fontSize:14,fontWeight:700,color:totNettoAnno<0?C.red:C.teal}, __self: this }
                       , totNettoAnno<0?"-":"", "€", Math.abs(totNettoAnno).toLocaleString("it-IT")
                     );
                   })()
@@ -1557,7 +1784,17 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                     const voci = altreSel.slice().sort((a,b)=>(a.data||"").localeCompare(b.data||""));
                     const totExtra   = voci.filter(v=>!v.isAcconto).reduce((t,v)=>t+(Number(v.importo)||0),0);
                     const totAcconti = voci.filter(v=> v.isAcconto).reduce((t,v)=>t+(Number(v.importo)||0),0);
-                    const totNetto   = totale + totExtra - totAcconti;
+                    // [FM-COMPENSAZIONE-DOCENTE] quote da allievo (sé stesso / figli) trattenute dal compenso
+                    const totComp    = haCompSel ? compSel.totale : 0;
+                    const righeComp  = haCompSel ? compSel.righe.filter(r => r.importo > 0) : [];
+                    const totNetto   = totale + totExtra - totAcconti - totComp;
+                    const rowsComp = righeComp.map(r => `
+                      <tr style="border-bottom:1px solid #eee;">
+                        <td style="padding:8px 12px;font-size:13px;">${_esc(r.a.name||'Allievo')}</td>
+                        <td style="padding:8px 12px;font-size:13px;color:#666;">${r.a.relazione==='se_stesso'?'Sé stesso':'Allievo collegato'}</td>
+                        <td style="padding:8px 12px;font-size:13px;color:#666;">${r.stato==='registrata'?'Compensata':'Da registrare'}</td>
+                        <td style="padding:8px 12px;font-size:13px;text-align:right;font-weight:600;color:#6b21a8;">-€${r.importo.toLocaleString('it-IT')}</td>
+                      </tr>`).join('');
                     const rowsVoci = voci.map(v => `
                       <tr style="border-bottom:1px solid #eee;">
                         <td style="padding:8px 12px;font-size:13px;">${v.data ? new Date(v.data+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'long'}) : '—'}</td>
@@ -1586,16 +1823,20 @@ th{background:#f9fafb;padding:10px 12px;font-size:11px;text-align:left;text-tran
 @media print{body{padding:20px;}}</style></head><body>
 <div class="header"><div><div class="logo">🎵 Futuro Musica</div><div style="font-size:11px;color:#999;margin-top:2px;">Generato il ${new Date().toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'})}</div></div>
 <div style="text-align:right;"><div style="font-size:16px;font-weight:700;">${selected.nome||selected.name||'Docente'}</div><div style="font-size:12px;color:#666;">Tariffa: €${selected.tariffaOra}/ora · ${selected.strumento||'—'}</div></div></div>
-<h1>Resoconto mensile — ${mLabel}</h1><div style="font-size:14px;color:#666;margin-bottom:24px;">${nLez} lezioni · compenso lezioni: €${totale.toLocaleString('it-IT')}${voci.length?` · totale da versare: ${_eur(totNetto)}`:''}</div>
+<h1>Resoconto mensile — ${mLabel}</h1><div style="font-size:14px;color:#666;margin-bottom:24px;">${nLez} lezioni · compenso lezioni: €${totale.toLocaleString('it-IT')}${(voci.length||totComp)?` · totale da versare: ${_eur(totNetto)}`:''}</div>
 <table><thead><tr><th>#</th><th>Data</th><th>Ora</th><th>Allievo / Corso</th><th>Argomento</th><th style="text-align:right;">Tariffa</th><th style="text-align:center;">Presenza</th></tr></thead>
 <tbody>${rows}</tbody></table>
 ${voci.length ? `<h2 style="font-size:15px;font-weight:700;margin:28px 0 10px;">Competenze extra e acconti</h2>
 <table><thead><tr><th>Data</th><th>Descrizione</th><th>Categoria</th><th style="text-align:right;">Importo</th></tr></thead>
 <tbody>${rowsVoci}</tbody></table>` : ''}
+${righeComp.length ? `<h2 style="font-size:15px;font-weight:700;margin:28px 0 10px;">Compensazione quote allievo</h2>
+<table><thead><tr><th>Allievo</th><th>Relazione</th><th>Stato</th><th style="text-align:right;">Importo</th></tr></thead>
+<tbody>${rowsComp}</tbody></table>` : ''}
 <div class="totale"><div><div class="totale-label">Lezioni</div><div style="font-size:22px;font-weight:700;">${nLez}</div></div>
 <div><div class="totale-label">Compenso lezioni</div><div style="font-size:22px;font-weight:700;color:#166534;">€${totale.toLocaleString('it-IT')}</div></div>
 ${totExtra ? `<div><div class="totale-label">Extra</div><div style="font-size:22px;font-weight:700;color:#166534;">+€${totExtra.toLocaleString('it-IT')}</div></div>` : ''}
 ${totAcconti ? `<div><div class="totale-label">Acconti</div><div style="font-size:22px;font-weight:700;color:#991b1b;">-€${totAcconti.toLocaleString('it-IT')}</div></div>` : ''}
+${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style="font-size:22px;font-weight:700;color:#6b21a8;">-€${totComp.toLocaleString('it-IT')}</div></div>` : ''}
 <div style="border-left:2px solid #e5e7eb;padding-left:32px;"><div class="totale-label">Totale da versare</div><div style="font-size:26px;font-weight:800;color:${totNetto<0?'#991b1b':'#0f766e'};">${_eur(totNetto)}</div></div></div>
 <div class="footer">Futuro Musica — Resoconto compensi ${mLabel} · ${selected.nome||selected.name}</div>
 </body></html>`;

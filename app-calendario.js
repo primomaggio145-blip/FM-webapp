@@ -1044,12 +1044,35 @@ const validate = f => {
   return e;
 };
 
-const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, role:_roleSF }) => {
+const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, role:_roleSF, allStudents:_allStudentsSF }) => {
   const roleSF = _roleSF || "admin"; // docente = dati anagrafici readOnly
   const _teacherOpts = (_docentiFSt||[]).map(d=>({value:d.nome||d.name||"",label:d.nome||d.name||""}));
   const [f, setF] = useState(initial || emptyStudent);
   const [errors, setErrors] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
+  // [FM-COMPENSAZIONE-DOCENTE] allievo che è anche docente: selezione del record docente
+  const [_sfDocAperto, _setSfDocAperto] = useState(!!(initial && initial.docenteId));
+  const _sfScegliDocente = (id) => {
+    const d = (_docentiFSt||[]).find(x => String(x.id) === String(id)) || null;
+    setErrors(p => { const n = {...p}; delete n.docenteId; return n; });
+    setF(p => {
+      const n = { ...p, docenteId: d ? String(d.id) : null };
+      // Precompila SOLO i campi ancora vuoti: non sovrascrive quanto già scritto dall'admin
+      if (d) {
+        if (!String(p.name||"").trim())  n.name  = d.nome || d.name || "";
+        if (!String(p.email||"").trim()) n.email = d.email || "";
+        if (!String(p.phone||"").trim()) n.phone = d.phone || d.telefono || "";
+      }
+      return n;
+    });
+  };
+  // Lo stesso docente non può essere "sé stesso" in due schede allievo diverse
+  const _sfDocenteDuplicato = (form) => {
+    if (!form || !form.docenteId) return null;
+    const lista = Array.isArray(_allStudentsSF) ? _allStudentsSF : [];
+    return lista.find(x => x && x.docenteId != null && String(x.docenteId) === String(form.docenteId)
+      && String(x.id) !== String(form.id != null ? form.id : "__nuovo__")) || null;
+  };
 
   const collettivi = (courses||[]).filter(c=>c.type==="collettivo");
 
@@ -1070,6 +1093,9 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
   const handleSubmit = () => {
     if (savingRef.current) return; // blocco anti doppio-click: un doppio invio creerebbe un allievo duplicato a DB
     const e = validate(f);
+    if (_sfDocAperto && !f.docenteId) e.docenteId = "Seleziona il docente oppure togli la spunta";
+    const _dupDoc = _sfDocenteDuplicato(f);
+    if (_dupDoc) e.docenteId = `Questo docente è già collegato all'allievo "${_dupDoc.name||_dupDoc.nome||_dupDoc.id}"`;
     if(Object.keys(e).length){ setErrors(e); return; }
     savingRef.current = true;
     setSaving(true);
@@ -1081,6 +1107,30 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
       , React.createElement('div', { style: {padding:24,display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}, className: "form-2col", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2942}}
 
         , React.createElement(SectionDivider, { label: "Dati anagrafici" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 2944}})
+        /* [FM-COMPENSAZIONE-DOCENTE] L'allievo è anche docente della scuola: collega il record docente.
+           Le quote di questo allievo (e dei figli collegati al profilo del docente) vengono
+           compensate con il compenso del docente (tab Compenso). */
+        , roleSF!=="docente" && React.createElement('div', { style: {gridColumn:"1/-1",background:C.bg,border:`1px solid ${f.docenteId?C.gold:C.border}`,borderRadius:10,padding:"12px 14px"} }
+          , React.createElement('label', { style: {display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:13,fontWeight:600,color:C.text} }
+            , React.createElement('input', { type: "checkbox", checked: !!(f.docenteId || _sfDocAperto),
+                onChange: e => { if (e.target.checked) { _setSfDocAperto(true); } else { _setSfDocAperto(false); set("docenteId", null); setErrors(p=>{ const n={...p}; delete n.docenteId; return n; }); } },
+                style: {width:16,height:16,accentColor:C.gold,cursor:"pointer"} })
+            , "\uD83C\uDFB5 È anche docente della scuola"
+          )
+          , (f.docenteId || _sfDocAperto) && React.createElement('div', { style: {marginTop:10} }
+            , React.createElement('select', {
+                value: f.docenteId ? String(f.docenteId) : "",
+                onChange: e => _sfScegliDocente(e.target.value),
+                style: {width:"100%",padding:"10px 12px",borderRadius:8,border:`1px solid ${errors.docenteId?C.red:C.border}`,background:C.surface,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif",outline:"none"} }
+              , React.createElement('option', { value: "" }, "— Seleziona il docente —")
+              , (_docentiFSt||[]).slice().sort((a,b)=>String(a.nome||a.name||"").localeCompare(String(b.nome||b.name||""))).map(d =>
+                  React.createElement('option', { key: d.id, value: String(d.id) }, d.nome||d.name||""))
+            )
+            , errors.docenteId && React.createElement('div', { style: {fontSize:11,color:C.red,marginTop:6} }, errors.docenteId)
+            , React.createElement('div', { style: {fontSize:11,color:C.textDim,marginTop:6,lineHeight:1.5} },
+                "Le quote mensili di questo allievo saranno compensate con il compenso del docente (Docenti \u2192 Compenso). Vale anche per i figli collegati al profilo del docente in Utenti \u2192 \u201cAnche allievo\u201d.")
+          )
+        )
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}, React.createElement(Input, { label: roleSF==="docente"?"Nome (sola lettura)":"Nome completo *", value: f.name, onChange: roleSF==="docente"?undefined:e=>set("name",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.name, placeholder: "Es. Sofia Marchetti", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2945}}))
         , React.createElement(Input, { label: "Email *", type: "email", value: f.email, onChange: roleSF==="docente"?undefined:e=>set("email",e.target.value), readOnly: roleSF==="docente", error: roleSF==="docente"?undefined:errors.email, placeholder: "email@esempio.it", __self: this, __source: {fileName: _jsxFileName, lineNumber: 2946}})
         , React.createElement('div', { style: {gridColumn:"1/-1"} }
@@ -2809,7 +2859,9 @@ const StudentList = ({ students, courses, onSelect, onAdd, onEdit, onDelete, use
                             , initials(s.name)
                           )
                           , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 3815}}
-                            , React.createElement('div', { style: {fontSize:14,fontWeight:500}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3816}}, s.name)
+                            , React.createElement('div', { style: {fontSize:14,fontWeight:500,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3816}}, s.name
+                              /* [FM-COMPENSAZIONE-DOCENTE] l'allievo è anche docente della scuola */
+                              , s.docenteId && React.createElement('span', { title: "Anche docente: quote compensate con il compenso", style: {fontSize:10,fontWeight:700,color:C.gold,background:C.goldBg,border:`1px solid ${C.goldDim||C.border}`,borderRadius:6,padding:"1px 6px",letterSpacing:"0.04em"} }, "DOCENTE"))
                             , slRuolo!=="docente" && React.createElement('div', { style: {fontSize:11,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3817}}, s.email||"—")
                           )
                         )
@@ -3745,6 +3797,38 @@ const ImportaIscrizioniModal = ({ annoCorrente, anniDisp, allStudents, studentsN
 //   - l'INSERT viene tentato UNA SOLA VOLTA, mai ripetuto;
 //   - eventuali colonne mancanti vengono invece rimosse e riscritte con un UPDATE separato,
 //     che non può mai creare righe duplicate anche se va ripetuto.
+/* [FM-COMPENSAZIONE-DOCENTE] Allievo che è anche docente: allinea profili.allievi_ids del
+   profilo del docente, così nell'app il docente può passare da "Docente" ad "Allievo" senza
+   doverlo collegare a mano in Utenti. Aggiunge l'allievo al nuovo docente e lo toglie dal
+   precedente (se il collegamento è cambiato o rimosso). Gli altri allievi collegati (figli)
+   non vengono toccati. Se il docente non ha ancora un account, non c'è nulla da aggiornare:
+   la sezione "Anche allievo" in Utenti lo proporrà quando si registrerà. */
+const fmSincronizzaProfiloDocenteAllievo = async (sb, studenteId, docenteNuovo, docentePrec) => {
+  if (!sb || studenteId == null || studenteId === '') return;
+  const sid = String(studenteId);
+  const norm = (v) => (v != null && v !== '') ? String(v) : null;
+  const nuovo = norm(docenteNuovo), prec = norm(docentePrec);
+  const toId = v => (v == null || v === '') ? null : (isNaN(Number(v)) ? v : Number(v));
+  const aggiorna = async (did, aggiungi) => {
+    const { data: profs, error } = await sb.from('profili').select('*').eq('docente_id', toId(did));
+    if (error) { console.warn('[FM] profilo docente-allievo: lettura profili non riuscita:', error.message); return; }
+    for (const p of (profs || [])) {
+      const ids = (typeof fmAllieviIdsDaProfilo === 'function') ? fmAllieviIdsDaProfilo(p) : [];
+      const presente = ids.includes(sid);
+      if (aggiungi === presente) continue;
+      const next = aggiungi ? [...ids, sid] : ids.filter(x => x !== sid);
+      const upd = { allievi_ids: next.map(toId), updated_at: new Date().toISOString() };
+      if (!aggiungi && p.allievo_id != null && String(p.allievo_id) === sid) upd.allievo_id = next.length ? toId(next[0]) : null;
+      const { error: eUpd } = await sb.from('profili').update(upd).eq('id', p.id);
+      if (eUpd) console.warn('[FM] profilo docente-allievo: aggiornamento non riuscito:', eUpd.message);
+    }
+  };
+  try {
+    if (prec && prec !== nuovo) await aggiorna(prec, false);
+    if (nuovo) await aggiorna(nuovo, true);
+  } catch (e) { console.warn('[FM] profilo docente-allievo:', e && e.message); }
+};
+
 const supabaseUpsertConFallbackColonne = async (sb, table, row, { isUpdate=false, matchId=null } = {}) => {
   if (isUpdate) {
     // UPDATE: nessun rischio di duplicati anche ripetendo — può tranquillamente riprovare.
@@ -4250,6 +4334,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
         complementary_course: d.complementaryCourse||null, notes: d.notes||null,
         nome_ricevuta: d.nomeRicevuta||null, codice_fiscale: d.codiceFiscale||null,
+        docente_id: d.docenteId ? (isNaN(Number(d.docenteId)) ? d.docenteId : Number(d.docenteId)) : null, // [FM-COMPENSAZIONE-DOCENTE]
         anno_scolastico_id: annoScolasticoRow ? annoScolasticoRow.id : null,
         extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
         extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
@@ -4269,6 +4354,8 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         // subito in scheda senza nome per ricevuta / codice fiscale finché non si ricarica.
         if (newStudent.nomeRicevuta === undefined || newStudent.nomeRicevuta === null) newStudent.nomeRicevuta = d.nomeRicevuta || '';
         if (newStudent.codiceFiscale === undefined || newStudent.codiceFiscale === null) newStudent.codiceFiscale = d.codiceFiscale || '';
+        newStudent.docenteId = d.docenteId ? String(d.docenteId) : null; // [FM-COMPENSAZIONE-DOCENTE]
+        if (newStudent.docenteId) fmSincronizzaProfiloDocenteAllievo(sb, inserted.id, newStudent.docenteId, null);
         let listaAggiornata;
         setStudents(p => { listaAggiornata = [...p, newStudent]; return listaAggiornata; });
         // CAUSA REALE DEI DOPPIONI: fm_sync.js confronta lo stato locale con la propria
@@ -4454,12 +4541,17 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
         birthdate: d.birthdate||null, enroll_date: d.enrollDate||null,
         complementary_course: d.complementaryCourse||null, notes: d.notes||null,
         nome_ricevuta: d.nomeRicevuta||null, codice_fiscale: d.codiceFiscale||null,
+        docente_id: d.docenteId ? (isNaN(Number(d.docenteId)) ? d.docenteId : Number(d.docenteId)) : null, // [FM-COMPENSAZIONE-DOCENTE]
         anno_scolastico_id: annoScolasticoRowEdit ? annoScolasticoRowEdit.id : null,
         extra_instruments: d.extraInstruments&&d.extraInstruments.length>0 ? JSON.stringify(d.extraInstruments) : null,
         extra_teachers: d.extraTeachers&&Object.keys(d.extraTeachers).length>0 ? JSON.stringify(d.extraTeachers) : null,
       };
+      // [FM-COMPENSAZIONE-DOCENTE] docente collegato PRIMA della modifica (per toglierlo dal vecchio profilo)
+      const _precEdit = (_allStudents||[]).find(x => String(x.id) === String(d.id));
+      const _docPrecEdit = _precEdit && _precEdit.docenteId != null ? String(_precEdit.docenteId) : null;
       const { error } = await supabaseUpsertConFallbackColonne(sb, 'studenti', row, { isUpdate:true, matchId:d.id });
       if (error) console.warn('[FM] handleEditStudent error:', error.message);
+      else if (String(d.docenteId||'') !== String(_docPrecEdit||'')) fmSincronizzaProfiloDocenteAllievo(sb, d.id, d.docenteId||null, _docPrecEdit);
       // Aggiorna anche l'iscrizione dell'anno selezionato se corso/docente sono cambiati
       try {
         const corso = courses.find(c=>(c.name||c.nome)===d.instrument || String(c.id)===String(d.courseId));
@@ -4600,7 +4692,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
           )
         )
       )
-      , _ruoloAV==="admin" && modal==="add" && React.createElement(Modal, { title: "Nuovo allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}, React.createElement(StudentForm, { onSave: handleAddStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}))
+      , _ruoloAV==="admin" && modal==="add" && React.createElement(Modal, { title: "Nuovo allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}, React.createElement(StudentForm, { allStudents: _allStudents, onSave: handleAddStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], __self: this, __source: {fileName: _jsxFileName, lineNumber: 3909}}))
 
       /* Riepilogo primo pagamento — mostrato SEMPRE dopo la creazione di un nuovo allievo */
       , prorationInfo && React.createElement(Modal, { title: "Primo pagamento — riepilogo", onClose: ()=>setProrationInfo(null), wide: true }
@@ -4643,7 +4735,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
           )
         )
       )
-      , _ruoloAV==="admin" && modal==="edit" && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], role: propUserRuoloAV||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
+      , _ruoloAV==="admin" && modal==="edit" && selected && React.createElement(Modal, { title: "Modifica allievo" , onClose: closeModal, wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}, React.createElement(StudentForm, { allStudents: _allStudents, initial: students.find(s=>s.id===selected.id), onSave: handleEditStudent, onClose: closeModal, courses: courses, docenti: propDocentiAV||[], role: propUserRuoloAV||"admin", __self: this, __source: {fileName: _jsxFileName, lineNumber: 3910}}))
       , _ruoloAV==="admin" && modal==="delete" && selected && React.createElement(ConfirmDelete, { label: selected.name, description: "Questa azione è irreversibile."   , onConfirm: handleDeleteStudent, onClose: closeModal, __self: this, __source: {fileName: _jsxFileName, lineNumber: 3911}})
 
       /* ── Modal Importa iscrizioni da anno precedente ── */
@@ -13959,7 +14051,9 @@ const CATEGORIE_DEFAULT = [
 ];
 const catById = id => CATEGORIE_DEFAULT.find(c=>c.id===id)||CATEGORIE_DEFAULT[CATEGORIE_DEFAULT.length-1];
 
-const METODI_PAG = ["Bonifico bancario","Contanti","Carta / POS","PayPal / Satispay","Assegno"];
+// [FM-COMPENSAZIONE-DOCENTE] "Compensazione compenso docente": quota di un allievo-docente (o dei suoi
+// figli) saldata trattenendola dal compenso del docente — nessun incasso di cassa.
+const METODI_PAG = ["Bonifico bancario","Contanti","Carta / POS","PayPal / Satispay","Assegno","Compensazione compenso docente"];
 
 const DOCENTI = [
   {id:"d1",name:"Prof. Rossi",   instrument:"Pianoforte / Violino", baseOraria:35},

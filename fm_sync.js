@@ -43,6 +43,8 @@
     // scritto correttamente su database — non sovrascrive se FMAdapter li mappa già da solo.
     if (base.nomeRicevuta === undefined) base.nomeRicevuta = r.nome_ricevuta || '';
     if (base.codiceFiscale === undefined) base.codiceFiscale = r.codice_fiscale || '';
+    // [FM-COMPENSAZIONE-DOCENTE] allievo che è anche docente della scuola (studenti.docente_id)
+    if (base.docenteId === undefined) base.docenteId = (r.docente_id != null && r.docente_id !== '') ? String(r.docente_id) : null;
     return base;
   }
   function adaptDocente(r) {
@@ -296,7 +298,7 @@
   // ═══════════════════════════════════════════════════════════════════════════
   const toDB = {
     studenti(s) {
-      return {
+      const row = {
         id: s.id, nome: s.name || '', email: s.email || null,
         phone: s.phone || null, strumento: s.instrument || null,
         docente: s.teacher || null,
@@ -319,6 +321,11 @@
           ? JSON.stringify(s.repertorio) : null,
         updated_at: new Date().toISOString(),
       };
+      // [FM-COMPENSAZIONE-DOCENTE] docente_id inviato solo se valorizzato: se la migrazione SQL non
+      // è ancora stata eseguita la colonna non esiste e l'upsert di TUTTI gli allievi fallirebbe.
+      // La rimozione del collegamento (null) la scrive esplicitamente il salvataggio della scheda.
+      if (s.docenteId != null && s.docenteId !== '') row.docente_id = s.docenteId;
+      return row;
     },
     docenti(d) {
       // strumenti: l'app usa stringa "Piano · Violino", il DB può avere jsonb array o text
