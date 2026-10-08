@@ -95,12 +95,17 @@ const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extra
     // [FM-COMPENSAZIONE-DOCENTE] una quota compensata non porta denaro in cassa: il docente
     // dell'allievo va pagato comunque con un metodo reale → si esclude 'Compensazione'.
     const metodiReali = Object.entries(metodi).filter(([k]) => k !== 'Compensazione');
-    const metodoDocente = stato === 'pagato'
-      ? (metodiReali.length ? metodiReali.sort((p, q) => q[1] - p[1])[0][0] : 'Da definire')
-      : 'Da definire';
+    // [FM-BILANCIO-BANCA] Se il metodo non si può ricavare (quota non pagata, oppure saldata solo
+    // tramite compensazione) le lezioni NON restano "Da definire": vanno su BANCA (pagamento
+    // tracciato) e vengono segnalate con un alert che ne riporta l'importo.
+    const motivoDaDefinire = stato !== 'pagato' ? 'quota non pagata'
+      : (metodiReali.length ? null : 'quota compensata');
+    const metodoDocente = motivoDaDefinire ? 'BANCA'
+      : metodiReali.sort((p, q) => q[1] - p[1])[0][0];
     righe.push({
       s, corsi: s._corsiConDocente || [], quotaParte, nTot, stato,
       nLez: lezS.length, compLez: lezS.length * tar, metodoDocente,
+      daDefinire: !!motivoDaDefinire, motivoDaDefinire,
       pagatoTot, pagatoQuota: pagatoTot * quotaParte, previsto,
       daIncassare: stato === 'pagato' ? 0 : previsto,
       metodi, metodiLabel: Object.keys(metodi).join(' + '),
@@ -115,6 +120,8 @@ const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extra
   // Da pagare al docente per metodo (solo lezioni individuali attribuite agli allievi)
   const pagaDocentePerMetodo = {};
   righe.forEach(r => { if (r.compLez > 0) pagaDocentePerMetodo[r.metodoDocente] = (pagaDocentePerMetodo[r.metodoDocente] || 0) + r.compLez; });
+  // [FM-BILANCIO-BANCA] parte di BANCA attribuita d'ufficio (metodo non ricavabile dalla quota)
+  const pagaDocenteDaDefinire = righe.reduce((t, r) => t + (r.daDefinire && r.compLez > 0 ? r.compLez : 0), 0);
   // Lezioni non attribuibili a un allievo in elenco (collettive, allievi di altri anni, ecc.)
   const lezNonAttribuite = lezArr ? lezArr.filter(l => !lezAttribuite.has(l)).length : 0;
   const compLezNonAttribuite = lezNonAttribuite * tar;
@@ -134,7 +141,7 @@ const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extra
   const compenso = compLezTot + extra;
   return {
     righe, incassato, daIncassare, metodiTot, compensoLezioni: compLezTot,
-    pagaDocentePerMetodo, lezNonAttribuite, compLezNonAttribuite,
+    pagaDocentePerMetodo, pagaDocenteDaDefinire, lezNonAttribuite, compLezNonAttribuite,
     extra, acconti, compenso, saldo: incassato - compenso,
     saldoPrevisto: incassato + daIncassare - compenso,
     versatiList, versato, versatoPerMetodo, versatoPerTipo,
@@ -243,6 +250,57 @@ const fmQuoteCompensazioneDaRegistrare = ({ calc, docente, m, y, oggiISO, nuovoI
     note: 'Compensazione automatica (docente anche allievo)',
     numRicevuta: '', noRicevuta: true,
   }));
+};
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   [FM-RIPARTIZIONE-COMPENSO] Ripartizione del compenso del mese (Docenti → Bilancio)
+   L'admin inserisce come paga le LEZIONI del docente:
+     • compenso in contanti
+     • compenso fatturato / tracciato
+   il sistema aggiunge da solo le voci già note:
+     + extra del mese
+     − acconti già versati
+     − compensazione quote allievo (sé stesso / figli)
+     − compensi ed extra già versati nel mese (esclusi gli acconti, già sopra)
+   La somma deve essere UGUALE al "Da versare" del resoconto, cioè:
+     contanti + tracciato = compenso lezioni (lezioni × tariffa).
+   ═══════════════════════════════════════════════════════════════════════════ */
+const fmArrot2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
+const fmNumeroIT = (v) => {
+  if (v === null || v === undefined) return 0;
+  const t = String(v).trim().replace(/\s|€/g, '');
+  if (!t) return 0;
+  // "1.234,50" → 1234.50 · "87,5" → 87.5 · "87.5" → 87.5
+  const n = Number(/,/.test(t) ? t.replace(/\./g, '').replace(',', '.') : t);
+  return isFinite(n) ? n : 0;
+};
+const fmCalcRipartizioneCompenso = ({ b, contanti, tracciato }) => {
+  const c = fmNumeroIT(contanti), t = fmNumeroIT(tracciato);
+  const extra = Number(b && b.extra) || 0;
+  const acconti = Number(b && b.acconti) || 0;
+  const compensazione = Number(b && b.compensazione) || 0;
+  const altriVersati = (Number(b && b.versato) || 0) - acconti; // compensi ed extra già pagati
+  const voci = [
+    { k: 'contanti',      label: 'Compenso in contanti',              segno: 1,  importo: c, editabile: true },
+    { k: 'tracciato',     label: 'Compenso fatturato / tracciato',    segno: 1,  importo: t, editabile: true },
+    { k: 'extra',         label: 'Extra del mese',                    segno: 1,  importo: extra },
+    { k: 'acconti',       label: 'Acconti già versati',               segno: -1, importo: acconti },
+    { k: 'compensazione', label: 'Compensazione quote allievo',       segno: -1, importo: compensazione },
+    { k: 'altriVersati',  label: 'Compensi ed extra già versati',     segno: -1, importo: altriVersati },
+  ];
+  const somma = fmArrot2(voci.reduce((tot, v) => tot + v.segno * v.importo, 0));
+  const daVersare = fmArrot2(b && b.daVersare);
+  const differenza = fmArrot2(somma - daVersare);
+  return { voci, somma, daVersare, differenza, quadra: Math.abs(differenza) < 0.01,
+    vuota: !String(contanti == null ? '' : contanti).trim() && !String(tracciato == null ? '' : tracciato).trim(),
+    attesoLezioni: fmArrot2(b && b.compensoLezioni) };
+};
+// Proposta dal resoconto: contanti = lezioni da pagare in contanti; tutto il resto è tracciato
+// (BANCA, PayPal/Satispay, quote da definire, collettive non attribuite).
+const fmSuggerisciRipartizione = (b) => {
+  const lez = fmArrot2(b && b.compensoLezioni);
+  const contanti = fmArrot2(Math.min(lez, Number(b && b.pagaDocentePerMetodo && b.pagaDocentePerMetodo['Contanti']) || 0));
+  return { contanti, tracciato: fmArrot2(lez - contanti) };
 };
 
 const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV, spese:_speseDocView, entrate:_entrateDocView, setEntrate:_setEntrateDocView }) => {
@@ -629,6 +687,67 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   const [listTabDoc, setListTabDoc] = useState("elenco");
   const [bilMese, setBilMese] = useState({ m: curMonth, y: curYear });
   const [bilEspanso, setBilEspanso] = useState(null);
+  // ── [FM-RIPARTIZIONE-COMPENSO] contanti / tracciato per docente e mese (tabella Supabase) ──
+  const [ripDB, setRipDB] = useState({});        // chiave "docente-anno-mese" → riga salvata
+  const [ripDraft, setRipDraft] = useState({});  // chiave → { contanti, tracciato, note } in modifica
+  const [ripStato, setRipStato] = useState({});  // chiave → 'saving' | 'saved' | messaggio d'errore
+  const [ripTabellaMancante, setRipTabellaMancante] = useState(false);
+  const ripKey = (did, m, y) => `${did}-${y}-${m}`;
+  React.useEffect(() => {
+    if (ruoloDocView !== 'admin' || listTabDoc !== 'bilancio') return;
+    const sb = window.supabaseClient;
+    if (!sb) return;
+    let annullato = false;
+    const { m, y } = bilMese;
+    sb.from('docenti_ripartizione_compenso').select('*').eq('anno', y).eq('mese', m).then(({ data, error }) => {
+      if (annullato) return;
+      if (error) {
+        console.warn('[FM] docenti_ripartizione_compenso:', error.message);
+        if (/does not exist|relation|schema cache|Could not find/i.test(error.message || '')) setRipTabellaMancante(true);
+        return;
+      }
+      setRipTabellaMancante(false);
+      const map = {};
+      (data || []).forEach(r => { map[ripKey(r.docente_id, r.mese, r.anno)] = r; });
+      setRipDB(p => ({ ...p, ...map }));
+    });
+    return () => { annullato = true; };
+  }, [ruoloDocView, listTabDoc, bilMese.m, bilMese.y]);
+  const ripValori = (did, m, y) => {
+    const k = ripKey(did, m, y);
+    if (ripDraft[k]) return ripDraft[k];
+    const r = ripDB[k];
+    const fmt = (v) => (v == null ? '' : String(v).replace('.', ','));
+    return r ? { contanti: fmt(r.contanti), tracciato: fmt(r.tracciato), note: r.note || '' } : { contanti: '', tracciato: '', note: '' };
+  };
+  const ripSet = (did, m, y, campo, valore) => {
+    const k = ripKey(did, m, y);
+    setRipDraft(p => ({ ...p, [k]: { ...ripValori(did, m, y), [campo]: valore } }));
+    setRipStato(p => { const n = { ...p }; delete n[k]; return n; });
+  };
+  const ripSalva = async (did, m, y) => {
+    const sb = window.supabaseClient;
+    const k = ripKey(did, m, y);
+    const v = ripValori(did, m, y);
+    if (!sb) { setRipStato(p => ({ ...p, [k]: 'Offline: impossibile salvare' })); return; }
+    setRipStato(p => ({ ...p, [k]: 'saving' }));
+    const row = {
+      docente_id: isNaN(Number(did)) ? did : Number(did), anno: Number(y), mese: Number(m),
+      contanti: fmArrot2(fmNumeroIT(v.contanti)), tracciato: fmArrot2(fmNumeroIT(v.tracciato)),
+      note: (v.note || '').trim() || null, updated_at: new Date().toISOString(),
+    };
+    const { data, error } = await sb.from('docenti_ripartizione_compenso')
+      .upsert(row, { onConflict: 'docente_id,anno,mese' }).select().single();
+    if (error) {
+      const mancante = /does not exist|relation|schema cache|Could not find/i.test(error.message || '');
+      if (mancante) setRipTabellaMancante(true);
+      setRipStato(p => ({ ...p, [k]: mancante ? 'Tabella mancante: esegui fm_ripartizione_compenso.sql su Supabase' : ('Errore: ' + error.message) }));
+      return;
+    }
+    setRipDB(p => ({ ...p, [k]: data || row }));
+    setRipDraft(p => { const n = { ...p }; delete n[k]; return n; });
+    setRipStato(p => ({ ...p, [k]: 'saved' }));
+  };
   // Cambiando anno scolastico, il mese del bilancio si sposta dentro quell'anno
   React.useEffect(() => {
     const a = Number(annoSelDoc);
@@ -769,6 +888,67 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     );
     const th = (t, right) => React.createElement('th', {style:{textAlign:right?'right':'left',fontSize:10,color:C.textDim,textTransform:'uppercase',letterSpacing:'.07em',padding:'8px 10px',borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap',fontWeight:600}}, t);
     const td = (c, extra) => React.createElement('td', {style:{fontSize:13,padding:'8px 10px',borderBottom:`1px solid ${C.border}`,verticalAlign:'top',...(extra||{})}}, c);
+    // [FM-RIPARTIZIONE-COMPENSO] tabella modificabile in fondo al resoconto del docente
+    const renderRipartizione = (d, b) => {
+      const k = ripKey(d.id, m, y);
+      const v = ripValori(d.id, m, y);
+      const r = fmCalcRipartizioneCompenso({ b, contanti: v.contanti, tracciato: v.tracciato });
+      const sug = fmSuggerisciRipartizione(b);
+      const st = ripStato[k];
+      const modificato = !!ripDraft[k];
+      const salvato = ripDB[k];
+      const inputSt = {width:120,padding:'6px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,textAlign:'right',fontFamily:"'Open Sans',sans-serif",outline:'none'};
+      const importoCell = (voce) => {
+        if (voce.editabile) return React.createElement('div', {style:{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:6}}
+          , React.createElement('span', {style:{fontSize:12,color:C.textMuted}}, '€')
+          , React.createElement('input', {type:'text', inputMode:'decimal', value: v[voce.k], placeholder:'0',
+              onChange: e => ripSet(d.id, m, y, voce.k, e.target.value), onClick: e => e.stopPropagation(), style: inputSt}));
+        if (!voce.importo) return React.createElement('span', {style:{color:C.textDim}}, '—');
+        return React.createElement('span', {style:{fontWeight:600,color:voce.segno<0?C.red:C.green}}, (voce.segno<0?'−':'+') + eur(voce.importo));
+      };
+      const esito = r.vuota
+        ? { c: C.textMuted, bg: C.bg, bd: C.border, t: `Inserisci contanti e tracciato: insieme devono fare ${eur(r.attesoLezioni)} (compenso lezioni).` }
+        : r.quadra
+          ? { c: C.green, bg: C.greenBg, bd: C.greenBorder, t: `✓ La somma coincide con il Da versare (${eur(r.daVersare)}).` }
+          : { c: C.red, bg: C.redBg, bd: C.redBorder, t: `⚠ La somma (${eur(r.somma)}) NON coincide con il Da versare (${eur(r.daVersare)}): ${r.differenza>0?'eccedenza':'mancano'} ${eur(Math.abs(r.differenza))}.` };
+      return React.createElement('div', {style:{marginTop:12,background:C.surface,border:`1px solid ${r.vuota?C.border:r.quadra?C.greenBorder:C.redBorder}`,borderRadius:10,overflow:'hidden'}}
+        , React.createElement('div', {style:{padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap',borderBottom:`1px solid ${C.border}`}}
+          , React.createElement('span', {style:{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em'}}, `Ripartizione compenso ${MESI_L[m-1]} ${y}`)
+          , React.createElement('button', {onClick: e => { e.stopPropagation();
+                setRipDraft(p => ({ ...p, [k]: { ...ripValori(d.id, m, y), contanti: String(sug.contanti).replace('.', ','), tracciato: String(sug.tracciato).replace('.', ',') } }));
+                setRipStato(p => { const n = { ...p }; delete n[k]; return n; }); },
+              title: 'Contanti = lezioni da pagare in contanti; tracciato = tutto il resto (BANCA, PayPal, da definire, collettive)',
+              style:{fontSize:11,padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
+            , `Proponi dal resoconto (${eur(sug.contanti)} + ${eur(sug.tracciato)})`)
+        )
+        , React.createElement('table', {style:{width:'100%',borderCollapse:'collapse'}}
+          , React.createElement('tbody', null
+            , r.voci.filter(voce => voce.editabile || voce.importo).map(voce => React.createElement('tr', {key:voce.k}
+                , td(React.createElement('span', null, voce.label, !voce.editabile && React.createElement('span', {style:{fontSize:10,color:C.textDim,marginLeft:6}}, 'automatico')), {fontSize:13})
+                , td(importoCell(voce), {textAlign:'right',whiteSpace:'nowrap'})))
+            , React.createElement('tr', {style:{background:C.bg}}
+              , td(React.createElement('b', null, 'TOTALE'), {borderBottom:'none'})
+              , td(React.createElement('b', {style:{fontSize:15,color:r.vuota?C.textMuted:r.quadra?C.green:C.red}}, eur(r.somma)), {textAlign:'right',borderBottom:'none'}))
+            , React.createElement('tr', null
+              , td('Da versare (resoconto)', {fontSize:12,color:C.textMuted,borderBottom:'none'})
+              , td(eur(r.daVersare), {textAlign:'right',fontSize:12,color:C.textMuted,borderBottom:'none'}))
+          )
+        )
+        , React.createElement('div', {style:{margin:'0 12px 10px',fontSize:12,fontWeight:600,lineHeight:1.5,color:esito.c,background:esito.bg,border:`1px solid ${esito.bd}`,borderRadius:8,padding:'8px 10px'}}, esito.t)
+        , React.createElement('div', {style:{display:'flex',gap:8,alignItems:'center',padding:'0 12px 12px',flexWrap:'wrap'}}
+          , React.createElement('input', {type:'text', value: v.note, placeholder:'Note (facoltative)', onChange: e => ripSet(d.id, m, y, 'note', e.target.value), onClick: e => e.stopPropagation(),
+              style:{...inputSt, width:'auto', flex:'1 1 200px', textAlign:'left'}})
+          , React.createElement('button', {onClick: e => { e.stopPropagation(); ripSalva(d.id, m, y); }, disabled: st==='saving' || (!modificato && !!salvato),
+              style:{padding:'7px 16px',borderRadius:8,border:'none',background:(st==='saving'||(!modificato&&!!salvato))?C.border:C.gold,color:'#fff',fontSize:12,fontWeight:600,cursor:st==='saving'?'wait':'pointer',fontFamily:"'Open Sans',sans-serif"}}
+            , st==='saving' ? 'Salvataggio…' : 'Salva ripartizione')
+          , React.createElement('span', {style:{fontSize:11,color: st && st!=='saving' && st!=='saved' ? C.red : C.textDim}}
+            , st==='saved' ? '✓ Salvata'
+              : (st && st!=='saving') ? st
+              : modificato ? 'Modifiche non salvate'
+              : salvato ? `Salvata${salvato.updated_at ? ' il ' + new Date(salvato.updated_at).toLocaleDateString('it-IT') : ''}` : '')
+        )
+      );
+    };
 
     return React.createElement('div', null
       /* selettore mese */
@@ -850,10 +1030,23 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               )
               , (Object.keys(b.pagaDocentePerMetodo).length > 0 || b.compLezNonAttribuite > 0 || b.extra > 0) && React.createElement('div', {style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10,alignItems:'center'}}
                 , React.createElement('span', {style:{fontSize:11,color:C.textMuted,fontWeight:600,marginRight:4}}, 'Metodo per pagare le lezioni:')
-                , fmOrdinaMetodi(b.pagaDocentePerMetodo).map(([k,v]) => React.createElement('span', {key:k, style:{fontSize:12,background:k==='Da definire'?C.orangeBg:C.goldBg,border:`1px solid ${k==='Da definire'?C.orangeBorder:C.border}`,borderRadius:10,padding:'3px 10px'}}, k, ': ', React.createElement('b', null, eur(v))))
+                , fmOrdinaMetodi(b.pagaDocentePerMetodo).map(([k,v]) => {
+                    // [FM-BILANCIO-BANCA] su BANCA confluiscono anche le lezioni con metodo non ricavabile
+                    const dd = k==='BANCA' ? (b.pagaDocenteDaDefinire||0) : 0;
+                    return React.createElement('span', {key:k, title: dd>0 ? `di cui ${eur(dd)} da definire (quote non pagate o compensate)` : undefined,
+                        style:{fontSize:12,background:C.goldBg,border:`1px solid ${dd>0?C.orangeBorder:C.border}`,borderRadius:10,padding:'3px 10px'}}
+                      , k, ': ', React.createElement('b', null, eur(v))
+                      , dd>0 && React.createElement('span', {style:{color:C.orange,fontWeight:700,marginLeft:4}}, `⚠ ${eur(dd)} da definire`));
+                  })
                 , b.compLezNonAttribuite > 0 && React.createElement('span', {style:{fontSize:12,background:C.orangeBg,border:`1px solid ${C.orangeBorder}`,borderRadius:10,padding:'3px 10px'}}, `Collettive/altre (${b.lezNonAttribuite} lez.): `, React.createElement('b', null, eur(b.compLezNonAttribuite)))
                 , b.extra > 0 && React.createElement('span', {style:{fontSize:12,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:'3px 10px'}}, 'Extra: ', React.createElement('b', null, eur(b.extra)))
               )
+              /* [FM-BILANCIO-BANCA] alert importo attribuito d'ufficio a BANCA */
+              , (b.pagaDocenteDaDefinire||0) > 0 && React.createElement('div', {style:{display:'flex',gap:8,alignItems:'flex-start',fontSize:12,lineHeight:1.5,color:C.orange,background:C.orangeBg,border:`1px solid ${C.orangeBorder}`,borderRadius:10,padding:'8px 12px',marginBottom:10}}
+                , React.createElement('span', null, '⚠')
+                , React.createElement('span', null
+                  , React.createElement('b', null, `${eur(b.pagaDocenteDaDefinire)} da definire`)
+                  , ' — lezioni di allievi con quota non ancora pagata (o saldata solo per compensazione): sono state sommate a BANCA. Verifica il metodo quando la quota verrà incassata.'))
               , b.righe.length === 0
                 ? React.createElement('div', {style:{fontSize:13,color:C.textMuted,padding:'8px 0'}}, 'Nessun allievo individuale assegnato.')
                 : React.createElement('div', {style:{overflowX:'auto',background:C.surface,border:`1px solid ${C.border}`,borderRadius:10}}
@@ -876,15 +1069,20 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                                 , React.createElement('div', {style:{fontSize:10,color:C.textDim}}, `${r.nLez} × ${eur(d.tariffaOra)}`))
                             : React.createElement('span', {style:{color:C.textDim}}, '0'), {textAlign:'right',whiteSpace:'nowrap'})
                         , td(r.nLez > 0
-                            ? React.createElement('span', {style:{fontSize:12,fontWeight:600,color:r.metodoDocente==='Da definire'?C.orange:C.text}}, r.metodoDocente==='Da definire' ? 'Da definire (quota non pagata)' : r.metodoDocente)
+                            ? React.createElement('div', null
+                                , React.createElement('span', {style:{fontSize:12,fontWeight:600,color:C.text}}, r.metodoDocente)
+                                , r.daDefinire && React.createElement('div', {style:{fontSize:10,fontWeight:700,color:C.orange}}, `⚠ da definire (${r.motivoDaDefinire})`))
                             : React.createElement('span', {style:{color:C.textDim}}, '—'), {whiteSpace:'nowrap'})
                       ))
                     )
                   )
                 )
+              , renderRipartizione(d, b)
             )
           );
         })
+      , ripTabellaMancante && React.createElement('div', {style:{fontSize:12,color:C.orange,background:C.orangeBg,border:`1px solid ${C.orangeBorder}`,borderRadius:10,padding:'8px 12px',marginTop:8}},
+          '⚠ La ripartizione del compenso non può essere salvata: esegui la migrazione fm_ripartizione_compenso.sql su Supabase.')
       , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:8,lineHeight:1.5}},
           'Il saldo considera solo le quote mensili effettivamente pagate degli allievi individuali del docente (iscrizioni escluse). ',
           'Se un allievo segue più corsi con docenti diversi, la sua quota è divisa in parti uguali. ',
