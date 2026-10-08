@@ -254,16 +254,14 @@ const fmQuoteCompensazioneDaRegistrare = ({ calc, docente, m, y, oggiISO, nuovoI
 
 /* ═══════════════════════════════════════════════════════════════════════════
    [FM-RIPARTIZIONE-COMPENSO] Ripartizione del compenso del mese (Docenti → Bilancio)
-   L'admin inserisce come paga le LEZIONI del docente:
-     • compenso in contanti
-     • compenso fatturato / tracciato
-   il sistema aggiunge da solo le voci già note:
-     + extra del mese
+   Parte alta (automatica, non modificabile):
+       Compenso dovuto (lezioni × tariffa + extra)
      − acconti già versati
+     − compensi ed extra già versati nel mese
      − compensazione quote allievo (sé stesso / figli)
-     − compensi ed extra già versati nel mese (esclusi gli acconti, già sopra)
-   La somma deve essere UGUALE al "Da versare" del resoconto, cioè:
-     contanti + tracciato = compenso lezioni (lezioni × tariffa).
+     = DA VERSARE (uguale al resoconto)
+   Parte bassa (inserita dall'admin): compenso in contanti + compenso tracciato.
+   La loro somma deve essere UGUALE al Da versare: così non si può versare il lordo.
    ═══════════════════════════════════════════════════════════════════════════ */
 const fmArrot2 = (v) => Math.round((Number(v) || 0) * 100) / 100;
 const fmNumeroIT = (v) => {
@@ -275,32 +273,51 @@ const fmNumeroIT = (v) => {
   return isFinite(n) ? n : 0;
 };
 const fmCalcRipartizioneCompenso = ({ b, contanti, tracciato }) => {
-  const c = fmNumeroIT(contanti), t = fmNumeroIT(tracciato);
-  const extra = Number(b && b.extra) || 0;
+  const dovuto = Number(b && b.compenso) || 0;                 // lezioni × tariffa + extra
   const acconti = Number(b && b.acconti) || 0;
-  const compensazione = Number(b && b.compensazione) || 0;
   const altriVersati = (Number(b && b.versato) || 0) - acconti; // compensi ed extra già pagati
-  const voci = [
-    { k: 'contanti',      label: 'Compenso in contanti',              segno: 1,  importo: c, editabile: true },
-    { k: 'tracciato',     label: 'Compenso fatturato / tracciato',    segno: 1,  importo: t, editabile: true },
-    { k: 'extra',         label: 'Extra del mese',                    segno: 1,  importo: extra },
-    { k: 'acconti',       label: 'Acconti già versati',               segno: -1, importo: acconti },
-    { k: 'compensazione', label: 'Compensazione quote allievo',       segno: -1, importo: compensazione },
-    { k: 'altriVersati',  label: 'Compensi ed extra già versati',     segno: -1, importo: altriVersati },
+  const compensazione = Number(b && b.compensazione) || 0;
+  const calcolo = [
+    { k: 'dovuto',        label: 'Compenso dovuto',                 segno: 1,  importo: dovuto, sempre: true },
+    { k: 'acconti',       label: 'Acconti già versati',             segno: -1, importo: acconti },
+    { k: 'altriVersati',  label: 'Compensi ed extra già versati',   segno: -1, importo: altriVersati },
+    { k: 'compensazione', label: 'Compensazione quote allievo',     segno: -1, importo: compensazione },
   ];
-  const somma = fmArrot2(voci.reduce((tot, v) => tot + v.segno * v.importo, 0));
   const daVersare = fmArrot2(b && b.daVersare);
-  const differenza = fmArrot2(somma - daVersare);
-  return { voci, somma, daVersare, differenza, quadra: Math.abs(differenza) < 0.01,
+  const c = fmNumeroIT(contanti), t = fmNumeroIT(tracciato);
+  const ripartito = fmArrot2(c + t);
+  const differenza = fmArrot2(ripartito - daVersare);
+  return {
+    calcolo, dovuto: fmArrot2(dovuto), daVersare,
+    // controllo interno: la parte alta deve tornare col Da versare del resoconto
+    daVersareCalcolato: fmArrot2(calcolo.reduce((tot, v) => tot + v.segno * v.importo, 0)),
+    contanti: fmArrot2(c), tracciato: fmArrot2(t), ripartito, differenza,
+    quadra: Math.abs(differenza) < 0.01,
     vuota: !String(contanti == null ? '' : contanti).trim() && !String(tracciato == null ? '' : tracciato).trim(),
-    attesoLezioni: fmArrot2(b && b.compensoLezioni) };
+  };
 };
-// Proposta dal resoconto: contanti = lezioni da pagare in contanti; tutto il resto è tracciato
-// (BANCA, PayPal/Satispay, quote da definire, collettive non attribuite).
+// Proposta dal resoconto, già al NETTO:
+//  1) lezioni: contanti = lezioni da pagare in contanti, il resto è tracciato
+//     (BANCA, PayPal/Satispay, quote da definire, collettive non attribuite);
+//  2) ogni extra si somma al metodo con cui è stato pagato;
+//  3) ogni importo già versato (acconti, compensi, extra) si toglie dal metodo con cui è stato pagato;
+//  4) la compensazione quote allievo (non è denaro) si toglie dal tracciato;
+//  5) un eventuale negativo si scala dall'altro metodo.
 const fmSuggerisciRipartizione = (b) => {
-  const lez = fmArrot2(b && b.compensoLezioni);
-  const contanti = fmArrot2(Math.min(lez, Number(b && b.pagaDocentePerMetodo && b.pagaDocentePerMetodo['Contanti']) || 0));
-  return { contanti, tracciato: fmArrot2(lez - contanti) };
+  const lez = Number(b && b.compensoLezioni) || 0;
+  let c = Math.min(lez, Number(b && b.pagaDocentePerMetodo && b.pagaDocentePerMetodo['Contanti']) || 0);
+  let t = lez - c;
+  const inContanti = (v) => fmNormMetodo(v && v.metodo) === 'Contanti';
+  const versati = (b && Array.isArray(b.versatiList)) ? b.versatiList : [];
+  versati.forEach(v => {
+    const imp = Number(v.importo) || 0;
+    if (fmTipoVoceDocente(v) === 'extra') { if (inContanti(v)) c += imp; else t += imp; }
+    if (inContanti(v)) c -= imp; else t -= imp;
+  });
+  t -= Number(b && b.compensazione) || 0;
+  if (c < 0) { t += c; c = 0; }
+  if (t < 0) { c += t; t = 0; }
+  return { contanti: fmArrot2(Math.max(0, c)), tracciato: fmArrot2(Math.max(0, t)) };
 };
 
 const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV, spese:_speseDocView, entrate:_entrateDocView, setEntrate:_setEntrateDocView }) => {
@@ -888,7 +905,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     );
     const th = (t, right) => React.createElement('th', {style:{textAlign:right?'right':'left',fontSize:10,color:C.textDim,textTransform:'uppercase',letterSpacing:'.07em',padding:'8px 10px',borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap',fontWeight:600}}, t);
     const td = (c, extra) => React.createElement('td', {style:{fontSize:13,padding:'8px 10px',borderBottom:`1px solid ${C.border}`,verticalAlign:'top',...(extra||{})}}, c);
-    // [FM-RIPARTIZIONE-COMPENSO] tabella modificabile in fondo al resoconto del docente
+    // [FM-RIPARTIZIONE-COMPENSO] tabella in fondo al resoconto del docente:
+    // sopra il calcolo del DA VERSARE (automatico), sotto contanti + tracciato (modificabili)
     const renderRipartizione = (d, b) => {
       const k = ripKey(d.id, m, y);
       const v = ripValori(d.id, m, y);
@@ -898,47 +916,52 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
       const modificato = !!ripDraft[k];
       const salvato = ripDB[k];
       const inputSt = {width:120,padding:'6px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,textAlign:'right',fontFamily:"'Open Sans',sans-serif",outline:'none'};
-      const importoCell = (voce) => {
-        if (voce.editabile) return React.createElement('div', {style:{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:6}}
-          , React.createElement('span', {style:{fontSize:12,color:C.textMuted}}, '€')
-          , React.createElement('input', {type:'text', inputMode:'decimal', value: v[voce.k], placeholder:'0',
-              onChange: e => ripSet(d.id, m, y, voce.k, e.target.value), onClick: e => e.stopPropagation(), style: inputSt}));
-        if (!voce.importo) return React.createElement('span', {style:{color:C.textDim}}, '—');
-        return React.createElement('span', {style:{fontWeight:600,color:voce.segno<0?C.red:C.green}}, (voce.segno<0?'−':'+') + eur(voce.importo));
-      };
+      const tag = (t) => React.createElement('span', {style:{fontSize:10,color:C.textDim,marginLeft:6}}, t);
+      const sezione = (t) => React.createElement('tr', null
+        , React.createElement('td', {colSpan:2, style:{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',padding:'10px 10px 4px',borderBottom:`1px solid ${C.border}`}}, t));
+      const campo = (campoK, label) => React.createElement('tr', {key:campoK}
+        , td(React.createElement('span', null, label, tag('da compilare')), {fontSize:13})
+        , td(React.createElement('div', {style:{display:'flex',justifyContent:'flex-end',alignItems:'center',gap:6}}
+            , React.createElement('span', {style:{fontSize:12,color:C.textMuted}}, '€')
+            , React.createElement('input', {type:'text', inputMode:'decimal', value: v[campoK], placeholder:'0',
+                onChange: e => ripSet(d.id, m, y, campoK, e.target.value), style: inputSt})), {textAlign:'right',whiteSpace:'nowrap'}));
       const esito = r.vuota
-        ? { c: C.textMuted, bg: C.bg, bd: C.border, t: `Inserisci contanti e tracciato: insieme devono fare ${eur(r.attesoLezioni)} (compenso lezioni).` }
+        ? { c: C.textMuted, bg: C.bg, bd: C.border, t: `Ripartisci il Da versare (${eur(r.daVersare)}) tra contanti e tracciato.` }
         : r.quadra
-          ? { c: C.green, bg: C.greenBg, bd: C.greenBorder, t: `✓ La somma coincide con il Da versare (${eur(r.daVersare)}).` }
-          : { c: C.red, bg: C.redBg, bd: C.redBorder, t: `⚠ La somma (${eur(r.somma)}) NON coincide con il Da versare (${eur(r.daVersare)}): ${r.differenza>0?'eccedenza':'mancano'} ${eur(Math.abs(r.differenza))}.` };
+          ? { c: C.green, bg: C.greenBg, bd: C.greenBorder, t: `✓ Contanti + tracciato (${eur(r.ripartito)}) coincidono con il Da versare (${eur(r.daVersare)}).` }
+          : { c: C.red, bg: C.redBg, bd: C.redBorder, t: `⚠ Contanti + tracciato (${eur(r.ripartito)}) NON coincidono con il Da versare (${eur(r.daVersare)}): ${r.differenza>0?'stai versando in più':'mancano'} ${eur(Math.abs(r.differenza))}.` };
       return React.createElement('div', {style:{marginTop:12,background:C.surface,border:`1px solid ${r.vuota?C.border:r.quadra?C.greenBorder:C.redBorder}`,borderRadius:10,overflow:'hidden'}}
         , React.createElement('div', {style:{padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap',borderBottom:`1px solid ${C.border}`}}
           , React.createElement('span', {style:{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em'}}, `Ripartizione compenso ${MESI_L[m-1]} ${y}`)
-          , React.createElement('button', {onClick: e => { e.stopPropagation();
+          , React.createElement('button', {onClick: () => {
                 setRipDraft(p => ({ ...p, [k]: { ...ripValori(d.id, m, y), contanti: String(sug.contanti).replace('.', ','), tracciato: String(sug.tracciato).replace('.', ',') } }));
                 setRipStato(p => { const n = { ...p }; delete n[k]; return n; }); },
-              title: 'Contanti = lezioni da pagare in contanti; tracciato = tutto il resto (BANCA, PayPal, da definire, collettive)',
+              title: 'Netto per metodo: lezioni in contanti / tracciate, meno gli importi già versati (ciascuno dal metodo con cui è stato pagato); la compensazione si toglie dal tracciato',
               style:{fontSize:11,padding:'4px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}}
             , `Proponi dal resoconto (${eur(sug.contanti)} + ${eur(sug.tracciato)})`)
         )
         , React.createElement('table', {style:{width:'100%',borderCollapse:'collapse'}}
           , React.createElement('tbody', null
-            , r.voci.filter(voce => voce.editabile || voce.importo).map(voce => React.createElement('tr', {key:voce.k}
-                , td(React.createElement('span', null, voce.label, !voce.editabile && React.createElement('span', {style:{fontSize:10,color:C.textDim,marginLeft:6}}, 'automatico')), {fontSize:13})
-                , td(importoCell(voce), {textAlign:'right',whiteSpace:'nowrap'})))
+            , sezione('Calcolo del da versare')
+            , r.calcolo.filter(voce => voce.sempre || voce.importo).map(voce => React.createElement('tr', {key:voce.k}
+                , td(React.createElement('span', null, voce.segno<0 ? '− ' : '', voce.label, tag('automatico')), {fontSize:13})
+                , td(React.createElement('span', {style:{fontWeight:600,color:voce.segno<0?C.red:C.text}}, (voce.segno<0?'−':'') + eur(voce.importo)), {textAlign:'right',whiteSpace:'nowrap'})))
             , React.createElement('tr', {style:{background:C.bg}}
-              , td(React.createElement('b', null, 'TOTALE'), {borderBottom:'none'})
-              , td(React.createElement('b', {style:{fontSize:15,color:r.vuota?C.textMuted:r.quadra?C.green:C.red}}, eur(r.somma)), {textAlign:'right',borderBottom:'none'}))
-            , React.createElement('tr', null
-              , td('Da versare (resoconto)', {fontSize:12,color:C.textMuted,borderBottom:'none'})
-              , td(eur(r.daVersare), {textAlign:'right',fontSize:12,color:C.textMuted,borderBottom:'none'}))
+              , td(React.createElement('b', null, '= DA VERSARE'))
+              , td(React.createElement('b', {style:{fontSize:15,color:C.orange}}, eur(r.daVersare)), {textAlign:'right'}))
+            , sezione('Come lo verso')
+            , campo('contanti', 'Compenso in contanti')
+            , campo('tracciato', 'Compenso fatturato / tracciato')
+            , React.createElement('tr', {style:{background:C.bg}}
+              , td(React.createElement('b', null, 'TOTALE RIPARTITO'), {borderBottom:'none'})
+              , td(React.createElement('b', {style:{fontSize:15,color:r.vuota?C.textMuted:r.quadra?C.green:C.red}}, eur(r.ripartito)), {textAlign:'right',borderBottom:'none'}))
           )
         )
         , React.createElement('div', {style:{margin:'0 12px 10px',fontSize:12,fontWeight:600,lineHeight:1.5,color:esito.c,background:esito.bg,border:`1px solid ${esito.bd}`,borderRadius:8,padding:'8px 10px'}}, esito.t)
         , React.createElement('div', {style:{display:'flex',gap:8,alignItems:'center',padding:'0 12px 12px',flexWrap:'wrap'}}
-          , React.createElement('input', {type:'text', value: v.note, placeholder:'Note (facoltative)', onChange: e => ripSet(d.id, m, y, 'note', e.target.value), onClick: e => e.stopPropagation(),
+          , React.createElement('input', {type:'text', value: v.note, placeholder:'Note (facoltative)', onChange: e => ripSet(d.id, m, y, 'note', e.target.value),
               style:{...inputSt, width:'auto', flex:'1 1 200px', textAlign:'left'}})
-          , React.createElement('button', {onClick: e => { e.stopPropagation(); ripSalva(d.id, m, y); }, disabled: st==='saving' || (!modificato && !!salvato),
+          , React.createElement('button', {onClick: () => ripSalva(d.id, m, y), disabled: st==='saving' || (!modificato && !!salvato),
               style:{padding:'7px 16px',borderRadius:8,border:'none',background:(st==='saving'||(!modificato&&!!salvato))?C.border:C.gold,color:'#fff',fontSize:12,fontWeight:600,cursor:st==='saving'?'wait':'pointer',fontFamily:"'Open Sans',sans-serif"}}
             , st==='saving' ? 'Salvataggio…' : 'Salva ripartizione')
           , React.createElement('span', {style:{fontSize:11,color: st && st!=='saving' && st!=='saved' ? C.red : C.textDim}}
