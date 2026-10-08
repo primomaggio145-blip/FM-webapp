@@ -5219,8 +5219,8 @@ function calcolaInfoExtra(lesson, opts) {
   // della prossima occorrenza con il mese di competenza di QUESTA lezione è corretto.
   let next;
   if (recurrence === "2 volte a settimana") {
-    const gapAvanti = gapProssimaLezione(lesson); // gap reale della coppia di giorni (default 3)
-    next = new Date(d); next.setDate(next.getDate() + gapAvanti);
+    // [FM-2X-GIORNI-FISSI] prossima occorrenza sui giorni fissi reali della serie
+    next = new Date(prossimaOccorrenzaSerie(lesson, allLessons).date + "T00:00:00");
   } else {
     const gap = GAP_PER_RICORRENZA[recurrence];
     if (!gap) return { isSoglia, haExtraPotenziale: false, N };
@@ -5246,6 +5246,64 @@ function prossimoGapGiorni(lesson) {
     return 7 - gapProssimaLezione(lesson);
   }
   return null;
+}
+
+// ── [FM-2X-GIORNI-FISSI] "2 volte a settimana" basata sui DUE GIORNI REALI della serie ──
+// Prima la lezione successiva si calcolava solo col passo salvato (gapGiorni, alternato 3/4):
+// bastava un passo sbagliato (abbinamento non rilevato, orari diversi tra i due giorni, default 3)
+// perché, ad es., giovedì + 3 desse DOMENICA invece di lunedì. Ora si leggono i giorni della
+// settimana effettivi delle lezioni della serie (stesso allievo + stesso strumento) e la
+// prossima lezione cade sempre sul primo dei due giorni fissi successivo alla data.
+// Si usano le lezioni più recenti della serie (finestra −42/+14 giorni), dando la precedenza
+// a quelle realmente svolte (presenza segnata): una lezione creata per errore su un giorno
+// sbagliato e mai svolta non "insegna" un giorno sbagliato. Se si conosce un solo giorno, il
+// secondo si ricava dal passo salvato (comportamento precedente).
+function giorniFissiSerie2x(lesson, lessons) {
+  if (!lesson || lesson.recurrence !== "2 volte a settimana" || !lesson.date) return null;
+  const d0 = new Date(lesson.date + "T00:00:00");
+  const da = yyyymmdd(addDays(d0, -42)), a = yyyymmdd(addDays(d0, 14));
+  const strum = String(lesson.instrument || lesson.strumento || '');
+  const stessoAllievo = (l) => (lesson.studentId != null && lesson.studentId !== '' && l.studentId != null && l.studentId !== '')
+    ? String(l.studentId) === String(lesson.studentId)
+    : stessaSerieIndividuale(l, lesson);
+  const serie = (lessons || []).filter(l => l && l.date && l.recurrence === "2 volte a settimana"
+    && !isColl(l) && !isProva(l) && !isSalaProve(l) && l.tipo !== 'recupero' && l.attendance !== 'recuperata'
+    && String(l.instrument || l.strumento || '') === strum && stessoAllievo(l)
+    && l.date >= da && l.date <= a);
+  if (lesson.id == null || !serie.some(l => l.id === lesson.id)) serie.push(lesson);
+  const statDi = (arr) => {
+    const st = {};
+    arr.forEach(l => {
+      const g = new Date(l.date + "T00:00:00").getDay();
+      const x = st[g] || (st[g] = { n: 0, ultima: '' });
+      x.n++; if (l.date > x.ultima) x.ultima = l.date;
+    });
+    return Object.keys(st).map(Number)
+      .sort((p, q) => st[q].n - st[p].n || st[q].ultima.localeCompare(st[p].ultima));
+  };
+  const svolte = serie.filter(l => l.attendance === 'presente' || l.attendance === 'assente' || l.attendance === 'recupero');
+  let ord = statDi(svolte);
+  if (ord.length < 2) ord = statDi(serie);
+  if (ord.length >= 2) return ord.slice(0, 2).sort((p, q) => p - q);
+  const g0 = d0.getDay();
+  return [g0, (g0 + gapProssimaLezione(lesson)) % 7].sort((p, q) => p - q);
+}
+// Prossima occorrenza di una serie ricorrente a partire da `lesson`:
+//   { date: 'YYYY-MM-DD', gap: giorni fino a date, gapGiorniNext: passo da salvare sulla nuova lezione }
+// Per "2 volte a settimana" usa i giorni fissi reali; per le altre ricorrenze il passo fisso.
+function prossimaOccorrenzaSerie(lesson, lessons) {
+  const d = new Date(lesson.date + "T00:00:00");
+  if (lesson.recurrence === "2 volte a settimana") {
+    const giorni = giorniFissiSerie2x(lesson, lessons);
+    if (giorni && giorni.length === 2 && giorni[0] !== giorni[1]) {
+      const passoVerso = (wd) => { let g = 1; while (g < 7 && !giorni.includes((wd + g) % 7)) g++; return g; };
+      const gap = passoVerso(d.getDay());
+      const next = addDays(d, gap);
+      return { date: yyyymmdd(next), gap, gapGiorniNext: passoVerso(next.getDay()), giorni };
+    }
+  }
+  const gap = gapProssimaLezione(lesson);
+  return { date: yyyymmdd(addDays(d, gap)), gap, gapGiorniNext: prossimoGapGiorni(lesson) };
 }
 
 // Cerca, tra le lezioni esistenti, l'eventuale "gemella" di una lezione "2 volte a settimana"
@@ -13008,8 +13066,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         const _eraInRecupero = originalLesson ? originalLesson.inRecupero === true : dataNormFull.inRecupero === true;
         const isLezioneRecupero = dataNormFull.tipo === 'recupero' || _eraInRecupero;
         if (!isLezioneRecupero) {
-          const gap      = gapProssimaLezione(dataNormFull);
-          const nextDate = yyyymmdd(addDays(new Date((dataNormFull.date||"")+"T00:00:00"), gap));
+          // [FM-2X-GIORNI-FISSI] data e passo dai giorni fissi reali della serie
+          const _occNext = prossimaOccorrenzaSerie(dataNormFull, lessons);
+          const nextDate = _occNext.date;
 
           // Lezione extra: non creare automaticamente, metti in pausa per decisione admin.
           // dataMinima = data d'iscrizione dell'allievo: il conteggio del pacchetto mensile
@@ -13053,7 +13112,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               inRecupero:       false,
               recuperoScadenza: null,
               tipo:             dataNormFull.tipo === 'recupero' ? 'individuale' : (dataNormFull.tipo || 'individuale'),
-              gapGiorni:        prossimoGapGiorni(dataNormFull),
+              gapGiorni:        _occNext.gapGiorniNext,
               // Mese/anno di competenza = il mese della sua data PREVISTA (nextDate), fissato
               // qui e mai più ricalcolato — anche se in futuro questa stessa lezione viene
               // spostata con "Cambio ora" oltre il confine del mese (vedi calcolaInfoExtra).
@@ -13177,8 +13236,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         }
         let shouldOpenCambioOra = false;
         if (lesson && valCreaLezione && lesson.recurrence && lesson.recurrence !== "Nessuna" && !isLezioneRecupero) {
-          const gap     = gapProssimaLezione(lesson);
-          const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap));
+          // [FM-2X-GIORNI-FISSI] data e passo dai giorni fissi reali della serie
+          const _occNext2 = prossimaOccorrenzaSerie(lesson, updated);
+          const nextDate = _occNext2.date;
 
           // Lezione extra (5a/3a/2a occorrenza mensile): non creare automaticamente,
           // metti in pausa e lascia decidere l'admin dalla tab "Extra".
@@ -13222,7 +13282,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               inRecupero:       false,
               recuperoScadenza: null,
               tipo:             lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
-              gapGiorni:        prossimoGapGiorni(lesson),
+              gapGiorni:        _occNext2.gapGiorniNext,
               // [FM-MESE-SOLARE] mese di competenza = mese della SUA data (prima ereditava quello
               // della lezione su cui si segnava la presenza → lezioni di ottobre contate a settembre)
               pacchettoMese:    new Date(nextDate+"T00:00:00").getMonth() + 1,
@@ -13283,7 +13343,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         extraContabilizzata: false,
         extraLessonId: null,
         tipo: lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
-        gapGiorni: prossimoGapGiorni(lesson),
+        // [FM-2X-GIORNI-FISSI] passo verso il giorno fisso successivo a nextDate
+        gapGiorni: (() => { const o = prossimaOccorrenzaSerie(lesson, lessons);
+          return o.date === nextDate ? o.gapGiorniNext : prossimoGapGiorni(lesson); })(),
         pacchettoMese: new Date(nextDate+"T00:00:00").getMonth() + 1,
         pacchettoAnno: new Date(nextDate+"T00:00:00").getFullYear(),
         pacchettoManuale: false,
@@ -13307,10 +13369,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     };
 
     const handleNonGeneraExtra = (lesson) => {
-      const gap1 = gapProssimaLezione(lesson);
-      const gap2 = lesson.recurrence === "2 volte a settimana" ? (7 - gap1) : gap1;
-      // Salta l'occorrenza extra: la prossima lezione riparte 2 cicli dopo (nuovo conteggio dal mese successivo)
-      const nextDate = yyyymmdd(addDays(new Date(lesson.date+"T00:00:00"), gap1 + gap2));
+      // Salta l'occorrenza extra: la prossima lezione riparte 2 occorrenze dopo (nuovo conteggio dal mese successivo)
+      // [FM-2X-GIORNI-FISSI] entrambe le occorrenze sui giorni fissi reali della serie
+      const _occ1 = prossimaOccorrenzaSerie(lesson, lessons);
+      const _occ2 = prossimaOccorrenzaSerie({ ...lesson, date: _occ1.date, gapGiorni: _occ1.gapGiorniNext }, lessons);
+      const nextDate = _occ2.date;
       const nextLesson = {
         ...lesson,
         id: uid(),
@@ -13328,7 +13391,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         extraContabilizzata: false,
         extraLessonId: null,
         tipo: lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
-        gapGiorni: lesson.recurrence === "2 volte a settimana" ? gap1 : null,
+        gapGiorni: lesson.recurrence === "2 volte a settimana" ? _occ2.gapGiorniNext : null,
         // [FM-SOGLIA-PACCHETTO] la lezione riparte nel mese successivo: il mese di competenza è
         // quello della SUA data (prima ereditava quello della lezione-soglia → contata due volte
         // nel mese vecchio e mancante nel nuovo).

@@ -2220,11 +2220,13 @@ function calcolaExtraPrevistiMese(lessons, students, mese, anno) {
     const proiettate = [];
     let cur = head, guard = 0;
     while (guard++ < 40) {
-      const nd = addDays(new Date(cur.date + "T00:00:00"), gapProssimaLezione(cur));
+      // [FM-2X-GIORNI-FISSI] "2 volte a settimana" proiettata sui giorni fissi reali della serie
+      const occ = prossimaOccorrenzaSerie(cur, lessons);
+      const nd = new Date(occ.date + "T00:00:00");
       if (nd > fineMese) break;
-      const nds = yyyymmdd(nd);
+      const nds = occ.date;
       if (nd >= inizioMese && !esistenti.includes(nds)) proiettate.push(nds);
-      cur = { ...cur, date: nds, gapGiorni: prossimoGapGiorni(cur) };
+      cur = { ...cur, date: nds, gapGiorni: occ.gapGiorniNext };
     }
     const tutte = esistenti.concat(proiettate).sort();
     if (tutte.length <= N) return;
