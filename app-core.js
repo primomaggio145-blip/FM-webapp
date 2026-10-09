@@ -2915,3 +2915,31 @@ const FMEditorTesto = ({ label, value, onChange, onBlur, placeholder, rows, bord
     )
   );
 };
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// [FM-FILE-UNIVERSALI] Helper condivisi per i file universali dei brani
+// (usati dal modale "Modifica brano" e dalla scheda di visualizzazione in Repertorio)
+// ═══════════════════════════════════════════════════════════════════════════════
+// Nome file sicuro per Supabase Storage (niente accenti, spazi, parentesi, ecc.)
+const fmSafeStorageName = (n) => String(n||'file').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9._-]+/g,'_').replace(/^_+|_+$/g,'') || 'file';
+// Dimensione leggibile (KB/MB); stringa vuota se sconosciuta
+const fmFmtFileSize = (b) => (b==null||b==='') ? '' : (b < 1024*1024 ? Math.max(1,Math.round(b/1024))+' KB' : (b/1024/1024).toFixed(1)+' MB');
+// Carica uno o più file (QUALSIASI estensione) nel bucket "allegati", cartella brani/universali/.
+// Non tocca il database: restituisce { ok:[oggetti file pronti da salvare], ko:['nome (motivo)'], fatal?:'messaggio' }
+const fmUploadFileUniversali = async (fileList) => {
+  const files = Array.from(fileList||[]);
+  const ok = [], ko = [];
+  if (!files.length) return { ok, ko };
+  const sb = window.supabaseClient;
+  if (!sb) return { ok, ko, fatal: 'Connessione a Supabase non disponibile: impossibile caricare i file' };
+  for (const file of files) {
+    const path = `brani/universali/${Date.now()}_${Math.random().toString(36).slice(2,6)}_${fmSafeStorageName(file.name)}`;
+    try {
+      const { error } = await sb.storage.from('allegati').upload(path, file, { upsert: true, contentType: file.type || 'application/octet-stream' });
+      if (error) throw error;
+      const { data: u } = sb.storage.from('allegati').getPublicUrl(path);
+      ok.push({ id:'fu_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), fileName:file.name, fileUrl:(u&&u.publicUrl)||null, fileType:file.type||'', size:file.size, storagePath:path });
+    } catch(er) { ko.push(file.name+' ('+((er&&er.message)||'errore')+')'); }
+  }
+  return { ok, ko };
+};

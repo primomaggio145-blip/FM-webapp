@@ -16324,28 +16324,17 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
   const [err,setErr]=useState({});
   const [openVersione, setOpenVersione] = useState(0); // indice versione espansa
   // [FM-FILE-UNIVERSALI] File allegati al brano (non a una singola versione): validi per tutte le versioni.
+  // Upload e utilità condivise: fmUploadFileUniversali / fmFmtFileSize (app-core.js)
   const [fuBusy, setFuBusy] = useState(false);
   const [fuErr, setFuErr] = useState('');
-  const _fuSafeName = (n) => String(n||'file').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9._-]+/g,'_').replace(/^_+|_+$/g,'') || 'file';
-  const _fuSize = (b) => (b==null||b==='') ? '' : (b < 1024*1024 ? Math.max(1,Math.round(b/1024))+' KB' : (b/1024/1024).toFixed(1)+' MB');
   const uploadFileUniversali = async (fileList) => {
     const files = Array.from(fileList||[]);
     if (!files.length) return;
-    const sb = window.supabaseClient;
-    if (!sb) { setFuErr('Connessione a Supabase non disponibile: impossibile caricare i file'); return; }
     setFuBusy(true); setFuErr('');
-    const ok = []; const ko = [];
-    for (const file of files) {
-      const path = `brani/universali/${Date.now()}_${Math.random().toString(36).slice(2,6)}_${_fuSafeName(file.name)}`;
-      try {
-        const { error } = await sb.storage.from('allegati').upload(path, file, { upsert: true, contentType: file.type || 'application/octet-stream' });
-        if (error) throw error;
-        const { data: u } = sb.storage.from('allegati').getPublicUrl(path);
-        ok.push({ id:'fu_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), fileName:file.name, fileUrl:(u&&u.publicUrl)||null, fileType:file.type||'', size:file.size, storagePath:path });
-      } catch(er) { ko.push(file.name+' ('+((er&&er.message)||'errore')+')'); }
-    }
-    if (ok.length) setF(p => ({...p, fileUniversali:[...(p.fileUniversali||[]), ...ok]}));
-    if (ko.length) setFuErr('Non caricati: '+ko.join(', '));
+    const r = await fmUploadFileUniversali(files);
+    if (r.ok.length) setF(p => ({...p, fileUniversali:[...(p.fileUniversali||[]), ...r.ok]}));
+    if (r.fatal) setFuErr(r.fatal);
+    else if (r.ko.length) setFuErr('Non caricati: '+r.ko.join(', '));
     setFuBusy(false);
   };
   const delFileUniversale = (id) => setF(p => ({...p, fileUniversali:(p.fileUniversali||[]).filter(x=>x.id!==id)}));
@@ -16486,7 +16475,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
               , fi.fileUrl
                   ? React.createElement('a',{href:fi.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{flex:1,fontSize:11,color:C.blue,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},fi.fileName)
                   : React.createElement('span',{style:{flex:1,fontSize:11,color:C.textMuted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},fi.fileName)
-              , fi.size!=null && React.createElement('span',{style:{fontSize:10,color:C.textDim,flexShrink:0}},_fuSize(fi.size))
+              , fi.size!=null && React.createElement('span',{style:{fontSize:10,color:C.textDim,flexShrink:0}},fmFmtFileSize(fi.size))
               , React.createElement('button',{onClick:()=>delFileUniversale(fi.id),title:'Rimuovi',style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted}},'✕')
             ))
           , fuErr && React.createElement('div',{style:{marginTop:6,padding:'7px 10px',borderRadius:6,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:11,color:C.red}},fuErr)

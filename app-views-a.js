@@ -111,9 +111,12 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     const [focusVers, setFocusVers]= useState(null); // [FM-PREV-BRANO-LINK] versione da evidenziare nel modal
     const [allievoPOV,setAllievoPOV]=useState(null);
     const [toast,     setToast]    = useState(null);
+    // [FM-FILE-UNIVERSALI] stato caricamento/errore dei file universali nella scheda di visualizzazione
+    const [fuBusy, setFuBusy] = useState(false);
+    const [fuErr,  setFuErr]  = useState('');
   
     const showToast=(msg,hex=C.green)=>{setToast({msg,hex});setTimeout(()=>setToast(null),3000);};
-    const closeModal=()=>{setModal(null);setSelBrano(null);setFocusVers(null);};
+    const closeModal=()=>{setModal(null);setSelBrano(null);setFocusVers(null);setFuErr('');};
 
     // ── Mappa brano JS → riga DB ──
     const toDbRow = (f, includeId=false, prev=null) => {
@@ -133,6 +136,49 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     };
     // Messaggio più chiaro se manca la colonna file_universali (migrazione SQL non ancora eseguita)
     const _fuHint = (m) => /file_universali/i.test(m||'') ? ' — esegui la migrazione SQL "migrazione_file_universali_brani.sql" su Supabase' : '';
+
+    // ── [FM-FILE-UNIVERSALI] Aggiunta/rimozione file universali direttamente dalla scheda di visualizzazione ──
+    // (senza passare da "Modifica"). Legge il valore attuale dal DB, applica la modifica e salva:
+    // così non si sovrascrivono file aggiunti nel frattempo da un altro utente/dispositivo.
+    const modificaFileUniversali = async (branoId, { aggiungi=[], rimuoviId=null }) => {
+      const sb = window.supabaseClient;
+      if (!sb) { showToast('Connessione a Supabase non disponibile', C.red); return false; }
+      const { data: riga, error: eLeggi } = await sb.from('brani').select('file_universali').eq('id', branoId).single();
+      if (eLeggi) { showToast('Errore salvataggio: '+eLeggi.message+_fuHint(eLeggi.message), C.red); return false; }
+      let base = riga && riga.file_universali;
+      if (typeof base === 'string') { try { base = JSON.parse(base); } catch(e) { base = []; } }
+      if (!Array.isArray(base)) base = [];
+      const nuovi = [...base.filter(x => !(rimuoviId && x.id === rimuoviId)), ...aggiungi];
+      const { data: righe, error: eSalva } = await sb.from('brani').update({ file_universali: nuovi }).eq('id', branoId).select('id');
+      if (eSalva) { showToast('Errore salvataggio: '+eSalva.message+_fuHint(eSalva.message), C.red); return false; }
+      if (!righe || righe.length === 0) { showToast('Salvataggio non riuscito: nessun brano aggiornato (permessi?)', C.red); return false; }
+      setBrani(p => p.map(b => String(b.id)===String(branoId) ? {...b, fileUniversali:nuovi} : b));
+      setSelBrano(p => (p && String(p.id)===String(branoId)) ? {...p, fileUniversali:nuovi} : p);
+      return true;
+    };
+    const caricaFileUniversali = async (fileList) => {
+      const files = Array.from(fileList||[]);
+      if (!files.length || !selBrano) return;
+      const id = selBrano.id;
+      setFuBusy(true); setFuErr('');
+      const r = await fmUploadFileUniversali(files);
+      if (r.ok.length) {
+        const salvato = await modificaFileUniversali(id, { aggiungi: r.ok });
+        if (salvato) showToast(r.ok.length === 1 ? 'File aggiunto' : r.ok.length+' file aggiunti');
+        else { try { await window.supabaseClient.storage.from('allegati').remove(r.ok.map(x => x.storagePath)); } catch(e) {} } // niente file orfani se il salvataggio fallisce
+      }
+      if (r.fatal) setFuErr(r.fatal);
+      else if (r.ko.length) setFuErr('Non caricati: '+r.ko.join(', '));
+      setFuBusy(false);
+    };
+    const rimuoviFileUniversale = async (fi) => {
+      if (!selBrano) return;
+      if (!window.confirm('Rimuovere "'+fi.fileName+'" dai file universali del brano?')) return;
+      setFuBusy(true); setFuErr('');
+      const ok = await modificaFileUniversali(selBrano.id, { rimuoviId: fi.id });
+      if (ok) showToast('File rimosso');
+      setFuBusy(false);
+    };
 
     // ── CRUD con persistenza Supabase ──
     // Sincronizza brano nella scaletta degli eventi collegati
@@ -661,14 +707,30 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
               /* Versioni con toggle */
               , React.createElement('div',{style:{padding:'16px 22px',maxHeight:'65vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:10}}
                 , selBrano.note && React.createElement('div',{style:{fontSize:13,color:C.textMuted,fontStyle:'italic',marginBottom:4}},selBrano.note)
-                /* [FM-FILE-UNIVERSALI] File validi per tutte le versioni */
-                , (selBrano.fileUniversali||[]).length>0 && React.createElement('div',{style:{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}
+                /* [FM-FILE-UNIVERSALI] File validi per tutte le versioni — aggiungibili/rimovibili anche da qui */
+                , ((selBrano.fileUniversali||[]).length>0 || ruoloRep!=="allievo") && React.createElement('div',{style:{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}
                     , React.createElement('div',{style:{padding:'10px 16px',background:C.bg,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}
                         , React.createElement('span',{style:{fontWeight:600,fontSize:13}},'📎 File universali')
-                        , React.createElement('span',{style:{fontSize:11,color:C.textDim}},`${selBrano.fileUniversali.length} file · per tutte le versioni`)
+                        , React.createElement('div',{style:{display:'flex',alignItems:'center',gap:12}}
+                            , React.createElement('span',{style:{fontSize:11,color:C.textDim}},`${(selBrano.fileUniversali||[]).length} file · per tutte le versioni`)
+                            , ruoloRep!=="allievo" && React.createElement('label',{style:{fontSize:12,fontWeight:600,color:fuBusy?C.textDim:C.blue,cursor:fuBusy?'not-allowed':'pointer'}}
+                                , fuBusy ? '⏳ Attendi...' : '📎 Carica'
+                                , React.createElement('input',{type:'file',multiple:true,disabled:fuBusy,style:{display:'none'},
+                                    onChange:async e=>{ const fl=e.target.files; await caricaFileUniversali(fl); e.target.value=''; }})
+                              )
+                          )
                       )
                     , React.createElement('div',{style:{padding:'12px 16px',display:'flex',flexDirection:'column',gap:8}}
-                        , selBrano.fileUniversali.map((fi,fii)=>React.createElement('a',{key:fi.id||fii,href:fi.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{fontSize:12,color:C.text,display:'flex',alignItems:'center',gap:6,padding:'5px 8px',background:C.surface,borderRadius:6,border:`1px solid ${C.border}`}},React.createElement(Ic,{n:'paperclip',size:11,stroke:C.textMuted}),fi.fileName))
+                        , (selBrano.fileUniversali||[]).length===0 && React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}},'Nessun file universale. Usa "Carica" per aggiungere materiali comuni a tutte le versioni (qualsiasi formato).')
+                        , (selBrano.fileUniversali||[]).map((fi,fii)=>React.createElement('div',{key:fi.id||fii,style:{display:'flex',alignItems:'center',gap:8}}
+                            , React.createElement('a',{href:fi.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{flex:1,minWidth:0,fontSize:12,color:C.text,display:'flex',alignItems:'center',gap:6,padding:'5px 8px',background:C.surface,borderRadius:6,border:`1px solid ${C.border}`}}
+                                , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.textMuted})
+                                , React.createElement('span',{style:{flex:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},fi.fileName)
+                                , fi.size!=null && React.createElement('span',{style:{fontSize:10,color:C.textDim,flexShrink:0}},fmFmtFileSize(fi.size))
+                              )
+                            , ruoloRep!=="allievo" && React.createElement('button',{onClick:()=>rimuoviFileUniversale(fi),disabled:fuBusy,title:'Rimuovi file',style:{background:'none',border:'none',cursor:fuBusy?'not-allowed':'pointer',color:C.textMuted,padding:4}},'✕')
+                          ))
+                        , fuErr && React.createElement('div',{style:{padding:'7px 10px',borderRadius:6,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:11,color:C.red}},fuErr)
                       )
                   )
                 /* Lezioni & Allievi collegati — include sia gli allievi assegnati dal
