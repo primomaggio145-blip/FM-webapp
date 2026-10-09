@@ -4788,6 +4788,88 @@ const ResetDatiSection = ({ anniScolastici: propAnniReset, setAnniScolastici: pr
 };
 
 // ─── BACKUP DATI ────────────────────────────────────────────────────────────
+// ─── ESPORTA ALLIEVI (CSV per Excel) ───────────────────────────────────────────
+// Scarica l'anagrafica degli allievi già caricata in memoria (nessuna query aggiuntiva).
+// Usa csvEscape (definita sopra, condivisa con EsportaRicevuteSection): separatore ";" + BOM per Excel.
+const EsportaAllieviSection = ({ students, showToast }) => {
+  const [stato, setStato] = React.useState('tutti');
+  const [msg, setMsg] = React.useState(null);
+
+  const lista = () => (Array.isArray(students) && students.length ? students : (window.__fmStudents__ || []));
+
+  const _statoDi = (s) => (s && s.status) ? s.status : 'attivo';
+  const filtrati = () => lista().filter(s => stato === 'tutti' ? true : _statoDi(s) === stato);
+
+  const handleExport = () => {
+    try {
+      const righe = filtrati();
+      if (righe.length === 0) {
+        const m = 'Nessun allievo da esportare con questo filtro';
+        setMsg({ok:false, testo:m}); showToast && showToast(false, m); return;
+      }
+      const fmtData = (d) => {
+        if (!d) return '';
+        const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[3]}/${m[2]}/${m[1]}` : String(d);
+      };
+      const header = ['Nome','Stato','Email','Telefono','Strumento','Docente','Corso complementare','Strumenti aggiuntivi','Data di nascita','Data iscrizione','Quota mensile €','Tipo quota','Codice fiscale','Nome per ricevuta','Note'];
+      const ordinati = [...righe].sort((a,b) => String(a.name||'').localeCompare(String(b.name||''), 'it', {sensitivity:'base'}));
+      const corpo = ordinati.map(s => [
+        s.name, _statoDi(s), s.email, s.phone, s.instrument, s.teacher, s.complementaryCourse,
+        Array.isArray(s.extraInstruments) ? s.extraInstruments.map(x => (x && typeof x === 'object') ? (x.name || x.instrument || x.strumento || '') : x).filter(Boolean).join(' | ') : '',
+        fmtData(s.birthdate), fmtData(s.enrollDate),
+        (s.monthlyFee != null && s.monthlyFee !== '') ? String(s.monthlyFee).replace('.', ',') : '',
+        s.feeType, s.codiceFiscale, s.nomeRicevuta, s.notes
+      ].map(csvEscape).join(';'));
+      const csv = '\uFEFF' + header.join(';') + '\n' + corpo.join('\n'); // BOM per Excel
+
+      const stamp = new Date().toISOString().slice(0,10);
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `allievi-${stato === 'tutti' ? 'tutti' : stato}-${stamp}.csv`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      const m = `✅ ${ordinati.length} allievi esportati`;
+      setMsg({ok:true, testo:m}); showToast && showToast(true, m);
+    } catch(e) {
+      console.error('[EsportaAllievi] errore imprevisto:', e);
+      const m = e?.message || 'Errore imprevisto — controlla la console del browser (F12)';
+      setMsg({ok:false, testo:m}); showToast && showToast(false, m);
+    }
+  };
+
+  const tot = lista().length;
+  const nFiltrati = filtrati().length;
+
+  return React.createElement(ImpSection, {title:"Esporta dati allievi", icon:"users"}
+    , React.createElement('div', {style:{padding:'12px 14px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,marginBottom:14,fontSize:12,color:C.textMuted,lineHeight:1.5}}
+        , 'Scarica un file CSV (apribile con Excel o Fogli Google) con l\'anagrafica degli allievi: contatti, strumento, docente, quota, codice fiscale e note.'
+      )
+    , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:12,flexWrap:'wrap'}}
+        , React.createElement('div', null
+            , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:'.06em',textTransform:'uppercase',display:'block',marginBottom:5}}, 'Stato allievi')
+            , React.createElement('select', {value:stato, onChange:e=>setStato(e.target.value),
+                style:{padding:'9px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif"}}
+              , React.createElement('option', {value:'tutti'}, 'Tutti')
+              , React.createElement('option', {value:'attivo'}, 'Solo attivi')
+              , React.createElement('option', {value:'sospeso'}, 'Solo sospesi')
+              , React.createElement('option', {value:'inattivo'}, 'Solo inattivi')
+            )
+          )
+        , React.createElement('button', {onClick:handleExport,
+            style:{marginTop:18,padding:'10px 20px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700,display:'flex',alignItems:'center',gap:8,fontFamily:"'Open Sans',sans-serif"}}
+          , React.createElement(Ic, {n:'download', size:15, stroke:'#fff'})
+          , '📥 Scarica allievi (CSV)'
+        )
+      )
+    , React.createElement('div', {style:{marginTop:10,fontSize:11,color:C.textDim}}, `${nFiltrati} allievi nel filtro selezionato (su ${tot} totali)`)
+    , msg && React.createElement('div', {style:{marginTop:12,padding:'10px 14px',borderRadius:8,
+        background:msg.ok?C.greenBg:C.redBg,border:`1px solid ${msg.ok?C.greenBorder:C.redBorder}`,fontSize:12,color:msg.ok?C.green:C.red}}, msg.testo)
+  );
+};
+
 const BackupDatiSection = () => {
   const [state, setState] = React.useState(null); // null | 'loading' | {ok,...}
   const [lastBackup, setLastBackup] = React.useState(null);
@@ -5784,6 +5866,9 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
 
     /* ── Record scollegati (solo admin) ───────────────────────────────────── */
     , activeTab==="backup" && (propRuolo==="admin"||!propRuolo) && React.createElement(RecordScollegatiSection)
+
+    /* ── Esporta allievi CSV (solo admin) ─────────────────────────────────── */
+    , activeTab==="backup" && (propRuolo==="admin"||!propRuolo) && React.createElement(EsportaAllieviSection, {students: propStudents, showToast})
 
     /* ── Backup DB (solo admin) ───────────────────────────────────────────── */
     , activeTab==="backup" && (propRuolo==="admin"||!propRuolo) && React.createElement(BackupDatiSection)
