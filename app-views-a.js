@@ -116,14 +116,23 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     const closeModal=()=>{setModal(null);setSelBrano(null);setFocusVers(null);};
 
     // ── Mappa brano JS → riga DB ──
-    const toDbRow = (f, includeId=false) => ({
-      ...(includeId ? {id: f.id||uid()} : {}),
-      titolo: f.title||'', compositore: f.composer||'',
-      genere: f.genere||'',
-      strumento: f.strumento||null,
-      eventi_ids: f.eventiIds||[], versioni: f.versioni||[],
-      note: f.note||'',
-    });
+    const toDbRow = (f, includeId=false, prev=null) => {
+      const row = {
+        ...(includeId ? {id: f.id||uid()} : {}),
+        titolo: f.title||'', compositore: f.composer||'',
+        genere: f.genere||'',
+        strumento: f.strumento||null,
+        eventi_ids: f.eventiIds||[], versioni: f.versioni||[],
+        note: f.note||'',
+      };
+      // [FM-FILE-UNIVERSALI] La colonna file_universali viene inviata solo quando serve (il brano ha file,
+      // oppure li aveva prima e ora sono stati tolti): così se la migrazione SQL non è ancora stata
+      // eseguita, il salvataggio di tutti gli altri brani continua a funzionare.
+      if ((f.fileUniversali||[]).length>0 || (prev && (prev.fileUniversali||[]).length>0)) row.file_universali = f.fileUniversali||[];
+      return row;
+    };
+    // Messaggio più chiaro se manca la colonna file_universali (migrazione SQL non ancora eseguita)
+    const _fuHint = (m) => /file_universali/i.test(m||'') ? ' — esegui la migrazione SQL "migrazione_file_universali_brani.sql" su Supabase' : '';
 
     // ── CRUD con persistenza Supabase ──
     // Sincronizza brano nella scaletta degli eventi collegati
@@ -177,7 +186,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
         const sb = window.supabaseClient;
         if (sb) {
           const { data, error } = await sb.from('brani').insert(toDbRow(f, true)).select().single();
-          if (error) { console.warn('[FM] insert brano error:', error.message); showToast('Errore salvataggio: '+error.message, C.red); }
+          if (error) { console.warn('[FM] insert brano error:', error.message); showToast('Errore salvataggio: '+error.message+_fuHint(error.message), C.red); }
           else if (data) {
             const realId = data.id;
             setBrani(p=>p.map(b=>b.id===tempId?{...f,id:realId}:b));
@@ -206,8 +215,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       try {
         const sb = window.supabaseClient;
         if (sb) {
-          const { error } = await sb.from('brani').update(toDbRow(f)).eq('id', selBrano.id);
-          if (error) { console.warn('[FM] update brano error:', error.message); showToast('Errore salvataggio: '+error.message, C.red); return; }
+          const { error } = await sb.from('brani').update(toDbRow(f, false, selBrano)).eq('id', selBrano.id);
+          if (error) { console.warn('[FM] update brano error:', error.message); showToast('Errore salvataggio: '+error.message+_fuHint(error.message), C.red); return; }
           // Sincronizza eventi collegati nuovi (quelli già presenti vengono saltati)
           await syncBranoInEventi(selBrano.id, f.title, f.composer, f.eventiIds||[], f.versioni, f.eventiVersioni||{}, selBrano.eventiIds||[]);
         }
@@ -652,6 +661,16 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
               /* Versioni con toggle */
               , React.createElement('div',{style:{padding:'16px 22px',maxHeight:'65vh',overflowY:'auto',display:'flex',flexDirection:'column',gap:10}}
                 , selBrano.note && React.createElement('div',{style:{fontSize:13,color:C.textMuted,fontStyle:'italic',marginBottom:4}},selBrano.note)
+                /* [FM-FILE-UNIVERSALI] File validi per tutte le versioni */
+                , (selBrano.fileUniversali||[]).length>0 && React.createElement('div',{style:{border:`1px solid ${C.border}`,borderRadius:10,overflow:'hidden'}}
+                    , React.createElement('div',{style:{padding:'10px 16px',background:C.bg,display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}
+                        , React.createElement('span',{style:{fontWeight:600,fontSize:13}},'📎 File universali')
+                        , React.createElement('span',{style:{fontSize:11,color:C.textDim}},`${selBrano.fileUniversali.length} file · per tutte le versioni`)
+                      )
+                    , React.createElement('div',{style:{padding:'12px 16px',display:'flex',flexDirection:'column',gap:8}}
+                        , selBrano.fileUniversali.map((fi,fii)=>React.createElement('a',{key:fi.id||fii,href:fi.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{fontSize:12,color:C.text,display:'flex',alignItems:'center',gap:6,padding:'5px 8px',background:C.surface,borderRadius:6,border:`1px solid ${C.border}`}},React.createElement(Ic,{n:'paperclip',size:11,stroke:C.textMuted}),fi.fileName))
+                      )
+                  )
                 /* Lezioni & Allievi collegati — include sia gli allievi assegnati dal
                    modal del brano sia quelli collegati indirettamente tramite lezione */
                 , (()=>{ const _allieviColl = allieviOfBrano(selBrano.id); const _nLez = usageCount(selBrano.id);

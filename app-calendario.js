@@ -16319,10 +16319,36 @@ const INIT_BRANI = [
 
 // ─── FORM BRANO ──────────────────────────────────────────────────────────────
 const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_concertiBranoIn,courses:_coursesBranoIn})=>{
-  const empty={title:"",composer:"",genere:"",strumento:"",eventiIds:[],note:"",versioni:[{tonalita:"",strumento:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
-  const [f,setF]=useState(initial ? {...empty,...initial,versioni:(initial.versioni&&initial.versioni.length>0)?initial.versioni:empty.versioni} : empty);
+  const empty={title:"",composer:"",genere:"",strumento:"",eventiIds:[],note:"",fileUniversali:[],versioni:[{tonalita:"",strumento:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
+  const [f,setF]=useState(initial ? {...empty,...initial,fileUniversali:Array.isArray(initial.fileUniversali)?initial.fileUniversali:[],versioni:(initial.versioni&&initial.versioni.length>0)?initial.versioni:empty.versioni} : empty);
   const [err,setErr]=useState({});
   const [openVersione, setOpenVersione] = useState(0); // indice versione espansa
+  // [FM-FILE-UNIVERSALI] File allegati al brano (non a una singola versione): validi per tutte le versioni.
+  const [fuBusy, setFuBusy] = useState(false);
+  const [fuErr, setFuErr] = useState('');
+  const _fuSafeName = (n) => String(n||'file').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9._-]+/g,'_').replace(/^_+|_+$/g,'') || 'file';
+  const _fuSize = (b) => (b==null||b==='') ? '' : (b < 1024*1024 ? Math.max(1,Math.round(b/1024))+' KB' : (b/1024/1024).toFixed(1)+' MB');
+  const uploadFileUniversali = async (fileList) => {
+    const files = Array.from(fileList||[]);
+    if (!files.length) return;
+    const sb = window.supabaseClient;
+    if (!sb) { setFuErr('Connessione a Supabase non disponibile: impossibile caricare i file'); return; }
+    setFuBusy(true); setFuErr('');
+    const ok = []; const ko = [];
+    for (const file of files) {
+      const path = `brani/universali/${Date.now()}_${Math.random().toString(36).slice(2,6)}_${_fuSafeName(file.name)}`;
+      try {
+        const { error } = await sb.storage.from('allegati').upload(path, file, { upsert: true, contentType: file.type || 'application/octet-stream' });
+        if (error) throw error;
+        const { data: u } = sb.storage.from('allegati').getPublicUrl(path);
+        ok.push({ id:'fu_'+Date.now()+'_'+Math.random().toString(36).slice(2,6), fileName:file.name, fileUrl:(u&&u.publicUrl)||null, fileType:file.type||'', size:file.size, storagePath:path });
+      } catch(er) { ko.push(file.name+' ('+((er&&er.message)||'errore')+')'); }
+    }
+    if (ok.length) setF(p => ({...p, fileUniversali:[...(p.fileUniversali||[]), ...ok]}));
+    if (ko.length) setFuErr('Non caricati: '+ko.join(', '));
+    setFuBusy(false);
+  };
+  const delFileUniversale = (id) => setF(p => ({...p, fileUniversali:(p.fileUniversali||[]).filter(x=>x.id!==id)}));
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const studentsList = _studBranoIn || [];
   const concertiList = _concertiBranoIn || [];
@@ -16382,6 +16408,7 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
   };
   const handleSave=()=>{
     const e=validate(); if(Object.keys(e).length){setErr(e);return;}
+    if (fuBusy) { setFuErr('Attendi il termine del caricamento dei file prima di salvare'); return; }
     onSave({...f, eventiVersioni});
   };
 
@@ -16441,6 +16468,28 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
             style: {background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
               color:C.text,fontSize:13,padding:"9px 13px",width:"100%",
               fontFamily:"'Open Sans',sans-serif",resize:"vertical"}})
+        )
+
+        /* ── FILE UNIVERSALI (validi per tutte le versioni del brano) ── */
+        , React.createElement('div', null
+          , React.createElement('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:6}}
+            , React.createElement('label',{style:{fontSize:11,color:C.textMuted,letterSpacing:'0.07em',textTransform:'uppercase'}},'📎 File universali (validi per tutte le versioni)')
+            , React.createElement('label',{style:{fontSize:11,color:fuBusy?C.textDim:C.blue,cursor:fuBusy?'not-allowed':'pointer'}}
+              , fuBusy ? '⏳ Caricamento...' : '📎 Carica'
+              , React.createElement('input',{type:'file',multiple:true,disabled:fuBusy,style:{display:'none'},
+                  onChange:async e=>{ const fl=e.target.files; await uploadFileUniversali(fl); e.target.value=''; }})
+            )
+          )
+          , (f.fileUniversali||[]).length===0 && !fuBusy && React.createElement('div',{style:{fontSize:12,color:C.textDim,fontStyle:'italic'}},'Nessun file. Carica qui i materiali comuni a tutte le versioni (qualsiasi formato).')
+          , (f.fileUniversali||[]).map((fi,fii)=>React.createElement('div',{key:fi.id||fii,style:{display:'flex',alignItems:'center',gap:8,padding:'6px 9px',borderRadius:6,border:`1px solid ${C.border}`,background:C.surface,marginBottom:4}}
+              , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.gold})
+              , fi.fileUrl
+                  ? React.createElement('a',{href:fi.fileUrl,target:'_blank',rel:'noopener noreferrer',style:{flex:1,fontSize:11,color:C.blue,textDecoration:'none',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},fi.fileName)
+                  : React.createElement('span',{style:{flex:1,fontSize:11,color:C.textMuted,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},fi.fileName)
+              , fi.size!=null && React.createElement('span',{style:{fontSize:10,color:C.textDim,flexShrink:0}},_fuSize(fi.size))
+              , React.createElement('button',{onClick:()=>delFileUniversale(fi.id),title:'Rimuovi',style:{background:'none',border:'none',cursor:'pointer',color:C.textMuted}},'✕')
+            ))
+          , fuErr && React.createElement('div',{style:{marginTop:6,padding:'7px 10px',borderRadius:6,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:11,color:C.red}},fuErr)
         )
 
         /* ── VERSIONI (tonalità multiple, ognuna con file/link/allievi propri) ── */
@@ -16684,6 +16733,17 @@ const BranoDrawer = ({brano,onClose,onEdit,onDelete,concerti}) => {
               , React.createElement('div', { style: {fontSize:13,color:C.text,lineHeight:1.65}}, brano.note)
             )
           )
+
+          /* File universali (validi per tutte le versioni) */
+          , (brano.fileUniversali||[]).length > 0 && React.createElement('div', null
+              , React.createElement('div',{style:{fontSize:10,color:C.textMuted,letterSpacing:'0.08em',textTransform:'uppercase',marginBottom:8}},'📎 File universali (tutte le versioni)')
+              , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:5}}
+                  , brano.fileUniversali.map((fi,fii)=>React.createElement('a',{key:fi.id||fii, href:fi.fileUrl, target:'_blank', rel:'noopener noreferrer',
+                      style:{fontSize:12,color:C.text,textDecoration:'none',display:'flex',alignItems:'center',gap:6,padding:'7px 10px',background:C.bg,borderRadius:7,border:`1px solid ${C.border}`}}
+                      , React.createElement(Ic,{n:'paperclip',size:11,stroke:C.textMuted}), fi.fileName
+                    ))
+                )
+            )
 
           /* ── Versioni raggruppate con toggle ── */
           , React.createElement('div', null

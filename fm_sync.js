@@ -243,6 +243,7 @@
       genere: r.genere || '',
       eventiIds: parseJson(r.eventi_ids, []),
       versioni: versioni,
+      fileUniversali: parseJson(r.file_universali, []), // [FM-FILE-UNIVERSALI] file validi per tutte le versioni
       note: r.note || '', dataPrima: r.data_prima || '',
       dataUltima: r.data_ultima || '',
       lezioni: r.lezioni || 0,
