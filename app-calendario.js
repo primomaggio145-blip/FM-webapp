@@ -14251,6 +14251,14 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
     : tipo === 'extra' ? `Extra ${MESI[f.mese]} — ${d.nome||d.name}` : `Compenso mensile ${d.nome||d.name}`;
   const [err, setErr] = useState({});
   const set = (k,v) => setF(p=>({...p,[k]:v}));
+  // [FM-SPESA-VOCI] Voci aggiuntive nello stesso compenso/spesa, ognuna con il PROPRIO metodo di pagamento
+  // (es. compenso docente: una parte in contanti e una con bonifico). Solo in creazione.
+  // Al salvataggio ogni voce diventa una spesa separata (vedi handleAdd in ContabilitaView): così i
+  // calcoli per docente, già basati sulla somma delle spese del mese divise per metodo, restano corretti.
+  const [extraVoci, setExtraVoci] = useState([]);
+  const addVoce = () => setExtraVoci(p=>[...p, { id: uid(), importo:"", metodo:"", desc:"" }]);
+  const setVoce = (id,k,v) => setExtraVoci(p=>p.map(x=>x.id===id?{...x,[k]:v}:x));
+  const removeVoce = (id) => setExtraVoci(p=>p.filter(x=>x.id!==id));
 
   const validate = () => {
     const e={};
@@ -14258,6 +14266,10 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
     if(!f.importo||isNaN(f.importo)||Number(f.importo)<=0) e.importo = "Importo non valido";
     if(!f.data)                                 e.data    = "Data obbligatoria";
     if(!f.metodo)                               e.metodo  = "Metodo di pagamento obbligatorio";
+    extraVoci.forEach(v => {
+      if(!v.importo||isNaN(v.importo)||Number(v.importo)<=0) e[`voce_${v.id}`] = "Importo non valido";
+      if(!v.metodo) e[`voceMet_${v.id}`] = "Seleziona il metodo di pagamento";
+    });
     return e;
   };
 
@@ -14272,7 +14284,9 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
     }
     const isDoc = f.categoria==="docenti" && !!f.docenteId;
     onSave({...f, desc, importo:Number(f.importo), isAcconto: !!f.isAcconto,
-      isExtra: isDoc ? (!f.isAcconto && !!f.isExtra) : null});
+      isExtra: isDoc ? (!f.isAcconto && !!f.isExtra) : null,
+      // [FM-SPESA-VOCI] voci aggiuntive (solo creazione): ognuna con il proprio metodo
+      ...((!initial && extraVoci.length) ? { extraVoci: extraVoci.map(v => ({ importo: Number(v.importo), metodo: v.metodo, desc: (v.desc||'').trim() })) } : {}) });
   };
 
   const cat = catById(f.categoria);
@@ -14407,6 +14421,47 @@ const SpesaForm = ({ initial, onSave, onClose, docenti:_docentiFSp, categorie:_c
         )
 
         , React.createElement(Sel, { label: "Metodo di pagamento"  , value: f.metodo, onChange: e=>set("metodo",e.target.value), options: METODI_PAG, error: err.metodo, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6389}})
+        /* [FM-SPESA-VOCI] Altre voci — solo in creazione. Ogni voce ha importo e metodo di pagamento propri. */
+        , !initial && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
+          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}, "Altre voci")
+          , extraVoci.map(v => {
+              const fieldSv = {background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"9px 10px",fontFamily:"'Open Sans',sans-serif"};
+              const errImp = err[`voce_${v.id}`], errMet = err[`voceMet_${v.id}`];
+              return React.createElement('div', {key:v.id, style:{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center",marginBottom:10,padding:8,borderRadius:8,border:`1px solid ${C.border}`,background:C.bg}}
+                , React.createElement('input', {type:"number", placeholder:"Importo €", value:v.importo, onChange:e=>setVoce(v.id,'importo',e.target.value),
+                    style:{...fieldSv,width:110,border:`1px solid ${errImp?C.red:C.border}`}})
+                , React.createElement('select', {value:v.metodo, onChange:e=>setVoce(v.id,'metodo',e.target.value),
+                    style:{...fieldSv,flex:"1 1 170px",appearance:"none",border:`1px solid ${errMet?C.red:C.border}`}}
+                  , React.createElement('option',{value:""},"— metodo di pagamento —")
+                  , METODI_PAG.map(m=>React.createElement('option',{key:m,value:m},m))
+                )
+                , React.createElement('input', {type:"text", placeholder:"Descrizione voce (facoltativa)", value:v.desc, onChange:e=>setVoce(v.id,'desc',e.target.value),
+                    style:{...fieldSv,flex:"2 1 180px"}})
+                , React.createElement('button', {onClick:()=>removeVoce(v.id), type:"button", title:"Rimuovi voce",
+                    style:{padding:"9px 12px",borderRadius:8,border:`1px solid ${C.border}`,background:"none",color:C.textMuted,cursor:"pointer",fontSize:13}}, "✕")
+                , (errImp||errMet) && React.createElement('div', {style:{flexBasis:"100%",fontSize:11,color:C.red}}, errImp||errMet)
+              );
+            })
+          , React.createElement('button', {onClick:addVoce, type:"button",
+              style:{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:20,border:`1px dashed ${C.teal}`,
+                background:"none",color:C.teal,cursor:"pointer",fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
+            , React.createElement(Ic,{n:"plus",size:12,stroke:C.teal}), f.categoria==="docenti" ? " Aggiungi un'altra voce (stesso compenso)" : " Aggiungi un'altra voce (stessa spesa)"
+          )
+          , extraVoci.length>0 && (() => {
+              const voci = [{importo:f.importo, metodo:f.metodo}, ...extraVoci];
+              const tot = voci.reduce((t,v)=>t+(Number(v.importo)||0),0);
+              const perMetodo = {};
+              voci.forEach(v => { const n = Number(v.importo)||0; if(n>0 && v.metodo) perMetodo[v.metodo] = (perMetodo[v.metodo]||0) + n; });
+              return React.createElement('div', {style:{marginTop:10,padding:"10px 14px",background:C.tealBg,border:`1px solid ${C.tealBorder}`,borderRadius:8,display:"flex",flexDirection:"column",gap:4}}
+                , React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                  , React.createElement('span',{style:{fontSize:12,color:C.teal}}, `Totale registrato (${voci.length} voci)`)
+                  , React.createElement('span',{style:{fontFamily:"'Oswald',sans-serif",fontSize:17,fontWeight:600,color:C.teal}}, fmt(tot))
+                )
+                , Object.keys(perMetodo).length>0 && React.createElement('div',{style:{fontSize:12,color:C.textMuted}}, Object.entries(perMetodo).map(([m,n])=>`${m}: ${fmt(n)}`).join("  ·  "))
+                , tipoDocente==='compenso' && docenteSel && React.createElement('div',{style:{fontSize:11,color:C.textDim}}, `Da versare suggerito per le lezioni del mese: ${fmt(importoSuggerito)}`)
+              );
+            })()
+        )
         , React.createElement(Textarea, { label: "Note", value: f.note, onChange: e=>set("note",e.target.value), placeholder: "Note aggiuntive..." , __self: this, __source: {fileName: _jsxFileName, lineNumber: 6390}})
       )
       , React.createElement('div', { style: {padding:"14px 22px",borderTop:`1px solid ${C.border}`,position:"sticky",bottom:0,background:C.surface,zIndex:2,paddingBottom:(window.__IS_PWA__||window.matchMedia('(display-mode:standalone)').matches||window.innerWidth<=768)?"calc(env(safe-area-inset-bottom,0px) + 64px)":"env(safe-area-inset-bottom,12px)",display:"flex",justifyContent:"flex-end",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6392}}
@@ -15683,7 +15738,17 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
     const [filterQMese,setFQMese] = useState("");
   
     const closeModal = () => { setModal(null); setSelSpesa(null); setSelQuota(null); setPrefillEntrata(null); setExtraLessonIdPendente(null); };
-    const handleAdd    = d => { setSpese(p=>[...p,{...d,id:uid()}]); closeModal(); };
+    // [FM-SPESA-VOCI] Le voci aggiuntive (stesso compenso, metodo di pagamento diverso) diventano spese
+    // separate che condividono categoria, docente, tipo, mese/anno e data: i calcoli per docente le sommano.
+    const handleAdd    = d => {
+      const { extraVoci: _vociExtra, ...principale } = d;
+      const extra = (_vociExtra||[]).filter(v => Number(v.importo) > 0).map(v => ({
+        ...principale, id: uid(), importo: Number(v.importo), metodo: v.metodo,
+        desc: (v.desc && v.desc.trim()) || principale.desc, note: '',
+      }));
+      setSpese(p=>[...p, {...principale, id:uid()}, ...extra]);
+      closeModal();
+    };
     const handleEdit   = d => { setSpese(p=>p.map(x=>x.id===d.id?{...x,...d}:x)); closeModal(); };
     const handleDel    = () => { setSpese(p=>p.filter(x=>x.id!==_optionalChain([selSpesa, 'optionalAccess', _60 => _60.id]))); closeModal(); };
     const handleAddQ   = async d => {
