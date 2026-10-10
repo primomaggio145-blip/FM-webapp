@@ -1418,6 +1418,12 @@ function useFMSwipeOrizzontale(ref, onSwipe, attivo) {
 
 const Modal = ({ title, onClose, children, footer, wide=false }) => {
   useFMBackClose(onClose); // gesto/tasto indietro chiude la finestra
+  // [FM-MODAL-DRAG-CLOSE-FIX] Chiusura cliccando sullo sfondo SOLO se il mouse è stato premuto E rilasciato
+  // sullo sfondo. Prima bastava il "click" sull'overlay: se si premeva il mouse dentro un campo (scrivendo o
+  // selezionando testo) e lo si rilasciava fuori dal pannello, il browser generava il click sull'overlay
+  // (antenato comune) e la finestra si chiudeva perdendo quanto scritto.
+  const _panelRef = React.useRef(null);
+  const _downInPanel = React.useRef(false);
   // Detect mobile/PWA — full-screen layout; desktop — centered overlay
   const isMob = typeof useIsMobile === 'function' ? useIsMobile() : false;
   const isPwa = typeof window !== 'undefined' &&
@@ -1455,11 +1461,18 @@ const Modal = ({ title, onClose, children, footer, wide=false }) => {
   return React.createElement('div', { className: "modal-resp-outer", style: {
       position:"fixed",inset:0,zIndex:200,
       display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"
-    }, onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 407}}
+    }, onMouseDown: e => { _downInPanel.current = !!(_panelRef.current && _panelRef.current.contains(e.target)); },
+    onClick: e => {
+      const iniziatoNelPannello = _downInPanel.current;
+      _downInPanel.current = false;
+      if (iniziatoNelPannello) return; // trascinamento partito dal pannello e finito fuori: NON chiudere
+      if (_panelRef.current && _panelRef.current.contains(e.target)) return;
+      if (onClose) onClose();
+    }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 407}}
     /* Backdrop */
     , React.createElement('div', { style: {position:"absolute",inset:0,background:"rgba(0,0,0,0.75)",backdropFilter:"blur(4px)",animation:"overlayIn 0.2s ease"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 409}})
     /* Pannello centrale */
-    , React.createElement('div', { onClick: e=>e.stopPropagation(), className:"modal-resp"+(wide?" modal-wide":""),
+    , React.createElement('div', { ref: _panelRef, onClick: e=>e.stopPropagation(), className:"modal-resp"+(wide?" modal-wide":""),
         style: {
           position:"relative",background:C.surface,border:`1px solid ${C.border}`,
           borderRadius:16,width:"100%",maxWidth:wide?900:520,
