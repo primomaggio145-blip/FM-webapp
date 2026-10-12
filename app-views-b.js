@@ -320,7 +320,7 @@ const fmSuggerisciRipartizione = (b) => {
   return { contanti: fmArrot2(Math.max(0, c)), tracciato: fmArrot2(Math.max(0, t)) };
 };
 
-const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV, spese:_speseDocView, entrate:_entrateDocView, setEntrate:_setEntrateDocView }) => {
+const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV, spese:_speseDocView, entrate:_entrateDocView, setEntrate:_setEntrateDocView, repertorio:_repertorioDocView }) => {
   const ruoloDocView = _ruoloDocView || "admin";
   const isMobile = useIsMobile();
   const students = _studentsRaw || [];
@@ -1561,6 +1561,10 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   )
                   , React.createElement('div', {style:{fontSize:12,color:C.textMuted}}
                     , "Tuoi allievi presenti: ", mieiAllievi.map(s=>s.name).join(", ")
+                  )
+                  /* [FM-COLL-INFO] argomenti, esercizi e brani della lezione (sola lettura) */
+                  , React.createElement('div', {style:{gridColumn:"1 / -1", paddingTop:4}}
+                    , React.createElement(CollettivaInfoLezione, {lesson:l, repertorio:(_repertorioDocView || window.__repertorio__ || []), compact:true})
                   )
                 )
               )

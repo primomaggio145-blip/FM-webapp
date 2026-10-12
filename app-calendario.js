@@ -5769,6 +5769,117 @@ const infoLezionePrecedente = (prev, repertorio) => {
   }
   return { topic, exercises, brani, assente, mancanti };
 };
+// [FM-COLL-INFO] ───────────────────────────────────────────────────────────────────
+// Collettive condotte da ALTRI docenti ma frequentate da allievi del docente: nel suo
+// calendario compaiono semitrasparenti e in SOLA LETTURA (hover / tocco → argomenti,
+// esercizi e brani trattati). Le funzioni "pure" non usano hook → testabili da sole.
+// [FM-COLL-INFO:PURE-INIZIO]
+const fmMatchDocenteNome = (d, teacherField) => {
+  const tf = String(teacherField || '').toLowerCase().trim();
+  if (!tf || !d) return false;
+  const key = String(d.teacherKey || d.nome || '').toLowerCase().trim();
+  const nom = String(d.nome || '').toLowerCase().trim();
+  return (!!key && (tf === key || tf.includes(key) || key.includes(tf)))
+      || (!!nom && (tf === nom || tf.includes(nom) || nom.includes(tf)));
+};
+// Allievi del docente: corso principale ed extra attivi, come nella tab Docenti.
+const fmStudentiDelDocente = (d, students) => (students || []).filter(s => {
+  if (!s) return false;
+  if (s.instrument && fmMatchDocenteNome(d, s.teacher)) return true;
+  if (s.extraTeachers && typeof s.extraTeachers === 'object') {
+    const attivi = new Set(s.extraInstruments || []);
+    return Object.entries(s.extraTeachers).some(([corso, t]) => corso && attivi.has(corso) && fmMatchDocenteNome(d, t));
+  }
+  return false;
+});
+// Restituisce "pseudo-lezioni" (copie con _isCollInfo) per le collettive NON sue a cui
+// partecipa almeno un suo allievo (escluse le assenze già "recuperata").
+// isSua(l) = stesso criterio che il calendario usa per le lezioni proprie del docente.
+const fmCollettiveInfoPerDocente = (d, lessons, students, isSua) => {
+  if (!d) return [];
+  const miei = fmStudentiDelDocente(d, students);
+  if (miei.length === 0) return [];
+  const ids = new Set(miei.map(s => String(s.id)));
+  const nomi = new Set(miei.map(s => String(s.name || '').toLowerCase()).filter(Boolean));
+  const out = [];
+  (lessons || []).forEach(l => {
+    if (!l || !l.date || !isColl(l)) return;
+    if (isSua && isSua(l)) return;
+    const presenti = (l.students || []).filter(x => x && (
+      (x.id != null && ids.has(String(x.id))) || nomi.has(String(x.name || '').toLowerCase())
+    ) && (x.attendance || l.attendance || '') !== 'recuperata');
+    if (presenti.length === 0) return;
+    out.push({ ...l, id: 'collinfo_' + l.id, _isCollInfo: true, _collInfoSrc: l,
+      _collInfoMiei: presenti.map(x => x.name).filter(Boolean),
+      attendance: '', inRecupero: false, recurrence: 'Nessuna' });
+  });
+  return out;
+};
+// [FM-COLL-INFO:PURE-FINE]
+
+// Blocco di sola lettura: argomenti, esercizi e brani di una lezione (collettiva).
+const CollettivaInfoLezione = ({ lesson, repertorio, compact }) => {
+  const info = infoLezionePrecedente(lesson, repertorio || []);
+  if (!info) return null;
+  const fs = compact ? 11 : 12;
+  const vuoto = React.createElement('span', { style: { fontStyle: 'italic', color: C.textDim } }, 'non compilato');
+  const riga = (etichetta, contenuto) => React.createElement('div',
+    { style: { fontSize: fs, color: C.textMuted, marginBottom: 4, lineHeight: 1.4 } },
+    React.createElement('strong', { style: { color: C.text } }, etichetta + ': '), contenuto);
+  const testo = (t) => React.createElement(FMTestoFormattato, { testo: t, style: { display: 'inline-block', verticalAlign: 'top' } });
+  const nIds = (lesson.repertorioIds || []).length;
+  const brani = info.brani.length > 0
+    ? info.brani.map((b, i) => React.createElement('span', { key: String(b.id) + '_' + i },
+        (i ? ' · ' : '') + b.title + (b.composer ? ' (' + b.composer + ')' : '') + (b.tonalita ? ' — ' + b.tonalita : '')))
+    : (nIds > 0 ? nIds + (nIds === 1 ? ' brano collegato (titolo non disponibile)' : ' brani collegati (titoli non disponibili)') : vuoto);
+  return React.createElement('div', null,
+    riga('Argomenti', info.topic ? testo(info.topic) : vuoto),
+    riga('Esercizi', info.exercises ? testo(info.exercises) : vuoto),
+    riga('Brani', brani));
+};
+
+// Riquadro in sola lettura: al passaggio del mouse (tooltip) o al tocco/clic (finestra fissata).
+const CollInfoPopover = ({ info, repertorio, onClose }) => {
+  const pinned = !!(info && info.pinned);
+  React.useEffect(() => {
+    if (!pinned || !onClose) return undefined;
+    const h = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [pinned]);
+  if (!info || !info.lesson) return null;
+  const l = info.lesson;
+  const dataTxt = (() => { try { return new Date(l.date + 'T00:00:00').toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' }); } catch (e) { return l.date; } })();
+  const corpo = React.createElement('div', null,
+    React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 2 } }, l.courseName || 'Collettiva'),
+    React.createElement('div', { style: { fontSize: 11, color: C.textMuted, marginBottom: 2 } },
+      dataTxt + ' · ' + String(l.hour || '').slice(0, 5) + (l.room ? ' · ' + l.room : '')),
+    React.createElement('div', { style: { fontSize: 11, color: C.textMuted, marginBottom: 8 } },
+      'Condotta da ' + (l.teacher || '—') + (info.miei && info.miei.length ? ' · I tuoi allievi: ' + info.miei.join(', ') : '')),
+    React.createElement(CollettivaInfoLezione, { lesson: l, repertorio: repertorio }),
+    React.createElement('div', { style: { fontSize: 10, color: C.textDim, marginTop: 6, fontStyle: 'italic' } }, 'Sola lettura'));
+  if (pinned || !info.rect) {
+    return React.createElement('div', { onClick: onClose,
+        style: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1300, background: 'rgba(0,0,0,0.35)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 } },
+      React.createElement('div', { onClick: (e) => e.stopPropagation(),
+          style: { background: C.surface, border: '1px solid ' + C.border, borderRadius: 12, padding: 16,
+            width: '100%', maxWidth: 420, maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' } },
+        corpo,
+        React.createElement('div', { style: { textAlign: 'right', marginTop: 10 } },
+          React.createElement('button', { onClick: onClose,
+            style: { fontSize: 12, padding: '6px 14px', borderRadius: 8, border: '1px solid ' + C.border,
+              background: C.surfaceHover || C.surface, color: C.text, cursor: 'pointer' } }, 'Chiudi'))));
+  }
+  const W = 340, r = info.rect, vw = window.innerWidth, vh = window.innerHeight;
+  const left = Math.min(Math.max(8, r.left), Math.max(8, vw - W - 8));
+  const sotto = (vh - r.bottom) >= (r.top);
+  const pos = sotto ? { top: r.bottom + 6 } : { bottom: vh - r.top + 6 };
+  return React.createElement('div', { style: { position: 'fixed', left: left, width: W, maxWidth: 'calc(100vw - 16px)', maxHeight: '50vh',
+      overflow: 'hidden', zIndex: 1300, pointerEvents: 'none', background: C.surface, border: '1px solid ' + C.border,
+      borderRadius: 10, padding: 12, boxShadow: '0 8px 28px rgba(0,0,0,0.22)', ...pos } }, corpo);
+};
+// [/FM-COLL-INFO] ──────────────────────────────────────────────────────────────────
 // Trova le lezioni ESISTENTI che si sovrappongono in orario con `lezione` (stesso giorno,
 // fasce orarie che si intersecano considerando la durata) e condividono lo stesso strumento
 // (solo tra due lezioni individuali) oppure lo stesso insegnante (qualunque tipo di lezione,
@@ -7011,7 +7122,7 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
 };
 
 // ─── PILL LEZIONE ─────────────────────────────────────────────────────────────
-const LessonPill = ({ lesson, onClick, compact=false, courses }) => {
+const LessonPill = ({ lesson, onClick, compact=false, courses, onInfoHover }) => {
   const hex    = lessonHex(lesson, courses);        // colore assegnato al corso se presente, altrimenti colore automatico
   const dotHex = attHex(lesson.attendance);
 
@@ -7025,9 +7136,10 @@ const LessonPill = ({ lesson, onClick, compact=false, courses }) => {
       onClick: onClick,
       style: {
         background: bgNormal,
-        border: `1px solid ${bdNormal}`,
+        border: `1px ${lesson._isCollInfo ? 'dashed' : 'solid'} ${bdNormal}`,
         borderLeft: `3px solid ${hex}`,
         borderRadius: 6,
+        opacity: lesson._isCollInfo ? 0.5 : 1,
         padding: compact ? "3px 5px" : "7px 9px",
         cursor: "pointer",
         transition: "all 0.15s",
@@ -7039,10 +7151,12 @@ const LessonPill = ({ lesson, onClick, compact=false, courses }) => {
       onMouseEnter: e => {
         e.currentTarget.style.background  = bgHover;
         e.currentTarget.style.borderColor = bdHover;
+        if (lesson._isCollInfo && onInfoHover) onInfoHover(lesson, e.currentTarget.getBoundingClientRect());
       },
       onMouseLeave: e => {
         e.currentTarget.style.background  = bgNormal;
         e.currentTarget.style.borderColor = bdNormal;
+        if (lesson._isCollInfo && onInfoHover) onInfoHover(null);
       }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4409}}
 
       /* Riga 1: ora · nome/corso */
@@ -8346,7 +8460,7 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
 };
 
 // ─── VISTA GIORNALIERA ────────────────────────────────────────────────────────
-const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula }) => {
+const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, onInfoHover }) => {
   // Admin: lezioni divise per aula (colonne). Scelta ricordata su questo dispositivo.
   const [modoAula, setModoAula] = React.useState(() => { try { return localStorage.getItem('fm_day_per_aula') !== '0'; } catch(e) { return true; } });
   const cambiaModoAula = (v) => { setModoAula(v); try { localStorage.setItem('fm_day_per_aula', v ? '1' : '0'); } catch(e) {} };
@@ -8385,6 +8499,25 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula }
   const cardDi = (l, isMobile) => {
         const hex = lessonHex(l, courses);
         const dotHex = l.inRecupero && !l.attendance ? '#f59e0b' : attHex(l.attendance);
+
+        // ── [FM-COLL-INFO] collettiva di un altro docente: semitrasparente, sola lettura ──
+        if (l._isCollInfo) {
+          return React.createElement('div', { key: l.id, onClick: () => onSelect(l),
+            onMouseEnter: e => { if (onInfoHover) onInfoHover(l, e.currentTarget.getBoundingClientRect()); },
+            onMouseLeave: () => { if (onInfoHover) onInfoHover(null); },
+            style: { display: "flex", flexDirection: "column", gap: 4, padding: isMobile ? "10px 10px" : "14px 18px",
+              background: C.surface, border: `1px dashed ${hex}80`, borderLeft: `4px solid ${hex}`,
+              borderRadius: 10, cursor: "pointer", opacity: 0.55 } }
+            , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" } }
+              , React.createElement(Ic, { n: "group", size: 14, stroke: hex })
+              , React.createElement('span', { style: { fontSize: 12, fontWeight: 700, color: hex } }, (l.hour || "").slice(0, 5))
+              , React.createElement('span', { style: { fontSize: 11, background: `${hex}15`, color: hex, border: `1px solid ${hex}40`, borderRadius: 4, padding: "1px 6px" } }, "Collettiva")
+              , React.createElement('span', { style: { fontSize: 14, fontWeight: 600, color: hex } }, l.courseName || "Collettiva")
+            )
+            , React.createElement('div', { style: { fontSize: 12, color: C.textMuted } }
+              , "Condotta da " + (l.teacher || "—") + (l._collInfoMiei && l._collInfoMiei.length ? " · I tuoi allievi: " + l._collInfoMiei.join(", ") : ""))
+          );
+        }
 
         // ── SALA PROVE card dedicata ──────────────────────────────
         if (isSalaProve(l)) {
@@ -8730,7 +8863,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula }
 };
 
 // ─── VISTA SETTIMANALE ────────────────────────────────────────────────────────
-const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onDayClick }) => {
+const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onDayClick, onInfoHover }) => {
   // Solo Lun–Sab (6 giorni, no domenica)
   const days      = Array.from({length:6}, (_, i) => addDays(weekStart, i));
   const HOUR_H    = isMobile ? 42 : 64;   // px per 1 ora — su mobile ridotta: alle celle bastano 2-3 righe di testo
@@ -8960,6 +9093,8 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                     : (l.instrument||"");
                   return React.createElement('div', { key:l.id,
                     onClick: ()=>onSelect(l),
+                    onMouseEnter: l._isCollInfo ? (e => { if (onInfoHover) onInfoHover(l, e.currentTarget.getBoundingClientRect()); }) : undefined,
+                    onMouseLeave: l._isCollInfo ? (() => { if (onInfoHover) onInfoHover(null); }) : undefined,
                     style:{
                       position:"absolute",
                       top:    l._top + 1,
@@ -8967,11 +9102,12 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                       width:  `calc(${wPct}% - 2px)`,
                       height: l._h,
                       background: bg,
-                      border:`1px solid ${bord}`,
+                      border:`1px ${l._isCollInfo ? 'dashed' : 'solid'} ${bord}`,
                       borderLeft:`2px solid ${accent}`,
                       borderRadius:3,
                       cursor:"pointer",
                       zIndex:2,
+                      opacity: l._isCollInfo ? 0.5 : 1,
                       overflow:"hidden",
                       padding:"1px 2px",
                       boxSizing:"border-box",
@@ -8990,6 +9126,8 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
 
                 return React.createElement('div', { key:l.id,
                   onClick: ()=>onSelect(l),
+                    onMouseEnter: l._isCollInfo ? (e => { if (onInfoHover) onInfoHover(l, e.currentTarget.getBoundingClientRect()); }) : undefined,
+                    onMouseLeave: l._isCollInfo ? (() => { if (onInfoHover) onInfoHover(null); }) : undefined,
                   style:{
                     position:"absolute",
                     top:    l._top + 1,
@@ -8997,11 +9135,12 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                     width:  `calc(${wPct}% - 3px)`,
                     height: l._h,
                     background: bg,
-                    border:`1px solid ${bord}`,
+                    border:`1px ${l._isCollInfo ? 'dashed' : 'solid'} ${bord}`,
                     borderLeft:`3px solid ${accent}`,
                     borderRadius:4,
                     cursor:"pointer",
                     zIndex:2,
+                    opacity: l._isCollInfo ? 0.5 : 1,
                     overflow:"hidden",
                     padding:"2px 4px",
                     boxSizing:"border-box",
@@ -9056,7 +9195,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
 };
 
 // ─── VISTA MENSILE ────────────────────────────────────────────────────────────
-const MonthView = ({ year, month, lessons, onSelect, onDayClick, config, courses }) => {
+const MonthView = ({ year, month, lessons, onSelect, onDayClick, config, courses, onInfoHover }) => {
   const firstDay  = new Date(year, month, 1);
   // getDay() 0=Dom,1=Lun...6=Sab → in una settimana Lun–Sab (6 giorni)
   // startDow: quanti slot vuoti prima del primo giorno (0=Lun, 5=Sab, Dom non esiste)
@@ -9126,7 +9265,7 @@ const MonthView = ({ year, month, lessons, onSelect, onDayClick, config, courses
               , !chiuso && holiday && React.createElement('div',{style:{fontSize:9,color:'#b91c1c',fontWeight:600,marginBottom:2,lineHeight:1.2}}, holiday.emoji,' ',holiday.label)
               , React.createElement('div', { style: {display:"flex", flexDirection:"column", gap:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4976}}
                 , dayLessons.slice(0,3).map(l => (
-                  React.createElement(LessonPill, { key: l.id, lesson: l, onClick: e => { e.stopPropagation(); onSelect(l); }, compact: true, courses: courses, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4978}})
+                  React.createElement(LessonPill, { key: l.id, lesson: l, onClick: e => { e.stopPropagation(); onSelect(l); }, compact: true, courses: courses, onInfoHover: onInfoHover, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4978}})
                 ))
                 , dayLessons.length > 3 && (
                   React.createElement('div', { style: {fontSize:10, color:C.textDim, paddingLeft:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4981}}, "+", dayLessons.length-3, " altre" )
@@ -13559,6 +13698,38 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       }));
       return [...ls, ...spEvents, ...gcalBusyEvents];
     }, [lessons, role, filterCorso, filterDocente, filterTipo, _cvAllievoId, currentStudent, _cvDocenteId, _cvNome, prenotazioniSala, gcalSalaBusy, _cvShowSalaProve]);
+
+    // [FM-COLL-INFO] Collettive di ALTRI docenti frequentate da allievi del docente loggato:
+    // solo per ruolo docente, solo nelle viste giorno/settimana/mese (non nei conteggi, nel
+    // recupero o nella sala prove), in sola lettura. Non toccano visibleLessons.
+    const [collInfo, setCollInfo] = useState(null);
+    const _collInfoLessons = useMemo(() => {
+      if (role !== "docente" || (!_cvDocenteId && !_cvNome)) return [];
+      const d = _cvDocenteId ? propDocenti.find(x => String(x.id) === String(_cvDocenteId)) : null;
+      const docMatch = d || { nome: _cvNome, teacherKey: _cvNome };
+      const k = String(d ? (d.teacherKey || d.nome || '') : _cvNome).toLowerCase().trim();
+      // stesso criterio del filtro di visibleLessons per le lezioni "proprie" del docente
+      const sua = (l) => {
+        const t = String(l.teacher || '').toLowerCase().trim();
+        return _cvDocenteId ? (t === k || t.includes(k) || k.includes(t))
+                            : String(l.teacher || '').toLowerCase().includes(String(_cvNome).toLowerCase());
+      };
+      return fmCollettiveInfoPerDocente(docMatch, lessons, propStudents, sua);
+    }, [role, lessons, propStudents, propDocenti, _cvDocenteId, _cvNome]);
+    const lezioniVistaCalendario = useMemo(() => {
+      if (!_collInfoLessons.length) return visibleLessons;
+      let extra = _collInfoLessons;
+      if (filterCorso.length)   extra = extra.filter(l => filterCorso.includes("c:" + String(l.courseId)));
+      if (filterDocente.length) extra = extra.filter(l => filterDocente.includes(String(l.teacher)));
+      if (filterTipo.length)    extra = extra.filter(() => filterTipo.includes("collettivo"));
+      return extra.length ? [...visibleLessons, ...extra] : visibleLessons;
+    }, [visibleLessons, _collInfoLessons, filterCorso, filterDocente, filterTipo]);
+    const handleCollInfoHover = (l, rect) => setCollInfo(prev =>
+      (prev && prev.pinned) ? prev : (l ? { lesson: l._collInfoSrc, miei: l._collInfoMiei, rect: rect, pinned: false } : null));
+    const handleSelectCal = (l) => {
+      if (l && l._isCollInfo) { setCollInfo({ lesson: l._collInfoSrc, miei: l._collInfoMiei, rect: null, pinned: true }); return; }
+      if (isSalaProve(l)) { setSelLesson(l); setModal("detailsala"); } else { setSelLesson(l); setModal("detail"); }
+    };
   
     const todayStr     = yyyymmdd(today);
     const todayLessons = visibleLessons.filter(l => l.date === todayStr);
@@ -13839,9 +14010,10 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           /* Contenuto */
           , React.createElement('div', { ref: swipeCalRef, style: {flex:1, padding: isMobile ? "0 8px 8px" : "0 12px 12px", overflow:"auto"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6125}}
             , React.createElement('div', { style: {background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, overflow:"visible"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6126}}
-              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: visibleLessons, isMobile: isMobile, config: calConfig, courses: propCourses, perAula: role === "admin", onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }}))
-              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: visibleLessons, config: calConfig, isMobile: isMobile, courses: propCourses, onDayClick: d => { setCurDate(d); setViewMode("day"); }, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }})
-              , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: visibleLessons, config: calConfig, courses: propCourses, onSelect: l => { if(isSalaProve(l)){setSelLesson(l);setModal("detailsala");}else{setSelLesson(l);setModal("detail");} }, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
+              , appView==='calendario' && viewMode === "day"   && React.createElement('div', { style: {padding: isMobile ? "6px 4px" : 20}}, React.createElement(DayView, { date: curDate, lessons: lezioniVistaCalendario, onInfoHover: handleCollInfoHover, isMobile: isMobile, config: calConfig, courses: propCourses, perAula: role === "admin", onSelect: handleSelectCal}))
+              , appView==='calendario' && viewMode === "week"  && React.createElement(WeekView, {  weekStart: weekStart, lessons: lezioniVistaCalendario, onInfoHover: handleCollInfoHover, config: calConfig, isMobile: isMobile, courses: propCourses, onDayClick: d => { setCurDate(d); setViewMode("day"); }, onSelect: handleSelectCal})
+              , appView==='calendario' && viewMode === "month" && React.createElement(MonthView, { year: curDate.getFullYear(), month: curDate.getMonth(), lessons: lezioniVistaCalendario, onInfoHover: handleCollInfoHover, config: calConfig, courses: propCourses, onSelect: handleSelectCal, onDayClick: d => { setCurDate(d); setViewMode("day"); }})
+              , role==='docente' && appView==='calendario' && collInfo && React.createElement(CollInfoPopover, { info: collInfo, repertorio: repertorio, onClose: () => setCollInfo(null) })
               , appView==='calendario' && viewMode === "extra" && React.createElement(ExtraLezioniTab, {
                   daDecidere: lezioniExtraDaDecidere,
                   saltate: lezioniExtraSaltate,
