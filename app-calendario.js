@@ -6121,6 +6121,7 @@ function _fmRigaBrano(nb) {
     eventi_ids: nb.eventiIds || nb.eventi_ids || [],
     versioni: nb.versioni || [],
     note: nb.note || '',
+    ...(nb.bambini === true ? { bambini: true } : {}), // [FM-BRANO-BAMBINI] mai sovrascrive a false da qui
   };
 }
 function persistiBranoDaLezione(nb, origine) {
@@ -12626,6 +12627,26 @@ const ExtraLezioniTab = ({ daDecidere, saltate, daPagare, onGenera, onNonGenera,
   );
 };
 
+// [FM-PUSH-ESERCIZI] Lezione "della settimana corrente" a cui porta il promemoria esercizi quando il push
+// non indica una lezione precisa: la prima lezione della settimana (lun-dom) non ancora finita, valida per
+// l'allievo (esclusi prove, sala prove, da recuperare, già con presenza/assenza segnata).
+function fmLezioneSettimanaCorrente(lessons, adesso) {
+  const now = adesso instanceof Date ? adesso : new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const ymd = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  const dow = (now.getDay() + 6) % 7;                       // 0 = lunedì
+  const fine = new Date(now); fine.setDate(fine.getDate() + (6 - dow));
+  const da = ymd(now), a = ymd(fine);
+  return (lessons || [])
+    .filter(l => l && l.date && l.date >= da && l.date <= a
+      && l.tipo !== 'prova' && l.tipo !== 'sala_prove'
+      && !l.inRecupero && !l.attendance)
+    .map(l => ({ l, t: new Date(l.date + 'T' + (l.hour || '00:00') + ':00').getTime() }))
+    .filter(x => x.t + (parseInt(x.l.durata) || 45) * 60000 >= now.getTime())
+    .sort((x, y) => x.t - y.t)
+    .map(x => x.l)[0] || null;
+}
+
 const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, courses:_propCoursesRaw, students:_propStudentsRaw, setStudents:propSetStudents, docenti:_propDocentiRaw, repertorio:propRepertorio, setRepertorio:propSetRepertorio, allegati:propAllegati, setAllegati:propSetAllegati, quickAction:qaCV, clearQuickAction:clearQaCV, userRuolo:propUserRuolo, appUser:_appUserCV, config:calConfig, onNavigate, onQuickAction, gruppi:propGruppiCal, iscrizioniAnno:propIscrizioniCal }) => {
   const isMobile = useIsMobile();
   const propCourses = _propCoursesRaw || [];
@@ -12708,7 +12729,17 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       }
       if(clearQaCV)clearQaCV();
     }
-  },[qaCV]);
+    // [FM-PUSH-ESERCIZI] Dal promemoria esercizi: apre la lezione della settimana corrente
+    // (se non c'è, mostra la settimana). Se le lezioni non sono ancora caricate si attende.
+    else if(qaCV==="openLezioneSettimana") {
+      if (!(propLessons||[]).length) return;
+      const _lz = fmLezioneSettimanaCorrente(propLessons);
+      setAppView("calendario");
+      if (_lz) { setSelLesson(_lz); setCurDate(new Date(_lz.date+"T00:00:00")); setModal("detail"); }
+      else { setViewMode("week"); setCurDate(new Date()); }
+      if(clearQaCV)clearQaCV();
+    }
+  },[qaCV, (propLessons||[]).length]);
 
     const navigate = (dir) => {
       const d = new Date(curDate);
@@ -16703,7 +16734,7 @@ const INIT_BRANI = [
 
 // ─── FORM BRANO ──────────────────────────────────────────────────────────────
 const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_concertiBranoIn,courses:_coursesBranoIn})=>{
-  const empty={title:"",composer:"",genere:"",strumento:"",eventiIds:[],note:"",fileUniversali:[],versioni:[{tonalita:"",strumento:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
+  const empty={title:"",composer:"",genere:"",bambini:false,strumento:"",eventiIds:[],note:"",fileUniversali:[],versioni:[{tonalita:"",strumento:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
   const [f,setF]=useState(initial ? {...empty,...initial,fileUniversali:Array.isArray(initial.fileUniversali)?initial.fileUniversali:[],versioni:(initial.versioni&&initial.versioni.length>0)?initial.versioni:empty.versioni} : empty);
   const [err,setErr]=useState({});
   const [openVersione, setOpenVersione] = useState(0); // indice versione espansa
@@ -16802,6 +16833,12 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
           , React.createElement(Input, { label: "Genere *" , value: f.genere||"", onChange: e=>set("genere",e.target.value), error: err.genere, placeholder: "Es. Classica, Jazz, Pop..." })
           , React.createElement(Sel, { label: "Corso individuale", value: f.strumento, onChange: e=>set("strumento",e.target.value),
             options: strumentiDisp.map(i=>({value:i,label:i})) })
+          /* [FM-BRANO-BAMBINI] flag brano adatto ai bambini */
+          , React.createElement('label', { style: {gridColumn:"1/-1",display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,cursor:"pointer",
+              border:`1px solid ${f.bambini===true?C.gold:C.border}`,background:f.bambini===true?C.goldBg:C.bg}}
+            , React.createElement('input', { type:"checkbox", checked: f.bambini===true, onChange: e=>set("bambini", e.target.checked), style:{width:16,height:16,cursor:"pointer",flexShrink:0}})
+            , React.createElement('span', { style:{fontSize:13,fontWeight:f.bambini===true?600:400,color:f.bambini===true?C.gold:C.textMuted}}, '👶 Brano per bambini')
+          )
         )
 
         /* ── Eventi collegati ── */
@@ -17068,6 +17105,7 @@ const BranoDrawer = ({brano,onClose,onEdit,onDelete,concerti}) => {
           )
           , React.createElement('div', { style: {display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}
             , React.createElement(TipoBadge, { tipo: brano.tipo})
+            , brano.bambini===true && React.createElement('span', { style: {background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}, '👶 Bambini')
             , React.createElement('span', { style: {background:brano.strumento?C.tealBg:`${C.purple}18`,color:brano.strumento?C.teal:C.purple,
                 border:`1px solid ${brano.strumento?C.tealBorder:C.purple+'40'}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}
               , brano.strumento ? '🎵 '+brano.strumento : '🎭 Ensemble'

@@ -242,6 +242,20 @@ function App() {
   // Esponi config globalmente per componenti che non ricevono la prop (es. WeekCalSala)
   React.useEffect(() => { window.__FM_CONFIG__ = sharedConfig; }, [sharedConfig]);
   const [sharedQuickAction,    setSharedQuickAction]    = useState(_rottaIniziale && _rottaIniziale.qa ? _rottaIniziale.qa : null);
+  // [FM-PUSH-LINK] Click su una notifica push con l'app già aperta: il service worker naviga la finestra
+  // verso webapp.html#/<vista>?qa=<azione> (solo cambio di hash, nessun reload) → qui lo applichiamo.
+  const _userHashRef = React.useRef(null); _userHashRef.current = user;
+  React.useEffect(() => {
+    const onHash = () => {
+      const r = window.FMRoute && window.FMRoute.parse(window.location.hash);
+      if (!r || !r.qa || !_FM_VISTE_VALIDE.includes(r.view)) return;
+      if (!_userHashRef.current) return;   // non ancora loggato: la rotta iniziale è gestita al login
+      setView(r.view);
+      setSharedQuickAction(r.qa);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
   const [sharedSpese,          setSharedSpese]          = useState(_d.spese      || INIT_SPESE);
   const [sharedAnniScolastici, setSharedAnniScolastici] = useState(_d.anniScolastici || INIT_ANNI_SCOLASTICI);
   const [sharedIscrizioniAnno, setSharedIscrizioniAnno] = useState(_d.iscrizioniAnno || []);
@@ -617,7 +631,7 @@ function App() {
                 const lkLeg = r.link_backing ? [{url:r.link_backing,label:'Backing track'}] : [];
                 if (tonLeg||spLeg.length||fLeg.length||lkLeg.length) versioni = [{tonalita:tonLeg,spartiti:spLeg,allegati:fLeg,link:lkLeg,allievi:[]}];
               }
-              return { id:r.id, title:r.titolo||'', composer:r.compositore||'', tipo:r.tipo||'individuale', strumento:r.strumento||'', genere:r.genere||'' /* [FM-BRANO-DA-LEZIONE] prima perso al refresh */, eventiIds:pj(r.eventi_ids,[]), versioni:versioni, fileUniversali:pj(r.file_universali,[]), note:r.note||'', lezioni:r.lezioni||0, periodo:r.periodo||'', difficulty:r.difficolta||'Intermedio' };
+              return { id:r.id, title:r.titolo||'', composer:r.compositore||'', tipo:r.tipo||'individuale', strumento:r.strumento||'', genere:r.genere||'' /* [FM-BRANO-DA-LEZIONE] prima perso al refresh */, bambini:r.bambini===true /* [FM-BRANO-BAMBINI] */, eventiIds:pj(r.eventi_ids,[]), versioni:versioni, fileUniversali:pj(r.file_universali,[]), note:r.note||'', lezioni:r.lezioni||0, periodo:r.periodo||'', difficulty:r.difficolta||'Intermedio' };
             }),
             spese:    (sP||[]).map(r => ({ id:String(r.id), docenteId:r.docente_id||null, data:r.data||'', mese:r.mese!=null?r.mese:new Date((r.data||'')+'T00:00:00').getMonth(), anno:r.anno||new Date().getFullYear(), importo:parseFloat(r.importo)||0, desc:r.desc||r.descrizione||'', nota:r.nota||'', note:r.note||'', metodo:r.metodo||'Bonifico', categoria:r.categoria||'altro', haAcconto:r.ha_acconto||false, isAcconto:r.is_acconto===true, accontoImporto:r.acconto_importo!=null?parseFloat(r.acconto_importo):null, importoLordo:r.importo_lordo!=null?parseFloat(r.importo_lordo):null })),
             entrate:  (sQ||[]).map(r => { const smQ={'da pagare':'attesa','in ritardo':'ritardo'}; return { id:String(r.id), studentId:r.studente_id||null, studentName:r.studente_nome||'', importo:parseFloat(r.importo)||0, mese:r.mese, anno:r.anno, data:r.data_pagamento||'', dataPagamento:r.data_pagamento||'', metodo:r.metodo||'Contanti', categoria:r.categoria||'quota', desc:r.descrizione||'', note:r.note||'', numRicevuta:r.num_ricevuta||'', noRicevuta:r.no_ricevuta===true, stato: smQ[r.stato]||r.stato||'attesa', convenzioneId:r.convenzione_id||null, convenzioneNome:r.convenzione_nome||'', ricevutaIntestatario:r.ricevuta_intestatario||'', ricevutaCf:r.ricevuta_cf||'', ricevutaIndirizzo:r.ricevuta_indirizzo||'', agevolazione:r.agevolazione||null, importoPieno:r.importo_pieno!=null?parseFloat(r.importo_pieno):null, motivoAgevolazione:r.motivo_agevolazione||'' }; }),

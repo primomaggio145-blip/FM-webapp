@@ -104,6 +104,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     const [fStrumento,setFStrumento]= useState("");
     const [fTipo,     setFTipo]    = useState("");
     const [fTonalita, setFTonalita]= useState("");
+    const [fBambini, setFBambini]= useState(""); // [FM-BRANO-BAMBINI] "" | "si"
   const [fStato,    setFStato]   = useState("");
     const [drawer,    setDrawer]   = useState(null);
     const [modal,     setModal]    = useState(null); // "add"|"edit"|"confirm_delete"
@@ -132,10 +133,14 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       // oppure li aveva prima e ora sono stati tolti): così se la migrazione SQL non è ancora stata
       // eseguita, il salvataggio di tutti gli altri brani continua a funzionare.
       if ((f.fileUniversali||[]).length>0 || (prev && (prev.fileUniversali||[]).length>0)) row.file_universali = f.fileUniversali||[];
+      // [FM-BRANO-BAMBINI] colonna inviata solo quando serve (flag attivo, oppure era attivo e viene tolto):
+      // se la migrazione SQL non è stata eseguita, il salvataggio degli altri brani non si rompe.
+      if (f.bambini===true || (prev && prev.bambini===true)) row.bambini = f.bambini===true;
       return row;
     };
     // Messaggio più chiaro se manca la colonna file_universali (migrazione SQL non ancora eseguita)
-    const _fuHint = (m) => /file_universali/i.test(m||'') ? ' — esegui la migrazione SQL "migrazione_file_universali_brani.sql" su Supabase' : '';
+    const _fuHint = (m) => /file_universali/i.test(m||'') ? ' — esegui la migrazione SQL "migrazione_file_universali_brani.sql" su Supabase'
+      : /bambini/i.test(m||'') ? ' — esegui la migrazione SQL "migrazione_brani_bambini.sql" su Supabase' : '';
 
     // ── [FM-FILE-UNIVERSALI] Aggiunta/rimozione file universali direttamente dalla scheda di visualizzazione ──
     // (senza passare da "Modifica"). Legge il valore attuale dal DB, applica la modifica e salva:
@@ -353,9 +358,10 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       return(!q||b.title.toLowerCase().includes(q)||b.composer.toLowerCase().includes(q)||matchTonalita)
         &&(!fStrumento||strumentiBrano.includes(fStrumento))
         &&(!fTipo||b.tipo===fTipo)
+        &&(!fBambini||b.bambini===true)
         &&(!fTonalita||(b.versioni||[]).some(v=>v.tonalita===fTonalita));
       // [FM-STATO-BRANO-LEZIONE] nessun filtro Stato nel catalogo: lo stato è per allievo/lezione
-    }),[braniVisibili,search,fStrumento,fTonalita]);
+    }),[braniVisibili,search,fStrumento,fTonalita,fBambini]);
 
     // Stessi filtri della tab Catalogo, applicati alla lista allievi (tab "Per allievo"):
     // ricerca su nome allievo + titolo/compositore/tonalità dei suoi brani, Strumento/Corso
@@ -500,6 +506,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                       , [
                         {val:fStrumento,set:setFStrumento,opts:tuttiStrumenti.map(s=>({id:s,label:s})),ph:"Strumento/Corso"},
                         {val:fTonalita,set:setFTonalita,opts:tutteTonalita.map(t=>({id:t,label:t})),ph:"Tonalità"},
+                        {val:fBambini,set:setFBambini,opts:[{id:"si",label:"👶 Solo bambini"}],ph:"Bambini"},
                       ].map((f,i)=>(
                         React.createElement('select', { key: i, value: f.val, onChange: e=>f.set(e.target.value),
                           style: {background:C.surface,border:`1px solid ${f.val?C.goldDim:C.border}`,
@@ -509,8 +516,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                           , f.opts.map(o=>React.createElement('option', { key: o.id, value: o.id, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7834}}, o.label))
                         )
                       ))
-                      , (search||fStrumento||fTonalita)&&(
-                        React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setSearch("");setFStrumento("");setFTonalita("");setFStato("");}, style:{flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7838}}
+                      , (search||fStrumento||fTonalita||fBambini)&&(
+                        React.createElement(Btn, { small: true, variant: "ghost", onClick: ()=>{setSearch("");setFStrumento("");setFTonalita("");setFBambini("");setFStato("");}, style:{flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7838}}
                           , React.createElement(Ic, { n: "x", size: 12, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7839}}), "Azzera"
                         )
                       )
@@ -547,6 +554,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                                           color:b.strumento?C.teal:C.purple,
                                           border:`1px solid ${b.strumento?C.tealBorder:C.purple+'40'}`}}
                                         , b.strumento ? b.strumento : '🎭 Ensemble')
+                                      , b.bambini===true&&React.createElement('span', { title: "Brano per bambini", style: {fontSize:10,padding:"2px 7px",borderRadius:4,background:`${C.gold}18`,color:C.gold,border:`1px solid ${C.goldDim}`}}, '👶 Bambini')
                                       , primaTonalita&&React.createElement('span', { style: {fontSize:10,padding:"2px 6px",borderRadius:4,border:`1px solid ${C.border}`,color:C.textMuted}}, primaTonalita)
                                       , nVersioni>1&&React.createElement('span', { style: {fontSize:10,padding:"2px 6px",borderRadius:4,background:C.bg,color:C.textDim,border:`1px solid ${C.border}`}}, nVersioni+' versioni')
                                     )
@@ -597,7 +605,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                               onMouseEnter: e=>e.currentTarget.style.background=C.surfaceHover,
                               onMouseLeave: e=>e.currentTarget.style.background="transparent"}
                               , React.createElement('div', null
-                                , React.createElement('div', { style: {fontSize:13,fontWeight:500}}, b.title)
+                                , React.createElement('div', { style: {fontSize:13,fontWeight:500}}, b.title, b.bambini===true&&React.createElement('span',{title:"Brano per bambini",style:{marginLeft:6}},'👶'))
                                 , React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:1}}, b.composer)
                               )
                               , React.createElement(TipoBadge, { tipo: b.tipo})
@@ -700,6 +708,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
             , React.createElement('div',{style:{display:'flex',flexDirection:'column'}}
               /* Badges header */
               , React.createElement('div',{style:{padding:'4px 22px 14px',borderBottom:`1px solid ${C.border}`,display:'flex',gap:6,flexWrap:'wrap'}}
+                , selBrano.bambini===true && React.createElement('span',{style:{fontSize:11,padding:'3px 10px',borderRadius:20,background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`}}, '👶 Bambini')
                 , selBrano.strumento && React.createElement('span',{style:{fontSize:11,padding:'3px 10px',borderRadius:20,background:`${C.teal}18`,color:C.teal,border:`1px solid ${C.tealBorder}`}}, '🎵 '+selBrano.strumento)
                 , (selBrano.eventiIds||[]).length>0 && React.createElement('span',{style:{fontSize:11,padding:'3px 10px',borderRadius:20,background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`}}, '🎤 '+( selBrano.eventiIds||[]).length+' event'+(( selBrano.eventiIds||[]).length===1?'o':'i'))
                 , (selBrano.versioni||[]).length>1 && React.createElement('span',{style:{fontSize:11,padding:'3px 10px',borderRadius:20,background:C.bg,color:C.textMuted,border:`1px solid ${C.border}`}}, (selBrano.versioni||[]).length+' versioni')

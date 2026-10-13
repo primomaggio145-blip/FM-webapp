@@ -241,6 +241,7 @@
       tipo: r.tipo || 'individuale',
       strumento: r.strumento || '',           // '' = ensemble/tutti gli strumenti
       genere: r.genere || '',
+      bambini: r.bambini === true,            // [FM-BRANO-BAMBINI] brano adatto ai bambini
       eventiIds: parseJson(r.eventi_ids, []),
       versioni: versioni,
       fileUniversali: parseJson(r.file_universali, []), // [FM-FILE-UNIVERSALI] file validi per tutte le versioni
@@ -471,6 +472,7 @@
         periodo: b.periodo || null, tonality: b.tonality || null,
         difficulty: b.difficulty || null, tipo: b.tipo || 'individuale',
         note: b.note || null,
+        ...(b.bambini === true ? { bambini: true } : {}), // [FM-BRANO-BAMBINI]
         link_backing: b.linkBacking || null,
         files: b.files ? JSON.stringify(b.files) : null,
         spartiti: b.spartiti ? JSON.stringify(b.spartiti) : null,

@@ -3,7 +3,7 @@
 //   - app.js, fm_sync.js, supabase_integration.js → NETWORK-FIRST (sempre freschi)
 //   - webapp.html, manifest.json, icone          → NETWORK-FIRST con fallback cache
 //   - API Supabase, font Google (googleapis/gstatic) → solo network, mai cache
-const CACHE_VERSION = 'fm-v13'; // v13: click notifica — URL sempre ricostruito sulla base attuale (404 su Android)
+const CACHE_VERSION = 'fm-v14'; // v14: promemoria esercizi cliccabile → apre la lezione (deep-link). v13: URL notifica ricostruito sulla base attuale (404 su Android)
 
 // File pre-cachati all'install (solo per fallback offline)
 const CACHE_STATIC = [
@@ -138,7 +138,19 @@ self.addEventListener('push', event => {
 
   const title = data.title || 'Futuro Musica';
 
-  const targetUrl = urlApp(data.url);
+  // [FM-PUSH-ESERCIZI] Link della notifica:
+  //  1) data.lezioneId (se la Edge Function lo invia)  → apre esattamente quella lezione
+  //  2) data.url con un deep-link (#/…)                → usato così com'è
+  //  3) promemoria esercizi senza link                 → apre la lezione della settimana corrente
+  let rawUrl = data.url;
+  let haHash = false;
+  try { haHash = !!(rawUrl && new URL(rawUrl, base).hash); } catch (e) {}
+  if (data.lezioneId) {
+    rawUrl = '#/calendario?qa=' + encodeURIComponent('openLesson:' + data.lezioneId);
+  } else if (!haHash && /ricordati degli esercizi|promemoria_esercizi/i.test([data.tag, data.tipo, data.body].filter(Boolean).join(' '))) {
+    rawUrl = '#/calendario?qa=openLezioneSettimana';
+  }
+  const targetUrl = urlApp(rawUrl);
 
   const iconUrl  = new URL('icons/icon-192.png', base).href;
   console.log('[FM SW] push ricevuto — base:', base, '| data.url originale:', data.url, '| targetUrl risolto:', targetUrl);
