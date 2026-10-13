@@ -3533,6 +3533,10 @@ const BandWeekCalendar = ({ lessons, prenotazioni, gcalBusy }) => {
     ? `${s.getDate()}–${e.getDate()} ${MESI_S[s.getMonth()]} ${s.getFullYear()}`
     : `${s.getDate()} ${MESI_S[s.getMonth()]} – ${e.getDate()} ${MESI_S[e.getMonth()]} ${e.getFullYear()}`;
 
+  // [FM-SALA-OCCUPAZIONE] occupazioni da lezioni (batteria/collettive) per la settimana mostrata
+  const _wkFrom = toLocalDateStr(days[0]), _wkTo = toLocalDateStr(days[6]);
+  const occLezioni = React.useMemo(() => fmSalaOccupazioniLezioni(lessons, _wkFrom, _wkTo), [lessons, _wkFrom, _wkTo]);
+
   const getEvents = (ds, h) => {
     const evts = [];
     // Prenotazioni (tutte tranne rifiutate)
@@ -3548,20 +3552,13 @@ const BandWeekCalendar = ({ lessons, prenotazioni, gcalBusy }) => {
         label:(p.oraInizio||'').slice(0,5)+'–'+(p.oraFine||'').slice(0,5),
         tag:p.stato==='approvata'?'✅':'⏳' });
     });
-    // Batteria → sala occupata (senza nome allievo)
-    (lessons||[]).filter(l => {
-      const ds2 = l.date||l.data||'';
-      if (ds2!==ds) return false;
-      const str=(l.instrument||l.strumento||'').toLowerCase();
-      return (str.includes('batter')||str.includes('drum')||str.includes('percuss')) &&
-             parseInt((l.hour||l.ora||'00').split(':')[0])===h;
-    }).forEach(l => {
-      const ora=l.hour||l.ora||'00:00', dur=l.durata||45;
-      const sm=toMin(ora), em=sm+dur;
-      evts.push({ id:'b'+l.id, top:(sm%60/60)*HOUR_H, height:Math.max((dur/60)*HOUR_H-2,18),
+    // [FM-SALA-OCCUPAZIONE] Lezioni di batteria e collettive (reali + ricorrenze proiettate)
+    // → sala occupata, senza nome allievo
+    occLezioni.filter(o => o.date===ds && parseInt(o.start.split(':')[0])===h).forEach(o => {
+      evts.push({ id:'b'+o.id, top:(toMin(o.start)%60/60)*HOUR_H, height:Math.max((o.durata/60)*HOUR_H-2,18),
         bg:'#fef3c7', bd:'#fcd34d', accent:'#d97706',
-        label:ora.slice(0,5)+'–'+String(Math.floor(em/60)).padStart(2,'0')+':'+String(em%60).padStart(2,'0'),
-        tag:'🔒' });
+        label:o.start+'–'+o.end,
+        tag:o.kind==='collettiva'?'👥':'🔒' });
     });
     // Slot occupati direttamente su Google Calendar (prenotazioni fuori dall'app)
     (gcalBusy||[]).filter(ev => {

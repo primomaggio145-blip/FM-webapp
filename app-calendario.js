@@ -5306,6 +5306,88 @@ function prossimaOccorrenzaSerie(lesson, lessons) {
   return { date: yyyymmdd(addDays(d, gap)), gap, gapGiorniNext: prossimoGapGiorni(lesson) };
 }
 
+// ── [FM-SALA-OCCUPAZIONE] Occupazione della sala prove da lezioni di BATTERIA e COLLETTIVE ──
+// In DB di ogni serie ricorrente esiste SOLO la prossima occorrenza (la successiva viene creata
+// quando si segna la presenza): il calendario occupazioni sala mostrava quindi una sola data
+// per serie. Qui le occorrenze reali vengono unite a quelle PROIETTATE secondo la ricorrenza
+// (stessa logica di prossimaOccorrenzaSerie: passo 7/14/30 gg, oppure i due giorni fissi reali
+// per "2 volte a settimana"). Le proiezioni partono dall'ultima lezione "in testa" alla serie
+// (ricorrenza attiva, nessuna presenza segnata) e non toccano mai il DB.
+const SALA_PROIEZIONE_MAX_ARRETRATO_GG = 60; // testa serie mai segnata da più di 60 gg = serie abbandonata
+const _salaIsBatteria = l => { const s = String((l && (l.instrument || l.strumento)) || '').toLowerCase(); return s.includes('batter') || s.includes('drum') || s.includes('percuss'); };
+const _salaChiaveSerie = l => isColl(l)
+  ? 'c:' + String(l.courseId || l.gruppoId || l.student || '') + '|' + String(l.teacherId || l.teacher || '')
+  : 'i:' + String(l.studentId || String(l.student || '').toLowerCase().trim()) + '|' + String(l.instrument || l.strumento || '').toLowerCase();
+function fmSalaOccupazioniLezioni(lessons, fromISO, toISO) {
+  const out = [];
+  const lez = (lessons || []).filter(l => l && l.date && l.tipo !== 'sala_prove' && (isColl(l) || _salaIsBatteria(l)));
+  const reali = new Set();                  // serie|data già presenti a calendario
+  const visti = new Set();                  // dedup per slot
+  const aggiungi = (l, date, proiettata) => {
+    const ora = String(l.hour || l.ora || '').slice(0, 5);
+    if (!/^\d{1,2}:\d{2}$/.test(ora)) return;
+    const durata = parseInt(l.durata) || (isColl(l) ? 60 : 45);
+    const chiave = _salaChiaveSerie(l) + '|' + date + '|' + ora;
+    if (visti.has(chiave)) return; visti.add(chiave);
+    const [h, m] = ora.split(':').map(Number);
+    const fine = h * 60 + m + durata;
+    out.push({
+      id: (proiettata ? 'proj_' : 'real_') + l.id + '_' + date, date, start: ora,
+      end: String(Math.floor(fine / 60)).padStart(2, '0') + ':' + String(fine % 60).padStart(2, '0'),
+      durata, kind: isColl(l) ? 'collettiva' : 'batteria', proiettata,
+    });
+  };
+  lez.forEach(l => {
+    reali.add(_salaChiaveSerie(l) + '|' + l.date);
+    if (l.date >= fromISO && l.date <= toISO) aggiungi(l, l.date, false);
+  });
+  const oggi = yyyymmdd(new Date());
+  const limiteTesta = yyyymmdd(addDays(new Date(), -SALA_PROIEZIONE_MAX_ARRETRATO_GG));
+  const fine = new Date(toISO + 'T00:00:00');
+  lez.forEach(testa => {
+    const rec = String(testa.recurrence || '');
+    if (!rec || /^nessuna/i.test(rec)) return;
+    if (testa.attendance || testa.inRecupero || testa.tipo === 'recupero' || testa.tipo === 'prova') return;
+    if (testa.date < limiteTesta) return;
+    const e2x = rec === '2 volte a settimana';
+    if (!e2x && !GAP_PER_RICORRENZA[rec]) return;
+    let giorni = null;
+    if (e2x) { giorni = giorniFissiSerie2x(testa, lessons); if (!(giorni && giorni.length === 2 && giorni[0] !== giorni[1])) giorni = null; }
+    let cur = new Date(testa.date + 'T00:00:00');
+    let gapG = testa.gapGiorni;
+    for (let n = 0; n < 400; n++) {
+      let gap;
+      if (giorni) { gap = 1; while (gap < 7 && !giorni.includes((cur.getDay() + gap) % 7)) gap++; }
+      else if (e2x) { gap = gapProssimaLezione({ recurrence: rec, gapGiorni: gapG }); gapG = 7 - gap; }
+      else gap = GAP_PER_RICORRENZA[rec];
+      cur = addDays(cur, gap);
+      if (cur > fine) break;
+      const ds = yyyymmdd(cur);
+      if (ds < fromISO || ds < oggi) continue;
+      if (reali.has(_salaChiaveSerie(testa) + '|' + ds)) continue;
+      aggiungi(testa, ds, true);
+    }
+  });
+  return out;
+}
+
+// ── [FM-SALA-ALLIEVO] Prenotazioni sala prove visibili all'ALLIEVO ──
+// L'allievo deve vedere QUANDO la sala è occupata: tutte le prenotazioni approvate (anche altrui)
+// più le proprie in attesa/convocazioni. Per le prenotazioni di altri restano solo giorno e orario:
+// nome del richiedente, motivo, telefono e note admin vengono rimossi (privacy).
+function fmSalaPrenotazioniPerAllievo(prenotazioni, appUser) {
+  const mioUser = appUser && (appUser.userId || appUser.id);
+  const mieiAllievi = new Set(((appUser && appUser.allieviIds) || []).concat(appUser && appUser.allievoId != null ? [appUser.allievoId] : []).map(String));
+  return (prenotazioni || []).reduce((acc, p) => {
+    if (!p || p.stato === 'rifiutata') return acc;
+    const mia = (mioUser && p.userId === mioUser) || (p.allieviIds || []).some(id => mieiAllievi.has(String(id)));
+    if (mia) { acc.push(p); return acc; }
+    if (p.stato !== 'approvata') return acc;
+    acc.push({ ...p, richiedente: '', motivo: '', telefono: '', noteAdmin: '', _anonima: true });
+    return acc;
+  }, []);
+}
+
 // Cerca, tra le lezioni esistenti, l'eventuale "gemella" di una lezione "2 volte a settimana"
 // appena creata/modificata (stesso allievo, stesso orario, ricorrenza uguale, giorno della
 // settimana diverso) e calcola il vero gap in giorni tra le due — necessario perché la creazione
@@ -11461,15 +11543,10 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role, students, doce
 
 // ── Vista admin: gestione richieste sala prove ────────────────────────────────
 const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role, appUser, lessons, students, docenti }) => {
-  // Gli allievi non devono vedere le prenotazioni sala prove altrui — solo le proprie (se presenti)
-  // o quelle in cui l'admin li ha esplicitamente convocati (prova collettiva/spettacolo).
-  // Admin e docente continuano a vedere tutte le prenotazioni (necessario per gestirle/per sapere
-  // quando la sala è occupata), come già avviene nel calendario principale.
+  // [FM-SALA-ALLIEVO] L'allievo vede quando la sala è occupata: tutte le prenotazioni approvate
+  // (senza nome/motivo se non sue) + le proprie. Admin e docente vedono tutto come prima.
   const prenotazioni = role === 'allievo'
-    ? (_prenotazioniRaw||[]).filter(p =>
-        p.userId === (appUser && appUser.userId) ||
-        (appUser && appUser.allievoId && (p.allieviIds||[]).map(String).includes(String(appUser.allievoId)))
-      )
+    ? fmSalaPrenotazioniPerAllievo(_prenotazioniRaw, appUser)
     : (_prenotazioniRaw||[]);
   const isMobile = useIsMobile();
   const [svPanel,      setSvPanel]      = useState("calendario");
@@ -13651,33 +13728,36 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           // Docente vede TUTTE le prenotazioni approvate (per sapere quando la sala è occupata)
           // e le proprie in attesa
           if (role === "docente") return p.stato === "approvata" || p.userId === myUserId;
-          // Allievo vede solo le proprie
-          return p.userId === myUserId;
+          // [FM-SALA-ALLIEVO] Allievo: vede anche le approvate altrui (anonime) per sapere quando la sala è occupata
+          return p.userId === myUserId || p.stato === "approvata";
         })
-        .map(p => ({
-          id: "sala_" + p.id,
+        .map(p => {
+          // [FM-SALA-ALLIEVO] prenotazione altrui vista da un allievo: solo orario, niente dati personali
+          const _altrui = role === "allievo" && !(p.userId && p.userId === (_appUserCV && _appUserCV.userId))
+            && !((p.allieviIds||[]).map(String).includes(String(_cvAllievoId)));
+          const pv = _altrui ? { ...p, richiedente: "", motivo: "", telefono: "", noteAdmin: "", _anonima: true } : p;
+          return {
+          id: "sala_" + pv.id,
           _isSalaProve: true,
-          _original: p,
+          _original: pv,
           tipo: "sala_prove",
-          date: p.data,
-          hour: p.oraInizio || "",
-          oraFine: p.oraFine || "",
-          student: p.richiedente || "",
-          richiedente: p.richiedente || "",
+          date: pv.data,
+          hour: pv.oraInizio || "",
+          oraFine: pv.oraFine || "",
+          student: _altrui ? "" : (pv.richiedente || ""),
+          richiedente: _altrui ? "" : (pv.richiedente || ""),
           teacher: "",
           instrument: "",
           room: "Sala Prove",
-          topic: p.motivo || "Sala Prove",
-          attendance: p.stato === "approvata" ? "presente" : "",
-          notes: p.noteAdmin || "",
-          stato: p.stato,
-        }));
+          topic: _altrui ? "🔒 Sala occupata" : (pv.motivo || "Sala Prove"),
+          attendance: pv.stato === "approvata" ? "presente" : "",
+          notes: pv.noteAdmin || "",
+          stato: pv.stato,
+        }; });
       // Blocchi di sola lettura per prenotazioni fatte direttamente su Google Calendar
       // (bypass app) — niente titolo/dettaglio per privacy, solo l'orario occupato.
-      // L'ALLIEVO non li vede nel calendario Oggi/Settimana (venivano scambiati per
-      // "prenotazioni altrui" pur essendo anonimi): restano visibili solo dentro il
-      // form "Richiedi prenotazione" della Sala Prove, per scegliere un orario libero.
-      const gcalBusyEvents = (!_cvShowSalaProve || role === "allievo") ? [] : (gcalSalaBusy || []).map(ev => ({
+      // [FM-SALA-ALLIEVO] visibili anche all'ALLIEVO (sono anonimi): mostrano quando la sala è occupata.
+      const gcalBusyEvents = !_cvShowSalaProve ? [] : (gcalSalaBusy || []).map(ev => ({
         id: "gcalbusy_" + ev.id,
         _isSalaProve: true,
         _isGcalExternal: true,
