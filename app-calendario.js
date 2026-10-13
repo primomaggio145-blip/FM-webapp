@@ -5592,6 +5592,20 @@ const isSalaProve = l => _optionalChain([l, 'optionalAccess', _47b => _47b.tipo]
 // ── Inserimento SICURO di una lezione ricorrente ──────────────────────────────
 // Previene duplicati con un guard globale + controllo Supabase prima di inserire
 // Restituisce true se la lezione è stata inserita, false se già esisteva
+// [FM-COLL-RESET-PRESENZE] Una lezione collettiva ricorrente è clonata con `...lesson`, quindi la
+// lezione successiva ereditava students[] con la presenza/assenza (e il motivo) di OGNI allievo
+// segnata sulla lezione precedente: il pulsante "Svolta/Presente" risultava già premuto e le
+// presenze del singolo allievo erano false. Azzera i campi per-allievo mantenendo il resto
+// (id, nome, strumento, livello). Per le lezioni individuali (senza students) non cambia nulla.
+const fmAzzeraPresenzeAllievi = (students) =>
+  Array.isArray(students)
+    ? students.map(x => {
+        if (!x || typeof x !== 'object') return x;
+        const { attendance, motivoAssenza, ...resto } = x;
+        return { ...resto, attendance: '' };
+      })
+    : students;
+
 const safeInsertRecurringLesson = async (lesson, setLessons) => {
   // Chiave univoca per questa lezione: data + ora + corso/studente
   const guardKey = `${lesson.date}_${lesson.hour}_${
@@ -13361,6 +13375,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               id:               uid(),
               date:             nextDate,
               attendance:       "",
+              students:         fmAzzeraPresenzeAllievi(dataNormFull.students),   // [FM-COLL-RESET-PRESENZE]
+              motivoAssenza:    null,
               notes:            "",
               exercises:        "",
               topic:            "",    // azzera argomento per ogni nuova lezione ricorrente
@@ -13531,6 +13547,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
               id:               uid(),
               date:             nextDate,
               attendance:       "",
+              students:         fmAzzeraPresenzeAllievi(lesson.students),   // [FM-COLL-RESET-PRESENZE]
+              motivoAssenza:    null,
               notes:            "",
               exercises:        "",
               topic:            "",    // azzera argomento per ogni nuova lezione ricorrente
@@ -13586,6 +13604,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         id: uid(),
         date: nextDate,
         attendance: "",
+        students: fmAzzeraPresenzeAllievi(lesson.students),   // [FM-COLL-RESET-PRESENZE]
+        motivoAssenza: null,
         notes: "",
         exercises: "",
         topic: "",
@@ -13634,6 +13654,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         id: uid(),
         date: nextDate,
         attendance: "",
+        students: fmAzzeraPresenzeAllievi(lesson.students),   // [FM-COLL-RESET-PRESENZE]
+        motivoAssenza: null,
         notes: "",
         exercises: "",
         topic: "",
