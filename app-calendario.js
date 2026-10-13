@@ -5388,6 +5388,45 @@ function fmSalaPrenotazioniPerAllievo(prenotazioni, appUser) {
   }, []);
 }
 
+// ── [FM-SALA-RLS] Occupazioni ANONIME via RPC (SQL: sala_occupazioni.sql) ──
+// Se le policy RLS impediscono ad allievi/docenti di leggere le lezioni e le prenotazioni di altri,
+// due funzioni SECURITY DEFINER restituiscono solo gli slot (nessun nome/telefono/motivo).
+// Se le funzioni non esistono ancora, l'errore viene ignorato e si usano i dati già in memoria.
+async function fmSalaCaricaOccupazioniRpc(force) {
+  const c = window.__salaOccRpcCache__;
+  if (!force && c && (Date.now() - c.ts) < 3 * 60000) return c.data;
+  const out = { lezioni: [], prenotazioni: [] };
+  const sb = window.supabaseClient;
+  if (!sb) return out;
+  try {
+    const [rl, rp] = await Promise.all([sb.rpc('sala_occupazioni_lezioni'), sb.rpc('sala_occupazioni_prenotazioni')]);
+    if (rl.error) console.warn('[FM] sala_occupazioni_lezioni:', rl.error.message);
+    else out.lezioni = (rl.data || []).map(r => ({
+      id: r.id, date: r.data, hour: String(r.ora || '').slice(0, 5), durata: r.durata || null,
+      tipo: r.tipo || 'individuale', instrument: r.strumento || '', recurrence: r.recurrence || 'Nessuna',
+      gapGiorni: r.gap_giorni != null ? Number(r.gap_giorni) : null, attendance: r.attendance || '',
+      inRecupero: r.in_recupero === true, student: '', teacher: '',
+      studentId: r.tipo === 'collettivo' ? null : r.serie, courseId: r.tipo === 'collettivo' ? r.serie : null,
+    }));
+    if (rp.error) console.warn('[FM] sala_occupazioni_prenotazioni:', rp.error.message);
+    else out.prenotazioni = (rp.data || []).map(r => ({
+      id: r.id, data: r.data, oraInizio: String(r.ora_inizio || '').slice(0, 5), oraFine: String(r.ora_fine || '').slice(0, 5),
+      stato: 'approvata', richiedente: '', motivo: '', telefono: '', noteAdmin: '', allieviIds: [], docentiIds: [], _anonima: true,
+    }));
+  } catch (e) { console.warn('[FM] occupazioni sala (rpc):', e && e.message); }
+  window.__salaOccRpcCache__ = { ts: Date.now(), data: out };
+  return out;
+}
+// Unisce i dati locali con quelli RPC, scartando i duplicati (stesso id).
+function fmSalaUnisciOccupazioni(lessons, prenotazioni, rpc) {
+  const idL = new Set((lessons || []).map(l => String(l.id)));
+  const idP = new Set((prenotazioni || []).map(p => String(p.id)));
+  return {
+    lessons: (lessons || []).concat(((rpc && rpc.lezioni) || []).filter(l => !idL.has(String(l.id)))),
+    prenotazioni: (prenotazioni || []).concat(((rpc && rpc.prenotazioni) || []).filter(p => !idP.has(String(p.id)))),
+  };
+}
+
 // Cerca, tra le lezioni esistenti, l'eventuale "gemella" di una lezione "2 volte a settimana"
 // appena creata/modificata (stesso allievo, stesso orario, ricorrenza uguale, giorno della
 // settimana diverso) e calcola il vero gap in giorni tra le due — necessario perché la creazione
@@ -11542,7 +11581,7 @@ const SalaProveForm = ({ initial, onSave, onClose, appUser, role, students, doce
 };
 
 // ── Vista admin: gestione richieste sala prove ────────────────────────────────
-const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role, appUser, lessons, students, docenti }) => {
+const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role, appUser, lessons, students, docenti, gcalBusy }) => {
   // [FM-SALA-ALLIEVO] L'allievo vede quando la sala è occupata: tutte le prenotazioni approvate
   // (senza nome/motivo se non sue) + le proprie. Admin e docente vedono tutto come prima.
   const prenotazioni = role === 'allievo'
@@ -11863,7 +11902,7 @@ const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role
 
       /* ── CALENDARIO OCCUPAZIONI ───────────────────────────────── */
       , svPanel==="calendario" && React.createElement('div', { style:{flex:1,overflow:"auto",padding:"16px 20px"} }
-        , React.createElement(BandWeekCalendar, { lessons: lessons, prenotazioni: prenotazioni })
+        , React.createElement(BandWeekCalendar, { lessons: lessons, prenotazioni: prenotazioni, gcalBusy: gcalBusy })
       )
 
       /* ── RICHIESTE (admin only) ───────────────────────────────── */
@@ -13713,7 +13752,9 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       }
       // Aggiungi eventi sala prove al calendario (solo se il docente ha attivato la visualizzazione
       // dalle sue Impostazioni — di default è disattivata; admin e allievi non sono soggetti al flag)
-      const spEvents = !_cvShowSalaProve ? [] : prenotazioniSala
+      // [FM-SALA-SOLO-TAB] allievo e docente vedono le prenotazioni sala SOLO nella tab "Sala Prove",
+      // mai tra le lezioni del calendario (le vede nel calendario lezioni solo l'admin).
+      const spEvents = (role === "allievo" || role === "docente" || !_cvShowSalaProve) ? [] : prenotazioniSala
         .filter(p => p.stato === "approvata" || p.stato === "in_attesa")
         .filter(p => {
           const myUserId = _appUserCV && _appUserCV.userId;
@@ -13757,7 +13798,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       // Blocchi di sola lettura per prenotazioni fatte direttamente su Google Calendar
       // (bypass app) — niente titolo/dettaglio per privacy, solo l'orario occupato.
       // [FM-SALA-ALLIEVO] visibili anche all'ALLIEVO (sono anonimi): mostrano quando la sala è occupata.
-      const gcalBusyEvents = !_cvShowSalaProve ? [] : (gcalSalaBusy || []).map(ev => ({
+      const gcalBusyEvents = (role === "allievo" || role === "docente" || !_cvShowSalaProve) ? [] : (gcalSalaBusy || []).map(ev => ({
         id: "gcalbusy_" + ev.id,
         _isSalaProve: true,
         _isGcalExternal: true,
@@ -13950,7 +13991,11 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           /* ── SALA PROVE ─────────────────────────────────────── */
           , appView==='sala_prove' && React.createElement(SalaProveView, {
               prenotazioni: prenotazioniSala,
-              lessons:      visibleLessons,
+              // [FM-SALA-OCCUPAZIONE] lezioni complete (NON visibleLessons, filtrata per ruolo): serve a
+              // mostrare l'occupazione della sala anche per le lezioni di altri. Il calendario sala non
+              // mostra mai nomi, solo gli orari.
+              lessons:      lessons,
+              gcalBusy:     gcalSalaBusy,
               onUpdate: (updated) => setPrenotazioniSala(p => {
                 const exists = p.some(x => x.id === updated.id);
                 return exists ? p.map(x => x.id===updated.id ? updated : x) : [...p, updated];

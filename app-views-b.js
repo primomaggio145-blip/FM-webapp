@@ -3535,12 +3535,20 @@ const BandWeekCalendar = ({ lessons, prenotazioni, gcalBusy }) => {
 
   // [FM-SALA-OCCUPAZIONE] occupazioni da lezioni (batteria/collettive) per la settimana mostrata
   const _wkFrom = toLocalDateStr(days[0]), _wkTo = toLocalDateStr(days[6]);
-  const occLezioni = React.useMemo(() => fmSalaOccupazioniLezioni(lessons, _wkFrom, _wkTo), [lessons, _wkFrom, _wkTo]);
+  // [FM-SALA-RLS] dati anonimi aggiuntivi via RPC (lezioni/prenotazioni che la RLS non fa leggere a questo ruolo)
+  const [rpcOcc, setRpcOcc] = useState({ lezioni: [], prenotazioni: [] });
+  React.useEffect(() => {
+    let vivo = true;
+    fmSalaCaricaOccupazioniRpc(false).then(d => { if (vivo && d) setRpcOcc(d); });
+    return () => { vivo = false; };
+  }, []);
+  const unite = React.useMemo(() => fmSalaUnisciOccupazioni(lessons, prenotazioni, rpcOcc), [lessons, prenotazioni, rpcOcc]);
+  const occLezioni = React.useMemo(() => fmSalaOccupazioniLezioni(unite.lessons, _wkFrom, _wkTo), [unite, _wkFrom, _wkTo]);
 
   const getEvents = (ds, h) => {
     const evts = [];
     // Prenotazioni (tutte tranne rifiutate)
-    (prenotazioni||[]).filter(p => {
+    (unite.prenotazioni||[]).filter(p => {
       if (p.data!==ds||p.stato==='rifiutata') return false;
       return parseInt((p.oraInizio||'00').split(':')[0])===h;
     }).forEach(p => {
