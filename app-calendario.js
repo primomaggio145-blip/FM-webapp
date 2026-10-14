@@ -9440,7 +9440,8 @@ const BranoFormInline = ({ initial, onSave, onClose, compact=false }) => {
       , React.createElement('div', { style: {padding:compact?10:22, display:"flex", flexDirection:"column", gap:compact?8:14}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5013}}
         , React.createElement(Input, { label: "Titolo *" , value: f.title, onChange: e=>set("title",e.target.value), error: err.title, placeholder: "Es. Notturno Op.9 n.2"   , __self: this, __source: {fileName: _jsxFileName, lineNumber: 5014}})
         , React.createElement(Input, { label: "Compositore *" , value: f.composer, onChange: e=>set("composer",e.target.value), error: err.composer, placeholder: "Es. Frédéric Chopin"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 5015}})
-        , React.createElement(Input, { label: "Genere *" , value: f.genere||"", onChange: e=>set("genere",e.target.value), error: err.genere, placeholder: "Es. Classica, Jazz, Pop..."  })
+        , React.createElement(Input, { label: "Genere *" , value: f.genere||"", onChange: e=>set("genere",e.target.value), error: err.genere, placeholder: "Es. Classica, Jazz, Pop...", list: "fm-generi-suggeriti", autoComplete: "off" })
+        , fmGeneriDatalist()
         , React.createElement(Sel, { label: "Tonalità / Scala"  , value: f.tonality, onChange: e=>set("tonality",e.target.value), options: TONALITY_OPTS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5016}})
         , React.createElement(Sel, { label: "Livello di difficoltà"  , value: f.difficulty, onChange: e=>set("difficulty",e.target.value), options: DIFFICULTY_OPTS, __self: this, __source: {fileName: _jsxFileName, lineNumber: 5017}})
         
@@ -16830,14 +16831,15 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
             , React.createElement(Input, { label: "Titolo *" , value: f.title, onChange: e=>set("title",e.target.value), error: err.title, placeholder: "Es. Jingle Bells" })
           )
           , React.createElement(Input, { label: "Compositore" , value: f.composer, onChange: e=>set("composer",e.target.value), placeholder: "Es. James Pierpont" })
-          , React.createElement(Input, { label: "Genere *" , value: f.genere||"", onChange: e=>set("genere",e.target.value), error: err.genere, placeholder: "Es. Classica, Jazz, Pop..." })
+          , React.createElement(Input, { label: "Genere *" , value: f.genere||"", onChange: e=>set("genere",e.target.value), error: err.genere, placeholder: "Es. Classica, Jazz, Pop...", list: "fm-generi-suggeriti", autoComplete: "off" })
+          , fmGeneriDatalist()
           , React.createElement(Sel, { label: "Corso individuale", value: f.strumento, onChange: e=>set("strumento",e.target.value),
             options: strumentiDisp.map(i=>({value:i,label:i})) })
-          /* [FM-BRANO-BAMBINI] flag brano adatto ai bambini */
+          /* [FM-BRANO-BAMBINI] flag brano per ragazzi */
           , React.createElement('label', { style: {gridColumn:"1/-1",display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,cursor:"pointer",
               border:`1px solid ${f.bambini===true?C.gold:C.border}`,background:f.bambini===true?C.goldBg:C.bg}}
             , React.createElement('input', { type:"checkbox", checked: f.bambini===true, onChange: e=>set("bambini", e.target.checked), style:{width:16,height:16,cursor:"pointer",flexShrink:0}})
-            , React.createElement('span', { style:{fontSize:13,fontWeight:f.bambini===true?600:400,color:f.bambini===true?C.gold:C.textMuted}}, '👶 Brano per bambini')
+            , React.createElement('span', { style:{fontSize:13,fontWeight:f.bambini===true?600:400,color:f.bambini===true?C.gold:C.textMuted}}, '🧒 Brano per ragazzi')
           )
         )
 
@@ -17105,7 +17107,7 @@ const BranoDrawer = ({brano,onClose,onEdit,onDelete,concerti}) => {
           )
           , React.createElement('div', { style: {display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}
             , React.createElement(TipoBadge, { tipo: brano.tipo})
-            , brano.bambini===true && React.createElement('span', { style: {background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}, '👶 Bambini')
+            , brano.bambini===true && React.createElement('span', { style: {background:C.goldBg,color:C.gold,border:`1px solid ${C.goldDim}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}, '🧒 Ragazzi')
             , React.createElement('span', { style: {background:brano.strumento?C.tealBg:`${C.purple}18`,color:brano.strumento?C.teal:C.purple,
                 border:`1px solid ${brano.strumento?C.tealBorder:C.purple+'40'}`,borderRadius:4,padding:"2px 8px",fontSize:10,fontWeight:600}}
               , brano.strumento ? '🎵 '+brano.strumento : '🎭 Ensemble'

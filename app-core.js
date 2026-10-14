@@ -699,6 +699,33 @@ const Btn = ({ children, onClick, variant:_variantRaw, small:_smallRaw, danger:_
   return React.createElement('button', { onClick: disabled?undefined:onClick, style: {...base,...v[danger?"danger":variant],...extraStyle}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 368}}, children);
 };
 
+// [FM-GENERI] Generi suggeriti per i brani di repertorio (suggerimenti nel campo Genere + ordine nel filtro).
+// Il campo resta a testo libero: si può scrivere anche un genere diverso.
+const FM_GENERI_SUGGERITI = ['Classica','Pop','Jazz','Swing','Funk','Rock','Soul','R&B','Ballad','Dance','Elettronica','Natale','Popolare','Tradizionale','Appunti'];
+const fmGeneriDatalist = () => React.createElement('datalist', { id: 'fm-generi-suggeriti' },
+  FM_GENERI_SUGGERITI.map(g => React.createElement('option', { key: g, value: g })));
+// Generi presenti nei brani, senza doppioni (maiuscole/minuscole ignorate): [{key, label, n}]
+// Prima quelli suggeriti (nell'ordine sopra), poi gli altri in ordine alfabetico.
+function fmGeneriInUso(brani) {
+  const m = new Map();
+  (brani || []).forEach(b => {
+    const raw = ((b && b.genere) || '').trim(); if (!raw) return;
+    const key = raw.toLowerCase();
+    if (!m.has(key)) {
+      const sug = FM_GENERI_SUGGERITI.find(g => g.toLowerCase() === key);
+      m.set(key, { key, label: sug || (raw.charAt(0).toUpperCase() + raw.slice(1)), n: 0 });
+    }
+    m.get(key).n++;
+  });
+  const idx = k => FM_GENERI_SUGGERITI.findIndex(g => g.toLowerCase() === k);
+  return [...m.values()].sort((a, b) => {
+    const ia = idx(a.key), ib = idx(b.key);
+    if (ia >= 0 && ib >= 0) return ia - ib;
+    if (ia >= 0) return -1; if (ib >= 0) return 1;
+    return a.label.localeCompare(b.label, 'it');
+  });
+}
+
 const Input = ({ label, error, ...props }) => (
   React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 372}}
     , label && React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 373}}, label)
