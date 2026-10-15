@@ -7313,7 +7313,6 @@ const LessonPill = ({ lesson, onClick, compact=false, courses, onInfoHover }) =>
           React.createElement('div', { style: {display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4442}}
             , React.createElement('div', { style: {fontSize: compact ? 10 : 12, fontWeight:600, color:hex,
               lineHeight:1.2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-              textDecoration: fmLezioneDaRecuperare(lesson) ? "line-through" : "none",
               flex:1, minWidth:0, maxWidth:"100%"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4443}}
               , label
             )
@@ -8948,7 +8947,6 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
           left: `calc(${it.col * larg}% + 2px)`, width: `calc(${larg}% - 4px)`, zIndex: 2,
           background: `${hex}1f`, borderLeft: `3px solid ${hex}`, borderRadius: 5,
           opacity: fmLezioneDaRecuperare(l) ? 0.45 : 1,
-          textDecoration: fmLezioneDaRecuperare(l) ? "line-through" : "none",
           padding: compatta ? "1px 5px" : "3px 6px", overflow: "hidden", cursor: "pointer", boxSizing: "border-box",
           fontSize: 11, lineHeight: 1.25, color: C.text, transition: "filter .12s"} }
       , React.createElement('div', {style:{display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", overflow:"hidden"}}
@@ -9252,7 +9250,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                       borderRadius:3,
                       cursor:"pointer",
                       zIndex:2,
-                      opacity: l._isCollInfo ? 0.5 : (fmLezioneDaRecuperare(l) ? 0.45 : 1), textDecoration: fmLezioneDaRecuperare(l) ? "line-through" : "none",
+                      opacity: l._isCollInfo ? 0.5 : (fmLezioneDaRecuperare(l) ? 0.45 : 1),
                       overflow:"hidden",
                       padding:"1px 2px",
                       boxSizing:"border-box",
@@ -9285,7 +9283,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                     borderRadius:4,
                     cursor:"pointer",
                     zIndex:2,
-                    opacity: l._isCollInfo ? 0.5 : (fmLezioneDaRecuperare(l) ? 0.45 : 1), textDecoration: fmLezioneDaRecuperare(l) ? "line-through" : "none",
+                    opacity: l._isCollInfo ? 0.5 : (fmLezioneDaRecuperare(l) ? 0.45 : 1),
                     overflow:"hidden",
                     padding:"2px 4px",
                     boxSizing:"border-box",
