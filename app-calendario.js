@@ -6024,6 +6024,11 @@ const CollInfoPopover = ({ info, repertorio, onClose }) => {
 function fmLezioneLiberaSlot(l) {
   return !!l && (l.inRecupero === true || l.attendance === 'in_recupero' || l.attendance === 'recuperata');
 }
+// [FM-DA-RECUPERARE-DISABILITATA] Lezione "DA RECUPERARE": non si svolge, quindi nel calendario
+// viene mostrata come NON abilitata (attenuata, bordo tratteggiato, testo barrato) e non riceve reminder.
+function fmLezioneDaRecuperare(l) {
+  return !!l && (l.inRecupero === true || l.attendance === 'in_recupero');
+}
 function trovaConflittiOrario(lezione, tutteLeLezioni) {
   if (!lezione || !lezione.date || !lezione.hour) return [];
   if (fmLezioneLiberaSlot(lezione)) return [];
@@ -7272,10 +7277,10 @@ const LessonPill = ({ lesson, onClick, compact=false, courses, onInfoHover }) =>
       onClick: onClick,
       style: {
         background: bgNormal,
-        border: `1px ${lesson._isCollInfo ? 'dashed' : 'solid'} ${bdNormal}`,
+        border: `1px ${(lesson._isCollInfo || fmLezioneDaRecuperare(lesson)) ? 'dashed' : 'solid'} ${bdNormal}`,
         borderLeft: `3px solid ${hex}`,
         borderRadius: 6,
-        opacity: lesson._isCollInfo ? 0.5 : 1,
+        opacity: lesson._isCollInfo ? 0.5 : (fmLezioneDaRecuperare(lesson) ? 0.45 : 1),
         padding: compact ? "3px 5px" : "7px 9px",
         cursor: "pointer",
         transition: "all 0.15s",
@@ -7308,6 +7313,7 @@ const LessonPill = ({ lesson, onClick, compact=false, courses, onInfoHover }) =>
           React.createElement('div', { style: {display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4442}}
             , React.createElement('div', { style: {fontSize: compact ? 10 : 12, fontWeight:600, color:hex,
               lineHeight:1.2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+              textDecoration: fmLezioneDaRecuperare(lesson) ? "line-through" : "none",
               flex:1, minWidth:0, maxWidth:"100%"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4443}}
               , label
             )
@@ -8706,7 +8712,8 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
               gap: isMobile ? 6 : 16,
               padding: isMobile ? "10px 10px" : "16px 18px",
               background:C.surface,
-              border:`1px solid ${C.border}`, borderLeft:`4px solid ${hex}`,
+              border:`1px ${fmLezioneDaRecuperare(l) ? 'dashed' : 'solid'} ${C.border}`, borderLeft:`4px solid ${hex}`,
+              opacity: fmLezioneDaRecuperare(l) ? 0.5 : 1,
               borderRadius:10, cursor:"pointer", transition:"all 0.15s"},
             onMouseEnter: e => { e.currentTarget.style.background = C.surfaceHover; },
             onMouseLeave: e => { e.currentTarget.style.background = C.surface; }, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4787}}
@@ -8940,6 +8947,8 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
         style: {position:"absolute", top: (it.s - H_START) * HOUR_H + 1, height: hPx,
           left: `calc(${it.col * larg}% + 2px)`, width: `calc(${larg}% - 4px)`, zIndex: 2,
           background: `${hex}1f`, borderLeft: `3px solid ${hex}`, borderRadius: 5,
+          opacity: fmLezioneDaRecuperare(l) ? 0.45 : 1,
+          textDecoration: fmLezioneDaRecuperare(l) ? "line-through" : "none",
           padding: compatta ? "1px 5px" : "3px 6px", overflow: "hidden", cursor: "pointer", boxSizing: "border-box",
           fontSize: 11, lineHeight: 1.25, color: C.text, transition: "filter .12s"} }
       , React.createElement('div', {style:{display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", overflow:"hidden"}}
@@ -9238,12 +9247,12 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                       width:  `calc(${wPct}% - 2px)`,
                       height: l._h,
                       background: bg,
-                      border:`1px ${l._isCollInfo ? 'dashed' : 'solid'} ${bord}`,
+                      border:`1px ${(l._isCollInfo || fmLezioneDaRecuperare(l)) ? 'dashed' : 'solid'} ${bord}`,
                       borderLeft:`2px solid ${accent}`,
                       borderRadius:3,
                       cursor:"pointer",
                       zIndex:2,
-                      opacity: l._isCollInfo ? 0.5 : 1,
+                      opacity: l._isCollInfo ? 0.5 : (fmLezioneDaRecuperare(l) ? 0.45 : 1), textDecoration: fmLezioneDaRecuperare(l) ? "line-through" : "none",
                       overflow:"hidden",
                       padding:"1px 2px",
                       boxSizing:"border-box",
@@ -9271,12 +9280,12 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                     width:  `calc(${wPct}% - 3px)`,
                     height: l._h,
                     background: bg,
-                    border:`1px ${l._isCollInfo ? 'dashed' : 'solid'} ${bord}`,
+                    border:`1px ${(l._isCollInfo || fmLezioneDaRecuperare(l)) ? 'dashed' : 'solid'} ${bord}`,
                     borderLeft:`3px solid ${accent}`,
                     borderRadius:4,
                     cursor:"pointer",
                     zIndex:2,
-                    opacity: l._isCollInfo ? 0.5 : 1,
+                    opacity: l._isCollInfo ? 0.5 : (fmLezioneDaRecuperare(l) ? 0.45 : 1), textDecoration: fmLezioneDaRecuperare(l) ? "line-through" : "none",
                     overflow:"hidden",
                     padding:"2px 4px",
                     boxSizing:"border-box",

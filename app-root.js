@@ -861,6 +861,8 @@ function App() {
       lessons.forEach(function(l) {
         if (l.date !== nowStr) return;
         if (l.tipo === 'sala_prove') return;
+        // [FM-NO-REMINDER-DA-RECUPERARE] la lezione "Da recuperare" non si svolge: nessun reminder
+        if (l.inRecupero === true || l.attendance === 'in_recupero') return;
         // Controlla se il tipo di notifica è abilitato
         const cfgKey   = isColl(l) ? 'lezione_collettiva' : 'lezione_individuale';
         const notifCfg = (window.__FM_NOTIFICHE_CONFIG__ || {})[cfgKey];
