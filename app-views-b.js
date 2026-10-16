@@ -4021,7 +4021,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons, students, docent
     )
 
     /* Modal contatta admin */
-    , showContatto && React.createElement('div', { onClick:()=>setShowContatto(false), style:{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,.6)',backdropFilter:'blur(3px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16} }
+    , showContatto && _fmBody(React.createElement('div', { onClick:()=>setShowContatto(false), style:{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,.6)',backdropFilter:'blur(3px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16} }
       , React.createElement('div', { onClick:e=>e.stopPropagation(), style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,width:'100%',maxWidth:420,padding:24,boxShadow:'0 20px 60px rgba(0,0,0,.4)',fontFamily:"'Open Sans',sans-serif"} }
         , React.createElement('div', { style:{display:'flex',alignItems:'center',gap:10,marginBottom:16} }
           , React.createElement('div', { style:{width:36,height:36,borderRadius:10,background:C.tealBg,border:`1px solid ${C.tealBorder}`,display:'flex',alignItems:'center',justifyContent:'center'} }
@@ -4045,13 +4045,18 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons, students, docent
           , React.createElement('button', { onClick:handleSendContatto, disabled:!msgContatto.trim()||sendingMsg, style:{padding:'9px 18px',borderRadius:8,border:'none',background:msgContatto.trim()?C.teal:C.surface,color:msgContatto.trim()?'#fff':C.textMuted,cursor:msgContatto.trim()?'pointer':'not-allowed',fontSize:13,fontWeight:600} }, sendingMsg?'Invio…':'Invia messaggio')
         )
       )
-    )
+    ))
   );
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MESSAGGI VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
+// Monta su document.body: i position:fixed dentro .main-scroll (overflow:auto + animation)
+// restano intrappolati sotto la bottom-nav (zIndex 300) in mobile/PWA, coprendo il campo
+// di testo e il pulsante Invia.
+const _fmBody = (el) => (typeof document !== 'undefined' && window.ReactDOM && window.ReactDOM.createPortal)
+  ? window.ReactDOM.createPortal(el, document.body) : el;
 // ── Allegati WhatsApp (vocali, foto, video, documenti) nella conversazione ───────
 // Il file è nel bucket privato "whatsapp-media" (leggibile solo dagli admin); si apre con un
 // link firmato temporaneo, tenuto in cache per non richiederlo a ogni ridisegno.
@@ -4118,6 +4123,17 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
   const isMobile = useIsMobile();
   const isAdmin  = ruolo === 'admin';
   const fondoRef = React.useRef(null);
+  // Viewport visuale (si restringe quando si apre la tastiera su iOS/Android/PWA)
+  const [vv, setVv] = useState(null);
+  useEffect(() => {
+    if (!isMobile || !apertaKey || !window.visualViewport) { setVv(null); return; }
+    const vp = window.visualViewport;
+    const upd = () => setVv({ h: vp.height, top: vp.offsetTop });
+    upd();
+    vp.addEventListener('resize', upd); vp.addEventListener('scroll', upd);
+    return () => { vp.removeEventListener('resize', upd); vp.removeEventListener('scroll', upd); };
+  }, [isMobile, apertaKey]);
+  const tastieraAperta = !!(vv && vv.h < (window.innerHeight || 0) - 120);
 
   const showToast = (ok, msg) => { setToast({ok,msg}); setTimeout(()=>setToast(null),4000); };
 
@@ -4575,7 +4591,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
       )
       /* Risposta */
       , puoRisp
-        ? React.createElement('div',{style:{flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface,padding:isMobile?'10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px)':'10px 14px'}}
+        ? React.createElement('div',{style:{flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface,padding:isMobile?(tastieraAperta?'10px 12px':'10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px)'):'10px 14px'}}
             , telOk && React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,marginBottom:8,flexWrap:'wrap'}}
                 , React.createElement('button',{onClick:()=>setRispWA(v=>!v),
                     style:{padding:'4px 12px',borderRadius:20,border:`1.5px solid ${rispWA?'#25d366':C.border}`,background:rispWA?'#e9fbf0':C.bg,color:rispWA?'#128c4a':C.textMuted,cursor:'pointer',fontSize:11,fontWeight:rispWA?600:400}},
@@ -4692,10 +4708,10 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
       : React.createElement('div', {style:{padding:isMobile?'12px 16px':'20px 32px'}}, listaEl)
 
     /* Conversazione a tutto schermo su mobile */
-    , isMobile && aperta && React.createElement('div',{style:{position:'fixed',inset:0,zIndex:9990,display:'flex',flexDirection:'column',background:C.bg}}, Thread(aperta))
+    , isMobile && aperta && _fmBody(React.createElement('div',{style:{position:'fixed',left:0,right:0,top:vv?vv.top:0,...(vv?{height:vv.h}:{bottom:0}),zIndex:9990,display:'flex',flexDirection:'column',background:C.bg,overflow:'hidden'}}, Thread(aperta)))
 
     /* Modal Compose */
-    , showCompose && React.createElement(ComposeModal, {
+    , showCompose && _fmBody(React.createElement(ComposeModal, {
         appUser, ruolo, students, docenti, gruppi, courses, annoInizioAttivo,
         onClose: ()=>setShowCompose(false),
         onSent: (nuovi, extra, conv) => {
@@ -4705,7 +4721,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
           else setTab('inviati');
           showToast(true, `✅ Messaggio inviato a ${nuovi.length} destinatar${nuovi.length===1?'io':'i'}${extra||''}`);
         }
-      })
+      }))
   );
 };
 
