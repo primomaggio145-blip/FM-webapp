@@ -329,7 +329,27 @@ async function fmSalvaDisponibilitaRecuperi(docId, slots) {
   if (!sb) return { ok:false, msg:"Connessione al database non disponibile: slot NON salvati." };
   if (!docId) return { ok:false, msg:"Docente non identificato: slot NON salvati." };
   try {
-    const payload = { disponibilita_recuperi: JSON.stringify(Array.isArray(slots) ? slots : []) };
+    const slotsJson = JSON.stringify(Array.isArray(slots) ? slots : []);
+    // 1) Via preferita: funzione SQL SECURITY DEFINER che aggiorna SOLO questa colonna e verifica
+    //    che l'utente sia admin o il docente stesso. Necessaria perché la RLS su 'docenti' consente
+    //    la scrittura solo all'admin (un UPDATE diretto del docente aggiorna 0 righe, senza errore).
+    const rpc = await sb.rpc('fm_salva_disponibilita_recuperi', { p_docente_id: String(docId), p_slots: slotsJson });
+    const funzioneAssente = rpc.error && (rpc.error.code === 'PGRST202' || rpc.error.code === '42883' ||
+      /could not find the function|does not exist|schema cache/i.test(rpc.error.message||''));
+    if (!rpc.error) {
+      const r = rpc.data || {};
+      if (r.ok === true) return { ok:true, msg:"✓ Disponibilità salvate" };
+      console.warn('[FM] disponibilita rpc rifiutata:', r);
+      if (r.motivo === 'non_autorizzato') return { ok:false, msg:"Il tuo account non risulta collegato a questo docente (profilo non collegato): chiedi all'amministratore di collegarlo da Impostazioni › Utenti. Slot NON salvati." };
+      if (r.motivo === 'non_autenticato') return { ok:false, msg:"Sessione scaduta: esci e rientra nell'app. Slot NON salvati." };
+      return { ok:false, msg:"Docente non trovato sul database. Slot NON salvati." };
+    }
+    if (!funzioneAssente) {
+      console.warn('[FM] disponibilita rpc error:', rpc.error.message, rpc.error);
+      return { ok:false, msg:"Errore di salvataggio: " + (rpc.error.message||"sconosciuto") + ". Slot NON salvati." };
+    }
+    // 2) Fallback (funzione SQL non ancora installata): UPDATE diretto, funziona solo per l'admin
+    const payload = { disponibilita_recuperi: slotsJson };
     const { data, error } = await sb.from('docenti').update(payload).eq('id', docId).select('id');
     if (error) {
       console.warn('[FM] disponibilita save error:', error.message, error);
@@ -340,7 +360,7 @@ async function fmSalvaDisponibilitaRecuperi(docId, slots) {
     }
     if (!data || data.length === 0) {
       console.warn('[FM] disponibilita save: 0 righe aggiornate per docente', docId, '(permessi/RLS o id non trovato)');
-      return { ok:false, msg:"Il database non ha accettato la modifica (nessuna riga aggiornata: possibile blocco permessi). Slot NON salvati." };
+      return { ok:false, msg:"Il database non ha accettato la modifica (permessi): installare sul database la funzione 'fm_salva_disponibilita_recuperi' (file SQL fix_rls_disponibilita_recuperi.sql). Slot NON salvati." };
     }
     return { ok:true, msg:"✓ Disponibilità salvate" };
   } catch(e) {
@@ -4689,6 +4709,52 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
   );
 };
 
+// ── Destinatari "propri" per chi NON è admin ──────────────────────────────────
+// docente → i SUOI allievi; allievo (o genitore) → i SUOI docenti.
+// Per un docente la lista `students` è già limitata ai suoi allievi (RLS); per un allievo
+// `students` contiene solo la sua scheda (o quelle dei figli collegati) mentre `docenti` è
+// leggibile da tutti: i suoi docenti si ricavano da students.teacher, extraTeachers e dai
+// gruppi collettivi a cui partecipa. Ritorna [{id,nome,ruolo,email,telefono}] ordinata per nome.
+function fmDestinatariPropri({ ruolo, appUser, students, docenti, gruppi }) {
+  const nz = s => String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+  const toDest = (x, r) => ({ id:String(x.id||x.userId||''), nome:x.nome||x.name||'', ruolo:r,
+                              email:x.email||'', telefono:x.telefono||x.phone||'' });
+  let lista = [];
+  if (ruolo === 'docente') {
+    const attivo = st => !/archiv|cestin|inatt|cessat/i.test(String(st.status||''));
+    lista = (students||[]).filter(attivo).map(st => toDest(st,'allievo'));
+  } else if (ruolo === 'allievo') {
+    const miei = new Set([appUser && appUser.allievoId, ...((appUser && appUser.allieviIds) || [])]
+      .filter(v => v != null && v !== '').map(String));
+    const mieiStud = (students||[]).filter(st => miei.has(String(st.id)));
+    const base = mieiStud.length ? mieiStud : (students||[]);
+    const campi = [];
+    base.forEach(st => {
+      campi.push(st.teacher);
+      Object.values(st.extraTeachers || {}).forEach(v => campi.push(v));
+    });
+    const ids = new Set();
+    campi.filter(v => typeof v === 'string' && v.trim()).forEach(tf => {
+      const t = nz(tf);
+      const esatti = (docenti||[]).filter(d => nz(d.teacherKey) === t || nz(d.nome||d.name) === t);
+      if (esatti.length) { esatti.forEach(d => ids.add(String(d.id))); return; }
+      // ripiego: un solo docente che contiene (o è contenuto in) il testo
+      const larghi = (docenti||[]).filter(d => {
+        const k = nz(d.teacherKey), n = nz(d.nome||d.name);
+        return (k && (t.includes(k) || k.includes(t))) || (n && (t.includes(n) || n.includes(t)));
+      });
+      if (larghi.length === 1) ids.add(String(larghi[0].id));
+    });
+    (gruppi||[]).forEach(g => {
+      if (g.docenteId && (g.allievi||[]).some(a => base.some(st => String(st.id) === String(a)))) ids.add(String(g.docenteId));
+    });
+    lista = (docenti||[]).filter(d => ids.has(String(d.id))).map(d => toDest(d,'docente'));
+  }
+  const visti = new Set();
+  return lista.filter(d => d.id && !visti.has(d.id) && visti.add(d.id))
+              .sort((a,b) => a.nome.localeCompare(b.nome,'it'));
+}
+
 // ── Modal Compose Message ─────────────────────────────────────────────────────
 const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, annoInizioAttivo, onClose, onSent }) => {
   useFMBackClose(onClose); // gesto/tasto indietro chiude
@@ -4738,7 +4804,11 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
   };
   const senzaTelWA = (isAdmin && canali.whatsapp) ? destSel.filter(d => !telValidoWA(d.telefono)) : [];
 
-  // Destinatari disponibili
+  // Destinatari disponibili: l'admin scrive a tutti; docente e allievo all'Amministrazione
+  // E ai propri allievi / docenti.
+  const DEST_PROPRI = React.useMemo(
+    () => isAdmin ? [] : fmDestinatariPropri({ ruolo, appUser, students, docenti, gruppi }),
+    [isAdmin, ruolo, appUser, students, docenti, gruppi]);
   const DEST_FISSI = !isAdmin ? [
     {id:'__admin__', nome:'Amministrazione', ruolo:'admin', email:'', telefono:''}
   ] : [];
@@ -4746,14 +4816,13 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
   const DEST_LISTA = isAdmin ? [
     ...( (students||[]).map(s=>({id:String(s.id||s.userId||''), nome:s.nome||s.name||'', ruolo:'allievo', email:s.email||'', telefono:s.telefono||s.phone||''})) ),
     ...( (docenti||[]).map(d=>({id:String(d.id||d.userId||''), nome:d.nome||'', ruolo:'docente', email:d.email||'', telefono:d.phone||d.telefono||''})) ),
-  ] : DEST_FISSI;
+  ] : [...DEST_FISSI, ...DEST_PROPRI];
 
   const filtered = search
     ? DEST_LISTA.filter(d => d.nome.toLowerCase().includes(search.toLowerCase()) || d.ruolo.toLowerCase().includes(search.toLowerCase()))
     : DEST_LISTA;
 
   const toggleDest = (d) => {
-    if (d.id==='__admin__') { setDestSel([d]); return; }
     setDestSel(p => p.some(x=>x.id===d.id) ? p.filter(x=>x.id!==d.id) : [...p,d]);
   };
 
@@ -4900,8 +4969,8 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
         /* Destinatari */
         , React.createElement('div',null
           , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'.07em',display:'block',marginBottom:6}},'A:')
-          , isAdmin && React.createElement('div',{style:{display:'flex',gap:6,marginBottom:8}}
-              , ['allievo','docente'].map(r=>React.createElement('button',{key:r,onClick:()=>selectAll(r),style:{padding:'4px 12px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11}},'Tutti i '+r+'i'))
+          , (isAdmin || DEST_PROPRI.length>1) && React.createElement('div',{style:{display:'flex',gap:6,marginBottom:8}}
+              , (isAdmin ? ['allievo','docente'] : [ruolo==='docente'?'allievo':'docente']).map(r=>React.createElement('button',{key:r,onClick:()=>selectAll(r),style:{padding:'4px 12px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11}},isAdmin ? 'Tutti i '+r+'i' : (r==='allievo' ? 'Tutti i miei allievi' : 'Tutti i miei docenti')))
             )
           /* Gruppi delle lezioni collettive */
           , isAdmin && GRUPPI_LISTA.length>0 && React.createElement('div',{style:{marginBottom:8}}
@@ -4926,7 +4995,7 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
                     })
               )
             )
-          , isAdmin && React.createElement('input',{type:'text',placeholder:'Cerca destinatario o gruppo...',value:search,onChange:e=>setSearch(e.target.value),style:{width:'100%',boxSizing:'border-box',padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,marginBottom:6}})
+          , (isAdmin || DEST_LISTA.length>6) && React.createElement('input',{type:'text',placeholder:isAdmin?'Cerca destinatario o gruppo...':'Cerca destinatario...',value:search,onChange:e=>setSearch(e.target.value),style:{width:'100%',boxSizing:'border-box',padding:'7px 10px',borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,marginBottom:6}})
           /* Lista destinatari selezionabili */
           , React.createElement('div',{style:{maxHeight:150,overflowY:'auto',border:`1px solid ${C.border}`,borderRadius:8,background:C.bg}}
               , filtered.map(d=>{
