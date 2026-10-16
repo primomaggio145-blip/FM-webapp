@@ -1438,6 +1438,9 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
         cursor.setDate(cursor.getDate()+1);
       }
     }
+    // Ordine cronologico (data, poi ora): il ciclo sopra genera gli slot per fascia settimanale
+    // (tutti i lunedì, poi tutti i martedì…), che è l'ordine sbagliato per chi deve sceglierli.
+    risultato.sort((a,b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
     setSlots(risultato);
     setLoadingSlots(false);
   }, [lesson.id]);
@@ -1548,6 +1551,12 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
 
   // Raggruppa slot per settimana
   const slotLiberi = slots.filter(s => !s.occupato);
+  const settimane = fmRaggruppaSlotPerSettimana(slotLiberi);
+  const _oggiLun = (() => { const t=new Date(); t.setHours(0,0,0,0); t.setDate(t.getDate()-((t.getDay()+6)%7));
+    return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); })();
+  const _prossLun = (() => { const [y,m,d]=_oggiLun.split('-').map(Number); const t=new Date(y,m-1,d+7);
+    return t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0'); })();
+  const fmtGM = iso => { const [,m,d]=iso.split('-').map(Number); return d+' '+MESI_L[m-1]; };
   const oggi = new Date().toISOString().split('T')[0];
 
   return React.createElement(React.Fragment, null
@@ -1576,7 +1585,13 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
           : React.createElement(React.Fragment, null
               , React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginBottom:4}}, `${slotLiberi.length} slot disponibili dalla disponibilità del docente · prossimi 60 giorni`)
               , React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:6}}
-                , slotLiberi.slice(0,30).map(s => {
+                , settimane.map(w => React.createElement('div', {key:w.lunedi, style:{display:'flex',flexDirection:'column',gap:6,marginBottom:10}}
+                  , React.createElement('div', {style:{fontSize:11,fontWeight:700,color:C.teal,textTransform:'uppercase',letterSpacing:'0.07em',padding:'6px 2px',borderBottom:`1px solid ${C.border}`,marginTop:4}}
+                      , `Settimana dal ${fmtGM(w.lunedi)} al ${fmtGM(w.domenica)}`
+                      , w.lunedi===_oggiLun ? ' · questa settimana' : w.lunedi===_prossLun ? ' · prossima settimana' : ''
+                      , React.createElement('span',{style:{fontWeight:400,color:C.textDim,textTransform:'none',letterSpacing:0}}, ` · ${w.slots.length} slot`)
+                    )
+                  , w.slots.map(s => {
                     const isSel = slotSel?.key === s.key;
                     return React.createElement('button', {key:s.key,
                         onClick:()=>setSlotSel(s),
@@ -1592,8 +1607,7 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
                         )
                       , isSel && React.createElement(Ic,{n:'check',size:16,stroke:C.teal})
                     );
-                  })
-                , slotLiberi.length > 30 && React.createElement('div',{style:{fontSize:11,color:C.textDim,textAlign:'center',padding:8}}, `+${slotLiberi.length-30} altri slot...`)
+                  })))
               )
             )
         // Note
@@ -1612,6 +1626,25 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
     )
   );
 };
+
+// Raggruppa gli slot (già con .data 'YYYY-MM-DD') per settimana lunedì→domenica, in ordine
+// cronologico. Ritorna [{lunedi:'YYYY-MM-DD', domenica:'YYYY-MM-DD', slots:[...]}].
+function fmRaggruppaSlotPerSettimana(slots) {
+  const pad = n => String(n).padStart(2,'0');
+  const ymd = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+  const ordinati = [...(slots||[])].sort((a,b) => (a.data+'_'+a.oraInizio) < (b.data+'_'+b.oraInizio) ? -1 : 1);
+  const map = new Map();
+  ordinati.forEach(s => {
+    const [y,m,dd] = s.data.split('-').map(Number);
+    const d = new Date(y, m-1, dd);
+    const lun = new Date(y, m-1, dd - ((d.getDay()+6)%7));   // lunedì della settimana
+    const dom = new Date(lun.getFullYear(), lun.getMonth(), lun.getDate()+6);
+    const k = ymd(lun);
+    if (!map.has(k)) map.set(k, { lunedi:k, domenica:ymd(dom), slots:[] });
+    map.get(k).slots.push(s);
+  });
+  return Array.from(map.values());
+}
 
 const RecuperoScadutoModal = ({ lesson, onExtend, onDismiss, setLessons }) => {
   const [nuovaScadenza, setNuovaScadenza] = useState('');
