@@ -1241,8 +1241,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
     {id:"lezioni",  label:"Lezioni",  icon:"calendar"},
     {id:"collettive", label:"Collettive", icon:"group"},
     {id:"compenso", label:"Compenso", icon:"euro"},
-    // Tab Impostazioni: solo per il docente loggato (visibile anche in PWA/mobile)
-    ...(ruoloDocView==="docente" ? [{id:"impostazioni", label:"Impostazioni", icon:"settings"}] : []),
+    // Tab Impostazioni: docente loggato (sue impostazioni) + admin (sola lettura, solo disponibilità recuperi)
+    ...((ruoloDocView==="docente" || ruoloDocView==="admin") ? [{id:"impostazioni", label:"Impostazioni", icon:"settings"}] : []),
   ];
   const stip = stipendioMese(selected);
 
@@ -2092,12 +2092,17 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
         )
       )
 
-      /* ── IMPOSTAZIONI (solo docente) ── */
-      , tab==="impostazioni" && ruoloDocView==="docente" && (
+      /* ── IMPOSTAZIONI (docente: complete; admin: sola lettura disponibilità recuperi) ── */
+      , tab==="impostazioni" && (ruoloDocView==="docente" || ruoloDocView==="admin") && (
         React.createElement('div', {style:{display:"flex",flexDirection:"column",gap:20}}
 
+          /* ── Nota admin (sola lettura) ── */
+          , ruoloDocView==="admin" && React.createElement('div', {style:{padding:"10px 14px",borderRadius:10,fontSize:12,color:C.textMuted,background:C.surface,border:`1px solid ${C.border}`}}
+            , `Impostazioni di ${selected.nome||"docente"} — sola lettura. Le disponibilità per i recuperi possono essere modificate solo dal docente.`
+          )
+
           /* ── Mostra/nascondi importi ── */
-          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+          , ruoloDocView==="docente" && React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
             , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
               , React.createElement(Ic, {n:"eye",size:14,stroke:C.gold})
               , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Privacy importi")
@@ -2128,7 +2133,7 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
           )
 
           /* ── Prenotazioni sala prove ── */
-          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+          , ruoloDocView==="docente" && React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
             , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
               , React.createElement(Ic, {n:"drum",size:14,stroke:C.gold})
               , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Sala prove")
@@ -2170,7 +2175,7 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
           )
 
           /* ── Sezioni dashboard visibili ── */
-          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+          , ruoloDocView==="docente" && React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
             , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
               , React.createElement(Ic, {n:"grid",size:14,stroke:C.gold})
               , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Sezioni dashboard")
@@ -2219,7 +2224,7 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
                 , React.createElement(Ic, {n:"clock",size:14,stroke:C.gold})
                 , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Disponibilità per recuperi")
               )
-              , React.createElement('button', {
+              , ruoloDocView==="docente" && React.createElement('button', {
                   onClick: ()=>setDocSettings(p=>({...p,showDisp:!p.showDisp})),
                   style:{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",
                     background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,
@@ -2232,7 +2237,9 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
             /* Lista slot esistenti */
             , docSettings.disponibilita.length === 0 && !docSettings.showDisp && (
               React.createElement('div', {style:{padding:"16px 20px",fontSize:13,color:C.textDim,textAlign:"center"}}
-                , "Nessuna disponibilità configurata. Gli allievi non potranno prenotare recuperi."
+                , ruoloDocView==="admin"
+                    ? `${selected.nome||"Questo docente"} non ha ancora configurato nessuna disponibilità per i recuperi: non sarà possibile fissare recuperi con lui/lei.`
+                    : "Nessuna disponibilità configurata. Gli allievi non potranno prenotare recuperi."
               )
             )
             , docSettings.disponibilita.length > 0 && (
@@ -2246,7 +2253,7 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
                       , React.createElement('span', {style:{fontSize:13,fontWeight:500,textTransform:"capitalize",color:C.text,minWidth:90}}, slot.giorno)
                       , React.createElement('span', {style:{fontSize:13,color:C.textMuted}}, `${slot.oraInizio} — ${slot.oraFine}`)
                     )
-                    , React.createElement('button', {
+                    , ruoloDocView==="docente" && React.createElement('button', {
                         onClick:()=>{
                           const updatedDisp = docSettings.disponibilita.filter((_,i)=>i!==idx);
                           setDocSettings(p=>({...p,disponibilita:updatedDisp}));
@@ -2269,7 +2276,7 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
               )
             )
             /* Form aggiunta slot */
-            , docSettings.showDisp && (
+            , ruoloDocView==="docente" && docSettings.showDisp && (
               React.createElement('div', {style:{padding:"16px 20px"}}
                 , React.createElement('div', {style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}
                   , React.createElement('div', null
@@ -2334,7 +2341,7 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
           )
 
           /* ── Informazioni personali ── */
-          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+          , ruoloDocView==="docente" && React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
             , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}
               , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
                 , React.createElement(Ic, {n:"user",size:14,stroke:C.gold})
@@ -2442,7 +2449,7 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
           )
 
           /* ── Cambio password ── */
-          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+          , ruoloDocView==="docente" && React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
             , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}
               , React.createElement('div', {style:{display:"flex",alignItems:"center",gap:8}}
                 , React.createElement(Ic, {n:"lock",size:14,stroke:C.gold})
@@ -2521,7 +2528,7 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
           )
 
           /* ── Google Calendar ── */
-          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+          , ruoloDocView==="docente" && React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
             , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
               , React.createElement('span',{style:{fontSize:16}},'📅')
               , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Google Calendar")
@@ -2539,7 +2546,7 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
           // capitare che l'aggiornamento automatico non scatti subito. Questo pulsante
           // forza la pulizia di service worker e cache locali e ricarica da zero,
           // garantendo di ripartire sempre con l'ultima versione pubblicata.
-          , React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
+          , ruoloDocView==="docente" && React.createElement('div', {style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden"}}
             , React.createElement('div', {style:{padding:"14px 20px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}
               , React.createElement(Ic, {n:"refresh",size:14,stroke:C.gold})
               , React.createElement('span', {style:{fontSize:12,fontWeight:600,letterSpacing:"0.07em",textTransform:"uppercase",color:C.textMuted}}, "Aggiornamento app")
