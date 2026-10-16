@@ -320,6 +320,35 @@ const fmSuggerisciRipartizione = (b) => {
   return { contanti: fmArrot2(Math.max(0, c)), tracciato: fmArrot2(Math.max(0, t)) };
 };
 
+// Salva le disponibilità recuperi di un docente su Supabase VERIFICANDO l'esito reale:
+// un UPDATE bloccato da RLS (o su un id non trovato) non restituisce errore ma aggiorna 0 righe,
+// e prima la UI mostrava comunque gli slot come "salvati" (perdendoli al ricaricamento).
+// Ritorna {ok:boolean, msg:string}.
+async function fmSalvaDisponibilitaRecuperi(docId, slots) {
+  const sb = window.supabaseClient;
+  if (!sb) return { ok:false, msg:"Connessione al database non disponibile: slot NON salvati." };
+  if (!docId) return { ok:false, msg:"Docente non identificato: slot NON salvati." };
+  try {
+    const payload = { disponibilita_recuperi: JSON.stringify(Array.isArray(slots) ? slots : []) };
+    const { data, error } = await sb.from('docenti').update(payload).eq('id', docId).select('id');
+    if (error) {
+      console.warn('[FM] disponibilita save error:', error.message, error);
+      const colMancante = /disponibilita_recuperi/i.test(error.message||'') && /column|colonna|schema cache/i.test(error.message||'');
+      return { ok:false, msg: colMancante
+        ? "Colonna 'disponibilita_recuperi' mancante sul database: eseguire la migrazione SQL. Slot NON salvati."
+        : "Errore di salvataggio: " + (error.message||"sconosciuto") + ". Slot NON salvati." };
+    }
+    if (!data || data.length === 0) {
+      console.warn('[FM] disponibilita save: 0 righe aggiornate per docente', docId, '(permessi/RLS o id non trovato)');
+      return { ok:false, msg:"Il database non ha accettato la modifica (nessuna riga aggiornata: possibile blocco permessi). Slot NON salvati." };
+    }
+    return { ok:true, msg:"✓ Disponibilità salvate" };
+  } catch(e) {
+    console.warn('[FM] disponibilita save exception:', e);
+    return { ok:false, msg:"Errore di salvataggio: " + (e && e.message ? e.message : e) + ". Slot NON salvati." };
+  }
+}
+
 const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setDocenti, annoInizioAttivo, courses:_coursesDocView, userRuolo:_ruoloDocView, appUser:_appUserDocView, quickAction:_qaDocView, clearQuickAction:_clearQaDocView, iscrizioniAnno:_propIscrizioniDV, anniScolastici:_propAnniDV, spese:_speseDocView, entrate:_entrateDocView, setEntrate:_setEntrateDocView, repertorio:_repertorioDocView }) => {
   const ruoloDocView = _ruoloDocView || "admin";
   const isMobile = useIsMobile();
@@ -2234,6 +2263,10 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
                 , docSettings.showDisp ? " Chiudi" : " Aggiungi slot"
               )
             )
+            , docSettings.msgDisp && React.createElement('div', {style:{padding:"10px 20px",fontSize:12,
+                background: docSettings.msgDisp.ok===true ? C.greenBg : docSettings.msgDisp.ok===false ? C.redBg : C.bg,
+                color: docSettings.msgDisp.ok===true ? C.green : docSettings.msgDisp.ok===false ? C.red : C.textMuted,
+                borderBottom:`1px solid ${C.border}`}}, docSettings.msgDisp.text)
             /* Lista slot esistenti */
             , docSettings.disponibilita.length === 0 && !docSettings.showDisp && (
               React.createElement('div', {style:{padding:"16px 20px",fontSize:13,color:C.textDim,textAlign:"center"}}
@@ -2254,17 +2287,23 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
                       , React.createElement('span', {style:{fontSize:13,color:C.textMuted}}, `${slot.oraInizio} — ${slot.oraFine}`)
                     )
                     , ruoloDocView==="docente" && React.createElement('button', {
-                        onClick:()=>{
-                          const updatedDisp = docSettings.disponibilita.filter((_,i)=>i!==idx);
-                          setDocSettings(p=>({...p,disponibilita:updatedDisp}));
+                        onClick: async ()=>{
+                          const prevDisp = docSettings.disponibilita;
+                          const prevDoc = selected;
+                          const updatedDisp = prevDisp.filter((_,i)=>i!==idx);
+                          setDocSettings(p=>({...p,disponibilita:updatedDisp,msgDisp:{ok:null,text:"Salvataggio..."}}));
                           const updatedDoc = { ...selected, disponibilitaRecuperi: updatedDisp };
                           setSelected(updatedDoc);
                           setDocenti(prev => prev.map(d => d.id === selected.id ? updatedDoc : d));
-                          const sb = window.supabaseClient;
-                          if (sb && selected) {
-                            sb.from('docenti').update({disponibilita_recuperi: JSON.stringify(updatedDisp)})
-                              .eq('id', selected.id)
-                              .then(({error})=>{ if(error) console.warn('[FM] disponibilita delete error:', error.message); });
+                          const res = await fmSalvaDisponibilitaRecuperi(prevDoc.id, updatedDisp);
+                          if (res.ok) {
+                            setDocSettings(p=>({...p,msgDisp:{ok:true,text:res.msg}}));
+                            setTimeout(()=>setDocSettings(p=>({...p,msgDisp:null})),3000);
+                          } else {
+                            // ripristina lo stato precedente: lo slot NON è stato rimosso dal DB
+                            setDocSettings(p=>({...p,disponibilita:prevDisp,msgDisp:{ok:false,text:res.msg}}));
+                            setSelected(prevDoc);
+                            setDocenti(prev => prev.map(d => d.id === prevDoc.id ? prevDoc : d));
                           }
                         },
                         style:{background:"none",border:"none",cursor:"pointer",color:C.red,padding:4,borderRadius:4,display:"flex"}
@@ -2316,20 +2355,28 @@ ${totComp ? `<div><div class="totale-label">Compensazione quote</div><div style=
                       onClick: async () => {
                         const slot = docSettings.newSlot;
                         if (!slot.giorno || !slot.oraInizio || !slot.oraFine) return;
-                        const updated = [...docSettings.disponibilita, {...slot}];
-                        setDocSettings(p=>({...p,disponibilita:updated,showDisp:false,newSlot:{giorno:"lunedì",oraInizio:"15:00",oraFine:"18:00"}}));
+                        if (slot.oraFine <= slot.oraInizio) {
+                          setDocSettings(p=>({...p,msgDisp:{ok:false,text:"L'orario di fine deve essere successivo a quello di inizio."}}));
+                          return;
+                        }
+                        const prevDisp = docSettings.disponibilita;
+                        const prevDoc = selected;
+                        const updated = [...prevDisp, {...slot}];
+                        setDocSettings(p=>({...p,disponibilita:updated,showDisp:false,newSlot:{giorno:"lunedì",oraInizio:"15:00",oraFine:"18:00"},msgDisp:{ok:null,text:"Salvataggio..."}}));
                         // Aggiorna il record in memoria (React state)
                         const updatedDoc = { ...selected, disponibilitaRecuperi: updated };
                         setSelected(updatedDoc);
                         setDocenti(prev => prev.map(d => d.id === selected.id ? updatedDoc : d));
-                        // Persisti su Supabase
-                        const sb = window.supabaseClient;
-                        if (sb && selected) {
-                          sb.from('docenti').update({
-                            disponibilita_recuperi: JSON.stringify(updated),
-                          }).eq('id', selected.id).then(({error})=>{
-                            if(error) console.warn('[FM] disponibilita save error:', error.message);
-                          });
+                        // Persisti su Supabase verificando l'esito reale
+                        const res = await fmSalvaDisponibilitaRecuperi(prevDoc.id, updated);
+                        if (res.ok) {
+                          setDocSettings(p=>({...p,msgDisp:{ok:true,text:res.msg}}));
+                          setTimeout(()=>setDocSettings(p=>({...p,msgDisp:null})),3000);
+                        } else {
+                          // ripristina: lo slot NON è stato salvato sul DB
+                          setDocSettings(p=>({...p,disponibilita:prevDisp,msgDisp:{ok:false,text:res.msg}}));
+                          setSelected(prevDoc);
+                          setDocenti(prev => prev.map(d => d.id === prevDoc.id ? prevDoc : d));
                         }
                       }
                     }
