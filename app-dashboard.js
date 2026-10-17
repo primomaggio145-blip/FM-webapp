@@ -1497,7 +1497,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
     : ruoloNB === "allievo"
     ? (lessons||[]).filter(l => myAllievoId
         ? String(l.studentId) === String(myAllievoId)
-        : (l.student||"").toLowerCase().includes(myAllievoNome.toLowerCase()))
+        : (l.student||"").toLowerCase().trim() === myAllievoNome.toLowerCase().trim() || (typeof window.__fmNomiCompatibili === "function" && window.__fmNomiCompatibili(l.student, myAllievoNome, null)))
     : (lessons||[]); // admin vede tutto
 
   const notifs = [];

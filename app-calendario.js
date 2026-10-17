@@ -5829,6 +5829,34 @@ window.gcalSyncSalaProveWith = (action, p) => {
   if (p.stato === 'approvata') window.gcalSyncLesson('sync_one', gcalSalaLesson(p));
   else window.gcalSyncLesson('delete_one', { id: 'sala_' + p.id });
 };
+// [FM-MATCH-NOME] Confronto nomi allievo SENZA sottostringhe: "Lorenzo" NON deve combaciare con
+// "Alessandro De Lorenzo". Uguaglianza a parole (ordine/accenti ignorati) oppure il nome parziale
+// deve essere l'INIZIO del nome completo (es. "Alessandro" -> "Alessandro De Lorenzo"), e solo se
+// nessun altro allievo in anagrafica combacia allo stesso modo (nome ambiguo -> nessun match).
+const _fmNomeTok = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase().replace(/['\u2019`]/g, '').replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(Boolean);
+const _fmNomePrefisso = (corto, lungo) => corto.length > 0 && corto.length < lungo.length && corto.every((t, i) => lungo[i] === t);
+const _fmNomiCompatibili = (a, b, studentId) => {
+  const ta = _fmNomeTok(a), tb = _fmNomeTok(b);
+  if (!ta.length || !tb.length) return false;
+  if (ta.length === tb.length && [...ta].sort().join(' ') === [...tb].sort().join(' ')) return true;
+  const corto = ta.length <= tb.length ? ta : tb, lungo = ta.length <= tb.length ? tb : ta;
+  if (!_fmNomePrefisso(corto, lungo)) return false;
+  // Ambiguità: un altro allievo (id diverso) che combacia con lo stesso nome parziale
+  try {
+    const all = (window.__FM_DATA__ && window.__FM_DATA__.students) || [];
+    const nomeCompleto = lungo.join(' ');
+    const altri = all.filter(st => {
+      const tk = _fmNomeTok(st.name || st.nome || '');
+      if (!tk.length || tk.join(' ') === nomeCompleto) return false;
+      if (studentId != null && st.id != null && String(st.id) === String(studentId)) return false;
+      return _fmNomePrefisso(corto, tk);
+    });
+    if (altri.length > 0) return false;
+  } catch (e) {}
+  return true;
+};
+window.__fmNomiCompatibili = _fmNomiCompatibili;
 const studentInLesson = (l, name, studentId) => {
   if (isColl(l)) {
     const arr = l.students || [];
@@ -5845,15 +5873,14 @@ const studentInLesson = (l, name, studentId) => {
     //    L'admin/docente vedrà comunque la lezione tramite il teacher match
     return false;
   }
-  // Individuali: match per ID
-  if (studentId != null && l.studentId != null && String(l.studentId) === String(studentId)) return true;
-  const ln = (l.student||'').toLowerCase().trim();
-  const nn = (name||'').toLowerCase().trim();
-  if (ln && nn && (ln === nn || ln.includes(nn) || nn.includes(ln))) return true;
+  // Individuali: se lezione e allievo hanno ENTRAMBI un ID, l'ID è l'unica verità
+  // (prima, ID diversi ricadevano nel confronto per nome → lezioni di un allievo
+  // attribuite a un altro con nome simile).
+  if (studentId != null && l.studentId != null) return String(l.studentId) === String(studentId);
+  if (_fmNomiCompatibili(l.student, name, studentId)) return true;
   // Fallback: lezioni "nuovo iscritto" registrate prima che l'allievo avesse un
   // record/collegamento — hanno contactName invece di student/studentId.
-  const cn = (l.contactName||'').toLowerCase().trim();
-  if (cn && nn && (cn === nn || cn.includes(nn) || nn.includes(cn))) return true;
+  if (l.studentId == null && !l.student && _fmNomiCompatibili(l.contactName, name, studentId)) return true;
   return false;
 };
 // Trova la lezione precedente della stessa serie (stesso allievo per le individuali, stesso

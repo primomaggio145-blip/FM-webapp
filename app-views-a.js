@@ -3162,7 +3162,7 @@ const AllegatiView = ({ allegati:propAllegati, setAllegati:propSetAllegati, less
     try { if (typeof studentInLesson === 'function') return studentInLesson(l, _avNome, _avAllievoId); } catch(e) {}
     if (_avAllievoId != null && l.studentId != null) return String(l.studentId) === String(_avAllievoId);
     const ln = (l.student||'').toLowerCase().trim(), nn = _avNome.toLowerCase().trim();
-    return !!ln && !!nn && (ln === nn || ln.includes(nn) || nn.includes(ln));
+    return !!ln && !!nn && (ln === nn || (typeof window.__fmNomiCompatibili === 'function' && window.__fmNomiCompatibili(ln, nn, _avAllievoId)));
   };
   const _avLessons = lessons.filter(l => {
     if (_avRuolo === 'admin' || !_avRuolo) return true;
