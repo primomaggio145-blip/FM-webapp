@@ -5588,6 +5588,8 @@ function contaLezioniCollettiveReali(nome, studentId, lessons, dataInizio, dataF
 }
 const isProva     = l => _optionalChain([l, 'optionalAccess', _47 => _47.tipo]) === "prova";
 const isSalaProve = l => _optionalChain([l, 'optionalAccess', _47b => _47b.tipo]) === "sala_prove";
+// [FM-SALA-NOME] Nome di chi ha prenotato la sala (allievo/docente/richiedente) — vuoto se anonimo
+const salaNome = l => String((l && (l.nomeSala || l.richiedente || l.student)) || "").trim();
 
 // ── Inserimento SICURO di una lezione ricorrente ──────────────────────────────
 // Previene duplicati con un guard globale + controllo Supabase prima di inserire
@@ -7374,7 +7376,7 @@ const LessonPill = ({ lesson, onClick, compact=false, courses, onInfoHover }) =>
           : lesson.tipo==="prova"
           ? (lesson.instrument||"") + (lesson.phone ? " \u00b7 " + lesson.phone : "")
           : lesson.tipo==="sala_prove"
-          ? (lesson.richiedente||lesson.student||"") + (lesson.oraFine ? " → "+(lesson.oraFine||"").slice(0,5) : "")
+          ? salaNome(lesson) + (lesson.oraFine ? " → "+(lesson.oraFine||"").slice(0,5) : "")
           : lesson.instrument||""
       )
     )
@@ -8715,7 +8717,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
               , React.createElement('div',{style:{fontSize:12,color:pending?"#92400e":C.orange2,fontWeight:600,marginBottom:2}}
                 , ora, fine?" → "+fine:"")
               , React.createElement('div',{style:{fontSize:12,color:C.textMuted}}
-                , l.richiedente||l.student
+                , salaNome(l)
                 , l._original&&l._original.telefono?" · 📞 "+l._original.telefono:"")
               , l.topic&&l.topic!=="Sala Prove"&&React.createElement('div',{style:{fontSize:12,color:C.textMuted,marginTop:4,fontStyle:"italic"}},"\"",fmTestoPiano(l.topic),"\"")
             )
@@ -8956,7 +8958,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
     const l = it.l;
     const hex = isSalaProve(l) ? (l.stato === "in_attesa" ? "#f59e0b" : C.orange2) : lessonHex(l, courses);
     const dot = l.inRecupero && !l.attendance ? '#f59e0b' : attHex(l.attendance);
-    const titolo = isSalaProve(l) ? "🤘 Sala Prove" + (l.richiedente ? " · " + l.richiedente : "")
+    const titolo = isSalaProve(l) ? "🤘 Sala Prove" + (salaNome(l) ? " · " + salaNome(l) : "")
       : isColl(l) ? (l.courseName || "Collettiva")
       : isProva(l) ? (l.contactName || "Lezione prova")
       : (l.student || (l.nuovoIscritto ? (l.contactName || "🆕 Nuovo iscritto") : ""));
@@ -9252,7 +9254,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
 
                 // ── Mobile: cella ultra-compatta — solo puntino presenza + allievo + corso ──
                 if (isMobile) {
-                  const nome = isSala ? `🤘 ${normHour}`
+                  const nome = isSala ? `🤘 ${salaNome(l) ? salaNome(l).split(" ")[0] : normHour}`
                     : isColl(l)  ? (l.courseName||"Coll.")
                     : isProva(l) ? (l.contactName||"Prova")
                     : l.student ? l.student.split(" ")[0]
@@ -9321,7 +9323,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                     , !isSala && React.createElement(Ic, {n: isColl(l)?"group": isProva(l)?"user":"music", size:8, stroke:accent})
                     , React.createElement('span',{style:{whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",flex:1,minWidth:0}}
                       , isSala
-                        ? `🤘 ${normHour}–${normFine}`
+                        ? `🤘 ${normHour}${salaNome(l) ? " · " + salaNome(l) : "–" + normFine}`
                         : `${normHour} · ${
                             isColl(l)  ? (l.courseName||"Coll.")
                           : isProva(l) ? (l.contactName||"Prova")
@@ -9341,7 +9343,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                   , l._h > 26 && React.createElement('div',{style:{fontSize:9,color:accent,
                       opacity:0.85,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",lineHeight:1.3}}
                     , isSala
-                      ? "SALA PROVE"
+                      ? (salaNome(l) ? `SALA PROVE · ${normHour}–${normFine}` : "SALA PROVE")
                       : isColl(l)
                         ? `${(l.students||[]).length} allievi`
                         : (l.instrument||"")
@@ -9349,7 +9351,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                   , l._h > 42 && React.createElement('div',{style:{fontSize:9,
                       color:accent,opacity:0.7,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}
                     , isSala
-                      ? (l.richiedente||l.student||"")
+                      ? (l.topic && !/^(Sala Prove|🔒)/.test(l.topic) ? l.topic : "")
                       : (l.teacher||"")
                   )
                   , isSala && pending && l._h > 56 && React.createElement('div',{
@@ -13865,10 +13867,18 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
           const _altrui = role === "allievo" && !(p.userId && p.userId === (_appUserCV && _appUserCV.userId))
             && !((p.allieviIds||[]).map(String).includes(String(_cvAllievoId)));
           const pv = _altrui ? { ...p, richiedente: "", motivo: "", telefono: "", noteAdmin: "", _anonima: true } : p;
+          // [FM-SALA-NOME] Nome mostrato sul calendario: chi ha prenotato (se allievo = nome allievo);
+          // se manca, nomi di allievi/docenti convocati dall'admin. Vuoto per le prenotazioni altrui.
+          const _nomiConv = _altrui ? [] : [
+            ...(p.allieviIds||[]).map(id => (propStudents||[]).find(s => String(s.id) === String(id))).filter(Boolean).map(s => s.name || s.nome),
+            ...(p.docentiIds||[]).map(id => (propDocenti||[]).find(d => String(d.id) === String(id))).filter(Boolean).map(d => d.nome || d.name || d.teacherKey),
+          ].filter(Boolean);
+          const _nomeSala = _altrui ? "" : ((pv.richiedente || "").trim() || _nomiConv.join(", "));
           return {
           id: "sala_" + pv.id,
           _isSalaProve: true,
           _original: pv,
+          nomeSala: _nomeSala,
           tipo: "sala_prove",
           date: pv.data,
           hour: pv.oraInizio || "",
