@@ -11954,7 +11954,7 @@ const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role
 
       /* ── CALENDARIO OCCUPAZIONI ───────────────────────────────── */
       , svPanel==="calendario" && React.createElement('div', { style:{flex:1,overflow:"auto",padding:"16px 20px"} }
-        , React.createElement(BandWeekCalendar, { lessons: lessons, prenotazioni: prenotazioni, gcalBusy: gcalBusy })
+        , React.createElement(BandWeekCalendar, { lessons: lessons, prenotazioni: prenotazioni, gcalBusy: gcalBusy, students: students, docenti: docenti })
       )
 
       /* ── RICHIESTE (admin only) ───────────────────────────────── */

@@ -3583,7 +3583,7 @@ const MobileMoreMenu = ({ current, setView, extraItems, onLogout, onEsciSenzaLog
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // ─── BAND WEEK CALENDAR — stessa time-grid dell'admin ─────────────────────────
-const BandWeekCalendar = ({ lessons, prenotazioni, gcalBusy }) => {
+const BandWeekCalendar = ({ lessons, prenotazioni, gcalBusy, students, docenti }) => {
   const [weekOffset, setWeekOffset] = useState(0);
 
   const getMonday = (offset) => {
@@ -3619,6 +3619,18 @@ const BandWeekCalendar = ({ lessons, prenotazioni, gcalBusy }) => {
   const unite = React.useMemo(() => fmSalaUnisciOccupazioni(lessons, prenotazioni, rpcOcc), [lessons, prenotazioni, rpcOcc]);
   const occLezioni = React.useMemo(() => fmSalaOccupazioniLezioni(unite.lessons, _wkFrom, _wkTo), [unite, _wkFrom, _wkTo]);
 
+  // [FM-SALA-NOME] Chi ha prenotato: richiedente (se allievo = nome allievo); in mancanza,
+  // allievi/docenti convocati. Vuoto per le prenotazioni anonime (privacy allievi/docenti).
+  const nomePrenotazione = (p) => {
+    if (!p || p._anonima) return '';
+    const r = String(p.richiedente || '').trim();
+    if (r) return r;
+    return [
+      ...(p.allieviIds||[]).map(id => (students||[]).find(x => String(x.id)===String(id))).filter(Boolean).map(x => x.name || x.nome),
+      ...(p.docentiIds||[]).map(id => (docenti||[]).find(x => String(x.id)===String(id))).filter(Boolean).map(x => x.nome || x.name || x.teacherKey),
+    ].filter(Boolean).join(', ');
+  };
+
   const getEvents = (ds, h) => {
     const evts = [];
     // Prenotazioni (tutte tranne rifiutate)
@@ -3632,7 +3644,8 @@ const BandWeekCalendar = ({ lessons, prenotazioni, gcalBusy }) => {
         bd:p.stato==='approvata'?C.orange2Border:'rgba(245,158,11,0.3)',
         accent:p.stato==='approvata'?C.orange2:'#f59e0b',
         label:(p.oraInizio||'').slice(0,5)+'–'+(p.oraFine||'').slice(0,5),
-        tag:p.stato==='approvata'?'✅':'⏳' });
+        tag:p.stato==='approvata'?'✅':'⏳',
+        nome: nomePrenotazione(p) });
     });
     // [FM-SALA-OCCUPAZIONE] Lezioni di batteria e collettive (reali + ricorrenze proiettate)
     // → sala occupata, senza nome allievo
@@ -3670,8 +3683,9 @@ const BandWeekCalendar = ({ lessons, prenotazioni, gcalBusy }) => {
           backgroundColor: chiuso.tipo==='festività' ? 'rgba(254,242,242,0.55)' : 'rgba(243,244,246,0.55)',
           zIndex:0, pointerEvents:'none'
         }})
-      ,evts.map(ev=>React.createElement('div',{key:ev.id,style:{position:'absolute',top:ev.top+1,left:2,right:2,height:ev.height,background:ev.bg,border:`1px solid ${ev.bd}`,borderLeft:`3px solid ${ev.accent}`,borderRadius:4,padding:'2px 4px',fontSize:9,color:ev.accent,fontWeight:600,overflow:'hidden',zIndex:2,display:'flex',flexDirection:'column',gap:1}}
+      ,evts.map(ev=>React.createElement('div',{key:ev.id,style:{position:'absolute',top:ev.top+1,left:2,right:2,height:ev.height,background:ev.bg,border:`1px solid ${ev.bd}`,borderLeft:`3px solid ${ev.accent}`,borderRadius:4,padding:'2px 4px',fontSize:9,color:ev.accent,fontWeight:600,overflow:'hidden',zIndex:2,display:'flex',flexDirection:'column',gap:1},title:ev.nome?(ev.nome+' · '+ev.label):undefined}
         ,React.createElement('div',{style:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:700}},ev.tag,' ',ev.label)
+        ,ev.nome&&ev.height>=26&&React.createElement('div',{style:{whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',fontWeight:600}},ev.nome)
       ))
     );
   };
@@ -3943,7 +3957,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons, students, docent
         , '🎸 Compila la richiesta e attendi la conferma dell\'admin. Per domande usa il pulsante "Contatta admin".'
       )
 
-      , isBand && React.createElement(BandWeekCalendar, { lessons, prenotazioni: miePrenotazioni, gcalBusy })
+      , isBand && React.createElement(BandWeekCalendar, { lessons, prenotazioni: miePrenotazioni, gcalBusy, students, docenti })
 
       /* Lista mie prenotazioni (band) */
       , isBand && React.createElement('div', { style: { marginTop: 20 } }
@@ -3975,7 +3989,7 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons, students, docent
 
       /* Lista admin: tutte le prenotazioni future */
       , isAdmin && React.createElement('div', null
-        , React.createElement(BandWeekCalendar, { lessons, prenotazioni, gcalBusy })
+        , React.createElement(BandWeekCalendar, { lessons, prenotazioni, gcalBusy, students, docenti })
         , React.createElement('div', { style: { fontSize:12, color:C.textMuted, textTransform:'uppercase', letterSpacing:'.08em', marginBottom:10, fontWeight:600 } }
           , 'Prenotazioni future · ', prenotazioni.filter(p => p.data >= oggi).length, ' totali'
         )
