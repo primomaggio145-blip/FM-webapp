@@ -183,6 +183,16 @@ const MiniChart = ({ dati }) => {
 };
 
 // ─── LESSON TIMELINE ──────────────────────────────────────────────────────────
+// [FM-TIMELINE-COLORI] Colore della lezione IN CORSO in base ai minuti che mancano alla fine:
+//   > 15 min alla fine → verde | da 15 a 5 min alla fine → arancione | ultimi 5 min → rosso
+// Es. 17:30–18:15: verde 17:30–18:00, arancione 18:00–18:10, rosso 18:10–18:15.
+const fmLessonTone = (startM, endM, nowM) => {
+  const rimanenti = endM - nowM;
+  if (rimanenti > 15) return "green";
+  if (rimanenti > 5)  return "orange";
+  return "red";
+};
+
 const LessonTimeline = ({ lezioni, onLessonClick }) => {
   const oraNum = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
 
@@ -221,6 +231,9 @@ const LessonTimeline = ({ lezioni, onLessonClick }) => {
         const prossima= !passata && !inCorso && i===lezioni.findIndex(x=>oraNum(x.ora)>nowMins);
         const clickable = !!onLessonClick;
         const isActive = inCorso || prossima; // primo elemento da mostrare in cima
+        // Palette dinamica della lezione in corso (verde → arancione → rosso)
+        const _tk   = inCorso ? fmLessonTone(startM, endM, nowMins) : null;
+        const tone  = _tk ? { c:C[_tk], bg:C[_tk+"Bg"], b:C[_tk+"Border"] } : null;
 
         const docenteColor = {
           "Prof. Rossi":C.gold,"Prof. Bianchi":C.teal,"Prof. Verde":C.blue,"Prof. Marino":C.purple
@@ -232,31 +245,31 @@ const LessonTimeline = ({ lezioni, onLessonClick }) => {
             onClick: clickable ? ()=>onLessonClick(l.id) : undefined,
             style: {display:"grid",gridTemplateColumns:"52px 4px 1fr auto",
               gap:10,alignItems:"center",padding:"9px 12px",borderRadius:10,
-              background:inCorso?`${C.goldBg}cc`:passata?C.bg:C.surface,
-              border:`1px solid ${inCorso?C.goldDim:passata?C.border+"60":C.border}`,
+              background:inCorso?tone.bg:passata?C.bg:C.surface,
+              border:`1px solid ${inCorso?tone.c:passata?C.border+"60":C.border}`,
               opacity:passata?0.5:1,
               cursor: clickable ? "pointer" : "default",
               transition:"all 0.12s"},
-            onMouseEnter: clickable ? e=>{e.currentTarget.style.borderColor=C.gold;e.currentTarget.style.background=inCorso?`${C.goldBg}cc`:`${C.gold}0a`;} : undefined,
-            onMouseLeave: clickable ? e=>{e.currentTarget.style.borderColor=inCorso?C.goldDim:passata?C.border+"60":C.border;e.currentTarget.style.background=inCorso?`${C.goldBg}cc`:passata?C.bg:C.surface;} : undefined,
+            onMouseEnter: clickable ? e=>{e.currentTarget.style.borderColor=inCorso?tone.c:C.gold;e.currentTarget.style.background=inCorso?tone.bg:`${C.gold}0a`;} : undefined,
+            onMouseLeave: clickable ? e=>{e.currentTarget.style.borderColor=inCorso?tone.c:passata?C.border+"60":C.border;e.currentTarget.style.background=inCorso?tone.bg:passata?C.bg:C.surface;} : undefined,
             __self: this, __source: {fileName: _jsxFileName, lineNumber: 1340}}
             /* Ora */
             , React.createElement('div', { style: {textAlign:"right"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1347}}
-              , React.createElement('div', { style: {fontSize:13,fontWeight:500,color:inCorso?C.gold:passata?C.textDim:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1348}}, l.ora)
+              , React.createElement('div', { style: {fontSize:13,fontWeight:500,color:inCorso?tone.c:passata?C.textDim:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1348}}, l.ora)
               , React.createElement('div', { style: {fontSize:10,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1349}}, l.durata, "′")
             )
             /* Indicatore */
             , React.createElement('div', { style: {display:"flex",flexDirection:"column",alignItems:"center",height:"100%",gap:2}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1352}}
               , React.createElement('div', { style: {width:4,height:4,borderRadius:"50%",flexShrink:0,
-                background:inCorso?C.gold:passata?C.textDim:docenteColor,
-                boxShadow:inCorso?`0 0 8px ${C.gold}`:undefined,
+                background:inCorso?tone.c:passata?C.textDim:docenteColor,
+                boxShadow:inCorso?`0 0 8px ${tone.c}`:undefined,
                 animation:inCorso?"pulse 1.5s infinite":undefined}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1353}})
               , i<lezioni.length-1 && React.createElement('div', { style: {flex:1,width:1,background:C.border}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1357}})
             )
             /* Contenuto */
             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 1360}}
               , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap",rowGap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1361}}
-                , React.createElement('span', { style: {fontSize:13,fontWeight:500,color:inCorso?C.gold:C.text,
+                , React.createElement('span', { style: {fontSize:13,fontWeight:500,color:inCorso?tone.c:C.text,
                   overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1362}}
                   , l.tipo==="collettivo"
                       ? (l.students&&l.students.length>0
@@ -265,7 +278,7 @@ const LessonTimeline = ({ lezioni, onLessonClick }) => {
                       : (l.allievo||l.strumento||"—")
                 )
                 , inCorso && (
-                  React.createElement('span', { style: {fontSize:9,background:C.gold,color:"#ffffff",borderRadius:4,
+                  React.createElement('span', { style: {fontSize:9,background:tone.c,color:"#ffffff",borderRadius:4,
                     padding:"1px 6px",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1367}}, "In corso"
 
                   )

@@ -17292,17 +17292,26 @@ const AllievoBraniView = ({allievo,allievoId,brani,allStudents,lessons,onBack})=
   const _stu = allievoId
     ? (allStudents||[]).find(s=>String(s.id)===String(allievoId))
     : (allStudents||[]).find(s=>(s.name||s.nome||"").toLowerCase().trim()===( allievo||"").toLowerCase().trim());
-  // Cerca prima in student.repertorio, poi nelle lezioni tramite repertorioIds
+  // [FM-REP-COLLETTIVE] Una lezione è "dell'allievo" se è individuale con il suo studentId/nome
+  // OPPURE collettiva con l'allievo nell'array students → il repertorio delle collettive
+  // viene quindi incluso. Si usa il globale studentInLesson (stessa logica di calendario/lezioni).
+  const _nomeStu = (_stu && (_stu.name||_stu.nome)) || allievo || "";
+  const _idStu = allievoId != null ? allievoId : (_stu ? _stu.id : null);
+  const _lezioneDellAllievo = l => {
+    if(!l) return false;
+    try { if(typeof studentInLesson === 'function') return studentInLesson(l, _nomeStu, _idStu); } catch(e) {}
+    return allievoId
+      ? String(l.studentId||'')===String(allievoId)
+      : (l.student||'').toLowerCase().trim()===(allievo||'').toLowerCase().trim();
+  };
+  // Cerca prima in student.repertorio, poi nelle lezioni (individuali + collettive) tramite repertorioIds
   const _braniIds = React.useMemo(()=>{
     const ids = new Set();
     // da student.repertorio in memoria
     if(_stu) (_stu.repertorio||[]).forEach(r=>ids.add(r.id));
     // da lezioni (fonte persistente su DB tramite repertorioIds)
     (lessons||[]).forEach(l=>{
-      const match = allievoId
-        ? String(l.studentId||'')===String(allievoId)
-        : (l.student||'').toLowerCase().trim()===(allievo||'').toLowerCase().trim();
-      if(match) (l.repertorioIds||[]).forEach(id=>ids.add(id));
+      if(_lezioneDellAllievo(l)) (l.repertorioIds||[]).forEach(id=>ids.add(id));
     });
     return ids;
   },[_stu,lessons,allievo,allievoId]);
@@ -17313,9 +17322,7 @@ const AllievoBraniView = ({allievo,allievoId,brani,allStudents,lessons,onBack})=
     const tipi = new Set(suoiBrani.map(b=>b.tipo||b.type||"individuale"));
     // Aggiungi i corsi dalle lezioni dell'allievo
     (lessons||[]).forEach(l=>{
-      const match = allievoId
-        ? String(l.studentId||'')===String(allievoId)
-        : (l.student||'').toLowerCase().trim()===(allievo||'').toLowerCase().trim();
+      const match = _lezioneDellAllievo(l);
       if(match && l.instrument) tipi.add(l.instrument);
       if(match && isColl(l) && l.courseName) tipi.add(l.courseName);
     });
@@ -17328,9 +17335,7 @@ const AllievoBraniView = ({allievo,allievoId,brani,allStudents,lessons,onBack})=
         if((b.tipo||b.type||"individuale")===filterCorso) return true;
         // controlla se il brano è associato a una lezione del corso
         return (lessons||[]).some(l=>{
-          const match = allievoId
-            ? String(l.studentId||'')===String(allievoId)
-            : (l.student||'').toLowerCase().trim()===(allievo||'').toLowerCase().trim();
+          const match = _lezioneDellAllievo(l);
           return match && (l.instrument===filterCorso||l.courseName===filterCorso) && (l.repertorioIds||[]).includes(b.id);
         });
       })
@@ -17415,7 +17420,7 @@ const AllievoBraniView = ({allievo,allievoId,brani,allStudents,lessons,onBack})=
                           return _st && typeof StatoBranoBadge!=='undefined' ? React.createElement(StatoBranoBadge, { stato: _st }) : null; })()
                       , React.createElement(DiffBadge, { diff: b.difficulty, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7634}})
                       , b.periodo&&React.createElement('span', { style: {background:p.hex+"18",color:p.hex,border:`1px solid ${p.hex}30`,borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:600}, __source: {fileName: _jsxFileName, lineNumber: 7635}}, b.periodo)
-                      , React.createElement('span', { style: {fontSize:11,color:C.textDim} }, (lessons||[]).filter(l=>(l.repertorioIds||[]).includes(b.id)).length, " lez." )
+                      , React.createElement('span', { style: {fontSize:11,color:C.textDim} }, (lessons||[]).filter(l=>_lezioneDellAllievo(l)&&(l.repertorioIds||[]).includes(b.id)).length, " lez." )
                     )
                   )
                   , (_link.length>0 || _file.length>0) && React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:6,borderTop:`1px solid ${C.border}`,paddingTop:10} }
