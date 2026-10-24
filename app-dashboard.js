@@ -193,14 +193,24 @@ const fmLessonTone = (startM, endM, nowM) => {
   return "red";
 };
 
+// Minuti mancanti alla fine: 45 all'inizio di una lezione da 45′, 44 un minuto dopo, … fino a 1 (mai sotto 0)
+const fmMinutiRimasti = (endM, nowM) => Math.max(0, endM - nowM);
+
 const LessonTimeline = ({ lezioni, onLessonClick }) => {
   const oraNum = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
 
   // Clock locale che si aggiorna ogni 60s → la timeline scorre col tempo reale
+  // [FM-TIMELINE-COUNTDOWN] il tick è allineato al cambio di minuto, così il countdown scala puntuale
   const [nowLive, setNowLive] = useState(new Date());
   useEffect(() => {
-    const t = setInterval(() => setNowLive(new Date()), 60000);
-    return () => clearInterval(t);
+    let t;
+    const tick = () => {
+      const n = new Date();
+      setNowLive(n);
+      t = setTimeout(tick, (60 - n.getSeconds())*1000 - n.getMilliseconds() + 50);
+    };
+    t = setTimeout(tick, (60 - new Date().getSeconds())*1000 + 50);
+    return () => clearTimeout(t);
   }, []);
   const nowMins = nowLive.getHours()*60 + nowLive.getMinutes();
 
@@ -234,6 +244,7 @@ const LessonTimeline = ({ lezioni, onLessonClick }) => {
         // Palette dinamica della lezione in corso (verde → arancione → rosso)
         const _tk   = inCorso ? fmLessonTone(startM, endM, nowMins) : null;
         const tone  = _tk ? { c:C[_tk], bg:C[_tk+"Bg"], b:C[_tk+"Border"] } : null;
+        const minRimasti = inCorso ? fmMinutiRimasti(endM, nowMins) : null; // 45, 44, 43 … 1
 
         const docenteColor = {
           "Prof. Rossi":C.gold,"Prof. Bianchi":C.teal,"Prof. Verde":C.blue,"Prof. Marino":C.purple
@@ -243,7 +254,7 @@ const LessonTimeline = ({ lezioni, onLessonClick }) => {
           React.createElement('div', { key: l.id, className: "lesson-row",
             'data-timeline-active': isActive ? "1" : undefined,
             onClick: clickable ? ()=>onLessonClick(l.id) : undefined,
-            style: {display:"grid",gridTemplateColumns:"52px 4px 1fr auto",
+            style: {display:"grid",gridTemplateColumns:"52px 34px 1fr auto",
               gap:10,alignItems:"center",padding:"9px 12px",borderRadius:10,
               background:inCorso?tone.bg:passata?C.bg:C.surface,
               border:`1px solid ${inCorso?tone.c:passata?C.border+"60":C.border}`,
@@ -264,7 +275,13 @@ const LessonTimeline = ({ lezioni, onLessonClick }) => {
                 background:inCorso?tone.c:passata?C.textDim:docenteColor,
                 boxShadow:inCorso?`0 0 8px ${tone.c}`:undefined,
                 animation:inCorso?"pulse 1.5s infinite":undefined}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1353}})
-              , i<lezioni.length-1 && React.createElement('div', { style: {flex:1,width:1,background:C.border}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 1357}})
+              , (i<lezioni.length-1 || inCorso) && React.createElement('div', { style: {flex:1,width:"100%",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",minHeight:inCorso?18:0}}
+                , React.createElement('div', { style: {position:"absolute",top:0,bottom:0,left:"50%",width:1,background:inCorso?tone.c:C.border,opacity:inCorso?0.6:1}})
+                , inCorso && React.createElement('span', { title: minRimasti+" min alla fine",
+                    style: {position:"relative",fontSize:10,fontWeight:700,lineHeight:1,padding:"2px 5px",borderRadius:8,
+                      background:tone.bg,color:tone.c,border:`1px solid ${tone.c}`,fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}
+                    , minRimasti, "′")
+              )
             )
             /* Contenuto */
             , React.createElement('div', {__self: this, __source: {fileName: _jsxFileName, lineNumber: 1360}}
