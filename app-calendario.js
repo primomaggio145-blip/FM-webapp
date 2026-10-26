@@ -275,7 +275,8 @@ const CourseForm = ({ initial, onSave, onClose, docenti:_docentiRaw }) => {
 
   const handleSave = () => {
     if(!f.name.trim()){ setErr({name:"Nome obbligatorio"}); return; }
-    onSave({ ...f, docenti: f.docenti || [] });
+    // [FM-CORSO-CATEGORIA] la categoria vale solo per i corsi collettivi
+    onSave({ ...f, categoria: f.type === "collettivo" ? (f.categoria || null) : null, docenti: f.docenti || [] });
   };
 
   const selDocenti = f.docenti || [];
@@ -294,6 +295,19 @@ const CourseForm = ({ initial, onSave, onClose, docenti:_docentiRaw }) => {
                   , React.createElement('div', { style: {fontSize:13,fontWeight:500,color:f.type===val?col:C.text}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2579}}, lbl)
                   , React.createElement('div', { style: {fontSize:11,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2580}}, sub)
                 )
+              )
+            ))
+          )
+        )
+        /* [FM-CORSO-CATEGORIA] corsi collettivi: OBBLIGATORIO (parte del percorso) / COMPLEMENTARE (extra) */
+        , f.type === "collettivo" && React.createElement('div', null
+          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:8} }, "Categoria corso collettivo" )
+          , React.createElement('div', { style: {display:"flex",gap:12} }
+            , [["obbligatorio","Obbligatorio","Parte del percorso dell'allievo",C.red,C.redBg,C.redBorder],["complementare","Complementare","Corso extra / facoltativo",C.teal,C.tealBg,C.tealBorder]].map(([val,lbl,sub,col,bg,border]) => (
+              React.createElement('button', { key: val, onClick: () => set("categoria", f.categoria === val ? null : val),
+                style: {flex:1,padding:"12px 16px",borderRadius:10,border:`2px solid ${f.categoria===val?col:C.border}`,background:f.categoria===val?bg:C.bg,cursor:"pointer",textAlign:"left",transition:"all 0.15s"} }
+                , React.createElement('div', { style: {fontSize:13,fontWeight:600,color:f.categoria===val?col:C.text} }, lbl)
+                , React.createElement('div', { style: {fontSize:11,color:C.textMuted} }, sub)
               )
             ))
           )
@@ -5019,6 +5033,7 @@ const attHex = (att) =>
   att === "recupero"    ? C.blue   :
   att === "recuperata"  ? C.teal   :
   att === "in_recupero" ? '#f59e0b':
+  att === "non_recuperata" ? '#64748b':
   att === "cambio_ora"  ? '#7c3aed': C.textDim;
 
 const attBadge = (att) =>
@@ -6507,6 +6522,30 @@ function stessaSerieIndividuale(l, lesson) {
 const lessonLabel = l => isColl(l)
   ? (l.courseName||"Collettiva")
   : (l.student||"");
+
+// [FM-RECUPERO-ETICHETTA] Lezione di recupero FISSATA (quella effettivamente svolta, non la lezione
+// originale "da recuperare" attenuata): nel calendario mostra "RECUPERO DEL <data lezione recuperata>"
+// al posto del nome allievo, e il nome dell'allievo al posto del corso/strumento.
+// La data originale è letta dalla nota "🔄 Recupero del <data> — ..." scritta alla creazione del recupero.
+const MESI_RECUPERO_PREFIX = ['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
+const isRecuperoFissato = l => !!l && !isColl(l) && !isProva(l) && !isSalaProve(l)
+  && !fmLezioneLiberaSlot(l)   // esclude "da recuperare" e le originali già "recuperata"
+  && (l.tipo === 'recupero' || /^\s*(?:🔄\s*)?Recupero del\s/i.test(l.notes || ''));
+const recuperoDelLabel = (l, corto) => {
+  const m = /Recupero del\s+([^—\n]+?)\s*(?:—|$)/i.exec((l && l.notes) || '');
+  let data = '';
+  if (m) {
+    const t = m[1].trim();
+    const num = /(\d{1,2})\s+([A-Za-zàèéìòù]+)/.exec(t);
+    const iso = /(\d{4})-(\d{2})-(\d{2})/.exec(t);
+    if (iso) data = iso[3] + '/' + iso[2];
+    else if (num) {
+      const mi = MESI_RECUPERO_PREFIX.indexOf(num[2].toLowerCase().slice(0,3));
+      data = mi >= 0 ? String(num[1]).padStart(2,'0') + '/' + String(mi+1).padStart(2,'0') : t;
+    } else data = t;
+  }
+  return (corto ? 'REC. DEL ' : 'RECUPERO DEL ') + data;
+};
 // Presenza effettiva per un allievo su una lezione: per le collettive usa il valore individuale
 // dell'allievo (l.students[].attendance) se presente, altrimenti ricade sull'attendance della lezione.
 const studAttendance = (l, name, studentId) => {
@@ -6683,6 +6722,8 @@ const INIT_LESSONS = (() => {
 // ─── FORM LEZIONE ─────────────────────────────────────────────────────────────
 // Presenza che conta come lezione svolta (pagabile al docente). Le lezioni di PROVA
 // non sono mai pagabili al docente, anche se svolte.
+// [FM-NON-RECUPERATA] 'non_recuperata' NON compare di proposito né in PRESENZE_PAGATE né in PRESENZE_SVOLTE:
+// la lezione non viene recuperata → nessun pagamento al docente.
 const PRESENZE_PAGATE = ['presente','assente','recupero'];
 const PRESENZE_SVOLTE = ['presente','assente','recupero'];
 const isLezionePagabile = (l) => !isProva(l) && PRESENZE_PAGATE.includes((l.attendance||'').toLowerCase());
@@ -6698,6 +6739,9 @@ const ATT_STYLES = {
   in_recupero: { bg:'rgba(255,160,0,0.10)', fg:'#f59e0b', bd:'rgba(245,158,11,0.4)', label:'Da recuperare' },
   recuperata:  { bg:C.tealBg,   fg:C.teal,   bd:C.tealBorder,   label:'Recuperata'  },
   cambio_ora:  { bg:'rgba(139,92,246,0.10)', fg:'#7c3aed', bd:'rgba(139,92,246,0.4)', label:'Cambio ora'  },
+  // [FM-NON-RECUPERATA] lezione da recuperare che NON verrà recuperata (accordi con allievo/genitore):
+  // motivazione obbligatoria, mai pagata al docente.
+  non_recuperata: { bg:'rgba(100,116,139,0.10)', fg:'#64748b', bd:'rgba(100,116,139,0.4)', label:'Non recuperata' },
 };
 
 const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRepertorio:_setRepertorioLF, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, courses:_coursesRaw, role:_roleLF, lessons:_lessonsLF }) => {
@@ -6871,6 +6915,8 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
     // Sala obbligatoria (il docente non può modificarla: per lui il campo è in sola lettura)
     if(roleLF !== "docente" && !(f.room||"").trim()) e.room = "Seleziona la sala";
     if(!f.recurrence) e.recurrence = "Seleziona la ricorrenza";
+    // [FM-NON-RECUPERATA] motivazione obbligatoria
+    if(f.attendance === 'non_recuperata' && !(f.motivoAssenza||"").trim()) e.motivoAssenza = "Motivazione obbligatoria per lezione non recuperata";
     return e;
   };
 
@@ -6950,13 +6996,22 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
                 , (f.notesRecupero||f.notes_recupero) && React.createElement('span',{style:{fontSize:12,color:C.textMuted,fontStyle:'italic'}}, f.notesRecupero||f.notes_recupero)
                 , React.createElement('span',{style:{fontSize:11,color:C.textDim}},'(sola lettura)')
               )
-            : ["presente","assente","recupero","in_recupero","cambio_ora"].map(a => {
+            : ["presente","assente","recupero","in_recupero","cambio_ora"]
+              .concat((f.inRecupero === true || f.attendance === 'in_recupero' || f.attendance === 'non_recuperata') && f.tipo !== 'prova' ? ['non_recuperata'] : [])
+              .map(a => {
               const s = ATT_STYLES[a] || ATT_STYLES.presente;
               const active = a === 'in_recupero'
-                ? (f.attendance === 'in_recupero' || f.inRecupero === true)
+                ? ((f.attendance === 'in_recupero' || f.inRecupero === true) && f.attendance !== 'non_recuperata')
                 : f.attendance === a;
               return (
-                React.createElement('button', { key: a, onClick: () => set("attendance", active ? "" : a),
+                React.createElement('button', { key: a, onClick: () => {
+                    if (a === 'non_recuperata') {
+                      if (active) { set("attendance", ""); set("inRecupero", true); set("motivoAssenza", ""); }
+                      else { set("attendance", a); set("inRecupero", false); set("recuperoScadenza", null); }
+                      return;
+                    }
+                    set("attendance", active ? "" : a);
+                  },
                   style: {flex:1, minWidth:90, padding:"9px 12px", borderRadius:8,
                     border:`2px solid ${active ? s.bd : C.border}`,
                     background: active ? s.bg : C.bg,
@@ -6968,6 +7023,12 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
                 )
               );
             })
+        )
+        /* [FM-NON-RECUPERATA] motivazione obbligatoria */
+        , f.attendance === 'non_recuperata' && React.createElement('div', { style: {gridColumn:"1/-1"} }
+          , React.createElement(Input, { label: "Motivazione non recupero *", value: f.motivoAssenza || "",
+              onChange: e => { set("motivoAssenza", e.target.value); setErr(p=>({...p, motivoAssenza: undefined})); },
+              placeholder: "Es. Accordo con la famiglia: lezione non recuperata", error: err.motivoAssenza })
         )
 
         , React.createElement(SDiv, { label: "Repertorio studiato" , __self: this, __source: {fileName: _jsxFileName, lineNumber: 4260}})
@@ -7335,9 +7396,10 @@ const LessonPill = ({ lesson, onClick, compact=false, courses, onInfoHover }) =>
         if(lesson.tipo==="collettivo") label = lesson.hour + " · " + (lesson.courseName||"Collettiva");
         else if(lesson.tipo==="prova") label = lesson.hour + " · Prova";
         else if(lesson.tipo==="sala_prove") label = lesson.hour + " · Sala Prove";
+        else if(isRecuperoFissato(lesson)) label = lesson.hour + " · " + recuperoDelLabel(lesson, compact);
         else label = lesson.hour + " · " + (lesson.student||"").split(" ")[0];
-        // Tronca etichetta se troppo lunga per celle strette
-        if(compact && label.length > 16) label = label.slice(0, 15) + "…";
+        // Tronca etichetta se troppo lunga per celle strette (i recuperi usano l'ellissi CSS)
+        if(compact && label.length > 16 && !isRecuperoFissato(lesson)) label = label.slice(0, 15) + "…";
         return (
           React.createElement('div', { style: {display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4442}}
             , React.createElement('div', { style: {fontSize: compact ? 10 : 12, fontWeight:600, color:hex,
@@ -7377,6 +7439,7 @@ const LessonPill = ({ lesson, onClick, compact=false, courses, onInfoHover }) =>
           ? (lesson.instrument||"") + (lesson.phone ? " \u00b7 " + lesson.phone : "")
           : lesson.tipo==="sala_prove"
           ? salaNome(lesson) + (lesson.oraFine ? " → "+(lesson.oraFine||"").slice(0,5) : "")
+          : isRecuperoFissato(lesson) ? (lesson.student||"")
           : lesson.instrument||""
       )
     )
@@ -7433,6 +7496,9 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
   // Motivo assenza obbligatorio — livello lezione
   const [assenzaPrompt, setAssenzaPrompt] = useState(false);
   const [assenzaMotivo, setAssenzaMotivo] = useState('');
+  // [FM-NON-RECUPERATA] motivazione obbligatoria — lezione da recuperare che non verrà recuperata
+  const [nonRecPrompt, setNonRecPrompt] = useState(false);
+  const [nonRecMotivo, setNonRecMotivo] = useState('');
   // Motivo assenza obbligatorio — per singolo allievo (lezione collettiva)
   const [assenzaPromptStudentId, setAssenzaPromptStudentId] = useState(null);
   const [assenzaMotivoStudent,   setAssenzaMotivoStudent]   = useState('');
@@ -8392,7 +8458,7 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
             ? React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',background:C.blueBg,border:'1px solid '+C.blueBorder,borderRadius:8}}
                 , React.createElement(Ic,{n:'calendar',size:15,stroke:C.blue})
                 , React.createElement('div',null
-                  , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.blue}},'🔄 RECUPERO')
+                  , React.createElement('div',{style:{fontSize:13,fontWeight:600,color:C.blue}},isRecuperoFissato(lesson) ? ('🔄 ' + recuperoDelLabel(lesson)) : '🔄 RECUPERO')
                   , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2}}, lesson.notes || 'Lezione di recupero confermata ufficialmente')
                 )
                 , React.createElement('span',{style:{fontSize:10,color:C.textDim,marginLeft:'auto'}},'(sola lettura)')
@@ -8432,6 +8498,10 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
                           onClick: () => { if (window.__FM_SHOW_RECUPERO_SCADUTO__) window.__FM_SHOW_RECUPERO_SCADUTO__({ lesson, onExtend: ()=>{} }); },
                           style:{padding:'7px 14px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}
                         }, '⏰ Proroga')
+                      , canEdit && React.createElement('button', {
+                          onClick: () => { setNonRecMotivo(lesson.motivoAssenza || ''); setNonRecPrompt(true); },
+                          style:{padding:'7px 14px',borderRadius:8,border:'none',background:'#64748b',color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}
+                        }, '🚫 Non recuperata')
                     )
                   )
                 )
@@ -8448,12 +8518,25 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
                   )
                 )
                 , React.createElement('div', { className: "att-row", style: {display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4638}}
-                  , (lesson.tipo === "prova" ? ["presente","assente"] : ["presente","assente","recupero","in_recupero","cambio_ora"]).map(a => {
+                  , (lesson.tipo === "prova" ? ["presente","assente"] : ["presente","assente","recupero","in_recupero","cambio_ora"]
+                      .concat(!isColl(lesson) && (lesson.inRecupero || lesson.attendance === 'non_recuperata' || (role === 'admin' && lesson.attendance === 'assente')) ? ['non_recuperata'] : [])
+                    ).map(a => {
                     const s = ATT_STYLES[a] || ATT_STYLES.presente;
-                    const active = a === 'in_recupero' ? lesson.inRecupero : lesson.attendance === a;
+                    const active = a === 'in_recupero' ? (lesson.inRecupero && lesson.attendance !== 'non_recuperata') : lesson.attendance === a;
                     return (
                       React.createElement('button', { key: a, onClick: () => {
                           if (!canEdit) return;
+                          // [FM-NON-RECUPERATA] richiede motivazione; se già attiva torna "Da recuperare"
+                          if (a === 'non_recuperata' && !active) {
+                            setNonRecMotivo(lesson.motivoAssenza || '');
+                            setNonRecPrompt(true);
+                            return;
+                          }
+                          if (a === 'non_recuperata' && active) {
+                            onAttendance(lesson.id, 'in_recupero');
+                            saveField({ attendance: '', inRecupero: true, motivoAssenza: null });
+                            return;
+                          }
                           if (a === 'assente' && !active) {
                             setAssenzaMotivo(lesson.motivoAssenza || '');
                             setAssenzaPrompt(true);
@@ -8515,6 +8598,42 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
                             fontFamily:"'Open Sans',sans-serif"}
                         }, 'Conferma assenza')
                     )
+                  )
+                )
+                , nonRecPrompt && (
+                  React.createElement('div', {style:{marginTop:8, padding:"10px 12px", border:'1px solid rgba(100,116,139,0.4)', background:'rgba(100,116,139,0.10)', borderRadius:8}}
+                    , React.createElement('div', {style:{fontSize:11, fontWeight:600, color:'#64748b', marginBottom:6}}, 'Motivazione non recupero (obbligatoria) — la lezione non sarà pagata al docente')
+                    , React.createElement('input', {
+                        type:'text', value: nonRecMotivo, autoFocus:true,
+                        onChange: e => setNonRecMotivo(e.target.value),
+                        placeholder:'Es. Accordo con la famiglia, allievo non intende recuperare...',
+                        style:{width:'100%', padding:'8px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, fontFamily:"'Open Sans',sans-serif", marginBottom:8, boxSizing:'border-box'}
+                      })
+                    , React.createElement('div', {style:{display:'flex', gap:8, justifyContent:'flex-end'}}
+                      , React.createElement('button', {
+                          onClick: () => { setNonRecPrompt(false); setNonRecMotivo(''); },
+                          style:{padding:'6px 12px', borderRadius:6, border:`1px solid ${C.border}`, background:'transparent', color:C.textMuted, fontSize:12, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"}
+                        }, 'Annulla')
+                      , React.createElement('button', {
+                          disabled: !nonRecMotivo.trim(),
+                          onClick: () => {
+                            if (!nonRecMotivo.trim()) return;
+                            onAttendance(lesson.id, 'non_recuperata');
+                            saveField({ attendance: 'non_recuperata', inRecupero: false, recuperoScadenza: null, motivoAssenza: nonRecMotivo.trim() });
+                            setNonRecPrompt(false);
+                          },
+                          style:{padding:'6px 14px', borderRadius:6, border:'none',
+                            background: nonRecMotivo.trim() ? '#64748b' : C.border,
+                            color:'#fff', fontSize:12, fontWeight:600,
+                            cursor: nonRecMotivo.trim() ? 'pointer' : 'not-allowed',
+                            fontFamily:"'Open Sans',sans-serif"}
+                        }, 'Conferma non recuperata')
+                    )
+                  )
+                )
+                , !nonRecPrompt && lesson.attendance === 'non_recuperata' && lesson.motivoAssenza && (
+                  React.createElement('div', {style:{marginTop:8, padding:'8px 12px', background:'rgba(100,116,139,0.10)', border:'1px solid rgba(100,116,139,0.4)', borderRadius:8, fontSize:12, color:'#64748b'}}
+                    , React.createElement('strong', null, 'Non recuperata — motivo: '), lesson.motivoAssenza
                   )
                 )
                 , !assenzaPrompt && lesson.attendance === 'assente' && lesson.motivoAssenza && (
@@ -8961,8 +9080,10 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
     const titolo = isSalaProve(l) ? "🤘 Sala Prove" + (salaNome(l) ? " · " + salaNome(l) : "")
       : isColl(l) ? (l.courseName || "Collettiva")
       : isProva(l) ? (l.contactName || "Lezione prova")
+      : isRecuperoFissato(l) ? recuperoDelLabel(l)
       : (l.student || (l.nuovoIscritto ? (l.contactName || "🆕 Nuovo iscritto") : ""));
     const sotto = isSalaProve(l) ? "" : isColl(l) ? [l.teacher, (l.students||[]).length + " allievi"].filter(Boolean).join(" · ")
+      : isRecuperoFissato(l) ? [l.student, l.teacher].filter(Boolean).join(" · ")
       : [l.instrument, l.teacher].filter(Boolean).join(" · ");
     const orario = hhmm(it.s) + "–" + hhmm(it.s + it.d);
     const hPx = Math.max(it.d * HOUR_H - 2, 18);
@@ -9257,11 +9378,13 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                   const nome = isSala ? `🤘 ${salaNome(l) ? salaNome(l).split(" ")[0] : normHour}`
                     : isColl(l)  ? (l.courseName||"Coll.")
                     : isProva(l) ? (l.contactName||"Prova")
+                    : isRecuperoFissato(l) ? recuperoDelLabel(l, true)
                     : l.student ? l.student.split(" ")[0]
                     : l.nuovoIscritto ? (l.contactName ? l.contactName.split(" ")[0] : "🆕 Nuovo")
                     : "";
                   const corso = isSala ? normFine
                     : isColl(l)  ? `${(l.students||[]).length} all.`
+                    : isRecuperoFissato(l) ? (l.student||"")
                     : (l.instrument||"");
                   return React.createElement('div', { key:l.id,
                     onClick: ()=>onSelect(l),
@@ -9327,6 +9450,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                         : `${normHour} · ${
                             isColl(l)  ? (l.courseName||"Coll.")
                           : isProva(l) ? (l.contactName||"Prova")
+                          : isRecuperoFissato(l) ? recuperoDelLabel(l)
                           : l.student ? l.student.split(" ")[0]
                           : l.nuovoIscritto ? (l.contactName ? l.contactName.split(" ")[0] : "🆕 Nuovo")
                           : ""
@@ -9346,6 +9470,7 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                       ? (salaNome(l) ? `SALA PROVE · ${normHour}–${normFine}` : "SALA PROVE")
                       : isColl(l)
                         ? `${(l.students||[]).length} allievi`
+                        : isRecuperoFissato(l) ? (l.student||"")
                         : (l.instrument||"")
                   )
                   , l._h > 42 && React.createElement('div',{style:{fontSize:9,
@@ -11221,8 +11346,8 @@ const LezioniAdminView = ({ lessons, onEditLesson, onDeleteLesson }) => {
       , React.createElement('select',{value:laPresenza,onChange:e=>setLaPresenza(e.target.value),
         style:{padding:'8px 12px',borderRadius:8,border:`1px solid ${C.border}`,background:C.surface,color:laPresenza?C.text:C.textMuted,fontSize:12,fontFamily:"'Open Sans',sans-serif"}}
         , React.createElement('option',{value:''},'Tutte le presenze')
-        , ['presente','assente','recupero','in_recupero'].map(v=>
-          React.createElement('option',{key:v,value:v}, v==='in_recupero'?'In recupero':v.charAt(0).toUpperCase()+v.slice(1))
+        , ['presente','assente','recupero','in_recupero','non_recuperata'].map(v=>
+          React.createElement('option',{key:v,value:v}, v==='in_recupero'?'In recupero':v==='non_recuperata'?'Non recuperata':v.charAt(0).toUpperCase()+v.slice(1))
         )
       )
     )
@@ -13085,6 +13210,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       if (existingLesson && (existingLesson.attendance === 'recuperata' || existingLesson.attendance === 'recupero')) {
         return; // sola lettura
       }
+      // [FM-NON-RECUPERATA] senza motivazione non si salva
+      if (data.attendance === 'non_recuperata' && !(data.motivoAssenza || '').trim()) return;
       var attNorm = data.attendance || null;
       var inRecNorm = data.inRecupero || false;
       var scadNorm = data.recuperoScadenza || null;
@@ -13104,7 +13231,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
         attNorm = 'presente';
         inRecNorm = false;
         scadNorm = null;
-      } else if (attNorm === 'presente' || attNorm === 'assente') {
+      } else if (attNorm === 'presente' || attNorm === 'assente' || attNorm === 'non_recuperata') {
         inRecNorm = false;
         scadNorm = null;
       }

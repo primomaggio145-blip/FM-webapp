@@ -1716,7 +1716,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
                   const ass   = lm.filter(l=>l.attendance==="assente").length;
                   const recu  = lm.filter(l=>l.attendance==="recupero").length;
                   const rec   = lm.filter(l=>l.attendance==="in_recupero"||l.inRecupero).length;
-                  const attended = lm.filter(l=>l.attendance).length;
+                  const attended = lm.filter(l=>l.attendance && l.attendance!=='non_recuperata').length;
                   const tasso = attended>0 ? Math.round((pres/attended)*100) : null;
                   return { x, i, lm, pres, ass, recu, rec, tasso, mese: x.y*100+x.m, tot: lm.length };
                 }), (r,k) => {

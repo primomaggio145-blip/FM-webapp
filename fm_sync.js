@@ -60,6 +60,8 @@
     // FA.corso() potrebbe non conoscere ancora questo campo (aggiunto di recente allo schema):
     // senza questo recupero il colore assegnato al corso si perderebbe in lettura.
     if (base.colore === undefined) base.colore = r.colore || null;
+    // [FM-CORSO-CATEGORIA] 'obbligatorio' | 'complementare' (solo corsi collettivi)
+    base.categoria = r.categoria || null;
     return base;
   }
   // Deduplica un array di record per id, mantenendo l'ultima occorrenza
@@ -355,6 +357,7 @@
         nome: c.name || c.nome || '',
         tipo: c.type || c.tipo || 'individuale',  // DB usa "tipo"
         descrizione: c.description || null,
+        ...((c.type || c.tipo) === 'collettivo' ? { categoria: c.categoria || null } : {}), // [FM-CORSO-CATEGORIA] solo collettivi
         // NOTA: 'livelli' e 'foto' sono gestiti ESCLUSIVAMENTE da admin.html (pannello
         // sito pubblico) — il form corsi della webapp gestionale non li mostra né li
         // modifica mai. Scriverli qui comunque, con il valore (spesso obsoleto/vuoto)
@@ -872,6 +875,7 @@
     recuperata:  'Recuperata',
     in_recupero: 'In attesa di recupero',
     recupero:    'Lezione di recupero',
+    non_recuperata: 'Non recuperata',
   };
 
   // Tipi di lezione con un proprio flusso di notifiche dedicato già esistente
