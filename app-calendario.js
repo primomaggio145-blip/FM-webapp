@@ -1029,8 +1029,17 @@ const CourseManager = ({ courses, students, docenti:_docentiRaw, onAdd, onEdit, 
 // ════════════════════════════════════════════════════════════════════════════════
 const emptyStudent = { name:"",email:"",phone:"",instrument:"",teacher:"",status:"attivo",monthlyFee:"",nomeRicevuta:"",codiceFiscale:"",feeType:"fisso",birthdate:"",enrollDate:"",complementaryCourse:"",notes:"",extraInstruments:[],extraTeachers:{} };
 
-const validate = f => {
+// [FM-CORSO-OBBLIGATORIO] true se l'allievo è iscritto a un corso collettivo con categoria "obbligatorio":
+// in tal caso è quello il suo corso principale e il corso individuale (con relativo insegnante) è facoltativo.
+const fmHaCollettivoObbligatorio = (f, courses) => {
+  if (!f || f.complementaryCourse == null || f.complementaryCourse === "") return false;
+  const c = (courses || []).find(x => String(x.id) === String(f.complementaryCourse));
+  return !!c && c.type === "collettivo" && c.categoria === "obbligatorio";
+};
+
+const validate = (f, courses) => {
   const e = {};
+  const _collObbl = fmHaCollettivoObbligatorio(f, courses);
   if(!f.name.trim()) e.name="Nome obbligatorio";
   if(!f.email || !f.email.trim()) e.email="Email obbligatoria";
   else if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email)) e.email="Email non valida";
@@ -1045,8 +1054,9 @@ const validate = f => {
       e.nomeRicevuta = "Nome per ricevuta obbligatorio (allievo minorenne)";
     }
   }
-  if(!f.instrument) e.instrument="Corso individuale obbligatorio";
-  if(!f.teacher)    e.teacher="Insegnante obbligatorio";
+  if(!f.instrument && !_collObbl) e.instrument="Corso individuale obbligatorio";
+  // con un collettivo obbligatorio e nessun corso individuale non c'è un insegnante individuale da richiedere
+  if(!f.teacher && (f.instrument || !_collObbl)) e.teacher="Insegnante obbligatorio";
   // Ogni corso individuale extra richiede un insegnante assegnato, esattamente come il corso principale:
   // tutti i corsi individuali sono allo stesso livello.
   const extraTeacherErrors = {};
@@ -1089,6 +1099,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
   };
 
   const collettivi = (courses||[]).filter(c=>c.type==="collettivo");
+  const _haCollObbl = fmHaCollettivoObbligatorio(f, courses); // [FM-CORSO-OBBLIGATORIO]
 
   // Strumenti dinamici: nomi dei corsi individuali dal DB + fallback lista statica
   const strumentiDisponibili = React.useMemo(() => {
@@ -1106,7 +1117,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
   // reale dei doppioni riscontrati: 2 insert distinti dallo stesso submit).
   const handleSubmit = () => {
     if (savingRef.current) return; // blocco anti doppio-click: un doppio invio creerebbe un allievo duplicato a DB
-    const e = validate(f);
+    const e = validate(f, courses);
     if (_sfDocAperto && !f.docenteId) e.docenteId = "Seleziona il docente oppure togli la spunta";
     const _dupDoc = _sfDocenteDuplicato(f);
     if (_dupDoc) e.docenteId = `Questo docente è già collegato all'allievo "${_dupDoc.name||_dupDoc.nome||_dupDoc.id}"`;
@@ -1168,7 +1179,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
 
         /* Corsi individuali — tutti allo stesso livello, nessuna priorità tra loro */
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2961}}
-          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2962}}, "Corsi individuali — strumenti *"    )
+          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:6}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2962}}, "Corsi individuali — strumenti" + (_haCollObbl ? " (facoltativo)" : " *")    )
           , React.createElement('div', { style: {display:"flex",flexWrap:"wrap",gap:8,marginBottom:8} }
             , strumentiDisponibili.map(i => {
               const isSelected = f.instrument === i || (f.extraInstruments||[]).includes(i);
@@ -1215,14 +1226,16 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
             })
           )
           , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:4}}
-            , "Puoi selezionare più corsi individuali: sono tutti allo stesso livello e vengono conteggiati sia per l'allievo sia per il rispettivo insegnante."
+            , _haCollObbl
+              ? "Facoltativo: il corso collettivo obbligatorio selezionato è già il corso principale dell'allievo. Puoi comunque aggiungere uno o più corsi individuali."
+              : "Puoi selezionare più corsi individuali: sono tutti allo stesso livello e vengono conteggiati sia per l'allievo sia per il rispettivo insegnante."
           )
           , errors.instrument && React.createElement('span', { style: {fontSize:11,color:C.red,marginTop:4,display:"block"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2973}}, errors.instrument)
         )
 
         /* Corso complementare — pill selector */
         , React.createElement('div', { style: {gridColumn:"1/-1"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2977}}
-          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2978}}, "Corso complementare — collettivo"   )
+          , React.createElement('label', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.06em",textTransform:"uppercase",display:"block",marginBottom:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2978}}, (_haCollObbl ? "Corso collettivo — obbligatorio" : "Corso collettivo — complementare / obbligatorio")   )
           , collettivi.length===0
             ? React.createElement('p', { style: {fontSize:12,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2980}}, "Nessun corso collettivo disponibile. Creane uno dalla sezione "        , React.createElement('strong', { style: {color:C.gold}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2980}}, "Corsi"), ".")
             : React.createElement('div', { style: {display:"flex",flexWrap:"wrap",gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2981}}
@@ -1233,7 +1246,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
                 , collettivi.map(c=>(
                   React.createElement('button', { key: c.id, onClick: ()=>set("complementaryCourse",c.id),
                     style: {padding:"8px 16px",borderRadius:20,border:`2px solid ${f.complementaryCourse===c.id?C.purple:C.border}`,background:f.complementaryCourse===c.id?C.purpleBg:C.bg,cursor:"pointer",fontSize:13,color:f.complementaryCourse===c.id?C.purple:C.textMuted,fontFamily:"'Open Sans',sans-serif",fontWeight:f.complementaryCourse===c.id?500:400,transition:"all 0.12s"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 2987}}
-                    , c.name
+                    , c.name, c.categoria === "obbligatorio" ? " · obbligatorio" : ""
                   )
                 ))
               )
@@ -1251,7 +1264,7 @@ const StudentForm = ({ initial, onSave, onClose, courses, docenti:_docentiFSt, r
             ];
             if (tuttiCorsi.length === 0) {
               // Nessun corso selezionato — mostra un selettore generico
-              return React.createElement(Sel, { label: "Insegnante *", value: f.teacher,
+              return React.createElement(Sel, { label: _haCollObbl ? "Insegnante (facoltativo)" : "Insegnante *", value: f.teacher,
                 onChange: e => set("teacher", e.target.value),
                 options: _teacherOpts.length > 0 ? _teacherOpts : TEACHERS,
                 error: errors.teacher });
