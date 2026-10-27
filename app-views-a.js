@@ -38,7 +38,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
   // [FM-DOCENTE-COLLETTIVO] id dei corsi del docente: s.complementaryCourse contiene un ID, non un nome
   const _myCorsiDocenteIds = ruoloRep==="docente" && _myDocenteObj
     ? (window.__FM_DATA__?.courses||[])
-        .filter(c => (c.docenti||[]).map(String).includes(String(_myDocenteObj.id)))
+        .filter(c => c.type==='collettivo' && c.categoria==='obbligatorio' && (c.docenti||[]).map(String).includes(String(_myDocenteObj.id)))
         .map(c => String(c.id))
     : [];
   const _myCorsiDocente = ruoloRep==="docente" && _myDocenteObj
