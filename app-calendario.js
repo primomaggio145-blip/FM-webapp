@@ -4839,6 +4839,8 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
       // dal pannello se/quando vuole mostrarli); gli individuali restano visibili di default.
       const tipoCorso = d.type || d.tipo || 'individuale';
       const row = { id:newId, nome:d.name||d.nome||'', tipo:tipoCorso, descrizione:d.description||d.descrizione||null, visible: tipoCorso !== 'collettivo', anno_creazione: annoCreazione, colore: d.colore||null };
+      // [FM-CORSO-CATEGORIA] 'obbligatorio' | 'complementare', solo per i collettivi (se la colonna manca il retry sotto la omette)
+      if (tipoCorso === 'collettivo' && d.categoria) row.categoria = d.categoria;
       // Insert singolo, mai ripetuto (evita di creare corsi duplicati come successo in passato
       // con gli allievi): se la colonna 'colore' non esiste ancora, un SOLO retry senza quel campo.
       let { error } = await sb.from('corsi').insert(row);
@@ -4869,6 +4871,8 @@ const CorsiView = ({ courses:propCourses, setCourses:propSetCourses, students:pr
     const sb = window.supabaseClient;
     if (sb && d.id) {
       const row = { nome:d.name||d.nome||'', tipo:d.type||d.tipo||'individuale', descrizione:d.description||d.descrizione||null, colore: d.colore||null };
+      // [FM-CORSO-CATEGORIA] solo per i collettivi; per gli altri tipi si azzera (null)
+      row.categoria = (row.tipo === 'collettivo') ? (d.categoria || null) : null;
       let { error } = await sb.from('corsi').update(row).eq('id', d.id);
       if (error) {
         const m = /Could not find the '([^']+)' column/.exec(error.message||'');
