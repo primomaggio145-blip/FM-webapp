@@ -35,6 +35,12 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       )
     : null;
 
+  // [FM-DOCENTE-COLLETTIVO] id dei corsi del docente: s.complementaryCourse contiene un ID, non un nome
+  const _myCorsiDocenteIds = ruoloRep==="docente" && _myDocenteObj
+    ? (window.__FM_DATA__?.courses||[])
+        .filter(c => (c.docenti||[]).map(String).includes(String(_myDocenteObj.id)))
+        .map(c => String(c.id))
+    : [];
   const _myCorsiDocente = ruoloRep==="docente" && _myDocenteObj
     ? (window.__FM_DATA__?.courses||[])
         .filter(c => (c.docenti||[]).map(String).includes(String(_myDocenteObj.id)))
@@ -63,6 +69,7 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     ? _studBranoRepAll.filter(s =>
         _myCorsiDocente.includes(s.instrument||'') ||
         _myCorsiDocente.includes(s.complementaryCourse||'') ||
+        (s.complementaryCourse && _myCorsiDocenteIds.includes(String(s.complementaryCourse))) ||
         (s.extraInstruments||[]).some(e=>_myCorsiDocente.includes(e))
       )
     : _studBranoRepAll;

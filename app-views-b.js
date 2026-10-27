@@ -76,7 +76,10 @@ const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extra
     && Number(e.mese) === Number(m) && Number(e.anno) === Number(y));
   const righe = [];
   (allieviD || []).forEach(s => {
-    const nDoc = (s._corsiConDocente || []).length || 1;
+    // [FM-DOCENTE-COLLETTIVO] allievo che con questo docente ha SOLO un collettivo ma ha corsi individuali con altri docenti:
+    // la sua quota è già ripartita tra i docenti dei corsi individuali → qui non va contata di nuovo.
+    if (s._soloCollettivoDoc && fmNumCorsiIndividuali(s) > 0) return;
+    const nDoc = (s._nCorsiIndDoc != null ? s._nCorsiIndDoc : (s._corsiConDocente || []).length) || 1;
     const nTot = Math.max(fmNumCorsiIndividuali(s), nDoc);
     const quotaParte = nDoc / nTot;
     const qs = quoteMese.filter(q => fmQuotaDiAllievo(q, s));
@@ -601,8 +604,15 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
           : students; // ultimo fallback: nessun dato storico disponibile
       }
     }
+    // [FM-DOCENTE-COLLETTIVO] oltre ai corsi individuali, conta anche il corso COLLETTIVO insegnato dal docente
+    // (allievi con solo un collettivo obbligatorio non hanno teacher/extraTeachers). _nCorsiIndDoc / _soloCollettivoDoc
+    // permettono al bilancio di non alterare il riparto delle quote.
     return base
-      .map(s => ({ ...s, _corsiConDocente: corsiConDocente(d, s) }))
+      .map(s => {
+        const ind = corsiConDocente(d, s);
+        const cc = fmCorsoCollettivoDelDocente(s, d.id, _coursesDocView);
+        return { ...s, _corsiConDocente: cc ? [...ind, cc.name || cc.nome] : ind, _nCorsiIndDoc: ind.length, _soloCollettivoDoc: !!cc && ind.length === 0 };
+      })
       .filter(s => s._corsiConDocente.length > 0);
   };
   const lezioniD = (d) => lessons.filter(l => l.date && matchTeacher(d, l.teacher) && l.attendance !== 'recuperata');

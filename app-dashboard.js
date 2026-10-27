@@ -2421,6 +2421,8 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
       ? _studentsAnno.filter(s=>{
           const t=(s.teacher||"").toLowerCase().trim(); const k=myDocTeacherKey.toLowerCase().trim();
           if (t===k||t.includes(k)||k.includes(t)) return true;
+          // [FM-DOCENTE-COLLETTIVO] allievo iscritto a un corso collettivo insegnato da questo docente
+          if (myDocRecord && fmCorsoCollettivoDelDocente(s, myDocRecord.id)) return true;
           // BUG CORRETTO: mancava il controllo su extraTeachers — un allievo con questo
           // docente assegnato solo come insegnante di uno strumento EXTRA (non quello
           // principale) non veniva mai conteggiato tra i suoi allievi in dashboard.

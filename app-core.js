@@ -2983,3 +2983,15 @@ const fmUploadFileUniversali = async (fileList) => {
   }
   return { ok, ko };
 };
+
+// [FM-DOCENTE-COLLETTIVO] Restituisce il corso COLLETTIVO dell'allievo (s.complementaryCourse) se il docente
+// indicato lo insegna (corso.docenti contiene il suo id), altrimenti null. Serve a far risultare al docente
+// anche gli allievi iscritti solo a un collettivo (es. corso "obbligatorio" senza corso individuale),
+// per i quali s.teacher / s.extraTeachers sono vuoti.
+const fmCorsoCollettivoDelDocente = (s, docenteId, courses) => {
+  if (!s || !s.complementaryCourse || docenteId == null || docenteId === '') return null;
+  const list = courses || (typeof window !== 'undefined' && window.__FM_DATA__ && window.__FM_DATA__.courses) || [];
+  const c = list.find(x => String(x.id) === String(s.complementaryCourse));
+  if (!c || c.type !== 'collettivo') return null;
+  return (c.docenti || []).map(String).includes(String(docenteId)) ? c : null;
+};
