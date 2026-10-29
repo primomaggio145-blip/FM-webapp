@@ -3355,7 +3355,7 @@ const PopoverCalcolo = ({ contenuto, children, width = 320 }) => {
 // tutto il repertorio della sua scheda Allievi → Repertorio (student.repertorio), diviso come
 // nella scheda: In studio / Completati / altri stati. Ogni brano ancora presente nel catalogo
 // è cliccabile e apre il Repertorio su quel brano.
-const RepertorioAllievoHover = ({ student, repertorioCatalogo, onApriBrano, children }) => {
+const RepertorioAllievoHover = ({ student, repertorioCatalogo, onApriBrano, onApriAllievo, children }) => {
   if (!student) return children;
   const rep = Array.isArray(student.repertorio) ? student.repertorio : [];
   const norm = st => String(st || '').toLowerCase().replace(/_/g, ' ').trim();
@@ -3388,6 +3388,8 @@ const RepertorioAllievoHover = ({ student, repertorioCatalogo, onApriBrano, chil
       , lista.map((r, i) => voce(r, i, mostraStato)));
   const contenuto = React.createElement('div', null
     , React.createElement('div', { style: { fontWeight: 700, fontSize: 12.5, color: C.text } }, '🎼 Repertorio di ', student.name || '')
+    , onApriAllievo ? React.createElement('a', { href: '#', onClick: e => { e.preventDefault(); e.stopPropagation(); onApriAllievo(); },
+        style: { display: 'inline-block', margin: '2px 0 4px', fontSize: 11.5, fontWeight: 600, color: C.blue, textDecoration: 'underline', textUnderlineOffset: 2 } }, 'Apri scheda allievo →') : null
     , React.createElement('div', { style: { fontSize: 10.5, color: C.textDim } }
         , rep.length, rep.length === 1 ? ' brano' : ' brani', ' nel registro · ', inStudio.length, ' in studio · ', completati.length, ' completati')
     , rep.length === 0
@@ -3398,7 +3400,18 @@ const RepertorioAllievoHover = ({ student, repertorioCatalogo, onApriBrano, chil
           , sezione('Altri', altri, C.textDim, true))
   );
   return React.createElement(PopoverCalcolo, { contenuto, width: 340 }
-    , React.createElement('span', { title: '', style: { borderBottom: `1px dotted ${C.textMuted}`, cursor: 'pointer' } }, children));
+    , React.createElement('span', {
+        title: onApriAllievo ? 'Apri la scheda allievo' : '',
+        onClick: e => {
+          // [FM-LINK-SCHEDA-ALLIEVO] Con mouse (hover disponibile) il click sul nome apre la scheda allievo;
+          // su touch il tap apre il popover del repertorio, che contiene il link "Apri scheda allievo".
+          if (!onApriAllievo) return;
+          const haHover = !!(window.matchMedia && window.matchMedia('(hover: hover)').matches);
+          if (haHover) { e.stopPropagation(); onApriAllievo(); }
+        },
+        style: onApriAllievo
+          ? { borderBottom: `1px solid ${C.blue}`, color: C.blue, cursor: 'pointer' }
+          : { borderBottom: `1px dotted ${C.textMuted}`, cursor: 'pointer' } }, children));
 };
 
 // [FM-SOGLIA-MAN] Editor della soglia manuale di un corso per un mese (scheda allievo → Lezioni).
@@ -7552,12 +7565,19 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
     onQuickAction('openBrano:' + branoId);
     onNavigate('repertorio');
   };
+  // [FM-LINK-SCHEDA-ALLIEVO] apre la scheda dell'allievo (Allievi → dettaglio) tramite il quickAction 'openStudent:<id>'
+  const _apriSchedaAllievo = (studentId) => {
+    if (!onQuickAction || !onNavigate || studentId == null) return;
+    onQuickAction('openStudent:' + studentId);
+    onNavigate('allievi');
+  };
   const _conHoverRepertorio = (sid, nome, children) => {
     const st = _trovaAllievo(sid, nome);
     if (!st) return children;
     return React.createElement(RepertorioAllievoHover, {
       student: st, repertorioCatalogo: _repertorioLDM || window.__repertorio__ || [],
-      onApriBrano: (onQuickAction && onNavigate) ? _apriBranoRepertorio : null }, children);
+      onApriBrano: (onQuickAction && onNavigate) ? _apriBranoRepertorio : null,
+      onApriAllievo: (role !== 'allievo' && onQuickAction && onNavigate) ? () => _apriSchedaAllievo(st.id) : null }, children);
   };
 
   // [FM-AUTOSAVE-TESTI] Argomento ed esercizi si salvano MENTRE si scrive (debounce 800 ms),
