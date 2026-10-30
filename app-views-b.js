@@ -755,6 +755,8 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
   };
   const [sortKeyDP, sortDirDP, handleSortDP, sortFnDP] = useSortable("mese", "asc");
   const [sortKeyDC, sortDirDC, handleSortDC, sortFnDC] = useSortable("mese", "asc");
+  // [FM-COMPENSO-NASCONDI-PAGATE] mostra/nasconde l'elenco delle lezioni pagate nel dettaglio mese
+  const [nascondiLezPagate, setNascondiLezPagate] = useState(false);
   // Mostra/nascondi importi (per il docente loggato)
   const [showAmountsDoc, setShowAmountsDoc] = useState(false);
   // Selettore anno scolastico per admin
@@ -1839,14 +1841,21 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
               , React.createElement('span', { style: {fontSize:12,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10450}}, "Dettaglio "
                  , MESI_LABEL_L[selMese.m-1], " " , selMese.y
               )
-              , React.createElement('span', { style: {fontSize:13,color:C.green,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10453}}, "€", stipLezSel.toLocaleString("it-IT"))
+              , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:10} }
+                , lezSel.length>0 && React.createElement('button', {
+                    onClick: () => setNascondiLezPagate(v => !v),
+                    title: nascondiLezPagate ? "Mostra l'elenco delle lezioni pagate" : "Nascondi l'elenco delle lezioni pagate",
+                    style: {padding:"4px 10px",borderRadius:8,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Open Sans',sans-serif",whiteSpace:"nowrap"}
+                  }, nascondiLezPagate ? `Mostra lezioni pagate (${lezSel.length})` : "Nascondi lezioni pagate")
+                , React.createElement('span', { style: {fontSize:13,color:C.green,fontWeight:600}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10453}}, "€", stipLezSel.toLocaleString("it-IT"))
+              )
             )
             , (lezSel.length===0 && lezSelProva.length===0) ? (
               React.createElement('div', { style: {textAlign:"center",padding:"32px 0",color:C.textDim,fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 10456}}
                 , isFuture(selMese)?"Mese non ancora iniziato":"Nessuna lezione registrata questo mese"
               )
             ) : (
-              [...lezSel.map(l=>({...l, __prova:false})), ...lezSelProva.map(l=>({...l, __prova:true}))]
+              [...(nascondiLezPagate ? [] : lezSel.map(l=>({...l, __prova:false}))), ...lezSelProva.map(l=>({...l, __prova:true}))]
                 .sort((a,b)=>a.date.localeCompare(b.date))
                 .map((l,i,arr)=>(
                 React.createElement('div', { key: l.id, style: {display:"grid",gridTemplateColumns:"90px 1fr auto",gap:12,alignItems:"center",
