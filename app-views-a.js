@@ -1143,8 +1143,29 @@ const PrenotazioneForm = ({ evento, students:psStudents, docenti:psDocenti, init
 };
 
 // ─── FORM EVENTO ──────────────────────────────────────────────────────────────
-const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
+// [FM-PROGRAMMA-AUTO] Allievi collegati a un brano (per l'inserimento automatico nel programma di un concerto):
+// assegnati nelle versioni del brano, con il brano nel repertorio della lezione, o con il brano nel proprio repertorio.
+// Vengono tenuti solo gli allievi presenti nell'elenco `students` (attivi), senza duplicati.
+function fmAllieviCollegatiBrano(brano, students, lessons) {
+  const out = [], visti = new Set();
+  const lista = students || [];
+  const nome = s => (s.name || s.nome || '');
+  const push = (sid, sname) => {
+    let st = sid != null ? lista.find(s => String(s.id) === String(sid)) : null;
+    if (!st && sname) { const n = String(sname).toLowerCase().trim(); st = lista.find(s => nome(s).toLowerCase().trim() === n); }
+    if (!st || visti.has(String(st.id))) return;
+    visti.add(String(st.id));
+    out.push({ studentId: st.id, studentName: nome(st) });
+  };
+  (brano.versioni || []).forEach(v => (v.allievi || []).forEach(a => push(a.studentId, a.studentName)));
+  (lessons || []).forEach(l => { if ((l.repertorioIds || []).includes(brano.id)) push(l.studentId, l.student); });
+  lista.forEach(s => { if ((s.repertorio || []).some(r => r.id === brano.id || (brano.title && r.titolo === brano.title))) push(s.id, nome(s)); });
+  return out;
+}
+
+const EventoForm = ({ initial, students, brani:_braniEv, docenti:_docentiEv, onSave, onClose }) => {
   const braniEv = _braniEv || [];
+  const docentiEv = (_docentiEv && _docentiEv.length) ? _docentiEv : (window.__docenti__ || []); // [FM-PROGRAMMA-AUTO] docenti aggiungibili come esecutori
   const def = initial || {id:"",tipo:"saggio",titolo:"",data:"",ora:"",luogo:"",capienza:100,
     biglietto:false,prezzoBiglietto:0,stato:"programmato",descrizione:"",note:"",programma:[],partecipanti:[],prenotazioni:[]};
   const [f,setF] = useState({...def, titolo: def.titolo||'', programma:def.programma||[], partecipanti:def.partecipanti||[]});
@@ -1158,7 +1179,9 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
     if((f.programma||[]).find(p=>p.branoId===bid)) return;
     const b = braniEv.find(x=>x.id===bid);
     if(!b) return;
-    set("programma", [...(f.programma||[]), {id:"pb"+Date.now(),branoId:bid,branoTitle:b.title||"",composer:b.composer||"",allievi:[]}]);
+    // [FM-PROGRAMMA-AUTO] gli allievi collegati al brano vengono inseriti in automatico (rimovibili, altri aggiungibili)
+    const auto = fmAllieviCollegatiBrano(b, students, (window.__FM_DATA__&&window.__FM_DATA__.lessons)||[]);
+    set("programma", [...(f.programma||[]), {id:"pb"+Date.now(),branoId:bid,branoTitle:b.title||"",composer:b.composer||"",allievi:auto,docenti:[]}]);
   };
   const remBranoProg = (bid) => set("programma",(f.programma||[]).filter(p=>p.branoId!==bid));
   const toggleAllievoBrano = (bid,sid,sname) => {
@@ -1166,6 +1189,13 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
       if(p.branoId!==bid) return p;
       const has=(p.allievi||[]).find(a=>a.studentId===sid);
       return {...p, allievi:has?p.allievi.filter(a=>a.studentId!==sid):[...(p.allievi||[]),{studentId:sid,studentName:sname}]};
+    }));
+  };
+  const toggleDocenteBrano = (bid,did,dname) => {
+    set("programma",(f.programma||[]).map(p=>{
+      if(p.branoId!==bid) return p;
+      const cur=p.docenti||[]; const has=cur.some(d=>String(d.docenteId)===String(did));
+      return {...p, docenti: has?cur.filter(d=>String(d.docenteId)!==String(did)):[...cur,{docenteId:did,docenteName:dname}]};
     }));
   };
   const moveBrano = (idx,dir) => {
@@ -1255,24 +1285,39 @@ const EventoForm = ({ initial, students, brani:_braniEv, onSave, onClose }) => {
               )
               , React.createElement('div', {style:{paddingLeft:32}}
                 , (() => {
-                  const conBrano = students.filter(s=>(s.repertorio||[]).some(r=>r.id===prog.branoId||r.titolo===prog.branoTitle));
-                  const lista = conBrano.length>0 ? conBrano : students;
+                  // [FM-PROGRAMMA-AUTO] esecutori = allievi (inseriti in automatico dal brano) + docenti, tutti rimovibili
+                  const selAl = prog.allievi||[]; const selDoc = prog.docenti||[];
+                  const branoCat = braniEv.find(b=>b.id===prog.branoId) || {id:prog.branoId,title:prog.branoTitle,versioni:[]};
+                  const collegati = fmAllieviCollegatiBrano(branoCat, students, (window.__FM_DATA__&&window.__FM_DATA__.lessons)||[]);
+                  const nonInclusi = collegati.filter(c=>!selAl.some(a=>String(a.studentId)===String(c.studentId)));
+                  const chip = (key,label,hex,onRem) => React.createElement('span', {key, style:{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 6px 3px 10px",borderRadius:14,fontSize:11,background:hex+"18",border:`1px solid ${hex}`,color:C.text}}
+                    , label
+                    , React.createElement('button', {type:"button",onClick:onRem,title:"Rimuovi",style:{background:"none",border:"none",cursor:"pointer",color:C.textMuted,fontSize:13,lineHeight:1,padding:0}}, "✕")
+                  );
+                  const itemsAggiunta = [
+                    ...students.filter(s=>!selAl.some(a=>String(a.studentId)===String(s.id))).map(s=>({id:"a:"+s.id,tipo:"allievo",rid:s.id,nome:s.name||s.nome||""})),
+                    ...docentiEv.filter(d=>!selDoc.some(x=>String(x.docenteId)===String(d.id))).map(d=>({id:"d:"+d.id,tipo:"docente",rid:d.id,nome:d.nome||d.name||""})),
+                  ].filter(it=>it.nome);
                   return React.createElement(React.Fragment, null
-                    , React.createElement('div', {style:{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}
-                      , conBrano.length>0 ? "Allievi esecutori:" : "Allievi esecutori (tutti):"
+                    , React.createElement('div', {style:{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}, "Esecutori:")
+                    , (selAl.length+selDoc.length)===0 && React.createElement('div', {style:{fontSize:11,color:C.textDim,fontStyle:"italic",marginBottom:6}}, collegati.length===0 ? "Nessun allievo collegato al brano — aggiungi gli esecutori qui sotto" : "Nessun esecutore selezionato")
+                    , (selAl.length+selDoc.length)>0 && React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}}
+                      , selAl.map(a=>chip("a"+a.studentId, a.studentName, tp.hex, ()=>toggleAllievoBrano(prog.branoId,a.studentId,a.studentName)))
+                      , selDoc.map(d=>chip("d"+d.docenteId, "🎓 "+d.docenteName, C.teal, ()=>toggleDocenteBrano(prog.branoId,d.docenteId,d.docenteName)))
                     )
-                    , React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:6}}
-                      , lista.map(s=>
-                        React.createElement('label', {key:s.id, style:{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:"3px 8px",borderRadius:6,
-                          background:(prog.allievi||[]).find(a=>a.studentId===s.id)?(tp.hex+"18"):C.surface,
-                          border:`1px solid ${(prog.allievi||[]).find(a=>a.studentId===s.id)?tp.hex:C.border}`,transition:"all .12s",fontSize:11}}
-                          , React.createElement('input', {type:"checkbox",checked:!!(prog.allievi||[]).find(a=>a.studentId===s.id),
-                              onChange:()=>toggleAllievoBrano(prog.branoId,s.id,s.name||s.nome||""),
-                              style:{accentColor:tp.hex,width:12,height:12,flexShrink:0}})
-                          , s.name||s.nome||""
-                        )
-                      )
+                    , nonInclusi.length>0 && React.createElement('div', {style:{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,marginBottom:8}}
+                      , React.createElement('span', {style:{fontSize:11,color:C.textDim}}, "Collegati al brano, non inclusi:")
+                      , nonInclusi.map(c=>React.createElement('button', {key:"n"+c.studentId,type:"button",onClick:()=>toggleAllievoBrano(prog.branoId,c.studentId,c.studentName),
+                          style:{padding:"2px 9px",borderRadius:14,border:`1px dashed ${C.border}`,background:"transparent",color:C.textMuted,fontSize:11,cursor:"pointer",fontFamily:"'Open Sans',sans-serif"}}, "+ "+c.studentName))
                     )
+                    , React.createElement(RicercaESeleziona, {
+                        items: itemsAggiunta,
+                        getSearchText: it => it.nome + (it.tipo==="docente"?" docente":" allievo"),
+                        renderOption: it => (it.tipo==="docente"?"🎓 ":"")+it.nome+(it.tipo==="docente"?" (docente)":""),
+                        placeholder: "Aggiungi altro allievo o docente...",
+                        emptyLabel: "Nessun risultato",
+                        onSelect: it => it.tipo==="docente" ? toggleDocenteBrano(prog.branoId,it.rid,it.nome) : toggleAllievoBrano(prog.branoId,it.rid,it.nome),
+                      })
                   );
                 })()
               )
@@ -1333,7 +1378,7 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
     const prog = evento.programma || [];
     return prog.map(p => ({
       brano: p.branoTitle || p.title || '',
-      performer: (p.allievi||[]).map(a => a.studentName).join(', ')
+      performer: [...(p.allievi||[]).map(a => a.studentName), ...(p.docenti||[]).map(d => d.docenteName)].filter(Boolean).join(', ') // [FM-PROGRAMMA-AUTO]
     })).filter(x => x.brano);
   }, [evento.programma]);
 
@@ -2348,7 +2393,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
         onUpdate: handleUpdate, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8897}})
       , modal==="edit" && (
         React.createElement(Modal, { title: "Modifica evento" , onClose: ()=>setModal(null), wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8903}}
-          , React.createElement(EventoForm, { initial: selected, students: students, brani: propBraniCV||[], onSave: handleSave, onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8904}})
+          , React.createElement(EventoForm, { initial: selected, students: students, brani: propBraniCV||[], docenti: propDocentiCV, onSave: handleSave, onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 8904}})
         )
       )
       , modal==="del" && selected && (
@@ -2518,7 +2563,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
       /* Modal nuovo evento */
       , modal==="new" && (
         React.createElement(Modal, { title: "Nuovo evento" , onClose: ()=>setModal(null), wide: true, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9069}}
-          , React.createElement(EventoForm, { students: students, brani: propBraniCV||[], onSave: handleSave, onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9070}})
+          , React.createElement(EventoForm, { students: students, brani: propBraniCV||[], docenti: propDocentiCV, onSave: handleSave, onClose: ()=>setModal(null), __self: this, __source: {fileName: _jsxFileName, lineNumber: 9070}})
         )
       )
     )

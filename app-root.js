@@ -1373,6 +1373,10 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
   const [note,      setNote]      = useState('');
   const [saving,    setSaving]    = useState(false);
   const [loadingSlots, setLoadingSlots] = useState(true);
+  // [FM-SLOT-EXTRA] slot fuori dalla disponibilità del docente (data + ora a scelta)
+  const [mostraExtra, setMostraExtra] = useState(false);
+  const [extraData,   setExtraData]   = useState('');
+  const [extraOra,    setExtraOra]    = useState('');
 
   // Calcola slot disponibili dalle disponibilità del docente
   React.useEffect(() => {
@@ -1445,8 +1449,32 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
     setLoadingSlots(false);
   }, [lesson.id]);
 
+  // ── [FM-SLOT-EXTRA] calcolo slot extra, validazione e conflitti ──
+  const _durExtra = lesson.durata || 45;
+  const _toStrE = x => String(Math.floor(x/60)).padStart(2,'0')+':'+String(x%60).padStart(2,'0');
+  const _nowE = new Date();
+  const _oggiE = _nowE.getFullYear()+'-'+String(_nowE.getMonth()+1).padStart(2,'0')+'-'+String(_nowE.getDate()).padStart(2,'0');
+  const _nowHM = String(_nowE.getHours()).padStart(2,'0')+':'+String(_nowE.getMinutes()).padStart(2,'0');
+  const slotExtra = (extraData && /^\d{2}:\d{2}$/.test(extraOra)) ? (() => {
+    const [yy,mm,dd] = extraData.split('-').map(Number);
+    const ini = (+extraOra.slice(0,2))*60 + (+extraOra.slice(3,5));
+    const GG = ['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
+    return { data:extraData, giorno:GG[new Date(yy,mm-1,dd).getDay()], oraInizio:extraOra, oraFine:_toStrE(ini+_durExtra),
+             key:'extra_'+extraData+'_'+extraOra, extra:true, _fine:ini+_durExtra };
+  })() : null;
+  const extraErr = !slotExtra ? ''
+    : (slotExtra.data < _oggiE || (slotExtra.data === _oggiE && extraOra <= _nowHM)) ? 'La data/ora scelta è già passata.'
+    : slotExtra._fine > 24*60 ? 'La lezione supera la mezzanotte: scegli un orario di inizio più presto.' : '';
+  const conflittiExtra = (slotExtra && !extraErr)
+    ? fmConflittiSlotExtra(window.__FM_DATA__?.lessons || [], lesson, slotExtra.data, slotExtra.oraInizio, _durExtra) : [];
+
   const handleConferma = async () => {
     if (!slotSel || saving) return;
+    // [FM-SLOT-EXTRA] slot extra su un orario già impegnato: chiede conferma esplicita
+    if (slotSel.extra && conflittiExtra.length > 0) {
+      const elenco = conflittiExtra.map(c => '• ' + (c.lezione.hour||'').slice(0,5) + ' ' + (c.lezione.student || c.lezione.courseName || 'lezione') + ' (stesso ' + c.motivo + ')').join('\n');
+      if (!window.confirm('Lo slot extra si sovrappone a:\n' + elenco + '\n\nConfermare comunque il recupero?')) return;
+    }
     setSaving(true);
     const sb = window.supabaseClient;
     if (sb) {
@@ -1578,7 +1606,7 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
           ? React.createElement('div',{style:{textAlign:'center',padding:32,color:C.textDim}},'⏳ Caricamento disponibilità...')
           : slotLiberi.length === 0
           ? React.createElement('div',{style:{padding:20,background:`${C.gold}08`,border:`1px solid ${C.goldDim}`,borderRadius:10,fontSize:13,color:C.textMuted,lineHeight:1.6}}
-              , '⚠️ Nessuno slot disponibile nei prossimi 60 giorni. '
+              , '⚠️ Nessuno slot disponibile nei prossimi 60 giorni (puoi comunque inserire uno slot extra qui sotto). '
               , React.createElement('br',null)
               , 'Verifica che il docente ', React.createElement('strong',null,lesson.teacher||'—'), ' abbia configurato le disponibilità recuperi nel suo profilo (Docenti → Impostazioni).'
             )
@@ -1610,6 +1638,33 @@ const AdminRecuperoModal = ({ lesson, setLessons, onDismiss }) => {
                   })))
               )
             )
+        /* [FM-SLOT-EXTRA] Slot extra rispetto alle disponibilità indicate dal docente */
+        , React.createElement('div', {style:{border:`1px dashed ${slotSel&&slotSel.extra?C.teal:C.border}`,borderRadius:10,padding:'12px 14px',background:slotSel&&slotSel.extra?C.tealBg:'transparent'}}
+          , React.createElement('button', {type:'button',onClick:()=>setMostraExtra(v=>!v),style:{background:'none',border:'none',cursor:'pointer',padding:0,color:C.teal,fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif",textAlign:'left'}}
+              , (mostraExtra?'▾ ':'▸ ') + '➕ Slot extra — fuori dalla disponibilità del docente')
+          , mostraExtra && React.createElement('div', {style:{marginTop:10,display:'flex',flexDirection:'column',gap:10}}
+            , React.createElement('div', {style:{display:'flex',gap:10,flexWrap:'wrap'}}
+              , React.createElement('div', {style:{flex:1,minWidth:140}}
+                , React.createElement('label', {style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:4}}, 'Data')
+                , React.createElement('input', {type:'date',min:_oggiE,value:extraData,onChange:e=>{ setExtraData(e.target.value); if(slotSel&&slotSel.extra) setSlotSel(null); },
+                    style:{width:'100%',boxSizing:'border-box',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:'8px 10px',fontFamily:"'Open Sans',sans-serif"}}))
+              , React.createElement('div', {style:{flex:1,minWidth:110}}
+                , React.createElement('label', {style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:4}}, 'Ora inizio')
+                , React.createElement('input', {type:'time',step:300,value:extraOra,onChange:e=>{ setExtraOra(e.target.value); if(slotSel&&slotSel.extra) setSlotSel(null); },
+                    style:{width:'100%',boxSizing:'border-box',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:'8px 10px',fontFamily:"'Open Sans',sans-serif"}}))
+            )
+            , slotExtra && !extraErr && React.createElement('div', {style:{fontSize:12,color:C.textMuted}}, fmtData(slotExtra.data)+' · '+slotExtra.giorno+' · 🕐 '+slotExtra.oraInizio+' → '+slotExtra.oraFine+' ('+_durExtra+' min)')
+            , extraErr && React.createElement('div', {style:{padding:'7px 10px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red}}, extraErr)
+            , conflittiExtra.length>0 && React.createElement('div', {style:{padding:'8px 10px',borderRadius:8,background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.4)',fontSize:12,color:C.text,lineHeight:1.5}}
+              , React.createElement('strong', null, '⚠️ Sovrapposizione: ')
+              , conflittiExtra.map((c,i)=>React.createElement('div',{key:i},'• '+(c.lezione.hour||'').slice(0,5)+' '+(c.lezione.student||c.lezione.courseName||'lezione')+' (stesso '+c.motivo+')'))
+              , React.createElement('div',{style:{color:C.textMuted,marginTop:3}},'Puoi confermare comunque: ti verrà chiesta una conferma.')
+            )
+            , slotExtra && !extraErr && React.createElement('button', {type:'button',onClick:()=>setSlotSel(slotExtra),
+                style:{alignSelf:'flex-start',padding:'8px 14px',borderRadius:8,border:`2px solid ${C.teal}`,background:slotSel&&slotSel.key===slotExtra.key?C.teal:'transparent',color:slotSel&&slotSel.key===slotExtra.key?'#fff':C.teal,cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif"}}
+                , slotSel&&slotSel.key===slotExtra.key ? '✓ Slot extra selezionato' : 'Usa questo slot extra')
+          )
+        )
         // Note
         , React.createElement('div', null
           , React.createElement('label',{style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:6}},'Note (opzionale)')
@@ -1646,33 +1701,82 @@ function fmRaggruppaSlotPerSettimana(slots) {
   return Array.from(map.values());
 }
 
-const RecuperoScadutoModal = ({ lesson, onExtend, onDismiss, setLessons }) => {
-  const [nuovaScadenza, setNuovaScadenza] = useState('');
-  const [saving, setSaving] = useState(false);
+// ── [FM-PROROGA-RECUPERO] / [FM-SLOT-EXTRA] helper puri (testabili) ──
+// Fine del mese SUCCESSIVO a quello della scadenza attuale (es. scadenza 31/10 → 30/11, anche se oggi è già il 02/11).
+// Senza scadenza si parte da oggi. Il risultato non è mai nel passato. Ritorna 'YYYY-MM-DD'.
+function fmFineMeseSuccessivo(scadenzaISO, oggi) {
+  const o = new Date(oggi.getFullYear(), oggi.getMonth(), oggi.getDate());
+  let base = o;
+  if (scadenzaISO) {
+    const p = String(scadenzaISO).split('-').map(Number);
+    base = new Date(p[0], p[1]-1, p[2]);
+  }
+  let f = new Date(base.getFullYear(), base.getMonth()+2, 0);
+  while (f < o) f = new Date(f.getFullYear(), f.getMonth()+2, 0);
+  return f.getFullYear()+'-'+String(f.getMonth()+1).padStart(2,'0')+'-'+String(f.getDate()).padStart(2,'0');
+}
+// Lezioni che si sovrappongono a uno slot extra (stesso docente OPPURE stesso allievo).
+// Le lezioni "da recuperare" liberano il loro orario (fmLezioneLiberaSlot). Ritorna [{lezione, motivo}].
+function fmConflittiSlotExtra(lessons, lesson, data, oraInizio, durataMin) {
+  const tMin = t => { const p = String(t||'0:0').split(':'); return (+p[0]||0)*60 + (+p[1]||0); };
+  const ini = tMin(oraInizio), fine = ini + durataMin;
+  const doc = String(lesson.teacher||'').toLowerCase().trim();
+  const out = [];
+  (lessons||[]).forEach(l => {
+    if (!l || l.id === lesson.id || l.date !== data || !l.hour) return;
+    if (typeof fmLezioneLiberaSlot === 'function' && fmLezioneLiberaSlot(l)) return;
+    const stessoDoc = !!doc && String(l.teacher||'').toLowerCase().trim() === doc;
+    const stessoAll = lesson.studentId ? String(l.studentId) === String(lesson.studentId) : (!!lesson.student && l.student === lesson.student);
+    if (!stessoDoc && !stessoAll) return;
+    const li = tMin(l.hour), lf = li + (l.durata || 45);
+    if (ini < lf && li < fine) out.push({ lezione:l, motivo: stessoDoc ? 'docente' : 'allievo' });
+  });
+  return out;
+}
 
-  // Calcola fine del prossimo mese come default
+const RecuperoScadutoModal = ({ lesson, onExtend, onDismiss, setLessons }) => {
+  // [FM-PROROGA-RECUPERO] Proroga del termine di recupero (default: fine del mese successivo) con motivo
+  // facoltativo (es. causa di forza maggiore). Usabile sia a recupero scaduto sia PRIMA della scadenza.
+  const [nuovaScadenza, setNuovaScadenza] = useState('');
+  const [motivo, setMotivo]   = useState('');
+  const [saving, setSaving]   = useState(false);
+  const [errore, setErrore]   = useState('');
+
   const oggi = new Date();
-  const fineMesseProssimo = new Date(oggi.getFullYear(), oggi.getMonth()+2, 0).toISOString().split('T')[0];
+  const oggiStr = oggi.getFullYear()+'-'+String(oggi.getMonth()+1).padStart(2,'0')+'-'+String(oggi.getDate()).padStart(2,'0');
+  const fineMeseSucc = fmFineMeseSuccessivo(lesson.recuperoScadenza, oggi);
+  const scadFinale = nuovaScadenza || fineMeseSucc;   // FIX: prima il default mostrato nel campo non veniva salvato
+  const scaduto = !!lesson.recuperoScadenza && lesson.recuperoScadenza < oggiStr;
+  const fmtIt = iso => iso ? String(iso).split('-').reverse().join('/') : '—';
 
   const handleEstendi = async () => {
-    if (!nuovaScadenza) return;
-    setSaving(true);
+    if (saving) return;
+    if (!scadFinale || scadFinale < oggiStr) { setErrore('La nuova scadenza non può essere nel passato.'); return; }
+    setSaving(true); setErrore('');
     const sb = window.supabaseClient;
+    const nota = 'Recupero prorogato al ' + fmtIt(scadFinale) + (motivo.trim() ? ' — ' + motivo.trim() : '');
     if (sb) {
-      await sb.from('lezioni').update({
-        in_recupero:       true,
-        recupero_scadenza: nuovaScadenza,
-        attendance:        null,   // rimuovi 'assente' se era già stato marcato
-      }).eq('id', lesson.id);
-      // Aggiorna React state
-      setLessons(p => p.map(l => l.id === lesson.id
-        ? {...l, inRecupero: true, recuperoScadenza: nuovaScadenza, attendance: ''}
-        : l));
+      const patch = { in_recupero:true, recupero_scadenza:scadFinale, attendance:null, notes_recupero:nota };
+      let { error } = await sb.from('lezioni').update(patch).eq('id', lesson.id);
+      if (error && /notes_recupero/i.test(error.message||'')) { delete patch.notes_recupero; ({ error } = await sb.from('lezioni').update(patch).eq('id', lesson.id)); }
+      if (error) { setErrore('Errore nel salvataggio: ' + error.message); setSaving(false); return; }
+      // Avvisa l'allievo (stessa struttura/tipo delle altre notifiche di recupero)
+      const allievoId = lesson.studentId || lesson.studente_id || null;
+      if (allievoId) {
+        try {
+          await sb.from('notifiche').insert({
+            destinatario_ruolo:'allievo', destinatario_id:String(allievoId), destinatario_nome:lesson.student||'',
+            tipo:'recupero_ufficiale', titolo:'⏰ Termine di recupero prorogato',
+            messaggio:'Il termine per recuperare la lezione del ' + fmtIt(lesson.date) + ' è stato prorogato al ' + fmtIt(scadFinale) + '.',
+            letto:false, created_at:new Date().toISOString(),
+          });
+        } catch(e) {}
+      }
+      const agg = l => l.id === lesson.id ? {...l, inRecupero:true, recuperoScadenza:scadFinale, attendance:'', notesRecupero:nota} : l;
+      setLessons(p => p.map(agg));
       if (window.__FM_UPDATE_PREV__) {
         const all = (window.__FM_DATA__?.lessons || []);
-        window.__FM_UPDATE_PREV__({ lessons: all.map(l => l.id === lesson.id
-          ? {...l, inRecupero: true, recuperoScadenza: nuovaScadenza, attendance: ''}
-          : l)});
+        window.__FM_UPDATE_PREV__({ lessons: all.map(agg) });
       }
     }
     setSaving(false);
@@ -1686,67 +1790,56 @@ const RecuperoScadutoModal = ({ lesson, onExtend, onDismiss, setLessons }) => {
   const scadenza = lesson.recuperoScadenza
     ? new Date(lesson.recuperoScadenza+'T00:00:00').toLocaleDateString('it-IT',{day:'2-digit',month:'long',year:'numeric'})
     : '—';
+  const inpS = {width:'100%',boxSizing:'border-box',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:'10px 14px',fontFamily:"'Open Sans',sans-serif"};
+  const lblS = {fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:6};
 
   return React.createElement(React.Fragment, null
-    // Overlay
-    , React.createElement('div', {
-        onClick: onDismiss,
-        style:{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,0.65)',backdropFilter:'blur(3px)'}
-      })
-    // Modal
+    , React.createElement('div', { onClick: onDismiss, style:{position:'fixed',inset:0,zIndex:9998,background:'rgba(0,0,0,0.65)',backdropFilter:'blur(3px)'} })
     , React.createElement('div', {
         style:{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',
           zIndex:9999,background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,
-          width:460,maxWidth:'calc(100vw - 32px)',boxShadow:'0 20px 60px rgba(0,0,0,0.4)',
+          width:460,maxWidth:'calc(100vw - 32px)',maxHeight:'calc(100vh - 32px)',overflow:'auto',boxShadow:'0 20px 60px rgba(0,0,0,0.4)',
           fontFamily:"'Open Sans',sans-serif"}
       }
-      // Header rosso
-      , React.createElement('div', {style:{background:'rgba(220,38,38,0.08)',borderBottom:`1px solid ${C.redBorder}`,borderRadius:'16px 16px 0 0',padding:'18px 24px',display:'flex',alignItems:'center',gap:12}}
-        , React.createElement('div', {style:{width:36,height:36,borderRadius:10,background:C.redBg,border:`1px solid ${C.redBorder}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
-          , React.createElement(Ic, {n:'alert',size:18,stroke:C.red})
+      , React.createElement('div', {style:{background:scaduto?'rgba(220,38,38,0.08)':'rgba(245,158,11,0.08)',borderBottom:`1px solid ${scaduto?C.redBorder:'rgba(245,158,11,0.35)'}`,borderRadius:'16px 16px 0 0',padding:'18px 24px',display:'flex',alignItems:'center',gap:12}}
+        , React.createElement('div', {style:{width:36,height:36,borderRadius:10,background:scaduto?C.redBg:'rgba(245,158,11,0.12)',border:`1px solid ${scaduto?C.redBorder:'rgba(245,158,11,0.35)'}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}
+          , React.createElement(Ic, {n:scaduto?'alert':'clock',size:18,stroke:scaduto?C.red:'#f59e0b'})
         )
         , React.createElement('div', null
-          , React.createElement('div', {style:{fontSize:15,fontWeight:700,color:C.red}}, '⏰ Recupero scaduto')
-          , React.createElement('div', {style:{fontSize:12,color:C.textDim,marginTop:2}}, 'Termine di recupero superato')
+          , React.createElement('div', {style:{fontSize:15,fontWeight:700,color:scaduto?C.red:'#f59e0b'}}, scaduto ? '⏰ Recupero scaduto' : '⏰ Proroga recupero')
+          , React.createElement('div', {style:{fontSize:12,color:C.textDim,marginTop:2}}, scaduto ? 'Termine di recupero superato' : 'Sposta il termine di recupero')
         )
       )
-      // Body
       , React.createElement('div', {style:{padding:'20px 24px',display:'flex',flexDirection:'column',gap:14}}
         , React.createElement('div', {style:{background:C.bg,border:`1px solid ${C.border}`,borderRadius:10,padding:'14px 16px'}}
-          , React.createElement('div', {style:{fontSize:13,fontWeight:600,marginBottom:4}},
-              lesson.student || lesson.courseName || '—')
-          , React.createElement('div', {style:{fontSize:12,color:C.textMuted}},
-              '📅 ', dataLez, ' · 🕐 ', lesson.hour||'—')
-          , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:4}},
-              '👨‍🏫 ', lesson.teacher||'—')
-          , React.createElement('div', {style:{fontSize:12,color:C.red,marginTop:6,fontWeight:600}},
-              '⚠️ Scadenza: ', scadenza)
+          , React.createElement('div', {style:{fontSize:13,fontWeight:600,marginBottom:4}}, lesson.student || lesson.courseName || '—')
+          , React.createElement('div', {style:{fontSize:12,color:C.textMuted}}, '📅 ', dataLez, ' · 🕐 ', lesson.hour||'—')
+          , React.createElement('div', {style:{fontSize:12,color:C.textMuted,marginTop:4}}, '👨‍🏫 ', lesson.teacher||'—')
+          , React.createElement('div', {style:{fontSize:12,color:scaduto?C.red:'#f59e0b',marginTop:6,fontWeight:600}}, scaduto ? '⚠️ Scadenza: ' : '⏳ Scade il: ', scadenza)
         )
-        , React.createElement('div', {style:{fontSize:13,color:C.text,lineHeight:1.5}}
-          , 'La lezione verrà automaticamente segnata come ', React.createElement('strong',null,'ASSENTE'),
-            ' così da essere retribuita al docente. '
-          , React.createElement('br',null)
-          , 'Vuoi comunque prorogare il termine di recupero?'
+        , scaduto && React.createElement('div', {style:{fontSize:13,color:C.text,lineHeight:1.5}}
+          , 'Se non prorogata, la lezione verrà automaticamente segnata come ', React.createElement('strong',null,'ASSENTE'),
+            ' così da essere retribuita al docente.'
+          )
+        , React.createElement('div', null
+          , React.createElement('label', {style:lblS}, 'Nuova scadenza recupero')
+          , React.createElement('input', { type:'date', min:oggiStr, value:scadFinale, onChange:e=>setNuovaScadenza(e.target.value), style:inpS })
+          , React.createElement('div', {style:{fontSize:11,color:C.textDim,marginTop:5}}, 'Proposta: fine del mese successivo (', fmtIt(fineMeseSucc), ')')
         )
         , React.createElement('div', null
-          , React.createElement('label', {style:{fontSize:11,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.07em',display:'block',marginBottom:6}}, 'Nuova scadenza recupero')
-          , React.createElement('input', {
-              type:'date',
-              min: new Date().toISOString().split('T')[0],
-              value: nuovaScadenza || fineMesseProssimo,
-              onChange: e => setNuovaScadenza(e.target.value),
-              style:{width:'100%',boxSizing:'border-box',background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:'10px 14px',fontFamily:"'Open Sans',sans-serif"}
-            })
+          , React.createElement('label', {style:lblS}, 'Motivo (facoltativo)')
+          , React.createElement('textarea', { rows:2, value:motivo, onChange:e=>setMotivo(e.target.value), placeholder:'Es. Causa di forza maggiore: l\'allievo non ha potuto recuperare', style:{...inpS,resize:'none'} })
         )
+        , errore && React.createElement('div', {style:{padding:'8px 12px',borderRadius:8,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:12,color:C.red}}, errore)
         , React.createElement('div', {style:{display:'flex',gap:10,justifyContent:'flex-end'}}
           , React.createElement('button', {
               onClick: onDismiss,
               style:{padding:'9px 18px',borderRadius:8,border:`1px solid ${C.border}`,background:'none',color:C.textMuted,cursor:'pointer',fontSize:13,fontFamily:"'Open Sans',sans-serif"}
-            }, 'Lascia come assente')
+            }, scaduto ? 'Lascia come assente' : 'Annulla')
           , React.createElement('button', {
               onClick: handleEstendi,
               disabled: saving,
-              style:{padding:'9px 18px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:saving?'wait':'pointer',fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif",opacity:saving?0.7:1}
+              style:{padding:'9px 18px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:saving?'wait':'pointer',fontSize:13,fontWeight:600,fontFamily:"'Open Sans',sans-serif"}
             }, saving ? '⏳...' : '✓ Proroga recupero')
         )
       )

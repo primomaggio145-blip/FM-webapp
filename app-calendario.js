@@ -8552,6 +8552,11 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
                         onClick: () => { if (window.__FM_SHOW_ADMIN_RECUPERO__) window.__FM_SHOW_ADMIN_RECUPERO__(lesson); },
                         style:{padding:'6px 14px',borderRadius:8,border:'none',background:C.teal,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}
                       }, '📅 Fissa recupero')
+                    , React.createElement('button', {
+                        onClick: () => { if (window.__FM_SHOW_RECUPERO_SCADUTO__) window.__FM_SHOW_RECUPERO_SCADUTO__({ lesson, onExtend: ()=>{} }); },
+                        title: 'Sposta il termine di recupero (default: fine del mese successivo)',
+                        style:{padding:'6px 14px',borderRadius:8,border:'none',background:C.gold,color:'#fff',cursor:'pointer',fontSize:12,fontWeight:600,fontFamily:"'Open Sans',sans-serif",whiteSpace:'nowrap'}
+                      }, '⏰ Proroga')
                   )
                 )
                 , React.createElement('div', { className: "att-row", style: {display:"flex", gap:8}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4638}}
@@ -11321,7 +11326,7 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
                           : React.createElement('span',{style:{background:'rgba(245,158,11,0.08)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.2)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In recupero')
                         )
                       , React.createElement('td',{style:{padding:'11px 14px'}},
-                          React.createElement('button',{onClick:()=>onOpenLesson&&onOpenLesson(l),style:{padding:'4px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Apri')
+                          React.createElement('button',{onClick:()=>onOpenLesson&&onOpenLesson(l),style:{padding:'4px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'Apri'), role==='admin' && React.createElement('button',{onClick:()=>{ if (window.__FM_SHOW_RECUPERO_SCADUTO__) window.__FM_SHOW_RECUPERO_SCADUTO__({ lesson:l, onExtend:()=>{} }); },title:'Proroga il termine di recupero (default: fine del mese successivo)',style:{marginLeft:6,padding:'4px 10px',borderRadius:7,border:`1px solid ${C.goldDim}`,background:C.goldBg,color:C.gold,fontSize:12,cursor:'pointer',fontFamily:"'Open Sans',sans-serif"}},'⏰ Proroga')
                         )
                     );
                   })
@@ -16786,7 +16791,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                     const rows=prog.map((p,i)=>`<div class="brano"><div class="num">${i+1}</div><div>
                       <div class="title">${p.branoTitle||""}</div>
                       <div class="comp">${p.composer||""}</div>
-                      ${(p.allievi||[]).length>0?`<div class="esec">${(p.allievi||[]).map(a=>a.studentName).join(", ")}</div>`:""}
+                      ${((p.allievi||[]).length+(p.docenti||[]).length)>0?`<div class="esec">${[...(p.allievi||[]).map(a=>a.studentName),...(p.docenti||[]).map(d=>d.docenteName)].filter(Boolean).join(", ")}</div>`:""}
                     </div></div>`).join("");
                     w.document.write(`<html><head><title>Scaletta</title><style>
                       body{font-family:'Georgia',serif;padding:40px;max-width:700px;margin:0 auto}
@@ -16833,7 +16838,10 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                   , (p.allievi||[]).length>0 && React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:5}}
                     , (p.allievi||[]).map(a=>React.createElement('span', {key:a.studentId,style:{padding:"2px 8px",borderRadius:12,background:C.goldBg,border:"1px solid "+C.goldDim,color:C.gold,fontSize:11}}, a.studentName))
                   )
-                  , (p.allievi||[]).length===0 && React.createElement('div', {style:{fontSize:11,color:C.textDim,fontStyle:"italic"}}, "Nessun esecutore specificato")
+                  , (p.docenti||[]).length>0 && React.createElement('div', {style:{display:"flex",flexWrap:"wrap",gap:5,marginTop:(p.allievi||[]).length>0?5:0}}
+                    , (p.docenti||[]).map(d=>React.createElement('span', {key:'d'+d.docenteId,style:{padding:"2px 8px",borderRadius:12,background:C.tealBg,border:"1px solid "+C.tealBorder,color:C.teal,fontSize:11}}, '🎓 '+d.docenteName))
+                  )
+                  , ((p.allievi||[]).length+(p.docenti||[]).length)===0 && React.createElement('div', {style:{fontSize:11,color:C.textDim,fontStyle:"italic"}}, "Nessun esecutore specificato")
                 )
               )
             )
