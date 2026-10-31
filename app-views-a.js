@@ -20,6 +20,125 @@ const StatoBranoBadge = ({ stato }) => {
   }}, cfg.icon+' '+cfg.label);
 };
 
+// ── [FM-BRANO-MANUALI] Riferimenti dal brano ai manuali/libri della Biblioteca ──
+// Ogni riferimento: { id, manualeId, titolo, fileUrl, pagina, nota }
+//  - manualeId = id della riga in tabella 'biblioteca' (titolo/fileUrl sono solo uno snapshot di riserva:
+//    la vista legge sempre i dati aggiornati dalla Biblioteca, così un manuale rinominato resta coerente)
+//  - pagina    = numero pagina (se il file è un PDF il link apre direttamente quella pagina: #page=N)
+// Colonna DB: brani.riferimenti_manuali (jsonb) — vedi migrazione_brani_manuali.sql
+const FM_BIBLIOTECA_CACHE = { rows:null, promise:null };
+const fmCaricaBiblioteca = (force) => {
+  if (!force && FM_BIBLIOTECA_CACHE.rows) return Promise.resolve(FM_BIBLIOTECA_CACHE.rows);
+  if (!force && FM_BIBLIOTECA_CACHE.promise) return FM_BIBLIOTECA_CACHE.promise;
+  const sb = window.supabaseClient;
+  if (!sb) return Promise.resolve([]);
+  FM_BIBLIOTECA_CACHE.promise = sb.from('biblioteca').select('*').order('titolo', { ascending:true })
+    .then(({ data, error }) => {
+      if (error) { console.warn('[FM] biblioteca (riferimenti brano):', error.message); FM_BIBLIOTECA_CACHE.promise = null; return []; }
+      FM_BIBLIOTECA_CACHE.rows = data || [];
+      FM_BIBLIOTECA_CACHE.promise = null;
+      return FM_BIBLIOTECA_CACHE.rows;
+    })
+    .catch(e => { console.warn('[FM] biblioteca (riferimenti brano) eccezione:', e && e.message); FM_BIBLIOTECA_CACHE.promise = null; return []; });
+  return FM_BIBLIOTECA_CACHE.promise;
+};
+const useBibliotecaFM = () => {
+  const [rows, setRows] = useState(FM_BIBLIOTECA_CACHE.rows || []);
+  React.useEffect(() => {
+    let vivo = true;
+    // force=true: la Biblioteca può essere cambiata (nuovi manuali) dall'ultima volta
+    fmCaricaBiblioteca(true).then(r => { if (vivo) setRows(r); });
+    return () => { vivo = false; };
+  }, []);
+  return rows;
+};
+// URL finale del riferimento: se il file è un PDF e c'è un numero di pagina → #page=N
+const fmUrlRiferimento = (url, pagina, tipoFile, nomeFile) => {
+  if (!url) return null;
+  const base = String(url).split('#')[0];
+  const p = String(pagina == null ? '' : pagina).trim();
+  const isPdf = /pdf/i.test(tipoFile || '') || /\.pdf(\?|$)/i.test(nomeFile || '') || /\.pdf(\?|$)/i.test(base);
+  return (isPdf && /^\d+$/.test(p)) ? base + '#page=' + p : base;
+};
+// Etichetta leggibile: "p. 12 — nota"
+const fmEtichettaRiferimento = (r) => {
+  const p = String(r && r.pagina != null ? r.pagina : '').trim();
+  return [p ? 'p. ' + p : '', (r && r.nota) || ''].filter(Boolean).join(' — ');
+};
+
+// Editor (form brano): cerca un manuale della Biblioteca e aggiungilo con pagina e nota
+const BranoManualiEditor = ({ value, onChange }) => {
+  const lista = Array.isArray(value) ? value : [];
+  const biblioteca = useBibliotecaFM();
+  const giaUsati = lista.map(r => String(r.manualeId));
+  const disponibili = biblioteca.filter(b => !giaUsati.includes(String(b.id)));
+  const setRiga = (idx, patch) => onChange(lista.map((r, i) => i === idx ? { ...r, ...patch } : r));
+  const inpS = { fontSize:12, padding:'6px 9px', borderRadius:6, border:`1px solid ${C.border}`, background:C.bg, color:C.text, boxSizing:'border-box', fontFamily:"'Open Sans',sans-serif" };
+  return React.createElement('div', null
+    , React.createElement('label', { style:{ fontSize:11, color:C.textMuted, letterSpacing:'0.07em', textTransform:'uppercase', display:'block', marginBottom:6 } }, '📖 Manuali e libri (dalla Biblioteca)')
+    , React.createElement(RicercaESeleziona, {
+        items: disponibili,
+        getSearchText: b => [b.titolo, b.autore, b.categoria].filter(Boolean).join(' '),
+        renderOption: b => `${b.titolo}${b.autore ? ` — ${b.autore}` : ''}${b.categoria ? ` (${b.categoria})` : ''}`,
+        placeholder: 'Cerca un manuale per titolo, autore o categoria...',
+        emptyLabel: biblioteca.length === 0 ? 'Nessun manuale in Biblioteca (o non ancora caricati)' : 'Nessun manuale trovato',
+        onSelect: b => onChange([...lista, { id:'mr_' + Date.now() + '_' + Math.random().toString(36).slice(2,5), manualeId:b.id, titolo:b.titolo || '', fileUrl:b.file_url || null, pagina:'', nota:'' }]),
+      })
+    , lista.length === 0 && React.createElement('div', { style:{ fontSize:12, color:C.textDim, fontStyle:'italic', marginTop:6 } }, 'Nessun manuale collegato. Cerca sopra il libro da cui è tratto il brano e indica la pagina.')
+    , lista.map((r, i) => {
+        const live = biblioteca.find(b => String(b.id) === String(r.manualeId));
+        const titolo = (live && live.titolo) || r.titolo || 'Manuale';
+        const url = fmUrlRiferimento(live ? live.file_url : r.fileUrl, r.pagina, live && live.file_type, live && live.file_name);
+        return React.createElement('div', { key:r.id || i, style:{ marginTop:6, padding:'8px 10px', borderRadius:8, border:`1px solid ${C.tealBorder}`, background:C.tealBg, display:'flex', flexDirection:'column', gap:6 } }
+          , React.createElement('div', { style:{ display:'flex', alignItems:'center', gap:8 } }
+            , React.createElement(Ic, { n:'courses', size:13, stroke:C.teal })
+            , url
+                ? React.createElement('a', { href:url, target:'_blank', rel:'noopener noreferrer', style:{ flex:1, minWidth:0, fontSize:12, fontWeight:600, color:C.teal, textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, titolo)
+                : React.createElement('span', { style:{ flex:1, minWidth:0, fontSize:12, fontWeight:600, color:C.textMuted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' } }, titolo)
+            , React.createElement('button', { type:'button', onClick:() => onChange(lista.filter((_, j) => j !== i)), title:'Rimuovi riferimento', style:{ background:'none', border:'none', cursor:'pointer', color:C.textMuted, fontSize:16, padding:'0 4px' } }, '✕')
+          )
+          , React.createElement('div', { style:{ display:'flex', gap:6 } }
+            , React.createElement('input', { value:r.pagina == null ? '' : r.pagina, onChange:e => setRiga(i, { pagina:e.target.value }), placeholder:'Pagina', inputMode:'numeric', style:{ ...inpS, width:80, flexShrink:0 } })
+            , React.createElement('input', { value:r.nota || '', onChange:e => setRiga(i, { nota:e.target.value }), placeholder:'Nota (es. n. 12 "Children\'s Song")', style:{ ...inpS, flex:1, minWidth:0 } })
+          )
+        );
+      })
+  );
+};
+
+// Elenco in sola lettura (schede di dettaglio): link diretti ai manuali, alla pagina indicata
+const BranoManualiLinks = ({ value, titolo }) => {
+  const lista = Array.isArray(value) ? value : [];
+  const biblioteca = useBibliotecaFM();
+  if (lista.length === 0) return null;
+  return React.createElement('div', null
+    , React.createElement('div', { style:{ fontSize:10, color:C.textMuted, letterSpacing:'0.08em', textTransform:'uppercase', marginBottom:8 } }, titolo || '📖 Manuali e libri')
+    , React.createElement('div', { style:{ display:'flex', flexDirection:'column', gap:5 } }
+      , lista.map((r, i) => {
+          const live = biblioteca.find(b => String(b.id) === String(r.manualeId));
+          // Biblioteca letta ma manuale non presente → è stato eliminato; Biblioteca vuota/illeggibile → uso lo snapshot
+          const eliminato = !live && biblioteca.length > 0;
+          const nome = (live && live.titolo) || r.titolo || 'Manuale';
+          const url = eliminato ? null : fmUrlRiferimento(live ? live.file_url : r.fileUrl, r.pagina, live && live.file_type, live && live.file_name);
+          const dettaglio = fmEtichettaRiferimento(r);
+          const stile = { fontSize:12, color:url ? C.teal : C.textMuted, textDecoration:'none', display:'flex', alignItems:'center', gap:8, padding:'7px 10px', background:url ? C.tealBg : C.bg, borderRadius:7, border:`1px solid ${url ? C.tealBorder : C.border}` };
+          const contenuto = [
+            React.createElement(Ic, { key:'i', n:'courses', size:12, stroke:url ? C.teal : C.textMuted }),
+            React.createElement('span', { key:'t', style:{ flex:1, minWidth:0 } }
+              , React.createElement('span', { style:{ fontWeight:600 } }, nome)
+              , dettaglio && React.createElement('span', { style:{ color:C.textMuted } }, '  ·  ' + dettaglio)
+              , eliminato && React.createElement('span', { style:{ color:C.red, fontSize:11 } }, '  (non più in Biblioteca)')
+            ),
+            url && React.createElement('span', { key:'a', style:{ fontSize:11, flexShrink:0 } }, 'Apri ↗'),
+          ];
+          return url
+            ? React.createElement('a', { key:r.id || i, href:url, target:'_blank', rel:'noopener noreferrer', style:stile }, contenuto)
+            : React.createElement('div', { key:r.id || i, style:stile }, contenuto);
+        })
+    )
+  );
+};
+
 
 const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep, docenti:_propDocentiRep, concerti:_propConcertiRep, quickAction, clearQuickAction, userRuolo:_ruoloRep, appUser:_appUserRep }) => {
   const ruoloRep = _ruoloRep || "admin";
@@ -144,11 +263,14 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       // [FM-BRANO-BAMBINI] colonna inviata solo quando serve (flag attivo, oppure era attivo e viene tolto):
       // se la migrazione SQL non è stata eseguita, il salvataggio degli altri brani non si rompe.
       if (f.bambini===true || (prev && prev.bambini===true)) row.bambini = f.bambini===true;
+      // [FM-BRANO-MANUALI] riferimenti ai manuali della Biblioteca: stessa logica (colonna inviata solo quando serve)
+      if ((f.manuali||[]).length>0 || (prev && (prev.manuali||[]).length>0)) row.riferimenti_manuali = f.manuali||[];
       return row;
     };
     // Messaggio più chiaro se manca la colonna file_universali (migrazione SQL non ancora eseguita)
     const _fuHint = (m) => /file_universali/i.test(m||'') ? ' — esegui la migrazione SQL "migrazione_file_universali_brani.sql" su Supabase'
-      : /bambini/i.test(m||'') ? ' — esegui la migrazione SQL "migrazione_brani_bambini.sql" su Supabase' : '';
+      : /bambini/i.test(m||'') ? ' — esegui la migrazione SQL "migrazione_brani_bambini.sql" su Supabase'
+      : /riferimenti_manuali/i.test(m||'') ? ' — esegui la migrazione SQL "migrazione_brani_manuali.sql" su Supabase' : '';
 
     // ── [FM-FILE-UNIVERSALI] Aggiunta/rimozione file universali direttamente dalla scheda di visualizzazione ──
     // (senza passare da "Modifica"). Legge il valore attuale dal DB, applica la modifica e salva:
@@ -755,6 +877,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
                         , fuErr && React.createElement('div',{style:{padding:'7px 10px',borderRadius:6,background:C.redBg,border:`1px solid ${C.redBorder}`,fontSize:11,color:C.red}},fuErr)
                       )
                   )
+                /* [FM-BRANO-MANUALI] Manuali e libri collegati al brano (link alla pagina) */
+                , (selBrano.manuali||[]).length>0 && React.createElement(BranoManualiLinks,{value:selBrano.manuali,titolo:'📖 Manuali e libri'})
                 /* Lezioni & Allievi collegati — include sia gli allievi assegnati dal
                    modal del brano sia quelli collegati indirettamente tramite lezione */
                 , (()=>{ const _allieviColl = allieviOfBrano(selBrano.id); const _nLez = usageCount(selBrano.id);

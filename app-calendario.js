@@ -16943,8 +16943,8 @@ const INIT_BRANI = [
 
 // ─── FORM BRANO ──────────────────────────────────────────────────────────────
 const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_concertiBranoIn,courses:_coursesBranoIn})=>{
-  const empty={title:"",composer:"",genere:"",bambini:false,strumento:"",eventiIds:[],note:"",fileUniversali:[],versioni:[{tonalita:"",strumento:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
-  const [f,setF]=useState(initial ? {...empty,...initial,fileUniversali:Array.isArray(initial.fileUniversali)?initial.fileUniversali:[],versioni:(initial.versioni&&initial.versioni.length>0)?initial.versioni:empty.versioni} : empty);
+  const empty={title:"",composer:"",genere:"",bambini:false,strumento:"",eventiIds:[],note:"",fileUniversali:[],manuali:[],versioni:[{tonalita:"",strumento:"",link:[],spartiti:[],allegati:[],allievi:[]}]};
+  const [f,setF]=useState(initial ? {...empty,...initial,fileUniversali:Array.isArray(initial.fileUniversali)?initial.fileUniversali:[],manuali:Array.isArray(initial.manuali)?initial.manuali:[],versioni:(initial.versioni&&initial.versioni.length>0)?initial.versioni:empty.versioni} : empty);
   const [err,setErr]=useState({});
   const [openVersione, setOpenVersione] = useState(0); // indice versione espansa
   // [FM-FILE-UNIVERSALI] File allegati al brano (non a una singola versione): validi per tutte le versioni.
@@ -17089,6 +17089,9 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
               color:C.text,fontSize:13,padding:"9px 13px",width:"100%",
               fontFamily:"'Open Sans',sans-serif",resize:"vertical"}})
         )
+
+        /* ── [FM-BRANO-MANUALI] MANUALI E LIBRI (riferimenti alla Biblioteca) ── */
+        , React.createElement(BranoManualiEditor, { value:f.manuali, onChange:v=>set('manuali',v) })
 
         /* ── FILE UNIVERSALI (validi per tutte le versioni del brano) ── */
         , React.createElement('div', null
@@ -17354,6 +17357,9 @@ const BranoDrawer = ({brano,onClose,onEdit,onDelete,concerti}) => {
               , React.createElement('div', { style: {fontSize:13,color:C.text,lineHeight:1.65}}, brano.note)
             )
           )
+
+          /* [FM-BRANO-MANUALI] Manuali e libri collegati (link alla pagina) */
+          , (brano.manuali||[]).length > 0 && React.createElement(BranoManualiLinks, { value:brano.manuali, titolo:'📖 Manuali e libri' })
 
           /* File universali (validi per tutte le versioni) */
           , (brano.fileUniversali||[]).length > 0 && React.createElement('div', null
