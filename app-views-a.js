@@ -355,7 +355,18 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
           const vIdxRaw = parseInt(eventiVersioni?.[evId]);
           const vIdx = (!isNaN(vIdxRaw) && (versioni||[])[vIdxRaw]) ? vIdxRaw : 0;
           const versione = (versioni||[])[vIdx] || {};
-          const allieviVers = (versione.allievi||[]).filter(a=>a && a.studentId!=null);
+          let allieviVers = (versione.allievi||[]).filter(a=>a && a.studentId!=null);
+          // [FM-FIX-BRANO-CONCERTO] se la versione scelta non ha allievi, usa gli allievi collegati al brano
+          // (tutte le versioni, lezioni con il brano in repertorio, repertorio degli allievi): stessa logica del form evento
+          if (allieviVers.length===0) {
+            try {
+              allieviVers = fmAllieviCollegatiBrano(
+                { id: branoId, title: branoTitle, versioni: versioni||[] },
+                _studBranoRepAll,
+                (window.__FM_DATA__&&window.__FM_DATA__.lessons)||_lessonsRep||[]
+              );
+            } catch(e) { console.warn('[FM] allievi collegati brano:', e?.message); }
+          }
           if (esistente) {
             // se la versione non ha allievi, non cancella quelli già presenti nel programma
             const allievi = allieviVers.length>0 ? allieviVers : (esistente.allievi||[]);
