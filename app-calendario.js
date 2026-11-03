@@ -17011,7 +17011,17 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
   // eventiVersioni: {[eventoId]: versioneIdx} — quale versione usare per ogni evento
   const [eventiVersioni, setEventiVersioni] = React.useState(() => {
     const init = {};
-    (initial?.eventiIds||[]).forEach(id => { init[id] = initial?.eventiVersioni?.[id] ?? 0; });
+    // [FM-FIX-BRANO-CONCERTO] la versione scelta per ogni evento non è una colonna del brano: si rilegge dal programma del concerto
+    // (prima si ripartiva sempre da 0 e il salvataggio successivo sovrascriveva versione e allievi)
+    (initial?.eventiIds||[]).forEach(id => {
+      let v = initial?.eventiVersioni?.[id];
+      if (v == null) {
+        const evc = concertiList.find(c => String(c.id) === String(id));
+        const pr = evc && (evc.programma||[]).find(p => initial && String(p.branoId) === String(initial.id));
+        if (pr && pr.versioneIdx != null) v = pr.versioneIdx;
+      }
+      init[id] = v ?? 0;
+    });
     return init;
   });
   const toggleEvento = (eventoId) => {
@@ -17021,7 +17031,8 @@ const BranoForm = ({initial,onSave,onClose,students:_studBranoIn,concerti:_conce
         setEventiVersioni(ev => { const n={...ev}; delete n[eventoId]; return n; });
         return {...p, eventiIds: ids.filter(x=>x!==eventoId)};
       } else {
-        setEventiVersioni(ev => ({...ev, [eventoId]: 0}));
+        // [FM-FIX-BRANO-CONCERTO] default: prima versione che ha allievi collegati (altrimenti la prima)
+        setEventiVersioni(ev => { const i=(p.versioni||[]).findIndex(v=>(v.allievi||[]).length>0); return {...ev, [eventoId]: i>=0?i:0}; });
         return {...p, eventiIds: [...ids, eventoId]};
       }
     });

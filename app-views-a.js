@@ -322,41 +322,72 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
     // vecchiEventiIds: array degli eventiIds prima della modifica (per rilevare rimozioni)
     const syncBranoInEventi = async (branoId, branoTitle, branoComposer, nuoviEventiIds, versioni, eventiVersioni, vecchiEventiIds) => {
       const sb = window.supabaseClient; if (!sb) return;
-      const nuoviSet = new Set(nuoviEventiIds||[]);
-      const vecchiSet = new Set(vecchiEventiIds||[]);
+      // [FM-FIX-BRANO-CONCERTO] id sempre confrontati come stringhe (uuid/numeri/stringhe miste tra brani.eventi_ids e concerti.id)
+      const sid = x => String(x);
+      const nuoviSet  = new Set((nuoviEventiIds||[]).map(sid));
+      const vecchiSet = new Set((vecchiEventiIds||[]).map(sid));
+      const pjArr = v => { if(!v) return []; if(Array.isArray(v)) return v; try { const r=JSON.parse(v); return Array.isArray(r)?r:[]; } catch(e) { return []; } };
+      const errori = [];
+      let toccati = 0;
 
-      // 1. Rimozioni: eventi presenti prima ma non ora → rimuovi brano dal programma
-      for (const evId of vecchiSet) {
-        if (nuoviSet.has(evId)) continue;
-        const evento = _concertiRep.find(e=>e.id===evId); if (!evento) continue;
-        const nuovoProgramma = (evento.programma||[]).filter(p=>p.branoId!==branoId);
-        await sb.from('concerti').update({programma:nuovoProgramma}).eq('id',evId);
-      }
+      for (const evId of new Set([...vecchiSet, ...nuoviSet])) {
+        const inNuovi = nuoviSet.has(evId);
+        const evLocale = _concertiRep.find(e=>sid(e.id)===evId);
+        const idQuery = evLocale ? evLocale.id : evId;
+        // [FM-FIX-BRANO-CONCERTO] legge SEMPRE il concerto fresco dal DB: lo stato React può essere vecchio
+        let rowDb = null;
+        try {
+          const { data, error } = await sb.from('concerti').select('id,programma,scaletta,partecipanti').eq('id', idQuery).maybeSingle();
+          if (error) throw error;
+          rowDb = data;
+        } catch(e) { console.warn('[FM] lettura concerto', evId, e?.message); }
+        if (!rowDb && !evLocale) continue;
+        const programma = rowDb ? pjArr(rowDb.programma) : (evLocale.programma||[]);
+        const esistente = programma.find(p=>sid(p.branoId)===sid(branoId));
 
-      // 2. Aggiunte/aggiornamenti: eventi nuovi o già presenti → upsert nel programma
-      for (const evId of nuoviSet) {
-        const evento = _concertiRep.find(e=>e.id===evId); if (!evento) continue;
-        const vIdx = eventiVersioni?.[evId] ?? 0;
-        const versione = (versioni||[])[vIdx] || (versioni||[])[0] || {};
-        const allievi = versione.allievi || [];
-        const programma = evento.programma||[];
-        const esistente = programma.find(p=>p.branoId===branoId);
         let nuovoProgramma;
-        if (esistente) {
-          // Aggiorna versione/allievi se già presente
-          nuovoProgramma = programma.map(p=>p.branoId===branoId
-            ? {...p, versioneIdx:vIdx, allievi:allievi, branoTitle:branoTitle, composer:branoComposer||''}
-            : p);
+        if (!inNuovi) {
+          // 1. Rimozione: evento presente prima ma non ora → toglie il brano dal programma
+          if (!esistente) continue;
+          nuovoProgramma = programma.filter(p=>sid(p.branoId)!==sid(branoId));
         } else {
-          // Aggiunge nuovo
-          nuovoProgramma = [...programma, {
-            id: 'pb'+Date.now()+'_'+Math.random().toString(36).slice(2,5),
-            branoId, branoTitle, composer:branoComposer||'', versioneIdx:vIdx, allievi,
-          }];
+          // 2. Aggiunta/aggiornamento con la versione scelta per QUESTO evento e i relativi allievi
+          const vIdxRaw = parseInt(eventiVersioni?.[evId]);
+          const vIdx = (!isNaN(vIdxRaw) && (versioni||[])[vIdxRaw]) ? vIdxRaw : 0;
+          const versione = (versioni||[])[vIdx] || {};
+          const allieviVers = (versione.allievi||[]).filter(a=>a && a.studentId!=null);
+          if (esistente) {
+            // se la versione non ha allievi, non cancella quelli già presenti nel programma
+            const allievi = allieviVers.length>0 ? allieviVers : (esistente.allievi||[]);
+            nuovoProgramma = programma.map(p=>sid(p.branoId)===sid(branoId)
+              ? {...p, versioneIdx:vIdx, allievi, branoTitle, composer:branoComposer||''}
+              : p);
+          } else {
+            nuovoProgramma = [...programma, {
+              id: 'pb'+Date.now()+'_'+Math.random().toString(36).slice(2,5),
+              branoId, branoTitle, composer:branoComposer||'', versioneIdx:vIdx, allievi:allieviVers, docenti:[],
+            }];
+          }
         }
-        await sb.from('concerti').update({programma:nuovoProgramma}).eq('id',evId);
+
+        const { error: errUp } = await sb.from('concerti').update({programma:nuovoProgramma}).eq('id', idQuery);
+        if (errUp) { console.warn('[FM] sync programma concerto', evId, errUp.message); errori.push(errUp.message); continue; }
+        toccati++;
+
+        // [FM-FIX-BRANO-CONCERTO] collega gli allievi al concerto: aggiorna la tabella relazionale
+        // concerti_partecipanti (fonte di verità dei partecipanti), come fa il salvataggio dell'evento
+        try {
+          const evAgg = {
+            ...(evLocale||{}),
+            programma: nuovoProgramma,
+            scaletta: rowDb ? pjArr(rowDb.scaletta) : (evLocale?.scaletta||[]),
+            partecipanti: rowDb ? pjArr(rowDb.partecipanti) : [],
+          };
+          await fmSyncPartecipantiConcerto(idQuery, derivePartecipanti(evAgg, _propStudentsRep||[]));
+        } catch(e) { console.warn('[FM] sync partecipanti concerto', evId, e?.message); errori.push(e?.message||'partecipanti'); }
       }
-      if (window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
+      if (errori.length) showToast('Brano salvato, ma errore nel collegare il concerto: '+errori[0], C.red);
+      if (toccati>0 && window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
     };
 
     const aggiungiBrano = async (f) => {
@@ -1696,6 +1727,24 @@ const derivePartecipanti = (evento, studentsList) => {
   return Object.values(map).map(p => ({...p, brani: Array.from(p.brani)}));
 };
 
+// [FM-FIX-BRANO-CONCERTO] Sincronizza la tabella relazionale concerti_partecipanti (fonte di verità).
+// Globale: usata sia dalla vista Eventi sia dal salvataggio di un brano collegato a un concerto (Repertorio).
+const fmSyncPartecipantiConcerto = async (concertoId, partecipanti) => {
+  const sb = window.supabaseClient; if (!sb) return;
+  const { error: errDel } = await sb.from('concerti_partecipanti').delete().eq('concerto_id', concertoId);
+  if (errDel) { console.warn('[FM] concerti_partecipanti delete:', errDel.message); throw new Error(errDel.message); }
+  const lista = (partecipanti||[]).filter(p=>p.studentId);
+  if (lista.length === 0) return;
+  const righe = lista.map(p => ({
+    concerto_id: concertoId,
+    studente_id: parseInt(p.studentId)||p.studentId,
+    studente_nome: p.studentName||'',
+    brani: p.brani||[],
+  }));
+  const { error } = await sb.from('concerti_partecipanti').insert(righe);
+  if (error) { console.warn('[FM] concerti_partecipanti insert:', error.message); throw new Error(error.message); }
+};
+
 const EventoDetail = ({ evento, students, docenti:docentiED, brani:_braniED, onEdit, onDelete, onBack, onUpdate }) => {
   const braniCatalog = _braniED || [];
   const [tab,    setTab]    = useState("info");
@@ -2278,21 +2327,8 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
   // Sincronizza i partecipanti su tabella relazionale concerti_partecipanti
   // (fonte di verità) — sostituisce tutte le righe per questo concerto
   const syncPartecipanti = async (concertoId, partecipanti) => {
-    const sb = window.supabaseClient; if (!sb) return;
-    try {
-      // Elimina le righe esistenti per questo concerto
-      await sb.from('concerti_partecipanti').delete().eq('concerto_id', concertoId);
-      const lista = (partecipanti||[]).filter(p=>p.studentId);
-      if (lista.length === 0) return;
-      const righe = lista.map(p => ({
-        concerto_id: concertoId,
-        studente_id: parseInt(p.studentId)||p.studentId,
-        studente_nome: p.studentName||'',
-        brani: p.brani||[],
-      }));
-      const { error } = await sb.from('concerti_partecipanti').insert(righe);
-      if (error) console.warn('[FM] syncPartecipanti error:', error.message);
-    } catch(e) { console.warn('[FM] syncPartecipanti exception:', e?.message); }
+    try { await fmSyncPartecipantiConcerto(concertoId, partecipanti); }
+    catch(e) { console.warn('[FM] syncPartecipanti exception:', e?.message); }
   };
 
   // Sincronizzazione inversa: quando un brano viene rimosso dal programma di un evento,
