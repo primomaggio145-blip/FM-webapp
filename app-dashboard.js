@@ -874,10 +874,13 @@ const SettingsDrawer = ({ open, onClose, panels, onPanels, config, onConfig, ruo
                     , React.createElement(SField, { label: "Codice fiscale / P.IVA"   ,
                       value: draft.codiceFiscale, onChange: e=>setD("codiceFiscale",e.target.value),
                       placeholder: "00000000000", __self: this, __source: {fileName: _jsxFileName, lineNumber: 1821}})
-                    , React.createElement(SField, { label: "Codice SDI / PEC"   ,
+                    , React.createElement(SField, { label: "Codice SDI"   ,
                       value: draft.sdi, onChange: e=>setD("sdi",e.target.value),
-                      placeholder: "XXXXXXX o PEC"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 1824}})
+                      placeholder: "XXXXXXX"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 1824}})
                   )
+                  , React.createElement(SField, { label: "PEC"   ,
+                    value: draft.pec, onChange: e=>setD("pec",e.target.value),
+                    placeholder: "nome@pec.it"  , __self: this, __source: {fileName: _jsxFileName, lineNumber: 1826}})
                   , React.createElement(SField, { label: "Sede legale / indirizzo"   ,
                     value: draft.indirizzo, onChange: e=>setD("indirizzo",e.target.value),
                     placeholder: "Via della Musica 1, 00100 Roma (RM)"      , __self: this, __source: {fileName: _jsxFileName, lineNumber: 1828}})
@@ -1339,7 +1342,7 @@ const INIT_ANNI_SCOLASTICI = [
 const CONFIG_DEFAULT = {
   nomeScuola:"Accademia Musicale", tipoEnte:"Sistema gestionale",
   logoIcon:"music", logoColor:C.gold, logoText:"AM", logoUrl:"",
-  codiceFiscale:"", pIva:"", sdi:"", indirizzo:"Via della Musica 1, 00100 Roma (RM)",
+  codiceFiscale:"", pIva:"", sdi:"", pec:"", indirizzo:"Via della Musica 1, 00100 Roma (RM)",
   telefono:"", email:"", iban:"", intestatarioConto:"",
   notaRicevuta:"Associazione no-profit — ricevuta non fiscale",
   annoScolastico:"2024/2025",

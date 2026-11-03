@@ -5508,6 +5508,7 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
         , React.createElement(Input,{label:"Telefono", value:draft.telefono||"", onChange:e=>setD("telefono",e.target.value), placeholder:"+39..."})
         , React.createElement(Input,{label:"Email", value:draft.email||"", onChange:e=>setD("email",e.target.value), placeholder:"info@..."})
         , React.createElement(Input,{label:"Codice SDI", value:draft.sdi||"", onChange:e=>setD("sdi",e.target.value), placeholder:"SDI..."})
+        , React.createElement(Input,{label:"PEC", value:draft.pec||"", onChange:e=>setD("pec",e.target.value), placeholder:"nome@pec.it"})
         , React.createElement(Input,{label:"IBAN", value:draft.iban||"", onChange:e=>setD("iban",e.target.value), placeholder:"IT..."})
         , React.createElement(Input,{label:"Intestatario conto", value:draft.intestatarioConto||"", onChange:e=>setD("intestatarioConto",e.target.value), placeholder:"..."})
         , React.createElement(Input,{label:"Anno scolastico", value:draft.annoScolastico||"", onChange:e=>setD("annoScolastico",e.target.value), placeholder:"2024/2025"})
@@ -6243,6 +6244,7 @@ const SchedaScuolaView = ({ config }) => {
         ${cfg.codiceFiscale?`<div class="field"><label>Codice Fiscale</label><div class="val">${cfg.codiceFiscale}</div></div>`:""}
         ${cfg.pIva?`<div class="field"><label>Partita IVA</label><div class="val">${cfg.pIva}</div></div>`:""}
         ${cfg.sdi?`<div class="field"><label>Codice SDI</label><div class="val">${cfg.sdi}</div></div>`:""}
+        ${cfg.pec?`<div class="field"><label>PEC</label><div class="val">${cfg.pec}</div></div>`:""}
         ${cfg.indirizzo?`<div class="field" style="grid-column:1/-1"><label>Sede legale</label><div class="val">${cfg.indirizzo}</div></div>`:""}
       </div>
     </div>
@@ -6274,6 +6276,7 @@ const SchedaScuolaView = ({ config }) => {
     {label:"Codice Fiscale",     value:cfg.codiceFiscale},
     {label:"Partita IVA",        value:cfg.pIva},
     {label:"Codice SDI",         value:cfg.sdi},
+    {label:"PEC",                value:cfg.pec},
     {label:"Indirizzo",          value:cfg.indirizzo},
     {label:"Telefono",           value:cfg.telefono},
     {label:"Email",              value:cfg.email},
@@ -6288,6 +6291,7 @@ const SchedaScuolaView = ({ config }) => {
     {k:"codiceFiscale",   label:"Codice Fiscale"},
     {k:"pIva",            label:"Partita IVA"},
     {k:"sdi",             label:"Codice SDI"},
+    {k:"pec",             label:"PEC"},
     {k:"indirizzo",       label:"Indirizzo"},
     {k:"telefono",        label:"Telefono"},
     {k:"email",           label:"Email"},

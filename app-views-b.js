@@ -150,8 +150,11 @@ const fmCalcBilancioDocente = ({ allieviD, entrate, m, y, compensoLezioni, extra
     versatiList, versato, versatoPerMetodo, versatoPerTipo,
     // [FM-COMPENSAZIONE-DOCENTE] quote da allievo trattenute dal compenso
     compensazione: Number(compensazione) || 0,
+    // [FM-EXTRA-SOMMATI] Gli extra sono già SOMMATI nel compenso (come in scheda docente → compenso):
+    // dal dovuto si detraggono solo compensi già pagati e acconti, NON gli extra.
+    versatoDetratto: versato - extra,
     // Quanto resta da versare al docente (negativo = versato più del dovuto)
-    daVersare: compenso - versato - (Number(compensazione) || 0),
+    daVersare: compenso - (versato - extra) - (Number(compensazione) || 0),
     // Saldo di cassa = incassato − già versato (quanto resta oggi in cassa per questo docente)
     saldoCassa: incassato - versato,
   };
@@ -278,12 +281,13 @@ const fmNumeroIT = (v) => {
 const fmCalcRipartizioneCompenso = ({ b, contanti, tracciato }) => {
   const dovuto = Number(b && b.compenso) || 0;                 // lezioni × tariffa + extra
   const acconti = Number(b && b.acconti) || 0;
-  const altriVersati = (Number(b && b.versato) || 0) - acconti; // compensi ed extra già pagati
+  // [FM-EXTRA-SOMMATI] solo i compensi già pagati: gli extra sono nel dovuto e non si detraggono
+  const altriVersati = (Number(b && b.versato) || 0) - acconti - (Number(b && b.extra) || 0);
   const compensazione = Number(b && b.compensazione) || 0;
   const calcolo = [
-    { k: 'dovuto',        label: 'Compenso dovuto',                 segno: 1,  importo: dovuto, sempre: true },
+    { k: 'dovuto',        label: 'Compenso dovuto (lezioni + extra)',                 segno: 1,  importo: dovuto, sempre: true },
     { k: 'acconti',       label: 'Acconti già versati',             segno: -1, importo: acconti },
-    { k: 'altriVersati',  label: 'Compensi ed extra già versati',   segno: -1, importo: altriVersati },
+    { k: 'altriVersati',  label: 'Compensi già versati',   segno: -1, importo: altriVersati },
     { k: 'compensazione', label: 'Compensazione quote allievo',     segno: -1, importo: compensazione },
   ];
   const daVersare = fmArrot2(b && b.daVersare);
@@ -314,7 +318,8 @@ const fmSuggerisciRipartizione = (b) => {
   const versati = (b && Array.isArray(b.versatiList)) ? b.versatiList : [];
   versati.forEach(v => {
     const imp = Number(v.importo) || 0;
-    if (fmTipoVoceDocente(v) === 'extra') { if (inContanti(v)) c += imp; else t += imp; }
+    // [FM-EXTRA-SOMMATI] l'extra si SOMMA al metodo con cui è pagato e non si detrae (a differenza di acconti/compensi)
+    if (fmTipoVoceDocente(v) === 'extra') { if (inContanti(v)) c += imp; else t += imp; return; }
     if (inContanti(v)) c -= imp; else t -= imp;
   });
   t -= Number(b && b.compensazione) || 0;
@@ -1049,7 +1054,7 @@ const DocentiView = ({ students:_studentsRaw, lessons:_lessonsRaw, docenti, setD
         , kpi(`Incassato ${MESI_L[m-1]}`, eur(tot.incassato), C.green, tot.daIncassare>0 ? `${eur(tot.daIncassare)} ancora da incassare` : 'Tutte le quote incassate')
         , kpi('Compensi dovuti', eur(tot.compenso), C.orange, 'lezioni × tariffa + extra')
         , kpi('Già versati', eur(tot.versato), C.blue, 'compensi, acconti ed extra pagati')
-        , kpi('Da versare', eur(Math.max(0, tot.daVersare)), tot.daVersare>0?C.orange:C.green, tot.daVersare<0 ? `versato in più: ${eur(-tot.daVersare)}` : 'compensi dovuti − già versati − compensazioni')
+        , kpi('Da versare', eur(Math.max(0, tot.daVersare)), tot.daVersare>0?C.orange:C.green, tot.daVersare<0 ? `versato in più: ${eur(-tot.daVersare)}` : 'dovuto − compensi e acconti versati − compensazioni (gli extra si sommano)')
         , kpi('Saldo di cassa', sgn(tot.saldoCassa), tot.saldoCassa>=0?C.green:C.red, 'incassato − già versato')
         , kpi('Saldo finale', sgn(tot.saldo), tot.saldo>=0?C.green:C.red, 'incassato − (versato + da versare)')
       )
