@@ -13961,10 +13961,18 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       (lessons||[]).filter(l => l.extraDecisione === 'saltata'), [lessons]);
     const lezioniExtraDaPagare = useMemo(() =>
       (lessons||[]).filter(l => l.isLezioneExtra && !l.extraContabilizzata), [lessons]);
-    const tutteRigheExtra = useMemo(() =>
-      [...lezioniExtraDaDecidere, ...lezioniExtraSaltate, ...lezioniExtraDaPagare]
-        .sort((a,b) => (a.date||'').localeCompare(b.date||'')),
-      [lezioniExtraDaDecidere, lezioniExtraSaltate, lezioniExtraDaPagare]);
+    // [FM-EXTRA-BTN] Il pulsante EXTRA compare SOLO se c'è qualcosa da fare (da decidere / da pagare).
+    // Le lezioni "saltate" sono storico: restano visibili nella tab ma non tengono acceso il pulsante.
+    const tutteRigheExtra = useMemo(() => {
+      const visti = new Set();
+      return [...lezioniExtraDaDecidere, ...lezioniExtraDaPagare]
+        .filter(l => { if (visti.has(l.id)) return false; visti.add(l.id); return true; })
+        .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+    }, [lezioniExtraDaDecidere, lezioniExtraDaPagare]);
+    // Se si sta guardando la tab EXTRA e l'ultima voce viene gestita, il pulsante sparisce: si torna alla vista settimana.
+    useEffect(() => {
+      if (viewMode === "extra" && tutteRigheExtra.length === 0) setViewMode("week");
+    }, [viewMode, tutteRigheExtra.length]);
 
     // Filtri a scelta multipla (array di valori): più opzioni nello stesso filtro sono in OR
     // (es. Pianoforte + Chitarra), filtri diversi tra loro sono in AND.
@@ -16224,7 +16232,7 @@ const Navbar = ({ tab, setTab, onSelDoc, onSetModal, onSetModalQuota, ruoloCV, i
   )
 );
 
-const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, spese:propSpese, setSpese:propSetSpese, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV, lessons:propLessonsCV, quickAction, clearQuickAction, userRuolo:_ruoloCV, appUser:_appUserCV }) => {
+const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrate:propSetEntrate, spese:propSpese, setSpese:propSetSpese, config:propConfig, setConfig:propSetConfig, docenti:propDocentiCV, lessons:propLessonsCV, setLessons:propSetLessonsCV, quickAction, clearQuickAction, userRuolo:_ruoloCV, appUser:_appUserCV }) => {
   const ruoloCV = _ruoloCV || "admin";
   const _loginNomeCV = (_appUserCV && _appUserCV.nome) || "";
   const myDocIdCV = ruoloCV==="docente"
@@ -16360,6 +16368,12 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       }));
       setEntrate(p=>[...p, primaria, ...extra, ...esoneriExtra]);
       if (extraLessonIdPendente) {
+        // [FM-EXTRA-BTN] aggiorna anche lo stato locale, altrimenti la extra resta "da pagare" fino al reload
+        // (e il sync generico potrebbe riscrivere extra_contabilizzata=false sul DB)
+        if (typeof propSetLessonsCV === 'function') {
+          const _idExtra = extraLessonIdPendente;
+          propSetLessonsCV(p => (p||[]).map(l => String(l.id) === String(_idExtra) ? { ...l, extraContabilizzata: true } : l));
+        }
         const sb = window.supabaseClient;
         if (sb) sb.from('lezioni').update({ extra_contabilizzata: true }).eq('id', extraLessonIdPendente)
           .then(({ error }) => { if (error) console.warn('[FM] extra_contabilizzata update error:', error.message); });
