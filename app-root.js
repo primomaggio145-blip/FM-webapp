@@ -4380,6 +4380,25 @@ const LogoScuolaSection = ({ showToast }) => {
   );
 };
 
+// ─── NOME PER RICEVUTA (solo allievi minorenni) per gli export CSV ─────────────
+// Ritorna il "nome per ricevuta" se l'allievo (cercato per id, altrimenti per nome) è minorenne, altrimenti ''.
+const fmNomeRicevutaMinorenne = (studenteId, studenteNome, anagrafica) => {
+  const lista = (Array.isArray(anagrafica) && anagrafica.length) ? anagrafica
+    : ((window.__fmStudents__ && window.__fmStudents__.length) ? window.__fmStudents__
+      : ((window.__FM_DATA__ && window.__FM_DATA__.students) || []));
+  let st = null;
+  if (studenteId !== null && studenteId !== undefined && studenteId !== '') {
+    st = lista.find(x => String(x.id) === String(studenteId)) || null;
+  }
+  if (!st && studenteNome) {
+    const n = String(studenteNome).trim().toLowerCase();
+    st = lista.find(x => String(x.name || '').trim().toLowerCase() === n) || null;
+  }
+  if (!st || !st.birthdate) return '';
+  const eta = (typeof age === 'function') ? age(st.birthdate) : null;
+  if (typeof eta !== 'number' || !(eta < 18)) return '';
+  return (st.nomeRicevuta || '').trim();
+};
 // ─── ESPORTA RICEVUTE (CSV filtrabile) ─────────────────────────────────────────
 const csvEscape = (v) => {
   const s = v===null || v===undefined ? '' : String(v);
@@ -4405,7 +4424,7 @@ const EsportaRicevuteSection = ({ anniScolastici: propAnniExp, showToast }) => {
         const err = 'Connessione a Supabase non disponibile — ricarica la pagina';
         setLocalMsg({ok:false, testo:err}); showToast && showToast(false, err); setLoading(false); return;
       }
-      let q = sb.from('quote').select('num_ricevuta, data_pagamento, studente_nome, importo, metodo, stato, mese, anno, anno_scolastico, note, no_ricevuta');
+      let q = sb.from('quote').select('num_ricevuta, data_pagamento, studente_id, studente_nome, importo, metodo, stato, mese, anno, anno_scolastico, note, no_ricevuta');
       if (dataDa) q = q.gte('data_pagamento', dataDa);
       if (dataA) q = q.lte('data_pagamento', dataA);
       if (annoSel) q = q.eq('anno_scolastico', parseInt(annoSel));
@@ -4425,9 +4444,9 @@ const EsportaRicevuteSection = ({ anniScolastici: propAnniExp, showToast }) => {
         setLocalMsg({ok:false, testo:msg}); showToast && showToast(false, msg); setLoading(false); return;
       }
 
-      const header = ['N. Ricevuta','Data pagamento','Socio','Importo €','Metodo','Stato','Mese','Anno','Anno scolastico','Note'];
+      const header = ['N. Ricevuta','Data pagamento','Socio','Nome per ricevuta','Importo €','Metodo','Stato','Mese','Anno','Anno scolastico','Note'];
       const righe = data.map(r => [
-        r.num_ricevuta, r.data_pagamento, r.studente_nome, r.importo, r.metodo, r.stato, r.mese, r.anno, r.anno_scolastico, r.note
+        r.num_ricevuta, r.data_pagamento, r.studente_nome, fmNomeRicevutaMinorenne(r.studente_id, r.studente_nome), r.importo, r.metodo, r.stato, r.mese, r.anno, r.anno_scolastico, r.note
       ].map(csvEscape).join(';'));
       const csv = '\uFEFF' + header.join(';') + '\n' + righe.join('\n'); // BOM per Excel
 
@@ -4536,6 +4555,7 @@ const fmMovBuild = ({ quote, spese, docenti, filtri }) => {
       tipo: 'Entrata', data, dataReale: !!r.data_pagamento,
       categoria: catLabelE(r.categoria || 'quota'), descrizione: r.descrizione || '',
       soggetto: r.studente_nome || r.ricevuta_intestatario || '',
+      nomeRicevuta: fmNomeRicevutaMinorenne(r.studente_id, r.studente_nome, f.anagrafica),
       importo: Number(r.importo) || 0, metodo: fmMovMetodo(r.metodo),
       stato, numRicevuta: r.no_ricevuta ? '' : (r.num_ricevuta || ''),
       competenza: mese && anno ? `${fmMovPad(mese)}/${anno}` : '',
@@ -4553,6 +4573,7 @@ const fmMovBuild = ({ quote, spese, docenti, filtri }) => {
       categoria: catLabelU(r.categoria || 'altro'),
       descrizione: r.is_acconto ? `${desc}${desc ? ' ' : ''}(acconto)` : desc,
       soggetto: nomeDoc(r.docente_id),
+      nomeRicevuta: '',
       importo: Number(r.importo) || 0, metodo: fmMovMetodo(r.metodo),
       stato: '', numRicevuta: '',
       competenza: mese0 != null && anno ? `${fmMovPad(mese0 + 1)}/${anno}` : '',
@@ -4583,16 +4604,16 @@ const fmMovBuild = ({ quote, spese, docenti, filtri }) => {
 const fmMovEsc = (v) => { const t = v == null ? '' : String(v); return /[";\n\r]/.test(t) ? `"${t.replace(/"/g,'""')}"` : t; };
 const fmMovNum = (n) => (Math.round((Number(n) || 0) * 100) / 100).toFixed(2).replace('.', ',');
 const fmMovCSV = ({ righe, tot }) => {
-  const header = ['Data','Tipo','Categoria','Descrizione','Socio / Docente','Entrata €','Uscita €','Metodo','Stato','N. Ricevuta','Mese competenza','Anno scolastico','Note'];
+  const header = ['Data','Tipo','Categoria','Descrizione','Socio / Docente','Nome per ricevuta','Entrata €','Uscita €','Metodo','Stato','N. Ricevuta','Mese competenza','Anno scolastico','Note'];
   const dIt = (iso) => iso ? iso.split('-').reverse().join('/') : '';
   const as = (a) => a != null ? `${a}/${a + 1}` : '';
   const lines = righe.map(x => [
-    dIt(x.data) + (x.data && !x.dataReale ? ' (stimata)' : ''), x.tipo, x.categoria, x.descrizione, x.soggetto,
+    dIt(x.data) + (x.data && !x.dataReale ? ' (stimata)' : ''), x.tipo, x.categoria, x.descrizione, x.soggetto, x.nomeRicevuta || '',
     x.tipo === 'Entrata' ? fmMovNum(x.importo) : '', x.tipo === 'Uscita' ? fmMovNum(x.importo) : '',
     x.metodo, x.stato, x.numRicevuta, x.competenza, as(x.annoScolastico), x.note,
   ].map(fmMovEsc).join(';'));
   const vuota = () => new Array(header.length).fill('');
-  const riga = (label, e, u) => { const r = vuota(); r[4] = label; r[5] = e; r[6] = u; return r.map(fmMovEsc).join(';'); };
+  const riga = (label, e, u) => { const r = vuota(); r[4] = label; r[6] = e; r[7] = u; return r.map(fmMovEsc).join(';'); };
   lines.push('');
   lines.push(riga('TOTALE', fmMovNum(tot.entrate), fmMovNum(tot.uscite)));
   lines.push(riga('SALDO (entrate − uscite)', fmMovNum(tot.saldo), ''));
