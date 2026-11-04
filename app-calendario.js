@@ -15594,6 +15594,46 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
   const catObj     = CAT_ENTRATE_USE.find(c=>c.id===f.categoria)||CAT_ENTRATE_USE[0];
   const needStudent = catObj.student;
   const selStudent  = needStudent ? students.find(s=>s.id===Number(f.studentId)) : null;
+  // [FM-CONV-MULTI:start]
+  // Selezione multipla allievi in convenzione: ogni allievo spuntato diventa una quota sulla STESSA ricevuta
+  // (importo = quota mensile dell'allievo, modificabile nelle righe sotto; il totale è la somma).
+  // Il primo allievo spuntato occupa la voce principale (se vuota), gli altri diventano "Altre quote".
+  const [convPickOpen, setConvPickOpen] = useState(false);
+  const [convPickQ, setConvPickQ] = useState("");
+  const convSelIds = new Set([
+    ...(needStudent && f.studentId ? [String(f.studentId)] : []),
+    ...extraVoci.filter(v => v.studentId).map(v => String(v.studentId)),
+  ]);
+  const _feeStr = (st) => (st && st.monthlyFee ? String(st.monthlyFee) : "");
+  const _nuovaQuotaConv = (st) => ({ id: uid(), categoria: "quota", studentId: String(st.id), importo: _feeStr(st), mese: f.mese, anno: f.anno, inRicevuta: true });
+  const selezionaAllieviConv = (lista) => {
+    const nuovi = lista.filter(st => !convSelIds.has(String(st.id)));
+    if (!nuovi.length) return;
+    let resto = nuovi;
+    if (needStudent && !f.studentId) {
+      const prim = nuovi[0]; resto = nuovi.slice(1);
+      setF(p => ({ ...p, studentId: String(prim.id), importo: p.importo ? p.importo : _feeStr(prim) }));
+    }
+    if (resto.length) setExtraVoci(p => [...p, ...resto.map(_nuovaQuotaConv)]);
+  };
+  const deselezionaAllievoConv = (st) => {
+    const sid = String(st.id);
+    const eraPrincipale = needStudent && String(f.studentId || "") === sid;
+    const rimaste = extraVoci.filter(v => !(v.studentId && String(v.studentId) === sid));
+    if (eraPrincipale) {
+      const prossima = f.categoria === "quota" ? rimaste.find(v => v.categoria === "quota" && v.studentId) : null;
+      if (prossima) {
+        setF(p => ({ ...p, studentId: String(prossima.studentId), importo: String(prossima.importo == null ? "" : prossima.importo), mese: Number(prossima.mese || p.mese), anno: Number(prossima.anno || p.anno) }));
+        setExtraVoci(rimaste.filter(v => v.id !== prossima.id));
+        return;
+      }
+      setF(p => ({ ...p, studentId: "" }));
+    }
+    setExtraVoci(rimaste);
+  };
+  const toggleAllievoConv = (st) => convSelIds.has(String(st.id)) ? deselezionaAllievoConv(st) : selezionaAllieviConv([st]);
+  const deselezionaTuttiConv = () => { if (needStudent) setF(p => ({ ...p, studentId: "", importo: "" })); setExtraVoci(p => p.filter(v => !v.studentId)); };
+  // [FM-CONV-MULTI:end]
 
   // ── AGEVOLAZIONE SOCIO (sconto / esonero) ───────────────────────────────
   // Solo per quota mensile e iscrizione, fuori convenzione. Lo sconto registra l'importo
@@ -16003,6 +16043,42 @@ const EntrataForm = ({ students, initial, onSave, onClose, categorie:_catEntrFor
         /* Convenzione: quote aggiuntive (anche di allievi diversi) */
         , !modoModifica && convOn && React.createElement('div', {style:{borderTop:`1px dashed ${C.border}`,paddingTop:14,marginTop:2}}
           , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:"0.07em",textTransform:"uppercase",display:"block",marginBottom:8}}, "Altre quote (convenzione)")
+          /* [FM-CONV-MULTI] Selezione multipla allievi: una sola ricevuta per tutti gli allievi spuntati */
+          , (() => {
+              const attivi = students.filter(s=>s.status==="attivo").slice().sort((x,y)=>String(x.name||"").localeCompare(String(y.name||""),"it"));
+              const qq = convPickQ.trim().toLowerCase();
+              const lista = qq ? attivi.filter(s=>String(s.name||"").toLowerCase().includes(qq)) : attivi;
+              const nSel = convSelIds.size;
+              const linkSt = {background:"none",border:"none",color:C.teal,cursor:"pointer",fontSize:12,padding:0,fontFamily:"'Open Sans',sans-serif"};
+              return React.createElement('div', {style:{marginBottom:10,borderRadius:8,border:`1px solid ${nSel>0?C.gold:C.border}`,background:C.bg,overflow:"hidden"}}
+                , React.createElement('button', {type:"button", onClick:()=>setConvPickOpen(o=>!o),
+                    style:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"none",border:"none",cursor:"pointer",color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif"}}
+                  , React.createElement('span', null, "👥 Seleziona più allievi" + (nSel>0 ? ` — ${nSel} selezionat${nSel===1?"o":"i"}` : ""))
+                  , React.createElement('span', {style:{color:C.textMuted,fontSize:11}}, convPickOpen ? "▲" : "▼")
+                )
+                , convPickOpen && React.createElement('div', {style:{padding:"0 12px 12px",display:"flex",flexDirection:"column",gap:8}}
+                  , React.createElement('input', {type:"text", placeholder:"Cerca allievo…", value:convPickQ, onChange:e=>setConvPickQ(e.target.value),
+                      style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,padding:"8px 10px",fontFamily:"'Open Sans',sans-serif"}})
+                  , React.createElement('div', {style:{display:"flex",gap:14,alignItems:"center"}}
+                    , React.createElement('button', {type:"button", onClick:()=>selezionaAllieviConv(lista), style:linkSt}, qq ? "Seleziona i risultati" : "Seleziona tutti")
+                    , React.createElement('button', {type:"button", onClick:deselezionaTuttiConv, style:linkSt}, "Deseleziona tutti")
+                    , React.createElement('span', {style:{marginLeft:"auto",fontSize:11,color:C.textDim}}, "Importo = quota mensile dell'allievo (modificabile sotto)")
+                  )
+                  , React.createElement('div', {style:{maxHeight:220,overflowY:"auto",border:`1px solid ${C.border}`,borderRadius:8,background:C.surface}}
+                    , lista.length===0
+                      ? React.createElement('div', {style:{padding:12,fontSize:12,color:C.textMuted}}, "Nessun allievo trovato")
+                      : lista.map(st => {
+                          const on = convSelIds.has(String(st.id));
+                          return React.createElement('label', {key:st.id, style:{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderBottom:`1px solid ${C.border}20`,cursor:"pointer",fontSize:13,color:on?C.text:C.textMuted,background:on?C.goldBg:"transparent"}}
+                            , React.createElement('input', {type:"checkbox", checked:on, onChange:()=>toggleAllievoConv(st)})
+                            , React.createElement('span', {style:{flex:1}}, st.name)
+                            , React.createElement('span', {style:{fontSize:12,color:C.textDim}}, st.monthlyFee ? `€${Number(st.monthlyFee).toLocaleString('it-IT')}` : "—")
+                          );
+                        })
+                  )
+                )
+              );
+            })()
           , extraVoci.map(v => {
               const catV = CAT_ENTRATE_USE.find(c=>c.id===v.categoria) || {};
               const conMese = v.categoria==="quota" || v.categoria==="iscrizione";
