@@ -16306,7 +16306,11 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
     const [search,   setSearch]   = useState("");
     const [filterCat,setFCat]     = useState("");
     const [filterMese,setFMese]   = useState("");
+    const [filterDoc,setFDoc]     = useState("");
     const [searchQ,  setSearchQ]  = useState("");
+    // [FM-COMPENSI-DOCENTE] lookup sui docenti REALI (propDocentiCV), non sull'array demo DOCENTI; confronto id come stringa
+    const docenteById = (id) => (id==null||id==="") ? null : ((propDocentiCV||[]).find(x=>String(x.id)===String(id)) || null);
+    const docenteNome = (id) => { const d = docenteById(id); return d ? (d.nome||d.name||"") : ""; };
     const [filterQMese,setFQMese] = useState("");
   
     const closeModal = () => { setModal(null); setSelSpesa(null); setSelQuota(null); setPrefillEntrata(null); setExtraLessonIdPendente(null); };
@@ -16442,7 +16446,8 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       return s.anno===ANNO_ATT
         &&(!q||s.desc.toLowerCase().includes(q)||(s.note||"").toLowerCase().includes(q))
         &&(!filterCat||s.categoria===filterCat)
-        &&(!filterMese||s.mese===Number(filterMese));
+        &&(!filterMese||s.mese===Number(filterMese))
+        &&(!(isCompensi&&filterDoc)||String(s.docenteId)===String(filterDoc));
     });
     const filtered = sortFnSp(filteredRaw, (s,k) => {
       if(k==="data")        return s.data||"";
@@ -16450,7 +16455,7 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
       if(k==="categoria")   return s.categoria||"";
       if(k==="importo")     return Number(s.importo)||0;
       if(k==="mese")        return Number(s.mese)||0;
-      if(k==="docente")     { const d = s.docenteId ? DOCENTI.find(x=>x.id===s.docenteId) : null; return d ? (d.name||"") : "\uffff"; }
+      if(k==="docente")     { return docenteNome(s.docenteId) || "\uffff"; }
       return s[k]||"";
     });
   
@@ -16551,8 +16556,14 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                     , React.createElement('option', { value: "", __self: this, __source: {fileName: _jsxFileName, lineNumber: 6959}}, "Tutti i mesi"  )
                     , MESI.map((m,i)=>React.createElement('option', { key: i, value: i, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6960}}, m))
                   )
-                  , (search||filterCat||filterMese)&&(
-                    React.createElement('button', { onClick: ()=>{setSearch("");setFCat("");setFMese("");},
+                  , isCompensi && React.createElement('select', { value: filterDoc, onChange: e=>setFDoc(e.target.value),
+                    style: {background:C.surface,border:`1px solid ${filterDoc?C.goldDim:C.border}`,borderRadius:8,
+                      color:filterDoc?C.gold:C.textMuted,fontSize:13,padding:"9px 12px",fontFamily:"'Open Sans',sans-serif",appearance:"none",cursor:"pointer"}}
+                    , React.createElement('option', { value: "" }, "Tutti i docenti")
+                    , (propDocentiCV||[]).slice().sort((a,b)=>(a.nome||a.name||"").localeCompare(b.nome||b.name||"")).map(d=>React.createElement('option', { key: d.id, value: d.id }, d.nome||d.name||"—"))
+                  )
+                  , (search||filterCat||filterMese||(isCompensi&&filterDoc))&&(
+                    React.createElement('button', { onClick: ()=>{setSearch("");setFCat("");setFMese("");setFDoc("");},
                       style: {background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMuted,
                         fontSize:12,padding:"9px 12px",cursor:"pointer",fontFamily:"'Open Sans',sans-serif",
                         display:"flex",alignItems:"center",gap:5},
@@ -16582,7 +16593,8 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                     React.createElement('div', { style: {padding:"40px 0",textAlign:"center",color:C.textDim,fontSize:13}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6985}}, "Nessuna spesa trovata"  )
                   ):filtered.map((s,i)=>{
                     const cat = catById(s.categoria);
-                    const doc = s.docenteId?DOCENTI.find(d=>d.id===s.docenteId):null;
+                    const doc = docenteById(s.docenteId);
+                    const docNome = doc ? (doc.nome||doc.name||"") : "";
                     return (
                       React.createElement('div', { key: s.id, style: {display:"grid",gridTemplateColumns:(isCompensi?"auto 2fr 1fr 1.2fr 1fr 1fr 1fr auto":"auto 2fr 1fr 1fr 1fr auto"),minWidth:(isCompensi?820:520),
                         padding:"12px 18px",borderBottom:i<filtered.length-1?`1px solid ${C.border}20`:"none",
@@ -16601,14 +16613,14 @@ const ContabilitaView = ({ students:propStudents, entrate:propEntrate, setEntrat
                           )
                           , React.createElement('div', { style: {fontSize:11,color:C.textMuted,marginTop:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7002}}
                             , !isCompensi && new Date(s.data+"T00:00:00").toLocaleDateString("it-IT")
-                            , !isCompensi && doc && React.createElement(React.Fragment, null, " · "  , React.createElement('span', { style: {color:cat.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7004}}, doc.name))
+                            , !isCompensi && doc && React.createElement(React.Fragment, null, " · "  , React.createElement('span', { style: {color:cat.hex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7004}}, docNome))
                             , s.note && React.createElement(React.Fragment, null, (isCompensi ? "" : " · ")  , s.note)
                           )
                         )
                         /* Data (solo Compensi) */
                         , isCompensi && React.createElement('div', { style: {fontSize:12,color:C.textMuted} }, s.data ? new Date(s.data+"T00:00:00").toLocaleDateString("it-IT") : "—")
                         /* Docente (solo Compensi) */
-                        , isCompensi && React.createElement('div', { style: {fontSize:12,color:doc?cat.hex:C.textMuted,fontWeight:doc?500:400} }, doc ? doc.name : "—")
+                        , isCompensi && React.createElement('div', { style: {fontSize:12,color:docNome?cat.hex:C.textMuted,fontWeight:docNome?500:400} }, docNome || "—")
                         /* Mese */
                         , React.createElement('div', { style: {fontSize:12,color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 7009}}, MESI[s.mese])
                         /* Metodo */
