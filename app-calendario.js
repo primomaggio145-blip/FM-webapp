@@ -9114,6 +9114,15 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
   const oggi = yyyymmdd(new Date()) === yyyymmdd(date);
   const oraAdesso = (() => { const n = new Date(); return n.getHours() + n.getMinutes()/60; })();
   const hhmm = (h) => { const hh = Math.floor(h + 1e-6), mm = Math.round((h - hh) * 60); return String(hh).padStart(2,"0") + ":" + String(mm).padStart(2,"0"); };
+  // Tinta di colonna per aula (overlay molto leggero): colore stabile per aula,
+  // preso dalla posizione nell'elenco sale configurato; per aule non in elenco, da un hash del nome.
+  const TINTE_AULA = ["#3b82f6", "#10b981", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#ec4899", "#84cc16"];
+  const tintaAula = (a) => {
+    if (a === SENZA_AULA) return "#9ca3af";
+    let i = ordineSale.indexOf(a);
+    if (i < 0) { i = 0; for (let k = 0; k < a.length; k++) i = (i * 31 + a.charCodeAt(k)) >>> 0; }
+    return TINTE_AULA[i % TINTE_AULA.length];
+  };
 
   const cella = (it) => {
     const l = it.l;
@@ -9167,7 +9176,8 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
               borderBottom:`1px solid ${C.border}`, position:"sticky", top:0, background:C.surface, zIndex:5}}
             , React.createElement('div')
             , aule.map(a => React.createElement('div', { key:a, style:{borderLeft:`1px solid ${C.border}`, display:"flex", alignItems:"center",
-                  justifyContent:"center", gap:6, padding:"0 6px", overflow:"hidden", whiteSpace:"nowrap"}}
+                  justifyContent:"center", gap:6, padding:"0 6px", overflow:"hidden", whiteSpace:"nowrap",
+                  background:`${tintaAula(a)}26`, boxShadow:`inset 0 -2px 0 ${tintaAula(a)}`}}
                 , React.createElement('span', {style:{fontFamily:"'Oswald',sans-serif", fontSize:13, fontWeight:600, letterSpacing:"0.04em",
                     textTransform:"uppercase", overflow:"hidden", textOverflow:"ellipsis", color: a===SENZA_AULA ? C.textDim : C.text}}, a)
                 , React.createElement('span', {style:{fontSize:10, color:C.textMuted}}, perAulaMap.get(a).length)
@@ -9179,7 +9189,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
               , ore.map(h => React.createElement('div', { key:h, style:{position:"absolute", top:(h-H_START)*HOUR_H, right:4,
                   fontSize:10, color:C.textDim, transform:"translateY(-1px)", paddingTop:2}}, String(h).padStart(2,"0") + ":00"))
             )
-            , aule.map(a => React.createElement('div', { key:a, style:{position:"relative", height: TOT_H, borderLeft:`1px solid ${C.border}`}}
+            , aule.map(a => React.createElement('div', { key:a, style:{position:"relative", height: TOT_H, borderLeft:`1px solid ${C.border}`, background:`${tintaAula(a)}12`}}
                 /* righe delle ore e mezz'ore (uguali in tutte le colonne) */
                 , ore.map(h => React.createElement(React.Fragment, {key:h}
                     , React.createElement('div', {style:{position:"absolute", left:0, right:0, top:(h-H_START)*HOUR_H, borderTop:`1px solid ${C.border}`}})
