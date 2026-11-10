@@ -5522,6 +5522,18 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     , activeTab==="scuola" && React.createElement(ImpSection, {title:"Sale e aule", icon:"home"}
       , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
           'Gestisci le sale dove si svolgono le lezioni. Le sale appaiono nel form di creazione lezione. Il colore scelto tinge la colonna della sala in Calendario → Oggi.')
+      , React.createElement('div', {style:{display:'flex',alignItems:'center',gap:10,marginBottom:14,flexWrap:'wrap'}}
+        , React.createElement('label', {style:{fontSize:11,color:C.textMuted,letterSpacing:'.06em',textTransform:'uppercase',minWidth:150}}, 'Opacità colonne calendario')
+        , React.createElement('input', {type:'range', min:0, max:40, step:1, value:fmOpacitaColoriSale(draft),
+            onChange: e => setD('opacitaColoriSale', Number(e.target.value)),
+            style:{flex:1,minWidth:140,maxWidth:260,cursor:'pointer'}})
+        , React.createElement('span', {style:{fontSize:13,color:C.text,minWidth:40,textAlign:'right'}}, fmOpacitaColoriSale(draft) + '%')
+        , (draft.opacitaColoriSale != null && draft.opacitaColoriSale !== '' && fmOpacitaColoriSale(draft) !== FM_OPACITA_SALE_DEFAULT)
+            ? React.createElement('button', {title:'Torna all\'opacità predefinita (' + FM_OPACITA_SALE_DEFAULT + '%)',
+                onClick: () => setD('opacitaColoriSale', FM_OPACITA_SALE_DEFAULT),
+                style:{padding:'6px 9px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11,whiteSpace:'nowrap'}}, 'Predefinita')
+            : null
+      )
       , React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8,marginBottom:10}}
         , (draft.sale||[]).map((sala, i) =>
             React.createElement('div', {key:i, style:{display:'flex',alignItems:'center',gap:8}}

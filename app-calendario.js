@@ -5016,6 +5016,15 @@ const fmColoreAula = (nome, sale, coloriSale) => {
   const c = coloriSale && typeof coloriSale === "object" ? coloriSale[nome] : null;
   return (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c)) ? c : fmColoreAulaAuto(nome, sale);
 };
+// Opacità (%) della tinta delle colonne aula: config.opacitaColoriSale (Impostazioni → Scuola → Sale e aule).
+// Default 7%. L'intestazione dell'aula usa ~2,2 volte l'opacità del corpo colonna (max 100%).
+const FM_OPACITA_SALE_DEFAULT = 7;
+const fmOpacitaColoriSale = (cfg) => {
+  const raw = cfg && cfg.opacitaColoriSale;
+  const n = (raw === "" || raw == null) ? NaN : Number(raw);
+  return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : FM_OPACITA_SALE_DEFAULT;
+};
+const fmAlphaHex = (pct) => Math.round(Math.min(100, Math.max(0, pct)) / 100 * 255).toString(16).padStart(2, "0");
 // Opzioni per il menu "Sala": sale configurate + il valore attuale della lezione se non è
 // (più) in elenco, così una lezione con una sala vecchia/scritta a mano non la perde in modifica.
 const opzioniSala = (corrente) => {
@@ -9132,6 +9141,8 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
   // altrimenti automatico e stabile (vedi fmColoreAula).
   const coloriSale = (window.__FM_CONFIG__ && window.__FM_CONFIG__.coloriSale) || null;
   const tintaAula = (a) => a === SENZA_AULA ? "#9ca3af" : fmColoreAula(a, ordineSale, coloriSale);
+  const opacitaSale = fmOpacitaColoriSale(window.__FM_CONFIG__);
+  const alfaCorpo = fmAlphaHex(opacitaSale), alfaIntest = fmAlphaHex(opacitaSale * 2.2);
 
   const cella = (it) => {
     const l = it.l;
@@ -9186,7 +9197,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
             , React.createElement('div')
             , aule.map(a => React.createElement('div', { key:a, style:{borderLeft:`1px solid ${C.border}`, display:"flex", alignItems:"center",
                   justifyContent:"center", gap:6, padding:"0 6px", overflow:"hidden", whiteSpace:"nowrap",
-                  background:`${tintaAula(a)}26`, boxShadow:`inset 0 -2px 0 ${tintaAula(a)}`}}
+                  background:`${tintaAula(a)}${alfaIntest}`, boxShadow:`inset 0 -2px 0 ${tintaAula(a)}`}}
                 , React.createElement('span', {style:{fontFamily:"'Oswald',sans-serif", fontSize:13, fontWeight:600, letterSpacing:"0.04em",
                     textTransform:"uppercase", overflow:"hidden", textOverflow:"ellipsis", color: a===SENZA_AULA ? C.textDim : C.text}}, a)
                 , React.createElement('span', {style:{fontSize:10, color:C.textMuted}}, perAulaMap.get(a).length)
@@ -9198,7 +9209,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
               , ore.map(h => React.createElement('div', { key:h, style:{position:"absolute", top:(h-H_START)*HOUR_H, right:4,
                   fontSize:10, color:C.textDim, transform:"translateY(-1px)", paddingTop:2}}, String(h).padStart(2,"0") + ":00"))
             )
-            , aule.map(a => React.createElement('div', { key:a, style:{position:"relative", height: TOT_H, borderLeft:`1px solid ${C.border}`, background:`${tintaAula(a)}12`}}
+            , aule.map(a => React.createElement('div', { key:a, style:{position:"relative", height: TOT_H, borderLeft:`1px solid ${C.border}`, background:`${tintaAula(a)}${alfaCorpo}`}}
                 /* righe delle ore e mezz'ore (uguali in tutte le colonne) */
                 , ore.map(h => React.createElement(React.Fragment, {key:h}
                     , React.createElement('div', {style:{position:"absolute", left:0, right:0, top:(h-H_START)*HOUR_H, borderTop:`1px solid ${C.border}`}})
