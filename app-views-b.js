@@ -4375,7 +4375,9 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
       else if (lastOutId) destId = lastOutId.destinatario_id;
       else if (t.anag) destId = t.anag.id;
       else if (t.key === 'admin') destId = '__admin__';
-      t.reply = t.broadcast ? null : { id:destId, nome:t.nome, ruolo:t.ruolo, email:'', telefono };
+      // Il docente può rispondere solo all'Amministrazione (mai agli allievi)
+      const rispostaVietata = ruolo === 'docente' && String(t.ruolo) !== 'admin';
+      t.reply = (t.broadcast || rispostaVietata) ? null : { id:destId, nome:t.nome, ruolo:t.ruolo, email:'', telefono };
       t.lastIn = lastIn;
       t.ultimo = ultimo;
       t.nonLetti = inMsgs.filter(m => !m.letto).length;
@@ -4454,6 +4456,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
     const t = aperta;
     const testo = risposta.trim();
     if (!t || !t.reply || !testo || invioRisp) return;
+    if (ruolo === 'docente' && t.reply.ruolo !== 'admin') return; // difesa in profondità
     const usaWA = isAdmin && rispWA && telValido(t.reply.telefono);
     if (!t.reply.id && !usaWA) { alert('Impossibile rispondere: destinatario non collegato a un utente dell\'app.'); return; }
     setInvioRisp(true);
@@ -4650,7 +4653,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
             , React.createElement('div',{style:{fontSize:10,color:C.textDim,marginTop:5}}, t.gruppo ? (isAdmin ? 'A tutti i '+t.membri.length+' partecipanti · App + Push' : 'La risposta arriva all\'amministrazione · App + Push') : 'Oggetto: '+oggettoRisposta(t)+(t.reply.id?' · App + Push':''))
           )
         : React.createElement('div',{style:{flexShrink:0,borderTop:`1px solid ${C.border}`,background:C.surface,padding:'12px 16px',fontSize:12,color:C.textMuted,textAlign:'center'}},
-            t.broadcast ? 'Messaggio inviato a un intero gruppo: per rispondere scrivi un nuovo messaggio.' : 'Questo mittente non può ricevere risposte dall\'app.')
+            t.broadcast ? 'Messaggio inviato a un intero gruppo: per rispondere scrivi un nuovo messaggio.' : (ruolo === 'docente' ? 'I docenti possono scrivere solo all\'Amministrazione.' : 'Questo mittente non può ricevere risposte dall\'app.'))
     );
   };
 
@@ -4764,7 +4767,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
 };
 
 // ── Destinatari "propri" per chi NON è admin ──────────────────────────────────
-// docente → i SUOI allievi; allievo (o genitore) → i SUOI docenti.
+// docente → NESSUNO (può scrivere solo all'Amministrazione); allievo (o genitore) → i SUOI docenti.
 // Per un docente la lista `students` è già limitata ai suoi allievi (RLS); per un allievo
 // `students` contiene solo la sua scheda (o quelle dei figli collegati) mentre `docenti` è
 // leggibile da tutti: i suoi docenti si ricavano da students.teacher, extraTeachers e dai
@@ -4775,8 +4778,8 @@ function fmDestinatariPropri({ ruolo, appUser, students, docenti, gruppi }) {
                               email:x.email||'', telefono:x.telefono||x.phone||'' });
   let lista = [];
   if (ruolo === 'docente') {
-    const attivo = st => !/archiv|cestin|inatt|cessat/i.test(String(st.status||''));
-    lista = (students||[]).filter(attivo).map(st => toDest(st,'allievo'));
+    // Regola: il docente invia messaggi (app + push) SOLO all'admin, mai ai propri allievi.
+    lista = [];
   } else if (ruolo === 'allievo') {
     const miei = new Set([appUser && appUser.allievoId, ...((appUser && appUser.allieviIds) || [])]
       .filter(v => v != null && v !== '').map(String));
@@ -4858,8 +4861,8 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
   };
   const senzaTelWA = (isAdmin && canali.whatsapp) ? destSel.filter(d => !telValidoWA(d.telefono)) : [];
 
-  // Destinatari disponibili: l'admin scrive a tutti; docente e allievo all'Amministrazione
-  // E ai propri allievi / docenti.
+  // Destinatari disponibili: l'admin scrive a tutti; il docente SOLO all'Amministrazione;
+  // l'allievo all'Amministrazione e ai propri docenti.
   const DEST_PROPRI = React.useMemo(
     () => isAdmin ? [] : fmDestinatariPropri({ ruolo, appUser, students, docenti, gruppi }),
     [isAdmin, ruolo, appUser, students, docenti, gruppi]);
@@ -4936,6 +4939,11 @@ const ComposeModal = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
 
   const handleSend = async () => {
     if (!oggetto.trim()||!testo.trim()||!destSel.length) return;
+    // Il docente può scrivere solo all'Amministrazione
+    if (ruolo === 'docente' && destSel.some(d => d.ruolo !== 'admin')) {
+      alert('I docenti possono inviare messaggi solo all\'Amministrazione.');
+      return;
+    }
     setSending(true);
     try {
       const sb = window.supabaseClient;
