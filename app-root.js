@@ -5521,14 +5521,26 @@ const ImpostazioniView = ({ config, setConfig, panels: propPanels, setPanels: pr
     /* ── Sale lezioni ──────────────────────────────────────────────────────── */
     , activeTab==="scuola" && React.createElement(ImpSection, {title:"Sale e aule", icon:"home"}
       , React.createElement('div', {style:{fontSize:13,color:C.textMuted,marginBottom:12}},
-          'Gestisci le sale dove si svolgono le lezioni. Le sale appaiono nel form di creazione lezione.')
+          'Gestisci le sale dove si svolgono le lezioni. Le sale appaiono nel form di creazione lezione. Il colore scelto tinge la colonna della sala in Calendario → Oggi.')
       , React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:8,marginBottom:10}}
         , (draft.sale||[]).map((sala, i) =>
             React.createElement('div', {key:i, style:{display:'flex',alignItems:'center',gap:8}}
+              , React.createElement('input', {type:'color', value:fmColoreAula(sala, draft.sale||[], draft.coloriSale), title:'Colore della colonna in Calendario → Oggi',
+                  onChange: e => setD('coloriSale', {...(draft.coloriSale||{}), [sala]: e.target.value}),
+                  style:{width:34,height:30,padding:0,border:`1px solid ${C.border}`,borderRadius:6,background:'transparent',cursor:'pointer',flexShrink:0}})
               , React.createElement('input', {type:'text', value:sala, placeholder:'Es. Sala A, Studio 1...',
-                  onChange: e => {const ns=[...(draft.sale||[])]; ns[i]=e.target.value; setD('sale',ns);},
+                  onChange: e => {
+                    const nuovo = e.target.value; const ns=[...(draft.sale||[])]; ns[i]=nuovo;
+                    // rinominando la sala il colore scelto la segue
+                    const col = {...(draft.coloriSale||{})};
+                    if (nuovo !== sala && Object.prototype.hasOwnProperty.call(col, sala)) { col[nuovo] = col[sala]; delete col[sala]; }
+                    setDraft(p => ({...p, sale: ns, coloriSale: col}));
+                  },
                   style:{flex:1,padding:'7px 10px',borderRadius:7,border:`1px solid ${C.border}`,background:C.bg,color:C.text,fontSize:13,fontFamily:"'Open Sans',sans-serif"}})
-              , React.createElement('button', {onClick:()=>setD('sale',(draft.sale||[]).filter((_,j)=>j!==i)),
+              , (draft.coloriSale && draft.coloriSale[sala]) ? React.createElement('button', {title:'Torna al colore automatico',
+                  onClick: () => { const col = {...(draft.coloriSale||{})}; delete col[sala]; setD('coloriSale', col); },
+                  style:{padding:'6px 9px',borderRadius:6,border:`1px solid ${C.border}`,background:C.bg,color:C.textMuted,cursor:'pointer',fontSize:11,whiteSpace:'nowrap'}}, 'Auto') : null
+              , React.createElement('button', {onClick:()=>{ const col={...(draft.coloriSale||{})}; delete col[sala]; setDraft(p=>({...p, sale:(p.sale||[]).filter((_,j)=>j!==i), coloriSale: col})); },
                   style:{padding:'6px 10px',borderRadius:6,border:`1px solid ${C.redBorder}`,background:C.redBg,color:C.red,cursor:'pointer',fontSize:12}}, '✕')
             )
           )

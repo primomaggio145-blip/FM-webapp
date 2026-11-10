@@ -5002,6 +5002,20 @@ const HOURS       = Array.from({length:15},(_,i)=>`${(i+8).toString().padStart(2
 const STUDENTS_LIST = ["Sofia Marchetti","Luca Ferrara","Emma Conti","Marco Ricci","Giulia Romano","Alessandro Gallo"];
 // ROOMS è ora dinamico: usa le sale configurate nelle Impostazioni, con fallback
 const ROOMS       = () => (window.__FM_CONFIG__&&window.__FM_CONFIG__.sale&&window.__FM_CONFIG__.sale.length>0) ? window.__FM_CONFIG__.sale : ["Sala A","Sala B","Sala C","Sala Grande","Studio 1"];
+// Colori delle colonne aula nella vista Calendario → Oggi.
+// Se l'admin non ne sceglie uno (Impostazioni → Sale e aule, config.coloriSale = {nomeSala: "#rrggbb"})
+// si usa una tinta automatica stabile: per posizione nell'elenco sale, altrimenti da un hash del nome.
+const FM_TINTE_AULA = ["#3b82f6", "#10b981", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#ec4899", "#84cc16"];
+const fmColoreAulaAuto = (nome, sale) => {
+  const n = String(nome == null ? "" : nome);
+  let i = (sale || []).indexOf(n);
+  if (i < 0) { i = 0; for (let k = 0; k < n.length; k++) i = (i * 31 + n.charCodeAt(k)) >>> 0; }
+  return FM_TINTE_AULA[i % FM_TINTE_AULA.length];
+};
+const fmColoreAula = (nome, sale, coloriSale) => {
+  const c = coloriSale && typeof coloriSale === "object" ? coloriSale[nome] : null;
+  return (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c)) ? c : fmColoreAulaAuto(nome, sale);
+};
 // Opzioni per il menu "Sala": sale configurate + il valore attuale della lezione se non è
 // (più) in elenco, così una lezione con una sala vecchia/scritta a mano non la perde in modifica.
 const opzioniSala = (corrente) => {
@@ -9114,15 +9128,10 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
   const oggi = yyyymmdd(new Date()) === yyyymmdd(date);
   const oraAdesso = (() => { const n = new Date(); return n.getHours() + n.getMinutes()/60; })();
   const hhmm = (h) => { const hh = Math.floor(h + 1e-6), mm = Math.round((h - hh) * 60); return String(hh).padStart(2,"0") + ":" + String(mm).padStart(2,"0"); };
-  // Tinta di colonna per aula (overlay molto leggero): colore stabile per aula,
-  // preso dalla posizione nell'elenco sale configurato; per aule non in elenco, da un hash del nome.
-  const TINTE_AULA = ["#3b82f6", "#10b981", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4", "#ec4899", "#84cc16"];
-  const tintaAula = (a) => {
-    if (a === SENZA_AULA) return "#9ca3af";
-    let i = ordineSale.indexOf(a);
-    if (i < 0) { i = 0; for (let k = 0; k < a.length; k++) i = (i * 31 + a.charCodeAt(k)) >>> 0; }
-    return TINTE_AULA[i % TINTE_AULA.length];
-  };
+  // Tinta di colonna per aula (overlay molto leggero): colore scelto in Impostazioni → Sale e aule,
+  // altrimenti automatico e stabile (vedi fmColoreAula).
+  const coloriSale = (window.__FM_CONFIG__ && window.__FM_CONFIG__.coloriSale) || null;
+  const tintaAula = (a) => a === SENZA_AULA ? "#9ca3af" : fmColoreAula(a, ordineSale, coloriSale);
 
   const cella = (it) => {
     const l = it.l;
