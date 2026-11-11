@@ -5016,6 +5016,11 @@ const fmColoreAula = (nome, sale, coloriSale) => {
   const c = coloriSale && typeof coloriSale === "object" ? coloriSale[nome] : null;
   return (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c)) ? c : fmColoreAulaAuto(nome, sale);
 };
+// Riempimento dei blocchi lezione (slot occupati) nelle griglie Settimana e Giorno-per-aula.
+// Prima 9-12% (0x18/0x1f): sullo sfondo delle colonne si distingueva male cosa è occupato e cosa è libero.
+// Valori esadecimali di alpha: "38" ≈ 22% riempimento, "80" ≈ 50% bordo.
+const FM_LEZIONE_BG_ALPHA = "38";
+const FM_LEZIONE_BORDO_ALPHA = "80";
 // Opacità (%) della tinta delle colonne aula: config.opacitaColoriSale (Impostazioni → Scuola → Sale e aule).
 // Default 7%. L'intestazione dell'aula usa ~2,2 volte l'opacità del corpo colonna (max 100%).
 const FM_OPACITA_SALE_DEFAULT = 7;
@@ -9192,7 +9197,7 @@ const DayView = ({ date, lessons, onSelect, isMobile, config, courses, perAula, 
         onMouseLeave: e => { e.currentTarget.style.filter = "none"; e.currentTarget.style.zIndex = 2; },
         style: {position:"absolute", top: (it.s - H_START) * HOUR_H + 1, height: hPx,
           left: `calc(${it.col * larg}% + 2px)`, width: `calc(${larg}% - 4px)`, zIndex: 2,
-          background: `${hex}1f`, borderLeft: `3px solid ${hex}`, borderRadius: 5,
+          background: `${hex}${FM_LEZIONE_BG_ALPHA}`, border: `1px solid ${hex}${FM_LEZIONE_BORDO_ALPHA}`, borderLeft: `3px solid ${hex}`, borderRadius: 5,
           opacity: fmLezioneDaRecuperare(l) ? 0.45 : 1,
           padding: compatta ? "1px 5px" : "3px 6px", overflow: "hidden", cursor: "pointer", boxSizing: "border-box",
           fontSize: 11, lineHeight: 1.25, color: C.text, transition: "filter .12s"} }
@@ -9462,8 +9467,8 @@ const WeekView = ({ weekStart, lessons, onSelect, config, isMobile, courses, onD
                 const isSala  = isSalaProve(l);
                 const hex     = lessonHex(l, courses);
                 const pending = isSala && l.stato === "in_attesa";
-                const bg      = isSala ? (pending?"#fffbeb":C.orange2Bg) : `${hex}18`;
-                const bord    = isSala ? (pending?"#fde68a":C.orange2Border) : `${hex}40`;
+                const bg      = isSala ? (pending?"#fffbeb":C.orange2Bg) : `${hex}${FM_LEZIONE_BG_ALPHA}`;
+                const bord    = isSala ? (pending?"#fde68a":C.orange2Border) : `${hex}${FM_LEZIONE_BORDO_ALPHA}`;
                 const accent  = isSala ? (pending?"#f59e0b":C.orange2) : hex;
                 const normHour = String(l.hour||"").slice(0,5);
                 const normFine = String(l.oraFine||"").slice(0,5);
