@@ -5237,6 +5237,17 @@ const GAP_PER_RICORRENZA       = { "Ogni settimana": 7, "Ogni 2 settimane": 14, 
 //
 // `opts.dataMinima` (tipicamente la data d'iscrizione dell'allievo) resta un filtro aggiuntivo
 // di sicurezza: nessuna lezione precedente a questa data viene mai conteggiata nell'ordinale.
+// [FM-EXTRA-SERIE-COLL] Due lezioni collettive appartengono alla STESSA SERIE (quindi allo stesso
+// pacchetto mensile) solo se hanno lo stesso corso E lo stesso gruppo. Prima si contava per solo
+// corso: due gruppi dello stesso corso (es. 10.11 ore 16:30 e 18:30, oppure un terzo gruppo il
+// 07.11) si sommavano nello stesso mese, la "soglia" scattava alla prima lezione del mese e
+// compariva un falso EXTRA. Senza gruppoId (lezioni vecchie) si distingue per orario.
+function stessaSerieCollettiva(a, b) {
+  if (!a || !b) return false;
+  if (String(a.courseId||'') !== String(b.courseId||'')) return false;
+  if (a.gruppoId || b.gruppoId) return String(a.gruppoId||'') === String(b.gruppoId||'');
+  return String(a.hour||'').slice(0,5) === String(b.hour||'').slice(0,5);
+}
 function calcolaInfoExtra(lesson, opts) {
   const recurrence = _optionalChain([lesson, 'optionalAccess', _47 => _47.recurrence]);
   const N = PACCHETTO_PER_RICORRENZA[recurrence];
@@ -5259,7 +5270,7 @@ function calcolaInfoExtra(lesson, opts) {
     if (!l.date) return false;
     if (isColl(lesson)) {
       if (!isColl(l)) return false;
-      if (String(l.courseId||'') !== String(lesson.courseId||'')) return false;
+      if (!stessaSerieCollettiva(l, lesson)) return false;   // [FM-EXTRA-SERIE-COLL]
     } else {
       if (isColl(l)) return false;
       if ((l.instrument||l.strumento||'') !== (lesson.instrument||lesson.strumento||'')) return false;
@@ -12827,7 +12838,7 @@ const GoogleCalendarPageView = ({ userRuolo, appUser }) => {
 };
 
 // ── Tab EXTRA: lezioni 5a/3a/2a occorrenza mensile da decidere/contabilizzare ──
-const ExtraLezioniTab = ({ daDecidere, saltate, daPagare, onGenera, onNonGenera, onContabilizza, onSelectLesson }) => {
+const ExtraLezioniTab = ({ daDecidere, saltate, daPagare, onGenera, onNonGenera, onContabilizza, onSelectLesson, falsiPositiviIds, onGeneraNormale }) => {
   const fmtData = (d) => { try { return new Date(d+"T00:00:00").toLocaleDateString('it-IT', {weekday:'short', day:'numeric', month:'short'}); } catch(e){ return d; } };
   const righeVuote = daDecidere.length===0 && saltate.length===0 && daPagare.length===0;
   return React.createElement('div', { style: {padding:20} }
@@ -12839,7 +12850,18 @@ const ExtraLezioniTab = ({ daDecidere, saltate, daPagare, onGenera, onNonGenera,
       React.createElement('div', { style:{textAlign:'center', padding:'32px 0', color:C.textDim} }, 'Nessuna lezione extra da gestire al momento')
     ) : (
       React.createElement('div', { style:{display:'flex', flexDirection:'column', gap:10} }
-        , daDecidere.map(l => (
+        , daDecidere.filter(l => falsiPositiviIds && falsiPositiviIds.has(l.id)).map(l => (
+          // [FM-EXTRA-FALSO-POSITIVO] voce segnalata per errore: rientra nella soglia mensile, non è un extra
+          React.createElement('div', { key:l.id, style:{display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:10, border:`1.5px solid ${C.tealBorder}`, background:C.tealBg} }
+            , React.createElement('span', { style:{fontSize:10, fontWeight:700, color:'#fff', background:C.teal, borderRadius:6, padding:'3px 8px', flexShrink:0} }, 'NON È EXTRA')
+            , React.createElement('div', { style:{flex:1, cursor:'pointer'}, onClick:()=>onSelectLesson(l) }
+              , React.createElement('div', { style:{fontSize:13, fontWeight:600} }, isColl(l) ? ((l.courseName||'Collettiva') + (l.gruppoNome ? ' · ' + l.gruppoNome : '')) : (l.student||'—'))
+              , React.createElement('div', { style:{fontSize:11, color:C.textMuted} }, 'Lezione del ', fmtData(l.date), (l.hour ? ' ore ' + l.hour : ''), ' · rientra nel pacchetto mensile: prossima lezione normale il ', fmtData(l.extraDataPotenziale))
+            )
+            , React.createElement('button', { onClick:()=>onGeneraNormale(l), style:{padding:'7px 14px', borderRadius:8, border:'none', background:C.teal, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"} }, 'Genera lezione normale')
+          )
+        ))
+        , daDecidere.filter(l => !(falsiPositiviIds && falsiPositiviIds.has(l.id))).map(l => (
           React.createElement('div', { key:l.id, style:{display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:10, border:'1.5px solid rgba(245,158,11,0.4)', background:'rgba(245,158,11,0.06)'} }
             , React.createElement('span', { style:{fontSize:10, fontWeight:700, color:'#fff', background:'#f59e0b', borderRadius:6, padding:'3px 8px', flexShrink:0} }, 'DA DECIDERE')
             , React.createElement('div', { style:{flex:1, cursor:'pointer'}, onClick:()=>onSelectLesson(l) }
@@ -13923,6 +13945,77 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
       gcalSyncLesson('sync_one', nextLesson);
     };
 
+    // [FM-EXTRA-FALSO-POSITIVO] Voci "da decidere" che con il conteggio corretto (per serie/gruppo)
+    // NON sono extra: la lezione rientra nel pacchetto mensile e la successiva è una lezione normale.
+    const extraFalsiPositiviIds = useMemo(() => {
+      const ids = new Set();
+      (lessons||[]).forEach(l => {
+        if (!(l.extraDaDecidere && !l.extraDecisione)) return;
+        const st = (propStudents||[]).find(x =>
+          (l.studentId!=null && String(x.id)===String(l.studentId)) ||
+          (l.student && (x.name||x.nome||'').toLowerCase().trim()===l.student.toLowerCase().trim()));
+        const info = calcolaInfoExtra(l, { lessons, dataMinima: st && st.enrollDate });
+        if (!info.haExtraPotenziale) ids.add(l.id);
+      });
+      return ids;
+    }, [lessons, propStudents]);
+
+    // Genera la lezione successiva COME NORMALE (non extra) per una voce segnalata per errore.
+    const handleGeneraNormale = (lesson) => {
+      const nextDate = lesson.extraDataPotenziale;
+      if (!nextDate) return;
+      const sb = window.supabaseClient;
+      const giaEsiste = (lessons||[]).some(l =>
+        l.id !== lesson.id && l.date === nextDate && l.hour === lesson.hour &&
+        (isColl(lesson) ? stessaSerieCollettiva(l, lesson) : stessaSerieIndividuale(l, lesson)));
+      const pulisciFlag = () => {
+        setLessons(prev => prev.map(l => l.id === lesson.id
+          ? { ...l, extraDaDecidere: false, extraDataPotenziale: null } : l));
+        if (sb) sb.from('lezioni').update({ extra_da_decidere: false, extra_data_potenziale: null })
+          .eq('id', lesson.id).then(({ error }) => {
+            if (error) console.warn('[FM] genera normale: reset flag extra error:', error.message);
+          });
+      };
+      if (giaEsiste) { pulisciFlag(); return; }
+      const _dNext = new Date(nextDate + "T00:00:00");
+      const _occ = prossimaOccorrenzaSerie(lesson, lessons);
+      const nextLesson = {
+        ...lesson,
+        id: uid(),
+        date: nextDate,
+        attendance: "",
+        students: fmAzzeraPresenzeAllievi(lesson.students),
+        motivoAssenza: null,
+        notes: "",
+        exercises: "",
+        topic: "",
+        inRecupero: false,
+        recuperoScadenza: null,
+        extraDaDecidere: false,
+        extraDataPotenziale: null,
+        extraDecisione: null,
+        isLezioneExtra: false,
+        extraContabilizzata: false,
+        extraLessonId: null,
+        tipo: lesson.tipo === 'recupero' ? 'individuale' : (lesson.tipo || 'individuale'),
+        gapGiorni: _occ.date === nextDate ? _occ.gapGiorniNext : prossimoGapGiorni(lesson),
+        pacchettoMese: _dNext.getMonth() + 1,
+        pacchettoAnno: _dNext.getFullYear(),
+        pacchettoManuale: false,
+      };
+      setLessons(prev => [
+        ...prev.map(l => l.id === lesson.id
+          ? { ...l, extraDaDecidere: false, extraDataPotenziale: null } : l),
+        nextLesson,
+      ]);
+      if (sb) sb.from('lezioni').update({ extra_da_decidere: false, extra_data_potenziale: null })
+        .eq('id', lesson.id).then(({ error }) => {
+          if (error) console.warn('[FM] genera normale: reset flag extra error:', error.message);
+        });
+      safeInsertRecurringLesson(nextLesson, setLessons);
+      gcalSyncLesson('sync_one', nextLesson);
+    };
+
     const handleNonGeneraExtra = (lesson) => {
       // Salta l'occorrenza extra: la prossima lezione riparte 2 occorrenze dopo (nuovo conteggio dal mese successivo)
       // [FM-2X-GIORNI-FISSI] entrambe le occorrenze sui giorni fissi reali della serie
@@ -14463,6 +14556,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   daPagare: lezioniExtraDaPagare,
                   onGenera: handleGeneraExtra,
                   onNonGenera: handleNonGeneraExtra,
+                  falsiPositiviIds: extraFalsiPositiviIds,
+                  onGeneraNormale: handleGeneraNormale,
                   onContabilizza: handleContabilizzaExtra,
                   onSelectLesson: l => { setSelLesson(l); setModal("detail"); },
                 })
