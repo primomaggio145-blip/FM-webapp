@@ -167,7 +167,55 @@
     // (creazione lezione/allievo/brano/ecc.) la cancellava senza mai salvarla —
     // il record sembrava sparire "da solo" al refresh successivo.
     let reloading = false;
-    async function reloadDopoFlush() {
+
+    // ── L'aggiornamento NON deve mai interrompere un'operazione in corso ──────────────────
+    // Il flush sopra salva solo le scritture già "in coda"; non può salvare ciò che l'utente sta ancora
+    // compilando (finestra aperta, campo in modifica, upload). Quindi il reload dopo un deploy parte
+    // solo quando l'app è "libera": nessuna finestra aperta, nessuna interazione da almeno 90 secondi
+    // e nessun campo di testo attivo da meno di 5 minuti. Se è occupata, l'aggiornamento resta in
+    // attesa (ricontrollo ogni 10 s) e compare un piccolo avviso con "Aggiorna ora".
+    const FM_RIPOSO_MS = 90 * 1000, FM_CAMPO_ATTIVO_MS = 5 * 60 * 1000;
+    let ultimaInterazione = Date.now();
+    ['pointerdown', 'keydown', 'input', 'change', 'touchstart', 'click'].forEach(function (ev) {
+      window.addEventListener(ev, function () { ultimaInterazione = Date.now(); }, { capture: true, passive: true });
+    });
+    function appOccupata() {
+      try { if (window.FMBack && typeof window.FMBack.aperte === 'function' && window.FMBack.aperte() > 0) return true; } catch (e) {}
+      const da = Date.now() - ultimaInterazione;
+      if (da < FM_RIPOSO_MS) return true;
+      const a = document.activeElement;
+      const inCampo = a && (/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) || a.isContentEditable);
+      return !!(inCampo && da < FM_CAMPO_ATTIVO_MS);
+    }
+    let aggiornamentoInAttesa = false, timerAttesa = null, pillAggiornamento = null;
+    function mostraAvvisoAggiornamento() {
+      if (pillAggiornamento || !document.body) return;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = 'Nuova versione disponibile · Aggiorna ora';
+      b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:calc(env(safe-area-inset-top,0px) + 8px);'
+        + 'z-index:2147483000;padding:6px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.25);'
+        + 'background:rgba(30,30,30,.92);color:#fff;font:600 12px system-ui,sans-serif;cursor:pointer;'
+        + 'box-shadow:0 2px 10px rgba(0,0,0,.35)';
+      b.addEventListener('click', function () { reloadDopoFlush(true); });
+      document.body.appendChild(b);
+      pillAggiornamento = b;
+    }
+    function aggiornaQuandoLibero() {
+      if (reloading) return;
+      if (!appOccupata()) { reloadDopoFlush(false); return; }
+      if (aggiornamentoInAttesa) return;
+      aggiornamentoInAttesa = true;
+      console.log('[FM] Nuova versione disponibile — aggiorno appena hai finito di lavorare');
+      mostraAvvisoAggiornamento();
+      timerAttesa = setInterval(function () {
+        if (reloading) { clearInterval(timerAttesa); return; }
+        if (!appOccupata()) { clearInterval(timerAttesa); reloadDopoFlush(false); }
+      }, 10000);
+    }
+
+    // forza=true solo dal pulsante "Aggiorna ora" (scelta esplicita dell'utente)
+    async function reloadDopoFlush(forza) {
       if (reloading) return;
       reloading = true;
       try {
@@ -179,6 +227,14 @@
           ]);
         }
       } catch (e) { /* procedi comunque col reload */ }
+      // L'utente ha ricominciato a lavorare mentre salvavamo: rimanda, non interrompere
+      if (forza !== true && appOccupata()) {
+        reloading = false;
+        if (pillAggiornamento || aggiornamentoInAttesa) return;
+        aggiornamentoInAttesa = false;
+        aggiornaQuandoLibero();
+        return;
+      }
       // Impedisce il popup nativo "Le modifiche potrebbero non essere salvate":
       // riusa lo stesso flag già usato da app-root.js per il pulsante "Esci" —
       // senza questo, il reload automatico (silenzioso per definizione) veniva
@@ -228,8 +284,8 @@
           // Se la rete non risponde per questo file (null), non consideriamo un
           // aggiornamento — evita falsi positivi durante un hiccup di connessione
           if (vAttuale && versioniIniziali[file] && vAttuale !== versioniIniziali[file]) {
-            console.log('[FM] Nuova versione rilevata (' + file + ') — ricarico…');
-            reloadDopoFlush();
+            console.log('[FM] Nuova versione rilevata (' + file + ')');
+            aggiornaQuandoLibero();
             return;
           }
         }
@@ -256,10 +312,10 @@
   <!-- ── Registrazione Service Worker per PWA ── -->
   <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.addEventListener('controllerchange', reloadDopoFlush);
+      navigator.serviceWorker.addEventListener('controllerchange', aggiornaQuandoLibero);
       // Segnale esplicito ridondante già inviato da service-worker.js su 'activate'
       navigator.serviceWorker.addEventListener('message', function(event) {
-        if (event.data && event.data.type === 'SW_UPDATED') reloadDopoFlush();
+        if (event.data && event.data.type === 'SW_UPDATED') aggiornaQuandoLibero();
       });
 
       window.addEventListener('load', function() {

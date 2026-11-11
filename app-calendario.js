@@ -5892,6 +5892,21 @@ const gcalSyncSalaProve = (p) => {
     gcalSyncLesson('delete_one', { id: 'sala_' + p.id });
   }
 };
+// Eliminazione di una richiesta sala prove VERIFICATA. Con le policy RLS di Supabase un DELETE non
+// autorizzato non dà errore: elimina 0 righe e risponde "ok" — l'app toglieva la riga dalla lista e
+// dal calendario, ma al ricaricamento la richiesta tornava. Qui chiediamo le righe eliminate e, se
+// sono 0, controlliamo se la richiesta esiste ancora (= rifiutata dal database) o era già sparita.
+window.fmEliminaPrenotazioneSala = async function (id) {
+  const sb = window.supabaseClient;
+  if (!sb) return { ok: false, error: 'Supabase non disponibile' };
+  const { data, error } = await sb.from('prenotazioni_sala').delete().eq('id', id).select('id');
+  if (error) return { ok: false, error: error.message };
+  if (data && data.length) return { ok: true };
+  const { data: ancora, error: e2 } = await sb.from('prenotazioni_sala').select('id').eq('id', id).maybeSingle();
+  if (e2) return { ok: false, error: e2.message };
+  if (ancora) return { ok: false, error: "Il database ha rifiutato l'eliminazione (permesso DELETE mancante su prenotazioni_sala). Esegui migrazione_prenotazioni_sala_delete.sql su Supabase." };
+  return { ok: true };
+};
 window.gcalSyncSalaProveWith = (action, p) => {
   // Variante per moduli esterni (es. app-views-b.js) che non hanno la gcalSyncLesson locale
   if (!p || !p.id) return;
@@ -12093,10 +12108,8 @@ const SalaProveView = ({ prenotazioni:_prenotazioniRaw, onUpdate, onDelete, role
     if (!confirm("Eliminare la prenotazione di " + p.richiedente + " del " + fmtDate(p.data) + "?")) return;
     setSvLoading(l=>({...l, ["del_"+p.id]:true}));
     try {
-      const sb = window.supabaseClient;
-      if (!sb) throw new Error("Supabase non disponibile");
-      const { error } = await sb.from("prenotazioni_sala").delete().eq("id", p.id);
-      if (error) throw error;
+      const esito = await window.fmEliminaPrenotazioneSala(p.id);
+      if (!esito.ok) throw new Error(esito.error);
       gcalSyncLesson('delete_one', { id: 'sala_' + p.id });
       if (onDelete) onDelete(p.id);
     } catch(e) {

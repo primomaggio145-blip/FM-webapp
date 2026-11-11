@@ -3879,8 +3879,12 @@ const SalaProveStandaloneView = ({ appUser, userRuolo, lessons, students, docent
 
   const handleDelete = async (p) => {
     if (!window.confirm(`Eliminare la prenotazione del ${fmtData(p.data)}?`)) return;
-    const sb = window.supabaseClient; if (!sb) return;
-    await sb.from('prenotazioni_sala').delete().eq('id', p.id);
+    // Eliminazione verificata (vedi window.fmEliminaPrenotazioneSala in app-calendario.js): se il database
+    // la rifiuta non togliamo la richiesta dalla lista e non tocchiamo Google Calendar.
+    const esito = window.fmEliminaPrenotazioneSala
+      ? await window.fmEliminaPrenotazioneSala(p.id)
+      : { ok: false, error: 'Funzione di eliminazione non disponibile — ricarica la pagina' };
+    if (!esito.ok) { showToast(false, 'Eliminazione non riuscita: ' + esito.error); return; }
     setPrenotazioni(prev => prev.filter(x => x.id !== p.id));
     if (window.gcalSyncSalaProveWith) window.gcalSyncSalaProveWith('delete', p);
     showToast(true, 'Prenotazione eliminata');
