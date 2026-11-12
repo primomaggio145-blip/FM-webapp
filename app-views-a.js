@@ -179,6 +179,17 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       if (found) { setSelBrano(found); setFocusVers(vIdx); setModal('view'); }
       if(clearQuickAction)clearQuickAction();
     }
+    else if(typeof quickAction==="string" && quickAction.startsWith("editBrano:")) {
+      // [FM-LINK-BRANO-EDIT] formato: editBrano:<id> — apre direttamente il form "Modifica brano"
+      // (usato dal titolo del brano nel modale Lezione). Solo ruoli che possono modificare.
+      const bidE = quickAction.slice("editBrano:".length).split(":")[0];
+      const foundE = (propBrani||[]).find(b=>String(b.id)===bidE);
+      if (foundE) {
+        setSelBrano(foundE); setFocusVers(null);
+        setModal(ruoloRep==="allievo" ? 'view' : 'edit');
+      }
+      if(clearQuickAction)clearQuickAction();
+    }
   },[quickAction]);
   const brani    = propBrani    || _braniLocal;
   const setBrani = propSetBrani || _setBraniLocal;

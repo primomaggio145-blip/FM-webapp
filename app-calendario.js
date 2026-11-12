@@ -8150,7 +8150,15 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
                     , React.createElement('div', { style: {display:"flex", alignItems:"center", gap:10} }
                       , React.createElement(Ic, { n: "note", size: 14, stroke: typeHex, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4624}})
                       , React.createElement('div', { style: {flex:1, minWidth:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4625}}
-                        , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4626}}, b.title
+                        , React.createElement('div', { style: {fontSize:13, fontWeight:500, color:typeHex}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4626}}
+                          /* [FM-LINK-BRANO-EDIT] il titolo apre il brano nel Repertorio direttamente in modalità modifica */
+                          , (canEdit && onQuickAction && onNavigate && (_repertorioLDM||window.__repertorio__||[]).some(r => String(r.id) === String(id)))
+                            ? React.createElement('a', { href: "#",
+                                onClick: (e) => { e.preventDefault(); e.stopPropagation(); onQuickAction('editBrano:' + id); onNavigate('repertorio'); },
+                                title: "Apri nel Repertorio in modifica",
+                                style: {color:typeHex, textDecoration:"underline", textDecorationStyle:"dotted", textUnderlineOffset:3, cursor:"pointer"} }
+                                , b.title)
+                            : b.title
                           , _ereditato && React.createElement('span', { title: "Brano della lezione precedente: resta nelle lezioni successive finché non lo segni «Completato»",
                               style: {marginLeft:8, fontSize:10, fontWeight:600, color:C.textMuted, border:`1px solid ${C.border}`, borderRadius:10, padding:"1px 7px", background:C.surface, whiteSpace:"nowrap"} }, "↻ dalla lezione precedente"))
                         , React.createElement('div', { style: {fontSize:11, color:C.textMuted}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4627}}, b.composer)
