@@ -4146,6 +4146,24 @@ const MediaWhatsApp = ({ path, tipo, nome, mio }) => {
         React.createElement(FilePreviewModal,{file:{url, name:nomeFile, type:t}, onClose:()=>setAnteprima(false)})));
 };
 
+// [FM-MSG-REMINDER-WA] I reminder WhatsApp automatici (tabella whatsapp_log, vedi vista "Reminder WA")
+// compaiono anche in Messaggi come messaggi inviati, nella conversazione del destinatario.
+const FM_REMINDER_WA_LABEL = {
+  individuale:'Lezione individuale', collettivo:'Lezione collettiva', docente:'Calendario docente',
+  pagamento:'Pagamento mensile', recupero:'Recupero in scadenza', compleanno:'Compleanno', lezione:'Lezione',
+};
+// Ricava il tipo di reminder di una riga di whatsapp_log; null se la riga NON è un reminder
+// (la colonna "tipo" può contenere anche altro, es. un wamid: va ignorata, come in RemindersView).
+function fmReminderWATipo(r) {
+  if (!r) return null;
+  if (r.tipo && Object.prototype.hasOwnProperty.call(FM_REMINDER_WA_LABEL, r.tipo) && r.tipo !== 'lezione') return r.tipo;
+  const lid = String(r.lezione_id || '');
+  const m = lid.match(/^(docente|pagamento|compleanno|recupero|collettivo|individuale)_/);
+  if (m) return m[1];
+  if (/^[0-9a-f-]{36}$/i.test(lid)) return 'lezione';
+  return null;
+}
+
 const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, annoInizioAttivo }) => {
   // STILE CONVERSAZIONE: i messaggi sono raggruppati per interlocutore (thread).
   // Cliccando su una conversazione si apre lo storico completo (ricevuti + inviati)
@@ -4162,6 +4180,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
   const [invioRisp,   setInvioRisp]   = useState(false);
   const [rispWA,      setRispWA]      = useState(false);  // solo admin
   const [vediMembri,  setVediMembri]  = useState(false);  // elenco partecipanti (conversazioni di gruppo)
+  const [reminderWA,  setReminderWA]  = useState([]);     // righe di whatsapp_log (reminder inviati) — solo admin
   const isMobile = useIsMobile();
   const isAdmin  = ruolo === 'admin';
   const fondoRef = React.useRef(null);
@@ -4231,6 +4250,30 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
 
   React.useEffect(() => { loadMessaggi(); }, []);
 
+  // [FM-MSG-REMINDER-WA] Reminder WhatsApp inviati (solo admin: la RLS di whatsapp_log è admin-only)
+  const loadReminderWA = React.useCallback(async () => {
+    if (!isAdmin) return;
+    const sb = window.supabaseClient; if (!sb) return;
+    try {
+      const { data, error } = await sb.from('whatsapp_log').select('*').order('created_at', { ascending:false }).limit(1000);
+      if (error) { console.warn('[FM] reminder WA in Messaggi:', error.message); return; }
+      setReminderWA(data || []);
+    } catch(e) { console.warn('[FM] loadReminderWA:', e?.message); }
+  }, [isAdmin]);
+  React.useEffect(() => { loadReminderWA(); }, [loadReminderWA]);
+  React.useEffect(() => {
+    const sb = window.supabaseClient; if (!isAdmin || !sb || !sb.channel) return;
+    let ch = null, t = null;
+    try {
+      ch = sb.channel('fm-messaggi-reminder-wa')
+        .on('postgres_changes', { event:'INSERT', schema:'public', table:'whatsapp_log' }, () => {
+          clearTimeout(t); t = setTimeout(() => loadReminderWA(), 600);
+        })
+        .subscribe();
+    } catch(e) { console.warn('[FM] realtime reminder WA:', e?.message); }
+    return () => { clearTimeout(t); try { if (ch) sb.removeChannel(ch); } catch(e) {} };
+  }, [isAdmin, loadReminderWA]);
+
   // Realtime: nuovi messaggi → ricarica (le policy RLS filtrano già ciò che l'utente può vedere)
   React.useEffect(() => {
     const sb = window.supabaseClient; if (!sb || !sb.channel) return;
@@ -4299,9 +4342,49 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
     return { key:'x:'+m.id, o, anag:null };
   };
 
+  // [FM-MSG-REMINDER-WA] Ogni riga di whatsapp_log diventa un messaggio "inviato" (canale whatsapp)
+  // agganciato all'anagrafica tramite il telefono — stessa regola dei messaggi WhatsApp in arrivo,
+  // così reminder e risposte dell'allievo finiscono nella STESSA conversazione.
+  // Testo: colonna "testo" di whatsapp_log se valorizzata (vedi migrazione SQL), altrimenti
+  // un'etichetta descrittiva con l'eventuale "dettaglio".
+  const reminderMsgs = React.useMemo(() => {
+    if (!isAdmin || !reminderWA.length) return [];
+    const cache = {};
+    const out = [];
+    reminderWA.forEach(r => {
+      const tipo = fmReminderWATipo(r);
+      if (!tipo) return;
+      const ruoloHint = tipo === 'docente' ? 'docente' : (tipo === 'lezione' ? '' : 'allievo');
+      const ck = ruoloHint + ':' + _tel(r.telefono);
+      if (!(ck in cache)) cache[ck] = r.telefono ? trovaAnagrafica({ ruolo: ruoloHint, telefono: r.telefono }) : null;
+      const anag = cache[ck];
+      const ok = r.stato === 'inviato';
+      const label = FM_REMINDER_WA_LABEL[tipo];
+      const reale = ['testo', 'messaggio', 'body'].map(k => r[k]).find(v => typeof v === 'string' && v.trim());
+      const det = typeof r.dettaglio === 'string' ? r.dettaglio.trim().slice(0, 300) : '';
+      const detUtile = det && (!ok || !/^(wamid\.|[{\[])/.test(det));
+      let testo;
+      if (reale) testo = ok ? reale : '❌ Non inviato' + (det ? ' — ' + det : '') + '\n\n' + reale;
+      else testo = (ok ? '⏰ Reminder «' + label + '» inviato' : '❌ Reminder «' + label + '» NON inviato') + (detUtile ? '\n' + det : '');
+      out.push({
+        id: 'wa-rem-' + (r.id != null ? r.id : r.created_at + '-' + out.length),
+        _reminder: true, _reminderErr: !ok,
+        mittente_id: myId, mittente_nome: 'Reminder WhatsApp', mittente_ruolo: 'admin',
+        destinatario_id: null, destinatario_scheda_id: anag ? anag.id : null,
+        destinatario_nome: anag ? anag.nome : (r.telefono || ''), destinatario_ruolo: anag ? anag.ruolo : '',
+        telefono: r.telefono || '',
+        oggetto: 'Reminder ' + label.toLowerCase(), testo,
+        letto: true, created_at: r.created_at, canale: 'whatsapp', inviato_wa: ok, inviato_push: false,
+      });
+    });
+    return out;
+  }, [reminderWA, myId, isAdmin, students, docenti]);
+  const tuttiMsg = React.useMemo(() => reminderMsgs.length ? [...messaggi, ...reminderMsgs] : messaggi, [messaggi, reminderMsgs]);
+  const inviatiTutti = reminderMsgs.length ? [...inviati, ...reminderMsgs] : inviati;
+
   const conversazioni = React.useMemo(() => {
     const map = {};
-    messaggi.forEach(m => {
+    tuttiMsg.forEach(m => {
       if (!isIn(m) && !isOut(m)) return;
       const { key, o, anag } = chiaveDi(m);
       if (!map[key]) map[key] = { key, msgs:[], anag, nome:'', ruolo:'', broadcast:!!o.broadcast && !key.startsWith('c:'), gruppo:key.startsWith('c:') };
@@ -4387,7 +4470,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
       t.haInterni = t.msgs.some(m => (m.canale||'interno') !== 'whatsapp');
       return t;
     }).sort((a,b) => String(b.ultimo.created_at||'').localeCompare(String(a.ultimo.created_at||'')));
-  }, [messaggi, myId, ruolo, students, docenti]);
+  }, [tuttiMsg, myId, ruolo, students, docenti]);
 
   const convFiltrate = canaleFiltro==='tutti' ? conversazioni
     : conversazioni.filter(t => canaleFiltro==='whatsapp' ? t.haWA : t.haInterni);
@@ -4542,7 +4625,8 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
     return React.createElement('div',{style:{width:size,height:size,borderRadius:'50%',background:rc.bg,color:rc.c,border:`1px solid ${rc.c}40`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:Math.round(size*0.36),fontWeight:700,fontFamily:"'Open Sans',sans-serif"}}, (t.broadcast || t.gruppo) ? '👥' : iniziali(t.nome));
   };
   const badgeCanale = (m) => [
-    m.canale==='whatsapp' && React.createElement('span',{key:'wa',style:{fontSize:10,background:'#dcfce7',color:'#16a34a',border:'1px solid #bbf7d0',borderRadius:4,padding:'1px 6px'}},'📲 Da WhatsApp'),
+    m._reminder && React.createElement('span',{key:'rem',style:{fontSize:10,background:'rgba(255,255,255,.2)',borderRadius:4,padding:'1px 6px'}}, m._reminderErr ? '❌ Reminder non inviato' : '⏰ Reminder automatico'),
+    m.canale==='whatsapp' && !m._reminder && React.createElement('span',{key:'wa',style:{fontSize:10,background:'#dcfce7',color:'#16a34a',border:'1px solid #bbf7d0',borderRadius:4,padding:'1px 6px'}},'📲 Da WhatsApp'),
     m.inviato_push && React.createElement('span',{key:'p',style:{fontSize:10,opacity:.8}},'📱 Push'),
     m.inviato_wa && React.createElement('span',{key:'w',style:{fontSize:10,opacity:.8}},'💬 WA'),
   ].filter(Boolean);
@@ -4614,7 +4698,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
             return React.createElement('div',{key:m.id,style:{display:'flex',justifyContent:mio?'flex-end':'flex-start'}}
               , React.createElement('div',{style:{maxWidth:'82%',padding:'8px 12px 6px',borderRadius:14,
                   borderBottomRightRadius: mio?4:14, borderBottomLeftRadius: mio?14:4,
-                  background: mio ? C.teal : C.surface, color: mio ? '#fff' : C.text,
+                  background: m._reminder ? (m._reminderErr ? C.red : '#128c4a') : (mio ? C.teal : C.surface), color: mio ? '#fff' : C.text,
                   border: mio ? 'none' : `1px solid ${C.border}`, boxShadow:'0 1px 2px rgba(0,0,0,.06)'}}
                 , t.gruppo && !mio && React.createElement('div',{style:{fontSize:11,fontWeight:700,marginBottom:2,color:(RUOLO_COL[m.mittente_ruolo]||{c:C.teal}).c}}, m.mittente_nome || '—')
                 , !t.gruppo && mostraOgg && React.createElement('div',{style:{fontSize:11,fontWeight:700,marginBottom:3,opacity:mio?.9:1,color:mio?'#fff':C.teal}}, m.oggetto)
@@ -4659,7 +4743,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
   };
 
   // ── Lista inviati (storico) ────────────────────────────────────────────────
-  const listaInviati = canaleFiltro==='tutti' ? inviati : inviati.filter(m => (m.canale||'interno')===canaleFiltro);
+  const listaInviati = canaleFiltro==='tutti' ? inviatiTutti : inviatiTutti.filter(m => (m.canale||'interno')===canaleFiltro);
   const _visti = {};
   const inviatiOrd = [...listaInviati].sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||'')))
     .filter(m => {
@@ -4713,7 +4797,7 @@ const MessaggiView = ({ appUser, ruolo, students, docenti, gruppi, courses, anno
       )
       /* Tabs */
       , React.createElement('div', {style:{display:'flex',gap:0}}
-        , [['conversazioni','💬 Conversazioni', conversazioni.length],['inviati','📤 Inviati', inviati.length]].map(([id,lbl,cnt]) =>
+        , [['conversazioni','💬 Conversazioni', conversazioni.length],['inviati','📤 Inviati', inviatiTutti.length]].map(([id,lbl,cnt]) =>
             React.createElement('button', {key:id, onClick:()=>setTab(id),
               style:{padding:'10px 20px',border:'none',background:'transparent',cursor:'pointer',
                 fontFamily:"'Open Sans',sans-serif",fontSize:13,fontWeight:tab===id?700:400,
