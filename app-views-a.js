@@ -140,7 +140,7 @@ const BranoManualiLinks = ({ value, titolo }) => {
 };
 
 
-const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep, docenti:_propDocentiRep, concerti:_propConcertiRep, quickAction, clearQuickAction, userRuolo:_ruoloRep, appUser:_appUserRep }) => {
+const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_propStudentsRep, lessons:_propLessonsRep, docenti:_propDocentiRep, concerti:_propConcertiRep, quickAction, clearQuickAction, userRuolo:_ruoloRep, appUser:_appUserRep, onNavigate:_onNavRep, onQuickAction:_onQaRep }) => {
   const ruoloRep = _ruoloRep || "admin";
   const _nomeAllievoRep = ruoloRep==="allievo" ? ((_appUserRep&&_appUserRep.nome)||"") : "";
   const _nomeDocenteRep = ruoloRep==="docente" ? ((_appUserRep&&_appUserRep.nome)||"") : "";
@@ -256,6 +256,17 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
   
     const showToast=(msg,hex=C.green)=>{setToast({msg,hex});setTimeout(()=>setToast(null),3000);};
     const closeModal=()=>{setModal(null);setSelBrano(null);setFocusVers(null);setFuErr('');};
+    // [FM-RITORNO-LEZIONE] se "Modifica brano" è stato aperto dal titolo brano nel modale Lezione,
+    // alla chiusura (X / Annulla / Salva) si torna al calendario e si riapre quel modale Lezione.
+    const _ritornaLezione = () => {
+      const lid = window.__FM_RETURN_LESSON__;
+      window.__FM_RETURN_LESSON__ = null;
+      if (!lid || !_onNavRep || !_onQaRep) return;
+      _onQaRep('openLesson:' + lid);
+      _onNavRep('calendario');
+    };
+    // se si esce dal Repertorio in altro modo, il ritorno pendente non deve restare armato
+    React.useEffect(() => () => { window.__FM_RETURN_LESSON__ = null; }, []);
 
     // ── Mappa brano JS → riga DB ──
     const toDbRow = (f, includeId=false, prev=null) => {
@@ -444,6 +455,9 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
       if ((f.eventiIds||[]).length>0 && window.__FM_FORCE_REFRESH__) window.__FM_FORCE_REFRESH__();
     };
     const modificaBrano = async (f) => {
+      try { await _modificaBranoCore(f); } finally { _ritornaLezione(); }
+    };
+    const _modificaBranoCore = async (f) => {
       setBrani(p=>p.map(b=>b.id===selBrano.id?{...b,...f}:b));
       closeModal(); setDrawer(null);
       try {
@@ -981,8 +995,8 @@ const RepertorioView = ({ brani:propBrani, setBrani:propSetBrani, students:_prop
           )
         )
         , modal==="edit"&&selBrano&&(
-          React.createElement(Modal, { title: "Modifica brano" , onClose: closeModal, wide: true}
-            , React.createElement(BranoForm, { initial: selBrano, onSave: modificaBrano, onClose: closeModal, students: _studBranoRep, concerti: _concertiRep, courses: window.__FM_DATA__&&window.__FM_DATA__.courses||[]})
+          React.createElement(Modal, { title: "Modifica brano" , onClose: ()=>{closeModal();_ritornaLezione();}, wide: true}
+            , React.createElement(BranoForm, { initial: selBrano, onSave: modificaBrano, onClose: ()=>{closeModal();_ritornaLezione();}, students: _studBranoRep, concerti: _concertiRep, courses: window.__FM_DATA__&&window.__FM_DATA__.courses||[]})
           )
         )
         , modal==="confirm_delete"&&selBrano&&(
@@ -1401,7 +1415,7 @@ const EventoForm = ({ initial, students, brani:_braniEv, docenti:_docentiEv, onS
 
       , React.createElement('div', { style: {padding:"14px 24px",borderTop:"1px solid "+C.border,display:"flex",justifyContent:"flex-end",gap:10}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8461}}
         , React.createElement(Btn, { variant: "secondary", onClick: onClose, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8462}}, "Annulla")
-        , React.createElement(Btn, { onClick: ()=>{if(!(f.titolo||'').trim()||!f.data)return alert("Titolo e data obbligatori");onSave({...f,id:f.id||("ev"+Date.now())});}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8463}}
+        , React.createElement(Btn, { onClick: ()=>{if(!(f.titolo||'').trim()||!f.data)return alert("Titolo e data obbligatori");onSave({...f,id:f.id||uid()});}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8463}}
           , React.createElement(Ic, { n: "check", size: 14, stroke: "#ffffff", __self: this, __source: {fileName: _jsxFileName, lineNumber: 8464}}), initial && initial.id?"Salva modifiche":"Crea evento"
         )
       )
@@ -2394,7 +2408,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
           ora: ev.ora||null, capienza: ev.capienza||null,
         };
         if (isNew) {
-          const { error } = await sb.from('concerti').insert(row);
+          const { error } = await sb.from('concerti').upsert(row);
           if (error) { console.warn('[FM] insert concerto error:', error.message); alert('⚠️ Errore salvataggio concerto:\n'+error.message); }
         } else {
           const { error } = await sb.from('concerti').update(row).eq('id', ev.id);

@@ -8154,7 +8154,7 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
                           /* [FM-LINK-BRANO-EDIT] il titolo apre il brano nel Repertorio direttamente in modalità modifica */
                           , (canEdit && onQuickAction && onNavigate && (_repertorioLDM||window.__repertorio__||[]).some(r => String(r.id) === String(id)))
                             ? React.createElement('a', { href: "#",
-                                onClick: (e) => { e.preventDefault(); e.stopPropagation(); onQuickAction('editBrano:' + id); onNavigate('repertorio'); },
+                                onClick: (e) => { e.preventDefault(); e.stopPropagation(); window.__FM_RETURN_LESSON__ = String(lesson.id); onQuickAction('editBrano:' + id); onNavigate('repertorio'); },
                                 title: "Apri nel Repertorio in modifica",
                                 style: {color:typeHex, textDecoration:"underline", textDecorationStyle:"dotted", textUnderlineOffset:3, cursor:"pointer"} }
                                 , b.title)
