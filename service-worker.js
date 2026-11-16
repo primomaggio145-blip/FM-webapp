@@ -3,7 +3,7 @@
 //   - app.js, fm_sync.js, supabase_integration.js → NETWORK-FIRST (sempre freschi)
 //   - webapp.html, manifest.json, icone          → NETWORK-FIRST con fallback cache
 //   - API Supabase, font Google (googleapis/gstatic) → solo network, mai cache
-const CACHE_VERSION = 'fm-v15'; // v15: push messaggi WhatsApp riconoscibili (titolo, icona, vibrazione, persistenza).  // v14: promemoria esercizi cliccabile → apre la lezione (deep-link). v13: URL notifica ricostruito sulla base attuale (404 su Android)
+const CACHE_VERSION = 'fm-v16'; // v15: push messaggi WhatsApp riconoscibili (titolo, icona, vibrazione, persistenza).  // v14: promemoria esercizi cliccabile → apre la lezione (deep-link). v13: URL notifica ricostruito sulla base attuale (404 su Android)
 
 // File pre-cachati all'install (solo per fallback offline)
 const CACHE_STATIC = [
@@ -173,10 +173,12 @@ self.addEventListener('push', event => {
     const corpo = (mitt && mitt !== data.title ? mitt + ': ' : '') + (data.body || 'Hai un nuovo messaggio');
     const iconMsg = new URL('icons/icon-msg-192.png', base).href;
     const badgeMsg = new URL('icons/badge-msg-96.png', base).href;
+    const bannerMsg = new URL('icons/banner-msg-720.png', base).href;
     const optsMsg = {
       body:               corpo,
       icon:               iconMsg,
       badge:              badgeMsg,
+      image:              bannerMsg,   // banner rosso a tutta larghezza (visibile espandendo la notifica)
       tag:                'fm-msg-wa-' + Date.now(),   // unico: non sostituisce le notifiche precedenti
       renotify:           true,
       requireInteraction: true,

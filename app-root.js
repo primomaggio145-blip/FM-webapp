@@ -3986,7 +3986,7 @@ const AvvisoMessaggiAdmin = ({ appUser, view, onApri, suonoUrl }) => {
       const titolo = wa ? '💬 MESSAGGIO DA FM-APP' : '💬 Nuovo messaggio' + (m.mittente_nome ? ' da ' + m.mittente_nome : '');
       const body = (wa && m.mittente_nome ? m.mittente_nome + ': ' : '') + String(m.oggetto ? m.oggetto + ' — ' : '') + String(m.testo || '').slice(0, 140);
       const opts = wa
-        ? { body, icon: '/icons/icon-msg-192.png', badge: '/icons/badge-msg-96.png', tag: 'fm-msg-' + m.id, renotify: true,
+        ? { body, icon: '/icons/icon-msg-192.png', badge: '/icons/badge-msg-96.png', image: '/icons/banner-msg-720.png', tag: 'fm-msg-' + m.id, renotify: true,
             requireInteraction: true, vibrate: [500, 150, 500, 150, 500, 150, 900], data: { url: '#/messaggi' } }
         : { body, icon: '/icons/icon-192.png', badge: '/icons/icon-192.png', tag: 'fm-msg-' + m.id };
       if (navigator.serviceWorker && navigator.serviceWorker.ready) {
