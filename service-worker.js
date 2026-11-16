@@ -3,7 +3,7 @@
 //   - app.js, fm_sync.js, supabase_integration.js → NETWORK-FIRST (sempre freschi)
 //   - webapp.html, manifest.json, icone          → NETWORK-FIRST con fallback cache
 //   - API Supabase, font Google (googleapis/gstatic) → solo network, mai cache
-const CACHE_VERSION = 'fm-v14'; // v14: promemoria esercizi cliccabile → apre la lezione (deep-link). v13: URL notifica ricostruito sulla base attuale (404 su Android)
+const CACHE_VERSION = 'fm-v15'; // v15: push messaggi WhatsApp riconoscibili (titolo, icona, vibrazione, persistenza).  // v14: promemoria esercizi cliccabile → apre la lezione (deep-link). v13: URL notifica ricostruito sulla base attuale (404 su Android)
 
 // File pre-cachati all'install (solo per fallback offline)
 const CACHE_STATIC = [
@@ -154,6 +154,46 @@ self.addEventListener('push', event => {
 
   const iconUrl  = new URL('icons/icon-192.png', base).href;
   console.log('[FM SW] push ricevuto — base:', base, '| data.url originale:', data.url, '| targetUrl risolto:', targetUrl);
+
+  // [FM-PUSH-MSG-WA] Messaggio WhatsApp ricevuto nella scheda MESSAGGI: notifica ben
+  // distinguibile dalle altre (titolo fisso, icona rossa, vibrazione lunga, resta a
+  // video finché non la tocchi, mai accorpata alle precedenti).
+  // NB: il Web Push NON permette di scegliere un suono né un colore della notifica
+  // (li decide il sistema): le leve disponibili sono titolo, icona, vibrazione e
+  // persistenza; il suono personalizzato parte in-app (messaggio ai client aperti).
+  const marker = [data.tipo, data.type, data.canale, data.tag].filter(Boolean).join(' ');
+  const esplicito = /whatsapp|messaggio_wa|msg[-_]?wa|^wa[-_]|fm-msg-wa/i.test(marker) || data.canale === 'whatsapp';
+  const dalTesto  = /whatsapp/i.test((data.title || '') + ' ' + (data.body || '')) ||
+                    /^\s*(💬|📩)?\s*(nuovo messaggio|risposta)/i.test(data.title || '');
+  const eReminder = /promemoria|reminder|esercizi|lezione/i.test(marker + ' ' + (data.title || ''));
+  const eMsgWA = (esplicito || dalTesto) && !eReminder;
+
+  if (eMsgWA) {
+    const mitt = data.mittente || data.mittente_nome || data.title || '';
+    const corpo = (mitt && mitt !== data.title ? mitt + ': ' : '') + (data.body || 'Hai un nuovo messaggio');
+    const iconMsg = new URL('icons/icon-msg-192.png', base).href;
+    const badgeMsg = new URL('icons/badge-msg-96.png', base).href;
+    const optsMsg = {
+      body:               corpo,
+      icon:               iconMsg,
+      badge:              badgeMsg,
+      tag:                'fm-msg-wa-' + Date.now(),   // unico: non sostituisce le notifiche precedenti
+      renotify:           true,
+      requireInteraction: true,
+      silent:             false,
+      timestamp:          Date.now(),
+      vibrate:            [500, 150, 500, 150, 500, 150, 900],
+      data:               { url: urlApp('#/messaggi') },
+      actions:            [{ action: 'open', title: '💬 Apri messaggi' }],
+    };
+    event.waitUntil(Promise.all([
+      self.registration.showNotification('💬 MESSAGGIO DA FM-APP', optsMsg),
+      // Se l'app è aperta (anche in background) fa suonare l'avviso personalizzato
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list =>
+        list.forEach(c => { try { c.postMessage({ type: 'FM_MSG_PUSH' }); } catch (e) {} })),
+    ]));
+    return;
+  }
 
   const options = {
     body:               data.body || 'Hai una nuova notifica',

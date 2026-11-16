@@ -2707,6 +2707,11 @@ if (IS_PWA) sessionStorage.setItem('fm_pwa', '1');
 // ── Aggiornamento SW: mostra banner quando il Service Worker si aggiorna ──────
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('message', event => {
+    // [FM-PUSH-MSG-WA] push WhatsApp arrivato: suono personalizzato (evita il doppio suono se il realtime è già scattato)
+    if (event.data?.type === 'FM_MSG_PUSH') {
+      try { if (window.FM_SUONO_MSG && Date.now() - (window.__fmSuonoMsgTs || 0) > 5000) window.FM_SUONO_MSG.play(); } catch (e) {}
+      return;
+    }
     if (event.data?.type === 'SW_UPDATED') {
       // Mostra banner di aggiornamento non invasivo
       const existing = document.getElementById('__fm_update_banner__');
