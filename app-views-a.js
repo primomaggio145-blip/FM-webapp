@@ -1781,9 +1781,125 @@ const fmSyncPartecipantiConcerto = async (concertoId, partecipanti) => {
   if (error) { console.warn('[FM] concerti_partecipanti insert:', error.message); throw new Error(error.message); }
 };
 
-const EventoDetail = ({ evento, students, docenti:docentiED, brani:_braniED, onEdit, onDelete, onBack, onUpdate }) => {
+// [FM-LISTA-BRANI] Tab "Lista brani" del concerto: admin e docente compilano la lista dei brani
+// proposti; l'allievo la consulta (sola lettura) per scegliere cosa cantare/suonare.
+// Dati: evento.listaBrani = [{id, titolo, autore, per:'canto'|'strumento'|'entrambi', note}]
+// (colonna concerti.lista_brani — vedi migrazione_lista_brani_concerti.sql)
+const LISTA_BRANI_PER = {
+  canto:     { label:'🎤 Canto',               hex:'#7c4dff' },
+  strumento: { label:'🎹 Strumento',           hex:'#1e88e5' },
+  entrambi:  { label:'🎤🎹 Canto e strumento', hex:'#43a047' },
+};
+const ListaBraniTab = ({ evento, canEdit, onSaveLista, brani: braniCatalog }) => {
+  const lista = Array.isArray(evento.listaBrani) ? evento.listaBrani : [];
+  const cat = braniCatalog || [];
+  const vuoto = { titolo:'', autore:'', per:'entrambi', note:'' };
+  const [showForm, setShowForm] = React.useState(false);
+  const [editId, setEditId] = React.useState(null);
+  const [f, setF] = React.useState(vuoto);
+  const [q, setQ] = React.useState('');
+  const [fPer, setFPer] = React.useState('');
+  const inp = { width:'100%', boxSizing:'border-box', background:C.bg, border:'1px solid '+C.border, borderRadius:7,
+    color:C.text, fontSize:13, padding:'8px 12px', fontFamily:"'Open Sans',sans-serif" };
+  const lbl = { fontSize:10, color:C.textMuted, display:'block', marginBottom:4, letterSpacing:'.06em', textTransform:'uppercase' };
+
+  const salva = nuova => onSaveLista({ ...evento, listaBrani: nuova });
+  const chiudi = () => { setShowForm(false); setEditId(null); setF(vuoto); };
+  const onTitolo = v => {
+    const m = cat.find(b => ((b.title||'')+(b.composer?' – '+b.composer:'')) === v);
+    setF(prev => m ? { ...prev, titolo: m.title||v, autore: prev.autore || m.composer || '' } : { ...prev, titolo: v });
+  };
+  const conferma = () => {
+    const titolo = (f.titolo||'').trim();
+    if (!titolo) return alert('Il titolo del brano è obbligatorio');
+    const autore = (f.autore||'').trim();
+    const dup = lista.some(b => b.id !== editId && (b.titolo||'').trim().toLowerCase() === titolo.toLowerCase()
+      && (b.autore||'').trim().toLowerCase() === autore.toLowerCase());
+    if (dup && !confirm('Questo brano è già nella lista. Aggiungerlo comunque?')) return;
+    const voce = { id: editId || uid(), titolo, autore, per: f.per || 'entrambi', note: (f.note||'').trim() };
+    salva(editId ? lista.map(b => b.id === editId ? voce : b) : [...lista, voce]);
+    chiudi();
+  };
+  const modifica = b => { setEditId(b.id); setF({ titolo:b.titolo||'', autore:b.autore||'', per:b.per||'entrambi', note:b.note||'' }); setShowForm(true); };
+  const elimina = b => { if (confirm('Rimuovere "'+(b.titolo||'brano')+'" dalla lista?')) salva(lista.filter(x => x.id !== b.id)); };
+
+  const qq = q.trim().toLowerCase();
+  const visibili = lista.filter(b =>
+    (!fPer || b.per === fPer || b.per === 'entrambi')
+    && (!qq || (b.titolo||'').toLowerCase().includes(qq) || (b.autore||'').toLowerCase().includes(qq)));
+
+  const chip = (val, label) => React.createElement('button', { key: val||'tutti', onClick: ()=>setFPer(val),
+    style:{ fontSize:12, padding:'5px 12px', borderRadius:16, cursor:'pointer', fontFamily:"'Open Sans',sans-serif",
+      border:'1px solid '+(fPer===val?C.gold:C.border), background:fPer===val?C.goldBg:C.bg, color:fPer===val?C.gold:C.textMuted } }, label);
+
+  return React.createElement('div', { style:{ maxWidth:760, display:'flex', flexDirection:'column', gap:14 } },
+    React.createElement('div', { style:{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' } },
+      React.createElement('div', { style:{ flex:1, minWidth:200 } },
+        React.createElement('div', { style:{ fontSize:15, fontWeight:600 } }, 'Lista brani'),
+        React.createElement('div', { style:{ fontSize:12, color:C.textMuted, marginTop:2 } },
+          canEdit ? 'Brani proposti tra cui gli allievi potranno scegliere cosa cantare/suonare al concerto.'
+                  : 'Brani tra cui scegliere cosa cantare/suonare al concerto. Per la tua scelta parlane con il tuo insegnante.')),
+      canEdit && React.createElement('button', { onClick: ()=>{ if (showForm) chiudi(); else setShowForm(true); },
+        style:{ fontSize:12, padding:'6px 12px', borderRadius:7, border:'1px solid '+C.goldDim, background:C.goldBg, color:C.gold, cursor:'pointer' } },
+        showForm ? '✕ Annulla' : '+ Aggiungi brano')),
+
+    canEdit && showForm && React.createElement('div', { style:{ background:C.surface, border:'1px solid '+C.goldDim, borderRadius:10, padding:16, display:'flex', flexDirection:'column', gap:10 } },
+      React.createElement('div', { style:{ fontSize:11, color:C.gold, fontWeight:600, letterSpacing:'.06em', textTransform:'uppercase' } }, editId ? 'Modifica brano' : 'Nuovo brano in lista'),
+      React.createElement('div', { style:{ display:'flex', gap:8, flexWrap:'wrap' } },
+        React.createElement('div', { style:{ flex:'2 1 200px' } },
+          React.createElement('label', { style:lbl }, 'Titolo brano *'),
+          React.createElement('input', { value:f.titolo, onChange:e=>onTitolo(e.target.value), list:'lista-brani-catalogo', placeholder:'Es. Hallelujah', style:inp }),
+          React.createElement('datalist', { id:'lista-brani-catalogo' },
+            cat.map(b => React.createElement('option', { key:b.id, value:(b.title||'')+(b.composer?' – '+b.composer:'') })))),
+        React.createElement('div', { style:{ flex:'1 1 150px' } },
+          React.createElement('label', { style:lbl }, 'Autore / artista'),
+          React.createElement('input', { value:f.autore, onChange:e=>setF(prev=>({...prev, autore:e.target.value})), placeholder:'Es. Leonard Cohen', style:inp }))),
+      React.createElement('div', null,
+        React.createElement('label', { style:lbl }, 'Adatto per'),
+        React.createElement('div', { style:{ display:'flex', gap:6, flexWrap:'wrap' } },
+          Object.keys(LISTA_BRANI_PER).map(k => React.createElement('button', { key:k, onClick:()=>setF(prev=>({...prev, per:k})),
+            style:{ fontSize:12, padding:'6px 12px', borderRadius:16, cursor:'pointer', fontFamily:"'Open Sans',sans-serif",
+              border:'1px solid '+(f.per===k?LISTA_BRANI_PER[k].hex:C.border), background:f.per===k?LISTA_BRANI_PER[k].hex+'20':C.bg,
+              color:f.per===k?LISTA_BRANI_PER[k].hex:C.textMuted } }, LISTA_BRANI_PER[k].label)))),
+      React.createElement('div', null,
+        React.createElement('label', { style:lbl }, 'Note (facoltative)'),
+        React.createElement('input', { value:f.note, onChange:e=>setF(prev=>({...prev, note:e.target.value})), onKeyDown:e=>{ if (e.key==='Enter') conferma(); },
+          placeholder:'Es. tonalità, durata, base disponibile…', style:inp })),
+      React.createElement('button', { onClick:conferma, style:{ alignSelf:'flex-start', padding:'7px 18px', borderRadius:7, border:'none', background:C.gold, color:'#ffffff', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:"'Open Sans',sans-serif" } },
+        editId ? 'Salva modifiche' : 'Aggiungi')),
+
+    lista.length > 0 && React.createElement('div', { style:{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' } },
+      React.createElement('input', { value:q, onChange:e=>setQ(e.target.value), placeholder:'Cerca per titolo o autore…', style:{ ...inp, flex:'1 1 200px', width:'auto' } }),
+      chip('', 'Tutti'), chip('canto', '🎤 Canto'), chip('strumento', '🎹 Strumento')),
+
+    lista.length === 0 && React.createElement('div', { style:{ textAlign:'center', padding:'48px 0', color:C.textDim, border:'1px dashed '+C.border, borderRadius:12 } },
+      React.createElement(Ic, { n:'music', size:32, stroke:C.textDim }),
+      React.createElement('p', { style:{ marginTop:12, fontSize:14, fontWeight:500 } }, 'Nessun brano in lista'),
+      React.createElement('p', { style:{ fontSize:12, marginTop:6 } }, canEdit ? 'Aggiungi i brani tra cui gli allievi potranno scegliere.' : 'La lista non è ancora stata pubblicata: riprova più avanti.')),
+
+    lista.length > 0 && visibili.length === 0 && React.createElement('div', { style:{ textAlign:'center', padding:'24px 0', color:C.textDim, fontSize:13 } }, 'Nessun brano corrisponde alla ricerca.'),
+
+    visibili.length > 0 && React.createElement('div', { style:{ display:'flex', flexDirection:'column', gap:8 } },
+      visibili.map((b, i) => {
+        const per = LISTA_BRANI_PER[b.per] || LISTA_BRANI_PER.entrambi;
+        return React.createElement('div', { key: b.id || i, style:{ display:'flex', alignItems:'center', gap:12, background:C.surface, border:'1px solid '+C.border, borderRadius:10, padding:'10px 14px' } },
+          React.createElement('div', { style:{ width:26, height:26, borderRadius:13, background:C.goldBg, color:C.gold, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:700, flexShrink:0 } }, i+1),
+          React.createElement('div', { style:{ flex:1, minWidth:0 } },
+            React.createElement('div', { style:{ fontSize:14, fontWeight:600, wordBreak:'break-word' } }, b.titolo),
+            (b.autore || b.note) && React.createElement('div', { style:{ fontSize:12, color:C.textMuted, marginTop:2, wordBreak:'break-word' } }, [b.autore, b.note].filter(Boolean).join(' · '))),
+          React.createElement('span', { style:{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:12, background:per.hex+'18', color:per.hex, border:'1px solid '+per.hex+'40', whiteSpace:'nowrap', flexShrink:0 } }, per.label),
+          canEdit && React.createElement('button', { onClick:()=>modifica(b), title:'Modifica', style:{ background:'none', border:'1px solid '+C.border, borderRadius:7, padding:'5px 7px', cursor:'pointer', display:'flex' } }, React.createElement(Ic, { n:'edit', size:12, stroke:C.textMuted })),
+          canEdit && React.createElement('button', { onClick:()=>elimina(b), title:'Rimuovi', style:{ background:C.redBg, border:'1px solid '+C.redBorder, borderRadius:7, padding:'5px 7px', cursor:'pointer', display:'flex' } }, React.createElement(Ic, { n:'trash', size:12, stroke:C.red })));
+      })));
+};
+
+const EventoDetail = ({ evento, students, docenti:docentiED, brani:_braniED, onEdit, onDelete, onBack, onUpdate, ruolo:_ruoloED, onUpdateLista }) => {
   const braniCatalog = _braniED || [];
-  const [tab,    setTab]    = useState("info");
+  // [FM-LISTA-BRANI] Admin: tutte le tab. Docente: solo "Lista brani" (modificabile). Allievo: solo "Lista brani" (sola lettura).
+  const ruoloED = _ruoloED || "admin";
+  const isAdminED = ruoloED === "admin";
+  const canEditLista = isAdminED || ruoloED === "docente";
+  const [tab,    setTab]    = useState(isAdminED ? "info" : "lista");
   const [modalP, setModalP] = useState(null); // null | "add" | prenotazione-obj
 
   const tp  = tipoEv(evento.tipo);
@@ -1803,12 +1919,15 @@ const EventoDetail = ({ evento, students, docenti:docentiED, brani:_braniED, onE
   const delPren = id => onUpdate({...evento,prenotazioni:evento.prenotazioni.filter(p=>p.id!==id)});
   const togglePagato = id => onUpdate({...evento,prenotazioni:evento.prenotazioni.map(p=>p.id===id?{...p,pagato:!p.pagato}:p)});
 
-  const TABS = [
+  const TABS = isAdminED ? [
     {id:"info",    label:"Informazioni", icon:"flag"},
     {id:"partec",  label:"Partecipanti", icon:"users"},
     ...(evento.biglietto?[{id:"biglietti",label:"Biglietteria",icon:"receipt"}]:[]),
     {id:"brani",   label:"Scaletta",     icon:"music"},
+    {id:"lista",   label:"Lista brani",  icon:"music"},
     {id:"report",  label:"Report",       icon:"chart"},
+  ] : [
+    {id:"lista",   label:"Lista brani",  icon:"music"},
   ];
 
   const formatData = d => d ? new Date(d+"T00:00:00").toLocaleDateString("it-IT",{weekday:"long",day:"numeric",month:"long",year:"numeric"}) : "—";
@@ -1846,8 +1965,8 @@ const EventoDetail = ({ evento, students, docenti:docentiED, brani:_braniED, onE
             )
           )
           , React.createElement('div', { style: {display:"flex",gap:8,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8533}}
-            , React.createElement(Btn, { variant: "secondary", onClick: onEdit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8534}}, React.createElement(Ic, { n: "edit", size: 13, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8534}}), "Modifica")
-            , React.createElement('button', { onClick: onDelete, style: {background:C.redBg,border:`1px solid ${C.redBorder}`,borderRadius:8,
+            , isAdminED && React.createElement(Btn, { variant: "secondary", onClick: onEdit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8534}}, React.createElement(Ic, { n: "edit", size: 13, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8534}}), "Modifica")
+            , isAdminED && React.createElement('button', { onClick: onDelete, style: {background:C.redBg,border:`1px solid ${C.redBorder}`,borderRadius:8,
               padding:"7px 10px",cursor:"pointer",display:"flex",alignItems:"center"}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8535}}
               , React.createElement(Ic, { n: "trash", size: 13, stroke: C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8537}})
             )
@@ -2196,6 +2315,8 @@ const EventoDetail = ({ evento, students, docenti:docentiED, brani:_braniED, onE
 
         /* SCALETTA */
         , tab==="brani" && React.createElement(ScalettaTab, { evento: evento, onUpdate: onUpdate, brani: braniCatalog, students: students })
+        /* LISTA BRANI */
+        , tab==="lista" && React.createElement(ListaBraniTab, { evento: evento, canEdit: canEditLista, onSaveLista: onUpdateLista || onUpdate, brani: braniCatalog })
 
         /* REPORT */
         , tab==="report" && (
@@ -2349,6 +2470,8 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
   const [search,   setSearch]   = useState("");
 
   const _myNomeConc = typeof window!=="undefined" ? (window.__currentUserName__||"") : "";
+  // [FM-LISTA-BRANI] admin, docente e allievo possono aprire il concerto (docente/allievo vedono solo la tab "Lista brani")
+  const puoAprireEv = ruoloConc==="admin" || ruoloConc==="docente" || ruoloConc==="allievo";
   const filtered = concerti.filter(e=>{
     const q = search.toLowerCase();
     const base = (!q || e.titolo.toLowerCase().includes(q)||e.luogo.toLowerCase().includes(q))
@@ -2405,6 +2528,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
           programma: ev.programma||[],
           scaletta: ev.scaletta||[],
           prenotazioni: ev.prenotazioni||[],
+          ...((ev._hasListaBrani || (ev.listaBrani||[]).length) ? { lista_brani: ev.listaBrani||[] } : {}), // [FM-LISTA-BRANI]
           ora: ev.ora||null, capienza: ev.capienza||null,
         };
         if (isNew) {
@@ -2432,6 +2556,24 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
       }
     } catch(e) { console.warn('[FM] handleDelete concerto exception:', e?.message); }
   };
+  // [FM-LISTA-BRANI] Salva SOLO la lista brani (colonna concerti.lista_brani): usato da admin e docente
+  // dalla tab "Lista brani"; non tocca prenotazioni, programma né partecipanti.
+  const handleUpdateLista = async ev => {
+    setConcerti(p=>p.map(x=>x.id===ev.id?ev:x)); setSelected(ev);
+    try {
+      const sb = window.supabaseClient;
+      if (sb) {
+        const { error } = await sb.from('concerti').update({ lista_brani: ev.listaBrani||[] }).eq('id', ev.id);
+        if (error) {
+          console.warn('[FM] lista brani concerto error:', error.message);
+          alert('⚠️ Lista brani non salvata:\n'+error.message+(/lista_brani/i.test(error.message)?'\n\nEsegui prima su Supabase la migrazione migrazione_lista_brani_concerti.sql':''));
+        } else {
+          // colonna presente: da ora la lista viene inclusa anche nei salvataggi completi del concerto
+          setConcerti(p=>p.map(x=>x.id===ev.id?{...x,_hasListaBrani:true}:x));
+        }
+      }
+    } catch(e) { console.warn('[FM] handleUpdateLista exception:', e?.message); }
+  };
   const handleUpdate = async ev => {
     const vecchio = concerti.find(x=>x.id===ev.id);
     setConcerti(p=>p.map(x=>x.id===ev.id?ev:x)); setSelected(ev);
@@ -2446,6 +2588,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
           programma: ev.programma||[],
           scaletta: ev.scaletta||[],
           prenotazioni: ev.prenotazioni||[],
+          ...((ev._hasListaBrani || (ev.listaBrani||[]).length) ? { lista_brani: ev.listaBrani||[] } : {}), // [FM-LISTA-BRANI]
         };
         const { error } = await sb.from('concerti').update(row).eq('id', ev.id);
         if (error) console.warn('[FM] handleUpdate concerto error:', error.message);
@@ -2459,6 +2602,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
   if(selected) return (
     React.createElement(React.Fragment, null
       , React.createElement(EventoDetail, { evento: selected, students: students, docenti: docenti, brani: propBraniCV||[],
+        ruolo: ruoloConc, onUpdateLista: handleUpdateLista,
         onEdit: ()=>setModal("edit"),
         onDelete: ()=>setModal("del"),
         onBack: ()=>setSelected(null),
@@ -2563,11 +2707,11 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
             const pct   = ev.capienza>0?Math.min(100,pOcc/ev.capienza*100):0;
             return (
               React.createElement('div', { key: ev.id,
-                onClick: ruoloConc==="admin" ? ()=>setSelected(ev) : undefined,
+                onClick: puoAprireEv ? ()=>setSelected(ev) : undefined,
                 style: {background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,overflow:"hidden",
-                  cursor:ruoloConc==="admin"?"pointer":"default",transition:"all 0.18s",display:"flex",flexDirection:"column"},
-                onMouseEnter: ruoloConc==="admin" ? e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 28px rgba(0,0,0,0.28)";} : undefined,
-                onMouseLeave: ruoloConc==="admin" ? e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";} : undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8998}}
+                  cursor:puoAprireEv?"pointer":"default",transition:"all 0.18s",display:"flex",flexDirection:"column"},
+                onMouseEnter: puoAprireEv ? e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 28px rgba(0,0,0,0.28)";} : undefined,
+                onMouseLeave: puoAprireEv ? e=>{e.currentTarget.style.transform="";e.currentTarget.style.boxShadow="";} : undefined, __self: this, __source: {fileName: _jsxFileName, lineNumber: 8998}}
                 /* Accent bar */
                 , React.createElement('div', { style: {height:4,background:`linear-gradient(90deg,${tp.hex},${tp.hex}50)`,flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9004}})
                 , React.createElement('div', { style: {padding:"15px 18px",flex:1}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9005}}
@@ -2608,6 +2752,11 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
                   , React.createElement('div', { style: {display:"flex",gap:10,fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9040}}
                     , React.createElement('span', { style: {display:"flex",alignItems:"center",gap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9041}}
                       , React.createElement(Ic, { n: "users", size: 10, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9042}}), ev.partecipanti.length, " allievi"
+                    )
+                    , (ev.listaBrani||[]).length>0 && (
+                      React.createElement('span', { style: {display:"flex",alignItems:"center",gap:4} }
+                        , React.createElement(Ic, { n: "music", size: 10, stroke: C.textDim }), ev.listaBrani.length, " brani in lista"
+                      )
                     )
                     , ev.biglietto && (
                       React.createElement('span', { style: {display:"flex",alignItems:"center",gap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9045}}

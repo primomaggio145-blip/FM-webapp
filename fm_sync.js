@@ -275,6 +275,9 @@
       note: r.note || '',
       programma: pj(r.programma, []),
       scaletta: pj(r.scaletta, []),
+      // [FM-LISTA-BRANI] lista brani proposti (allievi la consultano); _hasListaBrani = la colonna esiste sul DB
+      listaBrani: pj(r.lista_brani, []),
+      _hasListaBrani: Object.prototype.hasOwnProperty.call(r, 'lista_brani'),
       partecipanti: (partecipantiDaTabella && partecipantiDaTabella.length>0) ? partecipantiDaTabella : pj(r.partecipanti, []),
       prenotazioni: pj(r.prenotazioni, []),
     };
@@ -512,6 +515,9 @@
         note: c.note || null,
         partecipanti: JSON.stringify(c.partecipanti || []),
         scaletta: JSON.stringify(c.scaletta || []),
+        // [FM-LISTA-BRANI] inviata solo se la colonna esiste (migrazione eseguita) o se c'è una lista:
+        // così, prima della migrazione, il salvataggio degli altri concerti non si rompe
+        ...((c._hasListaBrani || (c.listaBrani || []).length) ? { lista_brani: c.listaBrani || [] } : {}),
       };
     },
     prenotazioni_sala(p) {
