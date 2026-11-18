@@ -5253,6 +5253,21 @@ function stessaSerieCollettiva(a, b) {
   if (a.gruppoId || b.gruppoId) return String(a.gruppoId||'') === String(b.gruppoId||'');
   return String(a.hour||'').slice(0,5) === String(b.hour||'').slice(0,5);
 }
+// [FM-EXTRA-CONTEGGIO-SLOT] Quali record NON occupano uno "slot" del pacchetto mensile.
+// Il pacchetto (es. 4 lezioni/mese) si conta sugli SLOT della serie, non sui record del DB:
+//  - il record di RECUPERO (tipo/attendance 'recupero', nota "Recupero del ...") è creato quando una
+//    lezione viene recuperata; la lezione ORIGINALE (poi 'recuperata') occupa già lo slot nel suo
+//    mese, quindi contare anche il recupero gonfiava l'ordinale di +1 per ogni recupero
+//    (3ª lezione scambiata per la 4ª → falso EXTRA sulla successiva);
+//  - le lezioni EXTRA già concordate (isLezioneExtra) sono per definizione fuori dal pacchetto
+//    (il Report lezioni le esclude già);
+//  - prove e prenotazioni sala prove non sono lezioni del pacchetto.
+// Le originali 'recuperata' / 'in_recupero' restano CONTATE: sono lo slot del mese.
+const _isRecuperoRow = l => !!l && (l.tipo === 'recupero' || l.attendance === 'recupero'
+  || /^\s*(?:🔄\s*)?Recupero del\s/i.test(l.notes || ''));
+function fmEscludiDaConteggioPacchetto(l) {
+  return !!l && (l.isLezioneExtra === true || isProva(l) || isSalaProve(l) || _isRecuperoRow(l));
+}
 function calcolaInfoExtra(lesson, opts) {
   const recurrence = _optionalChain([lesson, 'optionalAccess', _47 => _47.recurrence]);
   const N = PACCHETTO_PER_RICORRENZA[recurrence];
@@ -5273,6 +5288,8 @@ function calcolaInfoExtra(lesson, opts) {
   // strumento; collettiva: stesso corso_id) che appartengono allo stesso mese di competenza.
   const stessoCorso = allLessons.filter(l => {
     if (!l.date) return false;
+    // [FM-EXTRA-CONTEGGIO-SLOT] la lezione stessa conta sempre; gli altri record solo se occupano uno slot
+    if (l.id !== lesson.id && fmEscludiDaConteggioPacchetto(l)) return false;
     if (isColl(lesson)) {
       if (!isColl(l)) return false;
       if (!stessaSerieCollettiva(l, lesson)) return false;   // [FM-EXTRA-SERIE-COLL]
@@ -5312,6 +5329,10 @@ function calcolaInfoExtra(lesson, opts) {
   }
   const haOccorrenzaSuccessivaStessoMese = (next.getMonth() + 1) === pMese && next.getFullYear() === pAnno;
   const haExtraPotenziale = isSoglia && haOccorrenzaSuccessivaStessoMese;
+  if (haExtraPotenziale) {
+    try { console.info('[FM] extra potenziale su', lesson.date, (lesson.student||lesson.courseName||''), '— record contati nel pacchetto', pMese+'/'+pAnno+':',
+      stessoCorso.filter(l => l.date <= lesson.date).map(l => l.date + (l.tipo && l.tipo !== 'individuale' ? '['+l.tipo+']' : '') + (l.attendance ? '('+l.attendance+')' : '')).join(', ')); } catch (e) {}
+  }
   return { isSoglia, haExtraPotenziale, N };
 }
 // Gap (in giorni) fino alla prossima lezione della stessa serie, gestendo l'alternanza per
