@@ -5262,11 +5262,25 @@ function stessaSerieCollettiva(a, b) {
 //  - le lezioni EXTRA già concordate (isLezioneExtra) sono per definizione fuori dal pacchetto
 //    (il Report lezioni le esclude già);
 //  - prove e prenotazioni sala prove non sono lezioni del pacchetto.
-// Le originali 'recuperata' / 'in_recupero' restano CONTATE: sono lo slot del mese.
+// Le originali 'recuperata' restano CONTATE (sono lo slot del mese); quelle ancora 'in_recupero'
+// (DA RECUPERARE, non svolte) NON si contano finché non vengono recuperate [FM-EXTRA-RECUPERO].
 const _isRecuperoRow = l => !!l && (l.tipo === 'recupero' || l.attendance === 'recupero'
   || /^\s*(?:🔄\s*)?Recupero del\s/i.test(l.notes || ''));
 function fmEscludiDaConteggioPacchetto(l) {
   return !!l && (l.isLezioneExtra === true || isProva(l) || isSalaProve(l) || _isRecuperoRow(l));
+}
+// [FM-EXTRA-RECUPERO] Lezione in stato "DA RECUPERARE": non è stata svolta (verrà recuperata a parte),
+// quindi NON deve valere come lezione del mese ai fini della soglia/extra, né come extra "da pagare".
+// Quando viene recuperata dal flusso richieste diventa 'recuperata' (e allora conta come slot);
+// il record di recupero (tipo 'recupero') resta sempre escluso.
+function fmInDaRecuperare(l) {
+  return !!l && (l.inRecupero === true || l.attendance === 'in_recupero');
+}
+// Extra generata che richiede davvero di essere contabilizzata: una extra ancora "DA RECUPERARE"
+// (o NON RECUPERATA) non è stata svolta, quindi non c'è nulla da pagare.
+function fmExtraDaPagare(l) {
+  return !!l && l.isLezioneExtra === true && !l.extraContabilizzata
+    && !fmInDaRecuperare(l) && l.attendance !== 'non_recuperata';
 }
 function calcolaInfoExtra(lesson, opts) {
   const recurrence = _optionalChain([lesson, 'optionalAccess', _47 => _47.recurrence]);
@@ -5289,7 +5303,7 @@ function calcolaInfoExtra(lesson, opts) {
   const stessoCorso = allLessons.filter(l => {
     if (!l.date) return false;
     // [FM-EXTRA-CONTEGGIO-SLOT] la lezione stessa conta sempre; gli altri record solo se occupano uno slot
-    if (l.id !== lesson.id && fmEscludiDaConteggioPacchetto(l)) return false;
+    if (l.id !== lesson.id && (fmEscludiDaConteggioPacchetto(l) || fmInDaRecuperare(l))) return false;   // [FM-EXTRA-RECUPERO]
     if (isColl(lesson)) {
       if (!isColl(l)) return false;
       if (!stessaSerieCollettiva(l, lesson)) return false;   // [FM-EXTRA-SERIE-COLL]
@@ -8540,9 +8554,9 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
             , React.createElement(Ic,{n:'alert',size:16,stroke:'#f59e0b'})
             , React.createElement('div',{style:{flex:1}}
               , React.createElement('div',{style:{fontSize:13,fontWeight:700,color:'#f59e0b'}}, 'Lezione extra')
-              , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2}}, lesson.extraContabilizzata ? 'Già contabilizzata' : 'Oltre il pacchetto mensile — da pagare a parte se concordato con l\'allievo')
+              , React.createElement('div',{style:{fontSize:11,color:C.textMuted,marginTop:2}}, lesson.extraContabilizzata ? 'Già contabilizzata' : (fmInDaRecuperare(lesson) ? 'Lezione da recuperare — verrà contabilizzata solo quando sarà svolta' : 'Oltre il pacchetto mensile — da pagare a parte se concordato con l\'allievo'))
             )
-            , role === 'admin' && !lesson.extraContabilizzata && React.createElement('button', {
+            , role === 'admin' && !lesson.extraContabilizzata && !fmInDaRecuperare(lesson) && lesson.attendance !== 'non_recuperata' && React.createElement('button', {
                 onClick: () => {
                   const N = PACCHETTO_PER_RICORRENZA[lesson.recurrence] || 4;
                   const studentObj = isColl(lesson) ? null : (students||[]).find(s => s.name === lesson.student);
@@ -12872,7 +12886,7 @@ const GoogleCalendarPageView = ({ userRuolo, appUser }) => {
 };
 
 // ── Tab EXTRA: lezioni 5a/3a/2a occorrenza mensile da decidere/contabilizzare ──
-const ExtraLezioniTab = ({ daDecidere, saltate, daPagare, onGenera, onNonGenera, onContabilizza, onSelectLesson, falsiPositiviIds, onGeneraNormale }) => {
+const ExtraLezioniTab = ({ daDecidere, saltate, daPagare, onGenera, onNonGenera, onContabilizza, onSelectLesson, falsiPositiviIds, onGeneraNormale, extraGenFalsiIds, onNonExtra }) => {
   const fmtData = (d) => { try { return new Date(d+"T00:00:00").toLocaleDateString('it-IT', {weekday:'short', day:'numeric', month:'short'}); } catch(e){ return d; } };
   const righeVuote = daDecidere.length===0 && saltate.length===0 && daPagare.length===0;
   return React.createElement('div', { style: {padding:20} }
@@ -12911,8 +12925,10 @@ const ExtraLezioniTab = ({ daDecidere, saltate, daPagare, onGenera, onNonGenera,
             , React.createElement('span', { style:{fontSize:10, fontWeight:700, color:'#fff', background:C.teal, borderRadius:6, padding:'3px 8px', flexShrink:0} }, 'DA PAGARE')
             , React.createElement('div', { style:{flex:1, cursor:'pointer'}, onClick:()=>onSelectLesson(l) }
               , React.createElement('div', { style:{fontSize:13, fontWeight:600} }, isColl(l) ? (l.courseName||'Collettiva') : (l.student||'—'))
-              , React.createElement('div', { style:{fontSize:11, color:C.textMuted} }, 'Lezione extra generata: ', fmtData(l.date))
+              , React.createElement('div', { style:{fontSize:11, color:C.textMuted} }, 'Lezione extra generata: ', fmtData(l.date)
+                , (extraGenFalsiIds && extraGenFalsiIds.has(l.id)) ? ' · probabilmente NON è un extra (la lezione soglia non era la 4ª: una lezione da recuperare non conta nel mese)' : '')
             )
+            , (extraGenFalsiIds && extraGenFalsiIds.has(l.id) && onNonExtra) && React.createElement('button', { onClick:()=>onNonExtra(l), style:{padding:'7px 14px', borderRadius:8, border:`1px solid ${C.tealBorder}`, background:'transparent', color:C.teal, fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"} }, 'Non è extra')
             , React.createElement('button', { onClick:()=>onContabilizza(l), style:{padding:'7px 14px', borderRadius:8, border:'none', background:C.teal, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Open Sans',sans-serif"} }, 'Contabilizza')
           )
         ))
@@ -14130,7 +14146,38 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const lezioniExtraSaltate = useMemo(() =>
       (lessons||[]).filter(l => l.extraDecisione === 'saltata'), [lessons]);
     const lezioniExtraDaPagare = useMemo(() =>
-      (lessons||[]).filter(l => l.isLezioneExtra && !l.extraContabilizzata), [lessons]);
+      (lessons||[]).filter(fmExtraDaPagare), [lessons]);   // [FM-EXTRA-RECUPERO]
+    // [FM-EXTRA-RECUPERO] Extra GIÀ generate che con il conteggio corretto (le lezioni DA RECUPERARE non
+    // contano come lezioni del mese) non sono extra: la lezione-soglia di partenza non era la soglia.
+    const extraGenFalsePositiveIds = useMemo(() => {
+      const ids = new Set();
+      lezioniExtraDaPagare.forEach(ex => {
+        const src = (lessons||[]).find(x => x.extraLessonId === ex.id && x.extraDecisione === 'generata');
+        if (!src) return;
+        const st = (propStudents||[]).find(x =>
+          (src.studentId!=null && String(x.id)===String(src.studentId)) ||
+          (src.student && (x.name||x.nome||'').toLowerCase().trim()===src.student.toLowerCase().trim()));
+        const info = calcolaInfoExtra(src, { lessons, dataMinima: st && st.enrollDate });
+        if (!info.isSoglia) ids.add(ex.id);
+      });
+      return ids;
+    }, [lessons, propStudents, lezioniExtraDaPagare]);
+    // Converte un'extra generata per errore in lezione NORMALE del pacchetto (nessun pagamento da richiedere).
+    const handleExtraNonExtra = (ex) => {
+      setLessons(prev => (prev||[]).map(x => x.id === ex.id
+        ? { ...x, isLezioneExtra: false, extraContabilizzata: false }
+        : (x.extraLessonId === ex.id
+            ? { ...x, extraDecisione: null, extraLessonId: null, extraDaDecidere: false, extraDataPotenziale: null }
+            : x)));
+      const sb = window.supabaseClient;
+      if (sb) {
+        sb.from('lezioni').update({ is_lezione_extra: false, extra_contabilizzata: false }).eq('id', ex.id)
+          .then(({ error }) => { if (error) console.warn('[FM] non-extra update error:', error.message); });
+        sb.from('lezioni').update({ extra_decisione: null, extra_lesson_id: null, extra_da_decidere: false, extra_data_potenziale: null })
+          .eq('extra_lesson_id', ex.id)
+          .then(({ error }) => { if (error) console.warn('[FM] non-extra (sorgente) update error:', error.message); });
+      }
+    };
     // [FM-EXTRA-BTN] Il pulsante EXTRA compare SOLO se c'è qualcosa da fare (da decidere / da pagare).
     // Le lezioni "saltate" sono storico: restano visibili nella tab ma non tengono acceso il pulsante.
     const tutteRigheExtra = useMemo(() => {
@@ -14591,6 +14638,8 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
                   onGenera: handleGeneraExtra,
                   onNonGenera: handleNonGeneraExtra,
                   falsiPositiviIds: extraFalsiPositiviIds,
+                  extraGenFalsiIds: extraGenFalsePositiveIds,
+                  onNonExtra: handleExtraNonExtra,
                   onGeneraNormale: handleGeneraNormale,
                   onContabilizza: handleContabilizzaExtra,
                   onSelectLesson: l => { setSelLesson(l); setModal("detail"); },

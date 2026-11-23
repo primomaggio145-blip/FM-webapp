@@ -2719,7 +2719,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
             /* Banner lezioni extra da decidere */
             , ruolo === 'admin' && (() => {
                 const nDaDecidere = (propLessonsDash||[]).filter(l => l.extraDaDecidere && !l.extraDecisione).length;
-                const nDaPagare   = (propLessonsDash||[]).filter(l => l.isLezioneExtra && !l.extraContabilizzata).length;
+                const nDaPagare   = (propLessonsDash||[]).filter(l => typeof fmExtraDaPagare === 'function' ? fmExtraDaPagare(l) : (l.isLezioneExtra && !l.extraContabilizzata)).length;   // [FM-EXTRA-RECUPERO]
                 const tot = nDaDecidere + nDaPagare;
                 if (tot === 0) return null;
                 return React.createElement('div', { style:{display:'flex',alignItems:'center',gap:12,padding:'14px 18px',borderRadius:12,border:'1.5px solid rgba(245,158,11,0.4)',background:'rgba(245,158,11,0.10)',cursor:'pointer'},
