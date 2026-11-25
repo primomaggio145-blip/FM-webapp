@@ -1424,7 +1424,7 @@ const EventoForm = ({ initial, students, brani:_braniEv, docenti:_docentiEv, onS
 };
 
 // ─── DETTAGLIO EVENTO ─────────────────────────────────────────────────────────
-const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: studentsTab }) => {
+const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: studentsTab, docenti: docentiTab, courses: coursesTab }) => {
   // Restituisce il testo performer con corso accoppiato a ciascun nome:
   // "Mario Rossi - Pianoforte, Luigi Bianchi - Chitarra"
   const getPerformerConCorso = React.useCallback((nomePerformer) => {
@@ -1438,6 +1438,82 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
       return corso ? (nome+' - '+corso) : nome;
     }).join(', ');
   }, [studentsTab]);
+
+  // [FM-BAND-STAMPA] Tabella band per la stampa: colonne per strumento, con allievi e docenti
+  // che partecipano ai brani della scaletta. Il colore di ogni colonna è quello del corso.
+  const BAND_COLS = [
+    { key:'CANTO',     re:/canto|voce|vocal/i },
+    { key:'BATTERIA',  re:/batteria|percuss/i },
+    { key:'CHITARRE',  re:/chitarr/i },
+    { key:'PIANOFORTE',re:/pianof|piano|tastier/i },
+    { key:'SAX',       re:/sax|sassof/i },
+  ];
+  const bandNorm = (s) => (s||'').toLowerCase().replace(/(^|\s)(prof\.?ssa|prof\.?|m°|maestro|maestra)(?=\s|$)/g,' ').replace(/\s+/g,' ').trim();
+  const bandEsc = (t) => String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const getBandData = () => {
+    const stuList = studentsTab || [], docList = docentiTab || [], corsi = coursesTab || [];
+    const visti = new Set(); const persone = [];
+    items.forEach(it => (it.performer||'').split(',').map(n=>n.trim()).filter(Boolean).forEach(nome => {
+      const k = bandNorm(nome); if (!k || visti.has(k)) return; visti.add(k); persone.push(nome);
+    }));
+    const cols = BAND_COLS.map(c => ({ key:c.key, re:c.re, nomi:[] }));
+    const altri = {};
+    persone.forEach(nome => {
+      const k = bandNorm(nome);
+      let strumenti = [];
+      const stu = stuList.find(s => bandNorm(s.name||s.nome) === k);
+      if (stu) strumenti = [stu.instrument||stu.corso, ...(stu.extraInstruments||[])].filter(Boolean);
+      if (strumenti.length === 0) {
+        const doc = docList.find(d => bandNorm(d.nome||d.name) === k);
+        if (doc) {
+          const ids = (doc.corsi||[]).map(String);
+          strumenti = corsi.filter(c => (c.tipo||c.type)!=='collettivo' && (ids.includes(String(c.id)) || (c.docenti||[]).map(String).includes(String(doc.id)))).map(c => c.name||c.nome);
+          if (strumenti.length === 0) {
+            strumenti = Array.isArray(doc.strumenti) ? doc.strumenti : String(doc.strumenti||'').split('·').map(x=>x.trim()).filter(Boolean);
+          }
+        }
+      }
+      let piazzato = false;
+      cols.forEach(c => { if (strumenti.some(st => c.re.test(st))) { if (!c.nomi.includes(nome)) c.nomi.push(nome); piazzato = true; } });
+      if (!piazzato) {
+        const etichetta = (strumenti[0] || 'ALTRI').toUpperCase();
+        (altri[etichetta] = altri[etichetta] || []).push(nome);
+      }
+    });
+    const colorOf = (re, label) => {
+      const corso = corsi.find(c => (c.tipo||c.type)!=='collettivo' && re.test(c.name||c.nome||'') && c.colore);
+      if (corso) return corso.colore;
+      const corso2 = corsi.find(c => re.test(c.name||c.nome||''));
+      if (corso2 && corso2.colore) return corso2.colore;
+      if (typeof insHex === 'function') {
+        const nomeCorso = (corsi.find(c => re.test(c.name||c.nome||''))||{}).name;
+        return insHex(nomeCorso || label.charAt(0)+label.slice(1).toLowerCase());
+      }
+      return '#1a4fa0';
+    };
+    const out = cols.map(c => ({ key:c.key, nomi:c.nomi, colore: colorOf(c.re, c.key) }));
+    Object.keys(altri).forEach(et => {
+      const re = new RegExp(et.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i');
+      out.push({ key:et, nomi:altri[et], colore: colorOf(re, et) });
+    });
+    return out;
+  };
+  const buildBandTableHtml = () => {
+    const dati = getBandData();
+    // le 5 colonne standard restano sempre; le colonne extra solo se hanno persone
+    const colonne = dati.filter((c,i) => i < BAND_COLS.length || c.nomi.length > 0);
+    if (colonne.every(c => c.nomi.length === 0)) return '';
+    const hexOk = (h) => /^#[0-9a-f]{6}$/i.test(h||'');
+    const maxRighe = Math.max.apply(null, colonne.map(c => c.nomi.length));
+    const th = colonne.map(c => '<th style="background:'+(hexOk(c.colore)?c.colore:'#1a4fa0')+'">'+bandEsc(c.key)+'</th>').join('');
+    const td = colonne.map(c => {
+      const bg = hexOk(c.colore) ? c.colore+'1f' : '#f4f6fb';
+      const nomi = c.nomi.map(n => '<div class="bn">'+bandEsc(n)+'</div>').join('');
+      return '<td style="background:'+bg+'">'+nomi+'</td>';
+    }).join('');
+    return '<div class="band"><div class="band-t">Band</div>'
+      +'<table class="bandtab"><thead><tr>'+th+'</tr></thead><tbody><tr>'+td+'</tr></tbody></table></div>';
+  };
   const cat = braniCatalog || [];
 
   // Costruisce lista brani dalla struttura programma (eventi creati dal form)
@@ -1534,7 +1610,7 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
     const w = window.fmFinestraStampa({ titolo: 'Programma — '+(evento.titolo||'') });
     if (!w) { alert('Abilita i popup per stampare'); return; }
     const rows = items.map((s,i) => {
-      const perfTesto = getPerformerConCorso(s.performer);
+      const perfTesto = bandEsc(s.performer||'');
       const perf = s.performer ? '<div style="font-size:11px;color:#888;margin-top:3px">'+perfTesto+'</div>' : '';
       const nota = s.note ? '<div style="font-size:10.5px;color:#b8860b;margin-top:4px;font-style:italic">📝 '+s.note+'</div>' : '';
       return '<tr><td style="width:44px;text-align:center;font-weight:700;color:#1a4fa0;font-size:16px;padding:16px 8px">'+(i+1)+'</td>'
@@ -1549,11 +1625,18 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
       +'.ttl{font-family:\'Cormorant Garamond\',serif;font-size:30px;font-weight:700}'
       +'.sub{font-size:12px;color:#888;margin-top:6px}'
       +'table{width:100%;border-collapse:collapse}'
-      +'tr{border-bottom:1px solid #eee}tr:last-child{border:none}</style>'
+      +'*{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+      +'table.lista tr{border-bottom:1px solid #eee}table.lista tr:last-child{border:none}'
+      +'.band{margin-top:32px;page-break-inside:avoid}.band-t{font-family:\'Cormorant Garamond\',serif;font-size:22px;font-weight:700;margin-bottom:10px;border-bottom:2px solid #1a4fa0;padding-bottom:6px}'
+      +'table.bandtab{width:100%;border-collapse:collapse;table-layout:fixed}'
+      +'table.bandtab th{color:#fff;font-size:12px;letter-spacing:.08em;padding:8px 6px;text-align:center;border:1px solid #fff}'
+      +'table.bandtab td{vertical-align:top;padding:10px 8px;border:1px solid #fff;text-align:center}'
+      +'.bn{font-size:12px;font-weight:500;padding:3px 0}</style>'
       +'</head><body>'
       +'<div class="hdr"><div class="ttl">'+evento.titolo+'</div>'
       +'<div class="sub">'+dataStr+' '+(evento.ora||'')+' · '+(evento.luogo||'')+'</div></div>'
-      +'<table>'+rows+'</table>'
+      +'<table class="lista">'+rows+'</table>'
+      +buildBandTableHtml()
       +'<script>window.onload=function(){window.print()}<\/script>'
       +'</body></html>');
     w.document.close();
@@ -1565,7 +1648,7 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
     background:C.bg,cursor:'pointer',fontSize:13
   }, extra||{});
 
-  return React.createElement('div', {style:{maxWidth:700}},
+  return React.createElement('div', {style:{maxWidth:1500}},
 
     /* ── toolbar ── */
     React.createElement('div', {style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}},
@@ -1654,7 +1737,7 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
     ),
 
     /* ── lista brani ── */
-    items.length > 0 && React.createElement('div', {style:{display:'flex',flexDirection:'column',gap:6}},
+    items.length > 0 && React.createElement('div', {style:{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(420px, 1fr))',gap:8,alignItems:'start'}},
       items.map(function(item, idx) {
         return React.createElement('div', {key:String(idx)+item.brano,
           style:{display:'flex',alignItems:'center',gap:10,background:C.surface,
@@ -1893,7 +1976,7 @@ const ListaBraniTab = ({ evento, canEdit, onSaveLista, brani: braniCatalog }) =>
       })));
 };
 
-const EventoDetail = ({ evento, students, docenti:docentiED, brani:_braniED, onEdit, onDelete, onBack, onUpdate, ruolo:_ruoloED, onUpdateLista }) => {
+const EventoDetail = ({ evento, students, docenti:docentiED, courses:coursesED, brani:_braniED, onEdit, onDelete, onBack, onUpdate, ruolo:_ruoloED, onUpdateLista }) => {
   const braniCatalog = _braniED || [];
   // [FM-LISTA-BRANI] Admin: tutte le tab. Docente: solo "Lista brani" (modificabile). Allievo: solo "Lista brani" (sola lettura).
   const ruoloED = _ruoloED || "admin";
@@ -2314,7 +2397,7 @@ const EventoDetail = ({ evento, students, docenti:docentiED, brani:_braniED, onE
         )
 
         /* SCALETTA */
-        , tab==="brani" && React.createElement(ScalettaTab, { evento: evento, onUpdate: onUpdate, brani: braniCatalog, students: students })
+        , tab==="brani" && React.createElement(ScalettaTab, { evento: evento, onUpdate: onUpdate, brani: braniCatalog, students: students, docenti: docentiED, courses: coursesED })
         /* LISTA BRANI */
         , tab==="lista" && React.createElement(ListaBraniTab, { evento: evento, canEdit: canEditLista, onSaveLista: onUpdateLista || onUpdate, brani: braniCatalog })
 
@@ -2429,7 +2512,7 @@ const EventoDetail = ({ evento, students, docenti:docentiED, brani:_braniED, onE
 };
 
 // ─── CONCERTI VIEW ────────────────────────────────────────────────────────────
-const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, clearQuickAction, userRuolo:_ruoloConc, concerti:propConcerti, setConcerti:propSetConcerti, docenti:propDocentiCV }) => {
+const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, clearQuickAction, userRuolo:_ruoloConc, concerti:propConcerti, setConcerti:propSetConcerti, docenti:propDocentiCV, courses:propCoursesCV }) => {
   const ruoloConc = _ruoloConc || "admin";
   const isMobile = useIsMobile();
   const students  = propStudents || INIT_STUDENTS;
@@ -2601,7 +2684,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
 
   if(selected) return (
     React.createElement(React.Fragment, null
-      , React.createElement(EventoDetail, { evento: selected, students: students, docenti: docenti, brani: propBraniCV||[],
+      , React.createElement(EventoDetail, { evento: selected, students: students, docenti: docenti, courses: propCoursesCV||[], brani: propBraniCV||[],
         ruolo: ruoloConc, onUpdateLista: handleUpdateLista,
         onEdit: ()=>setModal("edit"),
         onDelete: ()=>setModal("del"),
