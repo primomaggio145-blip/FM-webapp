@@ -1450,69 +1450,68 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
   ];
   const bandNorm = (s) => (s||'').toLowerCase().replace(/(^|\s)(prof\.?ssa|prof\.?|m°|maestro|maestra)(?=\s|$)/g,' ').replace(/\s+/g,' ').trim();
   const bandEsc = (t) => String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const getBandData = () => {
+  // Strumenti di una persona (allievo: strumento + extra; docente: corsi assegnati)
+  const bandStrumenti = (nome) => {
     const stuList = studentsTab || [], docList = docentiTab || [], corsi = coursesTab || [];
-    const visti = new Set(); const persone = [];
-    items.forEach(it => (it.performer||'').split(',').map(n=>n.trim()).filter(Boolean).forEach(nome => {
-      const k = bandNorm(nome); if (!k || visti.has(k)) return; visti.add(k); persone.push(nome);
-    }));
-    const cols = BAND_COLS.map(c => ({ key:c.key, re:c.re, nomi:[] }));
-    const altri = {};
-    persone.forEach(nome => {
-      const k = bandNorm(nome);
-      let strumenti = [];
-      const stu = stuList.find(s => bandNorm(s.name||s.nome) === k);
-      if (stu) strumenti = [stu.instrument||stu.corso, ...(stu.extraInstruments||[])].filter(Boolean);
-      if (strumenti.length === 0) {
-        const doc = docList.find(d => bandNorm(d.nome||d.name) === k);
-        if (doc) {
-          const ids = (doc.corsi||[]).map(String);
-          strumenti = corsi.filter(c => (c.tipo||c.type)!=='collettivo' && (ids.includes(String(c.id)) || (c.docenti||[]).map(String).includes(String(doc.id)))).map(c => c.name||c.nome);
-          if (strumenti.length === 0) {
-            strumenti = Array.isArray(doc.strumenti) ? doc.strumenti : String(doc.strumenti||'').split('·').map(x=>x.trim()).filter(Boolean);
-          }
+    const k = bandNorm(nome);
+    let strumenti = [];
+    const stu = stuList.find(s => bandNorm(s.name||s.nome) === k);
+    if (stu) strumenti = [stu.instrument||stu.corso, ...(stu.extraInstruments||[])].filter(Boolean);
+    if (strumenti.length === 0) {
+      const doc = docList.find(d => bandNorm(d.nome||d.name) === k);
+      if (doc) {
+        const ids = (doc.corsi||[]).map(String);
+        strumenti = corsi.filter(c => (c.tipo||c.type)!=='collettivo' && (ids.includes(String(c.id)) || (c.docenti||[]).map(String).includes(String(doc.id)))).map(c => c.name||c.nome);
+        if (strumenti.length === 0) {
+          strumenti = Array.isArray(doc.strumenti) ? doc.strumenti : String(doc.strumenti||'').split('·').map(x=>x.trim()).filter(Boolean);
         }
       }
+    }
+    return strumenti;
+  };
+  const bandColor = (re, label) => {
+    const corsi = coursesTab || [];
+    const corso = corsi.find(c => (c.tipo||c.type)!=='collettivo' && re.test(c.name||c.nome||'') && c.colore);
+    if (corso) return corso.colore;
+    const corso2 = corsi.find(c => re.test(c.name||c.nome||''));
+    if (corso2 && corso2.colore) return corso2.colore;
+    if (typeof insHex === 'function') {
+      return insHex((corso2 && (corso2.name||corso2.nome)) || (label.charAt(0)+label.slice(1).toLowerCase()));
+    }
+    return '#1a4fa0';
+  };
+  // Colonne di UN brano: solo gli strumenti con almeno una persona che suona in quel brano
+  const getColonneBrano = (performerText) => {
+    const nomi = []; const visti = new Set();
+    (performerText||'').split(',').map(n=>n.trim()).filter(Boolean).forEach(n => {
+      const k = bandNorm(n); if (k && !visti.has(k)) { visti.add(k); nomi.push(n); }
+    });
+    const cols = BAND_COLS.map(c => ({ key:c.key, re:c.re, nomi:[] }));
+    const altri = {};
+    nomi.forEach(nome => {
+      const strumenti = bandStrumenti(nome);
       let piazzato = false;
-      cols.forEach(c => { if (strumenti.some(st => c.re.test(st))) { if (!c.nomi.includes(nome)) c.nomi.push(nome); piazzato = true; } });
+      cols.forEach(c => { if (strumenti.some(st => c.re.test(st))) { c.nomi.push(nome); piazzato = true; } });
       if (!piazzato) {
-        const etichetta = (strumenti[0] || 'ALTRI').toUpperCase();
-        (altri[etichetta] = altri[etichetta] || []).push(nome);
+        const et = (strumenti[0] || 'ALTRI').toUpperCase();
+        (altri[et] = altri[et] || []).push(nome);
       }
     });
-    const colorOf = (re, label) => {
-      const corso = corsi.find(c => (c.tipo||c.type)!=='collettivo' && re.test(c.name||c.nome||'') && c.colore);
-      if (corso) return corso.colore;
-      const corso2 = corsi.find(c => re.test(c.name||c.nome||''));
-      if (corso2 && corso2.colore) return corso2.colore;
-      if (typeof insHex === 'function') {
-        const nomeCorso = (corsi.find(c => re.test(c.name||c.nome||''))||{}).name;
-        return insHex(nomeCorso || label.charAt(0)+label.slice(1).toLowerCase());
-      }
-      return '#1a4fa0';
-    };
-    const out = cols.map(c => ({ key:c.key, nomi:c.nomi, colore: colorOf(c.re, c.key) }));
+    const out = cols.filter(c => c.nomi.length > 0).map(c => ({ key:c.key, nomi:c.nomi, colore:bandColor(c.re, c.key) }));
     Object.keys(altri).forEach(et => {
       const re = new RegExp(et.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i');
-      out.push({ key:et, nomi:altri[et], colore: colorOf(re, et) });
+      out.push({ key:et, nomi:altri[et], colore:bandColor(re, et) });
     });
     return out;
   };
-  const buildBandTableHtml = () => {
-    const dati = getBandData();
-    // le 5 colonne standard restano sempre; le colonne extra solo se hanno persone
-    const colonne = dati.filter((c,i) => i < BAND_COLS.length || c.nomi.length > 0);
-    if (colonne.every(c => c.nomi.length === 0)) return '';
+  const buildBranoTableHtml = (performerText) => {
+    const colonne = getColonneBrano(performerText);
+    if (colonne.length === 0) return '';
     const hexOk = (h) => /^#[0-9a-f]{6}$/i.test(h||'');
-    const maxRighe = Math.max.apply(null, colonne.map(c => c.nomi.length));
     const th = colonne.map(c => '<th style="background:'+(hexOk(c.colore)?c.colore:'#1a4fa0')+'">'+bandEsc(c.key)+'</th>').join('');
-    const td = colonne.map(c => {
-      const bg = hexOk(c.colore) ? c.colore+'1f' : '#f4f6fb';
-      const nomi = c.nomi.map(n => '<div class="bn">'+bandEsc(n)+'</div>').join('');
-      return '<td style="background:'+bg+'">'+nomi+'</td>';
-    }).join('');
-    return '<div class="band"><div class="band-t">Band</div>'
-      +'<table class="bandtab"><thead><tr>'+th+'</tr></thead><tbody><tr>'+td+'</tr></tbody></table></div>';
+    const td = colonne.map(c => '<td style="background:'+(hexOk(c.colore)?c.colore+'1f':'#f4f6fb')+'">'
+      + c.nomi.map(n => '<div class="bn">'+bandEsc(n)+'</div>').join('')+'</td>').join('');
+    return '<table class="bt"><thead><tr>'+th+'</tr></thead><tbody><tr>'+td+'</tr></tbody></table>';
   };
   const cat = braniCatalog || [];
 
@@ -1610,8 +1609,7 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
     const w = window.fmFinestraStampa({ titolo: 'Programma — '+(evento.titolo||'') });
     if (!w) { alert('Abilita i popup per stampare'); return; }
     const rows = items.map((s,i) => {
-      const perfTesto = bandEsc(s.performer||'');
-      const perf = s.performer ? '<div style="font-size:11px;color:#888;margin-top:3px">'+perfTesto+'</div>' : '';
+      const perf = s.performer ? buildBranoTableHtml(s.performer) : '';
       const nota = s.note ? '<div style="font-size:10.5px;color:#b8860b;margin-top:4px;font-style:italic">📝 '+s.note+'</div>' : '';
       return '<tr><td style="width:44px;text-align:center;font-weight:700;color:#1a4fa0;font-size:16px;padding:16px 8px">'+(i+1)+'</td>'
         +'<td style="padding:14px 16px"><div style="font-size:15px;font-weight:600">'+s.brano+'</div>'+perf+nota+'</td></tr>';
@@ -1627,16 +1625,14 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
       +'table{width:100%;border-collapse:collapse}'
       +'*{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
       +'table.lista tr{border-bottom:1px solid #eee}table.lista tr:last-child{border:none}'
-      +'.band{margin-top:32px;page-break-inside:avoid}.band-t{font-family:\'Cormorant Garamond\',serif;font-size:22px;font-weight:700;margin-bottom:10px;border-bottom:2px solid #1a4fa0;padding-bottom:6px}'
-      +'table.bandtab{width:100%;border-collapse:collapse;table-layout:fixed}'
-      +'table.bandtab th{color:#fff;font-size:12px;letter-spacing:.08em;padding:8px 6px;text-align:center;border:1px solid #fff}'
-      +'table.bandtab td{vertical-align:top;padding:10px 8px;border:1px solid #fff;text-align:center}'
-      +'.bn{font-size:12px;font-weight:500;padding:3px 0}</style>'
+      +'table.bt{width:auto;min-width:45%;border-collapse:collapse;margin-top:6px;table-layout:auto}'
+      +'table.bt th{color:#fff;font-size:8px;letter-spacing:.08em;padding:3px 10px;text-align:center;border:1px solid #fff;font-weight:600}'
+      +'table.bt td{vertical-align:top;padding:3px 10px;border:1px solid #fff;text-align:center}'
+      +'.bn{font-size:10.5px;font-weight:500;padding:1px 0}</style>'
       +'</head><body>'
       +'<div class="hdr"><div class="ttl">'+evento.titolo+'</div>'
       +'<div class="sub">'+dataStr+' '+(evento.ora||'')+' · '+(evento.luogo||'')+'</div></div>'
       +'<table class="lista">'+rows+'</table>'
-      +buildBandTableHtml()
       +'<script>window.onload=function(){window.print()}<\/script>'
       +'</body></html>');
     w.document.close();
