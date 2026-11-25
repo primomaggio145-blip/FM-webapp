@@ -1508,9 +1508,9 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
     const colonne = getColonneBrano(performerText);
     if (colonne.length === 0) return '';
     const hexOk = (h) => /^#[0-9a-f]{6}$/i.test(h||'');
-    const th = colonne.map(c => '<th style="background:'+(hexOk(c.colore)?c.colore:'#1a4fa0')+'">'+bandEsc(c.key)+'</th>').join('');
-    const td = colonne.map(c => '<td style="background:'+(hexOk(c.colore)?c.colore+'1f':'#f4f6fb')+'">'
-      + c.nomi.map(n => '<div class="bn">'+bandEsc(n)+'</div>').join('')+'</td>').join('');
+    const th = colonne.map(c => '<th style="background:'+(hexOk(c.colore)?c.colore+'38':'#1a4fa00d')+';border-bottom:2px solid '+(hexOk(c.colore)?c.colore:'#1a4fa0')+'">'+bandEsc(c.key)+'</th>').join('');
+    const td = colonne.map(c => '<td style="background:'+(hexOk(c.colore)?c.colore+'14':'#f4f6fb')+'">'
+      + c.nomi.map(n => '<span class="bn">'+bandEsc(n)+'</span>').join('<span class="bs">, </span>')+'</td>').join('');
     return '<table class="bt"><thead><tr>'+th+'</tr></thead><tbody><tr>'+td+'</tr></tbody></table>';
   };
   const cat = braniCatalog || [];
@@ -1625,10 +1625,10 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
       +'table{width:100%;border-collapse:collapse}'
       +'*{-webkit-print-color-adjust:exact;print-color-adjust:exact}'
       +'table.lista tr{border-bottom:1px solid #eee}table.lista tr:last-child{border:none}'
-      +'table.bt{width:auto;min-width:45%;border-collapse:collapse;margin-top:6px;table-layout:auto}'
-      +'table.bt th{color:#fff;font-size:8px;letter-spacing:.08em;padding:3px 10px;text-align:center;border:1px solid #fff;font-weight:600}'
-      +'table.bt td{vertical-align:top;padding:3px 10px;border:1px solid #fff;text-align:center}'
-      +'.bn{font-size:10.5px;font-weight:500;padding:1px 0}</style>'
+      +'table.bt{width:auto;border-collapse:collapse;margin-top:6px}'
+      +'table.bt th{color:#333;font-size:8px;letter-spacing:.08em;padding:2px 8px;text-align:left;border:1px solid #fff;font-weight:700}'
+      +'table.bt td{vertical-align:top;padding:2px 8px;border:1px solid #fff;text-align:left}'
+      +'.bn{font-size:10.5px;font-weight:700;color:#1a1a2e;white-space:nowrap}.bs{font-size:10.5px;color:#888}</style>'
       +'</head><body>'
       +'<div class="hdr"><div class="ttl">'+evento.titolo+'</div>'
       +'<div class="sub">'+dataStr+' '+(evento.ora||'')+' · '+(evento.luogo||'')+'</div></div>'

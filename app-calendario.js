@@ -11086,6 +11086,8 @@ const TrialLessonForm = ({ docenti:_docentiRaw, courses:_coursesRaw, initial, on
 
 // ─── RECUPERO VIEW (sub-tab di CalendarioView) ───────────────────────────────
 const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
+  // [FM-DATE-IT] aaaa-mm-gg (o ISO con orario) -> gg/mm/aaaa
+  const dateIT_r = (d) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d||'')); return m ? (m[3]+'/'+m[2]+'/'+m[1]) : (d||'—'); };
   const [rfCorso,   setRfCorso]   = useState('');
   const [rfDocente, setRfDocente] = useState('');
   const [rfAllievo, setRfAllievo] = useState('');
@@ -11281,7 +11283,7 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
           , React.createElement('div',{style:{background:C.bg,borderRadius:10,padding:'14px 16px',marginBottom:18,border:'1px solid '+C.border}}
             , React.createElement('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px 20px'}}
               , [{label:'Allievo',val:selRich.allievo_nome||'—'},{label:'Docente',val:selRich.docente||'—'},
-                 {label:'Data richiesta',val:selRich.data_preferita?new Date(selRich.data_preferita+'T00:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'short'}):'—'},
+                 {label:'Data richiesta',val:selRich.data_preferita ? dateIT_r(selRich.data_preferita) : '—'},
                  {label:'Ora richiesta',val:selRich.ora_recupero||'—'}
                 ].map(function(f){
                   return React.createElement('div',{key:f.label}
@@ -11338,7 +11340,7 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
             , role==='docente' ? ('Nessuna richiesta di recupero'+(myDocKey?' per '+myDocKey:'')) : 'Nessuna richiesta di recupero')
         , !loadingR && richFiltered.length > 0 && React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
             , richFiltered.map(function(rich) {
-                var dL = rich.data_preferita ? new Date(rich.data_preferita+'T00:00:00').toLocaleDateString('it-IT',{weekday:'short',day:'2-digit',month:'short',year:'numeric'}) : '—';
+                var dL = rich.data_preferita ? dateIT_r(rich.data_preferita) : '—';
                 var isActionable = (rich.stato==='in_attesa'&&role==='docente')||(rich.stato==='confermata'&&role==='admin');
                 return React.createElement('div',{key:rich.id,style:{background:C.surface,borderRadius:12,padding:'16px 20px',
                     border:'1px solid '+(isActionable?'rgba(245,158,11,0.45)':C.border),
@@ -11419,11 +11421,11 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
                     return React.createElement('tr',{key:l.id, style:{borderBottom:`1px solid ${C.border}`},
                       onMouseEnter:e=>e.currentTarget.style.background=C.bg,
                       onMouseLeave:e=>e.currentTarget.style.background='transparent'}
-                      , React.createElement('td',{style:{padding:'11px 14px',fontSize:13}},l.date||'—')
+                      , React.createElement('td',{style:{padding:'11px 14px',fontSize:13}},l.date ? dateIT_r(l.date) : '—')
                       , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,fontWeight:500}},l.student||'—')
                       , React.createElement('td',{style:{padding:'11px 14px',fontSize:13,color:C.textMuted}},l.teacher||'—')
                       , React.createElement('td',{style:{padding:'11px 14px',fontSize:12}},React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:`1px solid ${C.blueBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},l.instrument||l.courseId||'—'))
-                      , React.createElement('td',{style:{padding:'11px 14px',fontSize:12,color:scaduto?C.red:urgente?C.orange:C.textMuted}},l.recuperoScadenza||'—')
+                      , React.createElement('td',{style:{padding:'11px 14px',fontSize:12,color:scaduto?C.red:urgente?C.orange:C.textMuted}},l.recuperoScadenza ? dateIT_r(l.recuperoScadenza) : '—')
                       , React.createElement('td',{style:{padding:'11px 14px'}},
                           scaduto ? React.createElement('span',{style:{background:C.redBg,color:C.red,border:`1px solid ${C.redBorder}`,borderRadius:20,padding:'2px 8px',fontSize:11}},'SCADUTO')
                           : urgente ? React.createElement('span',{style:{background:'rgba(245,158,11,0.1)',color:'#f59e0b',border:'1px solid rgba(245,158,11,0.3)',borderRadius:20,padding:'2px 8px',fontSize:11}},'In scadenza')
