@@ -1469,6 +1469,12 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
     }
     return strumenti;
   };
+  // true se il nome è di un docente (e non di un allievo)
+  const bandIsDocente = (nome) => {
+    const k = bandNorm(nome);
+    const isStu = (studentsTab||[]).some(s => bandNorm(s.name||s.nome) === k);
+    return !isStu && (docentiTab||[]).some(d => bandNorm(d.nome||d.name) === k);
+  };
   const bandColor = (re, label) => {
     const corsi = coursesTab || [];
     const corso = corsi.find(c => (c.tipo||c.type)!=='collettivo' && re.test(c.name||c.nome||'') && c.colore);
@@ -1490,11 +1496,12 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
     const altri = {};
     nomi.forEach(nome => {
       const strumenti = bandStrumenti(nome);
+      const persona = { nome: nome, doc: bandIsDocente(nome) };
       let piazzato = false;
-      cols.forEach(c => { if (strumenti.some(st => c.re.test(st))) { c.nomi.push(nome); piazzato = true; } });
+      cols.forEach(c => { if (strumenti.some(st => c.re.test(st))) { c.nomi.push(persona); piazzato = true; } });
       if (!piazzato) {
         const et = (strumenti[0] || 'ALTRI').toUpperCase();
-        (altri[et] = altri[et] || []).push(nome);
+        (altri[et] = altri[et] || []).push(persona);
       }
     });
     const out = cols.filter(c => c.nomi.length > 0).map(c => ({ key:c.key, nomi:c.nomi, colore:bandColor(c.re, c.key) }));
@@ -1510,7 +1517,7 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
     const hexOk = (h) => /^#[0-9a-f]{6}$/i.test(h||'');
     const th = colonne.map(c => '<th style="background:'+(hexOk(c.colore)?c.colore+'38':'#1a4fa00d')+';border-bottom:2px solid '+(hexOk(c.colore)?c.colore:'#1a4fa0')+'">'+bandEsc(c.key)+'</th>').join('');
     const td = colonne.map(c => '<td style="background:'+(hexOk(c.colore)?c.colore+'14':'#f4f6fb')+'">'
-      + c.nomi.map(n => '<span class="bn">'+bandEsc(n)+'</span>').join('<span class="bs">, </span>')+'</td>').join('');
+      + c.nomi.map(n => '<span class="'+(n.doc?'bn bd':'bn')+'">'+bandEsc(n.nome)+'</span>').join('<span class="bs">, </span>')+'</td>').join('');
     return '<table class="bt"><thead><tr>'+th+'</tr></thead><tbody><tr>'+td+'</tr></tbody></table>';
   };
   const cat = braniCatalog || [];
@@ -1545,6 +1552,18 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
   const [addNote, setAddNote] = React.useState('');
   const [editingNoteIdx, setEditingNoteIdx] = React.useState(null);
   const [noteTemp, setNoteTemp] = React.useState('');
+  // [FM-SCALETTA-DND] trascinamento dei brani per riordinare la scaletta
+  const [dragIdx, setDragIdx] = React.useState(null);
+  const [overIdx, setOverIdx] = React.useState(null);
+  const resetDrag = () => { setDragIdx(null); setOverIdx(null); };
+  const dropOn = (to) => {
+    if (dragIdx === null || to === dragIdx) { resetDrag(); return; }
+    const s = [...items];
+    const mosso = s.splice(dragIdx, 1)[0];
+    s.splice(to, 0, mosso);
+    resetDrag();
+    save(s);
+  };
 
   // Ricarica se cambia evento
   React.useEffect(() => {
@@ -1628,7 +1647,7 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
       +'table.bt{width:auto;border-collapse:collapse;margin-top:6px}'
       +'table.bt th{color:#333;font-size:8px;letter-spacing:.08em;padding:2px 8px;text-align:left;border:1px solid #fff;font-weight:700}'
       +'table.bt td{vertical-align:top;padding:2px 8px;border:1px solid #fff;text-align:left}'
-      +'.bn{font-size:10.5px;font-weight:700;color:#1a1a2e;white-space:nowrap}.bs{font-size:10.5px;color:#888}</style>'
+      +'.bn{font-size:10.5px;font-weight:400;color:#1a1a2e;white-space:nowrap}.bd{font-weight:700}.bs{font-size:10.5px;color:#888}</style>'
       +'</head><body>'
       +'<div class="hdr"><div class="ttl">'+evento.titolo+'</div>'
       +'<div class="sub">'+dataStr+' '+(evento.ora||'')+' · '+(evento.luogo||'')+'</div></div>'
@@ -1735,10 +1754,34 @@ const ScalettaTab = ({ evento, onUpdate, brani: braniCatalog, students: students
     /* ── lista brani ── */
     items.length > 0 && React.createElement('div', {style:{display:'grid',gridTemplateColumns:'repeat(auto-fill, minmax(420px, 1fr))',gap:8,alignItems:'start'}},
       items.map(function(item, idx) {
+        var _isOver = dragIdx !== null && overIdx === idx && dragIdx !== idx;
         return React.createElement('div', {key:String(idx)+item.brano,
-          style:{display:'flex',alignItems:'center',gap:10,background:C.surface,
-            border:'1px solid '+C.border,borderRadius:10,padding:'11px 13px',
+          draggable: editingNoteIdx !== idx,
+          onDragStart: function(e){
+            setDragIdx(idx);
+            e.dataTransfer.effectAllowed = 'move';
+            try { e.dataTransfer.setData('text/plain', String(idx)); } catch(_) {}
+          },
+          onDragOver: function(e){
+            if (dragIdx === null) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            if (overIdx !== idx) setOverIdx(idx);
+          },
+          onDrop: function(e){ e.preventDefault(); dropOn(idx); },
+          onDragEnd: resetDrag,
+          style:{display:'flex',alignItems:'center',gap:10,
+            background:_isOver ? C.goldBg : C.surface,
+            border:'1px solid '+(_isOver ? C.gold : C.border),
+            boxShadow:_isOver ? ('0 0 0 2px '+C.gold) : 'none',
+            opacity: dragIdx === idx ? 0.4 : 1,
+            cursor: editingNoteIdx === idx ? 'default' : 'grab',
+            borderRadius:10,padding:'11px 13px',
             transition:'background .1s'}},
+
+          /* maniglia di trascinamento */
+          React.createElement('span', {title:'Trascina per spostare',
+            style:{color:C.textDim,fontSize:15,lineHeight:1,flexShrink:0,userSelect:'none',marginRight:-2}}, '⠿'),
 
           /* numero */
           React.createElement('div', {style:{width:28,height:28,borderRadius:7,background:C.goldBg,
@@ -1833,8 +1876,15 @@ const derivePartecipanti = (evento, studentsList) => {
     });
   });
 
-  // 3. Da partecipanti espliciti (picker "Partecipanti facoltativi")
-  (evento.partecipanti||[]).forEach(p => {
+  // 3. Da partecipanti espliciti (picker "Partecipanti facoltativi").
+  // [FM-PARTECIPANTI-FIX] Per saggi/concerti/eventi pubblici i partecipanti sono SOLO quelli che
+  // compaiono nel programma o nella scaletta: l'elenco salvato (tabella concerti_partecipanti) è
+  // una copia derivata e, riletto come fonte, manteneva per sempre gli allievi rimossi dai brani.
+  // Resta come fonte solo per i tipi con elenco manuale, o se non c'è ancora nessun brano.
+  const _tipiConBrani = ['saggio','concerto','pubblico'];
+  const _usaElenco = !_tipiConBrani.includes(evento.tipo)
+    || ((evento.programma||[]).length === 0 && (evento.scaletta||[]).length === 0);
+  if (_usaElenco) (evento.partecipanti||[]).forEach(p => {
     const k = keyFor(p.studentId, p.studentName);
     if (!map[k]) map[k] = {studentId:p.studentId||null, studentName:p.studentName||'', brani: new Set(p.brani||[])};
   });
@@ -1972,7 +2022,9 @@ const ListaBraniTab = ({ evento, canEdit, onSaveLista, brani: braniCatalog }) =>
       })));
 };
 
-const EventoDetail = ({ evento, students, docenti:docentiED, courses:coursesED, brani:_braniED, onEdit, onDelete, onBack, onUpdate, ruolo:_ruoloED, onUpdateLista }) => {
+const EventoDetail = ({ evento: eventoRaw, students, docenti:docentiED, courses:coursesED, brani:_braniED, onEdit, onDelete, onBack, onUpdate, ruolo:_ruoloED, onUpdateLista }) => {
+  // [FM-PARTECIPANTI-FIX] partecipanti sempre ricalcolati da programma/scaletta (niente allievi rimossi)
+  const evento = React.useMemo(() => ({ ...eventoRaw, partecipanti: derivePartecipanti(eventoRaw, students) }), [eventoRaw, students]);
   const braniCatalog = _braniED || [];
   // [FM-LISTA-BRANI] Admin: tutte le tab. Docente: solo "Lista brani" (modificabile). Allievo: solo "Lista brani" (sola lettura).
   const ruoloED = _ruoloED || "admin";
@@ -2557,7 +2609,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
       && (!fTipo  || e.tipo===fTipo)
       && (!fStato || e.stato===fStato);
     if(ruoloConc==="allievo" && _myNomeConc)
-      return base && (e.partecipanti||[]).some(p=>(p.studentName||"").toLowerCase().includes(_myNomeConc.toLowerCase()));
+      return base && derivePartecipanti(e, students).some(p=>(p.studentName||"").toLowerCase().includes(_myNomeConc.toLowerCase()));
     if(ruoloConc==="docente") return base;
     return base;
   }).sort((a,b)=>(b.data||'').localeCompare(a.data||''));
@@ -2830,7 +2882,7 @@ const ConcertiView = ({ students:propStudents, brani:propBraniCV, quickAction, c
                 , React.createElement('div', { style: {padding:"10px 18px",borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9039}}
                   , React.createElement('div', { style: {display:"flex",gap:10,fontSize:11,color:C.textDim}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9040}}
                     , React.createElement('span', { style: {display:"flex",alignItems:"center",gap:4}, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9041}}
-                      , React.createElement(Ic, { n: "users", size: 10, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9042}}), ev.partecipanti.length, " allievi"
+                      , React.createElement(Ic, { n: "users", size: 10, stroke: C.textDim, __self: this, __source: {fileName: _jsxFileName, lineNumber: 9042}}), derivePartecipanti(ev, students).length, " allievi"
                     )
                     , (ev.listaBrani||[]).length>0 && (
                       React.createElement('span', { style: {display:"flex",alignItems:"center",gap:4} }
