@@ -6848,6 +6848,46 @@ const PRESENZE_SVOLTE = ['presente','assente','recupero'];
 const isLezionePagabile = (l) => !isProva(l) && PRESENZE_PAGATE.includes((l.attendance||'').toLowerCase());
 const isLezioneSvolta   = (l) => PRESENZE_SVOLTE.includes((l.attendance||'').toLowerCase());
 
+// [FM-DUPLICA-LEZIONE] bozza per "DUPLICA": mantiene docente, aula, allievo, corso, durata, ricorrenza,
+// repertorio (brani, versioni, stati) e manuali; azzera data/ora (da reinserire a mano) e tutto lo
+// "storico" della lezione originale (id, presenza, recupero, extra, mese pacchetto, gap, allegati).
+const fmBozzaLezioneDuplicata = (src) => {
+  const l = src || {};
+  const copia = (v, vuoto) => (v == null ? vuoto : JSON.parse(JSON.stringify(v)));
+  if (l.tipo === "collettivo") {
+    // Collettiva: stessi corso, gruppo, allievi (presenze azzerate), docente, sala, repertorio
+    return {
+      date: "", hour: "",
+      tipo: "collettivo",
+      courseId: l.courseId, courseName: l.courseName || "",
+      student: l.student || l.courseName || "", instrument: l.instrument || "Vari",
+      teacher: l.teacher || "", teacherId: l.teacherId != null ? l.teacherId : "",
+      room: l.room || "", durata: l.durata || 60,
+      recurrence: l.recurrence || "Nessuna",
+      topic: l.topic || "", notes: l.notes || "", exercises: l.exercises || "",
+      students: (l.students || []).filter(Boolean).map(st => ({ ...st, attendance: "" })),
+      repertorioIds: copia(l.repertorioIds, []),
+      gruppoId: l.gruppoId || null, gruppoNome: l.gruppoNome || null,
+      attendance: "", inRecupero: false, recuperoScadenza: null,
+    };
+  }
+  return {
+    date: "", hour: "",
+    tipo: l.tipo || "individuale", type: l.type || l.tipo || "individuale",
+    student: l.student || "", studentId: l.studentId || null,
+    instrument: l.instrument || "", teacher: l.teacher || "", room: l.room || "",
+    durata: l.durata || 45,
+    recurrence: l.recurrence || "",
+    topic: l.topic || "", notes: l.notes || "", exercises: l.exercises || "", linkUrl: l.linkUrl || "",
+    repertorioIds: copia(l.repertorioIds, []),
+    repertorioVersioni: copia(l.repertorioVersioni, {}),
+    repertorioStati: copia(l.repertorioStati, {}),
+    manualiIds: copia(l.manualiIds, []),
+    nuovoIscritto: !!l.nuovoIscritto, contactName: l.contactName || "", phone: l.phone || "",
+    attendance: "", inRecupero: false, recuperoScadenza: null, motivoAssenza: null,
+    allegati: [],
+  };
+};
 const emptyLesson = { date:yyyymmdd(today), hour:"09:00", student:"", instrument:"", teacher:"", room:"", topic:"", attendance:"", recurrence:"", notes:"", exercises:"", repertorioIds:[], linkUrl:"", allegati:[], inRecupero:false, recuperoScadenza:null, durata:45, nuovoIscritto:false, contactName:"", phone:"" };
 
 // ─── ATT_STYLES globale (usato da LessonForm, LessonDetailModal, LezioniAdminView, RecuperoView)
@@ -6863,7 +6903,7 @@ const ATT_STYLES = {
   non_recuperata: { bg:'rgba(100,116,139,0.10)', fg:'#64748b', bd:'rgba(100,116,139,0.4)', label:'Non recuperata' },
 };
 
-const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRepertorio:_setRepertorioLF, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, courses:_coursesRaw, role:_roleLF, lessons:_lessonsLF }) => {
+const LessonForm = ({ initial, duplicata, onSave, onClose, repertorio:_repertorioRaw, setRepertorio:_setRepertorioLF, onAddBrano, students:_studentsRaw, docenti:_docentiFLes, courses:_coursesRaw, role:_roleLF, lessons:_lessonsLF }) => {
   const roleLF = _roleLF || "admin"; // admin = può modificare data; docente = data readOnly
   const _teacherOptsLes = (_docentiFLes||[]).map(d=>({value:d.nome||d.name||"",label:d.nome||d.name||""}));
   const repertorio = _repertorioRaw || [];
@@ -6909,7 +6949,8 @@ const LessonForm = ({ initial, onSave, onClose, repertorio:_repertorioRaw, setRe
   const _eredStatiLF = React.useRef({ ..._eredInitLF.stati });
   const _eredVersLF  = React.useRef({ ..._eredInitLF.versioni });
   const [f, setF] = useState(() => (initial && _ereditatiInitLF.length) ? fmLezioneConEreditati(initial, _eredInitLF) : (initial || emptyLesson));
-  const _braniToccatiLF = React.useRef(false);
+  // [FM-DUPLICA-LEZIONE] lezione duplicata: il repertorio copiato non va sostituito dai brani ereditati
+  const _braniToccatiLF = React.useRef(!!duplicata);
   const [err, setErr] = useState({});
   const [conflittiOrario, setConflittiOrario] = useState(null); // array di lezioni in conflitto, o null
 
@@ -7566,7 +7607,7 @@ const LessonPill = ({ lesson, onClick, compact=false, courses, onInfoHover }) =>
 };
 
 // ─── MODAL DETTAGLIO ─────────────────────────────────────────────────────────
-const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLesson:_prevLessonRawLDM, onEdit, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses, repertorio:_repertorioLDM, setRepertorio:_setRepertorioLDM, biblioteca:_bibliotecaLDM }) => {
+const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLesson:_prevLessonRawLDM, onEdit, onDuplicate, onDelete, onAttendance, onIscrizione, onClose, role, nextLessonDate, students, onUpdateLesson, allegatiGlobali, onNavigate, onQuickAction, appUser, courses, repertorio:_repertorioLDM, setRepertorio:_setRepertorioLDM, biblioteca:_bibliotecaLDM }) => {
   // [FM-BRANI-EREDITATI] lezione con i brani ereditati dalla precedente (finché non "Completato").
   // Ogni modifica fatta da qui li rende propri della lezione (onUpdateLesson parte da questo oggetto).
   const _eredLDM = React.useMemo(() => fmRepertorioEreditatoLezione(_lessonRawLDM, _lessonsLDM || []), [_lessonRawLDM, _lessonsLDM]);
@@ -7808,7 +7849,11 @@ const LessonDetailModal = ({ lesson:_lessonRawLDM, lessons:_lessonsLDM, prevLess
         , canEdit ? (
           React.createElement(React.Fragment, null
             , React.createElement(Btn, { danger: true, onClick: onDelete, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4753}}, React.createElement(Ic, { n: "trash", size: 14, stroke: C.red, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4753}}), "Elimina")
-            , React.createElement(Btn, { variant: "secondary", onClick: onEdit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4754}}, React.createElement(Ic, { n: "edit", size: 14, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4754}}), "Modifica")
+            , React.createElement('div', { style: {display:"flex", gap:8, alignItems:"center"} }
+              // [FM-DUPLICA-LEZIONE] solo admin (il docente non può scegliere data/ora); individuali e collettive, non le prove
+              , (onDuplicate && role === 'admin' && lesson.tipo !== 'prova') && React.createElement(Btn, { variant: "secondary", onClick: onDuplicate }, React.createElement(Ic, { n: "copy", size: 14, stroke: C.textMuted }), "DUPLICA")
+              , React.createElement(Btn, { variant: "secondary", onClick: onEdit, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4754}}, React.createElement(Ic, { n: "edit", size: 14, stroke: C.textMuted, __self: this, __source: {fileName: _jsxFileName, lineNumber: 4754}}), "Modifica")
+            )
           )
         ) : (
           React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,color:C.textDim,fontSize:12,width:"100%",justifyContent:"center"}}
@@ -10221,7 +10266,7 @@ function fmDocenteIdDaLezione(lezione, docenti, corso) {
   return delCorso.length === 1 ? String(delCorso[0].id) : '';
 }
 
-const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose, gruppi:_gruppiCLF, iscrizioniAnno:_iscrCLF, annoSel:_annoSelCLF, lessons:_lessonsCLF }) => {
+const CollectiveLessonForm = ({ initial, duplicata, courses, students, docenti:_docentiRaw, repertorio:_repertorioRaw, onAddBrano, onSave, onClose, gruppi:_gruppiCLF, iscrizioniAnno:_iscrCLF, annoSel:_annoSelCLF, lessons:_lessonsCLF }) => {
   const docenti    = _docentiRaw    || [];
   const repertorio = _repertorioRaw || [];
   const collettivi = courses.filter(c => c.type === "collettivo");
@@ -10256,8 +10301,8 @@ const CollectiveLessonForm = ({ initial, courses, students, docenti:_docentiRaw,
   const [showBranoForm, setShowBranoForm] = useState(false);
   const [newBranoForm, setNewBranoForm]   = useState({ title:'', composer:'', period:'', tonality:'', type:'collettivo', difficulty:'', notes:'' });
   const [form, setForm] = useState({
-    date:      initial?.date      || yyyymmdd(today),
-    hour:      initial?.hour      || "15:00",
+    date:      duplicata ? "" : (initial?.date || yyyymmdd(today)),   // [FM-DUPLICA-LEZIONE] duplicata: data/ora da inserire a mano
+    hour:      duplicata ? "" : (initial?.hour || "15:00"),
     durata:    initial?.durata    || 60,
     teacherId: initial ? fmDocenteIdDaLezione(initial, docenti, initCourse) : "",  // [FM-COLL-DOCENTE]
     room:      initial?.room      || "",
@@ -13013,6 +13058,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const [modal,     setModal]     = useState(null);
     const [selLesson, setSelLesson] = useState(null);
     const [addDate,   setAddDate]   = useState(null);
+    const [dupLesson, setDupLesson] = useState(null); // [FM-DUPLICA-LEZIONE] bozza lezione duplicata
     const role = propUserRuolo || "admin"; // ricevuto dall'App; admin | docente | allievo
     const _cvDocenteId = (_appUserCV && _appUserCV.docenteId) || null;
     const _cvAllievoId = (_appUserCV && _appUserCV.allievoId) || null;
@@ -13042,7 +13088,7 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
     const [appView,     setAppView]    = useState("calendario"); // calendario | repertorio | recupero | lezioni_admin
 
   
-    const closeModal = () => { setModal(null); setSelLesson(null); setAddDate(null); setNextLessonCreated(null); };
+    const closeModal = () => { setModal(null); setSelLesson(null); setAddDate(null); setDupLesson(null); setNextLessonCreated(null); };
   React.useEffect(()=>{
     if(qaCV==="addLezione"){ setModal("add"); if(clearQaCV)clearQaCV(); }
     else if(qaCV==="showRecuperi"){ setAppView("recupero"); if(clearQaCV)clearQaCV(); }
@@ -14670,6 +14716,19 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             , React.createElement(LessonForm, { initial: addDate ? {...emptyLesson, date:addDate} : undefined, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, setRepertorio: setRepertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, lessons: lessons, __self: this, __source: {fileName: _jsxFileName, lineNumber: 6137}})
           )
         )
+        , modal === "duplicate" && dupLesson && (
+          React.createElement(Modal, { title: dupLesson.tipo === "collettivo" ? "Duplica lezione collettiva" : "Duplica lezione", onClose: closeModal, wide: true }
+            , dupLesson.tipo === "collettivo"
+              ? React.createElement(CollectiveLessonForm, {
+                  initial: dupLesson, duplicata: true,
+                  courses: propCourses, students: propStudents, docenti: propDocenti,
+                  repertorio: repertorio, gruppi: propGruppiCal || [], iscrizioniAnno: propIscrizioniCal || [],
+                  annoSel: calConfig && calConfig.annoInizioAttivo, lessons: lessons,
+                  onAddBrano: b => setRepertorio(p=>[...p,b]),
+                  onSave: handleAddCollective, onClose: closeModal })
+              : React.createElement(LessonForm, { initial: dupLesson, duplicata: true, onSave: handleAdd, onClose: closeModal, repertorio: repertorio, setRepertorio: setRepertorio, onAddBrano: b => setRepertorio(p=>[...p,b]), students: propStudents, docenti: propDocenti, courses: propCourses, role: role, lessons: lessons })
+          )
+        )
         , modal === "edit" && selLesson && (
           isColl(selLesson)
             ? React.createElement(Modal, { title: "Modifica lezione collettiva", onClose: closeModal, wide: true}
@@ -14714,6 +14773,13 @@ const CalendarioView = ({ lessons:propLessons, setLessons:propSetLessons, course
             setRepertorio: setRepertorio,
             biblioteca: biblioteca,
             onEdit: () => setModal("edit"),
+            onDuplicate: () => {
+              // [FM-DUPLICA-LEZIONE] copia impostazioni (docente, aula, allievo, corso, repertorio…)
+              // e azzera data/ora e tutto ciò che è stato della lezione originale (presenza, recupero, extra…)
+              const _src = lessons.find(l => l.id === selLesson.id) || selLesson;
+              setDupLesson(fmBozzaLezioneDuplicata(_src));
+              setModal("duplicate");
+            },
             onDelete: () => setModal("delete"),
             onAttendance: handleAttendance,
             onIscrizione: handleIscrizioneProva,
