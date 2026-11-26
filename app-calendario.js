@@ -11099,6 +11099,8 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
   const [modData, setModData] = useState('');
   const [modOra, setModOra]   = useState('');
   const [saving, setSaving]   = useState(false);
+  // [FM-RECUPERI-NASCONDI-PASSATE] richieste già concluse nascoste di default
+  const [mostraRichPassate, setMostraRichPassate] = useState(false);
   const [sortKeyR, sortDirR, handleSortR, sortFnR] = useSortable("date", "asc");
   const oggi_r = new Date(); oggi_r.setHours(0,0,0,0);
 
@@ -11232,6 +11234,13 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
   });
   var richInAttesa   = richFiltered.filter(function(r){ return r.stato==='in_attesa'; });
   var richConfermata = richFiltered.filter(function(r){ return r.stato==='confermata'; });
+  // Richieste "passate": confermate ufficialmente (completata), non confermate (rifiutata);
+  // per il docente anche 'confermata' (da lui già gestita). Per l'admin 'confermata' resta visibile (azione richiesta).
+  var _richPassata = function(r){
+    return r.stato==='completata' || r.stato==='rifiutata' || (role==='docente' && r.stato==='confermata');
+  };
+  var richPassate = richFiltered.filter(_richPassata);
+  var richVisibili = mostraRichPassate ? richFiltered : richFiltered.filter(function(r){ return !_richPassata(r); });
 
   const lezioniRec = (lessons||[]).filter(l=>l.inRecupero||l.attendance==='in_recupero');
   const docenteOptsR=[...new Set(lezioniRec.map(l=>l.teacher).filter(Boolean))].sort();
@@ -11332,14 +11341,19 @@ const RecuperoView = ({ lessons, onOpenLesson, role, appUser }) => {
           , React.createElement('h3', {style:{fontFamily:"'Oswald',sans-serif",fontSize:20,fontWeight:600,margin:0}}, 'Richieste di recupero')
           , richInAttesa.length > 0 && React.createElement('span',{style:{background:'rgba(245,158,11,0.12)',color:'#b45309',border:'1px solid rgba(245,158,11,0.3)',borderRadius:20,padding:'3px 12px',fontSize:12,fontWeight:700}}, richInAttesa.length+' da gestire')
           , role==='admin' && richConfermata.length > 0 && React.createElement('span',{style:{background:C.blueBg,color:C.blue,border:'1px solid '+C.blueBorder,borderRadius:20,padding:'3px 12px',fontSize:12,fontWeight:700}}, richConfermata.length+' da confermare')
+          , richPassate.length > 0 && React.createElement('button', {
+              onClick: function(){ setMostraRichPassate(function(v){ return !v; }); },
+              title: mostraRichPassate ? "Nascondi le richieste di recupero passate" : "Mostra le richieste di recupero passate",
+              style: {marginLeft:'auto',padding:"4px 10px",borderRadius:8,border:'1px solid '+C.border,background:C.bg,color:C.textMuted,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"'Open Sans',sans-serif",whiteSpace:"nowrap"}
+            }, mostraRichPassate ? "Nascondi richieste passate" : ("Mostra richieste passate ("+richPassate.length+")"))
         )
         , loadingR && React.createElement('div',{style:{display:'flex',alignItems:'center',gap:8,padding:'16px 0',color:C.textDim,fontSize:13}}
             , 'Caricamento richieste...')
-        , !loadingR && richFiltered.length === 0 && React.createElement('div',{style:{textAlign:'center',padding:'28px 0',color:C.textDim,fontSize:13,background:C.surface,borderRadius:12,border:'1px solid '+C.border}}
+        , !loadingR && richVisibili.length === 0 && React.createElement('div',{style:{textAlign:'center',padding:'28px 0',color:C.textDim,fontSize:13,background:C.surface,borderRadius:12,border:'1px solid '+C.border}}
             , React.createElement('div',{style:{fontSize:28,marginBottom:8}}, role==='docente'?'📭':'📋')
-            , role==='docente' ? ('Nessuna richiesta di recupero'+(myDocKey?' per '+myDocKey:'')) : 'Nessuna richiesta di recupero')
-        , !loadingR && richFiltered.length > 0 && React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
-            , richFiltered.map(function(rich) {
+            , (role==='docente' ? ('Nessuna richiesta di recupero'+(myDocKey?' per '+myDocKey:'')) : 'Nessuna richiesta di recupero') + (richPassate.length>0 && !mostraRichPassate ? ' da gestire' : ''))
+        , !loadingR && richVisibili.length > 0 && React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:8}}
+            , richVisibili.map(function(rich) {
                 var dL = rich.data_preferita ? dateIT_r(rich.data_preferita) : '—';
                 var isActionable = (rich.stato==='in_attesa'&&role==='docente')||(rich.stato==='confermata'&&role==='admin');
                 return React.createElement('div',{key:rich.id,style:{background:C.surface,borderRadius:12,padding:'16px 20px',
