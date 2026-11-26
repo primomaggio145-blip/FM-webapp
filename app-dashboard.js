@@ -2441,9 +2441,18 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
         })
       : _studentsAnno;
     const allieviAttivi    = _myStudentsForDash.filter(a=>a.status==="attivo"||a.stato==="attivo").length;
+    // [FM-KPI-COLLETTIVO-OBBLIGATORIO] gli allievi iscritti a un corso collettivo OBBLIGATORIO hanno quel corso
+    // come corso principale (senza corso individuale): vanno contati come 1 corso. Se hanno anche uno strumento
+    // individuale, il principale è già contato da a.instrument e non si aggiunge nulla.
+    const _corsiDashKpi = (typeof window !== 'undefined' && window.__FM_DATA__ && window.__FM_DATA__.courses) || [];
+    const _haCollObblKpi = a => {
+      if (!a || a.complementaryCourse == null || a.complementaryCourse === "") return false;
+      const c = _corsiDashKpi.find(x => String(x.id) === String(a.complementaryCourse));
+      return !!c && (c.type || c.tipo) === 'collettivo' && c.categoria === 'obbligatorio';
+    };
     const corsiIndividualiAttivi = _myStudentsForDash
       .filter(a=>a.status==="attivo"||a.stato==="attivo")
-      .reduce((tot,a)=> tot + (a.instrument?1:0) + ((a.extraInstruments||[]).length), 0);
+      .reduce((tot,a)=> tot + (a.instrument ? 1 : (_haCollObblKpi(a) ? 1 : 0)) + ((a.extraInstruments||[]).length), 0);
     const morosi           = ruolo==="docente" ? 0 : _studentsAnno.filter(a=>a.status==="scaduto"||a.stato==="scaduto").length;
     const oraNum  = t => { const [h,m]=(t||"0:0").split(":").map(Number); return h*60+m; };
     const nowMins = dashNow.getHours()*60+dashNow.getMinutes();
@@ -2949,7 +2958,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                       // KPI cards configurabili — ordine salvato in panels.kpiOrder
                       const ALL_KPI = [
                         { id:'allievi',  icon:"users",    label:"Allievi attivi",  value: allieviAttivi, sub: `${_studentsAnno.length} totali`, hex: C.gold, nav:'allievi' },
-                        { id:'corsiIndividuali', icon:"music", label:"Corsi individuali attivi", value: corsiIndividualiAttivi, sub: "strumenti principali + extra", hex: C.blue, nav:'allievi' },
+                        { id:'corsiIndividuali', icon:"music", label:"Corsi individuali attivi", value: corsiIndividualiAttivi, sub: "strumenti principali + extra + collettivi obbligatori", hex: C.blue, nav:'allievi' },
                         { id:'lezioni',  icon:"calendar", label:"Lezioni oggi",    value: lezioniOggi,   sub: `${lezioniSettimana} questa settimana`, hex: C.teal, nav:'calendario' },
                         { id:'entrate',  icon:"up",       label:"Entrate mese",    value: fmt(entrMeseLiveLive), hex: C.green, trend:+8, hideAmounts:!showAmounts, nav:'contabilita' },
                         { id:'uscite',   icon:"down",     label:"Uscite mese",     value: fmt(uscMeseLiveLive),  hex: C.red,   trend:+12, hideAmounts:!showAmounts, nav:'contabilita' },
