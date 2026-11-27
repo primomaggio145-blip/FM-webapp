@@ -1406,7 +1406,7 @@ const LessonLog = ({ lessons:_lessonsRaw, studentId, onAddLesson }) => {
 // ════════════════════════════════════════════════════════════════════════════════
 // SCHEDA DETTAGLIO
 // ════════════════════════════════════════════════════════════════════════════════
-const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntrateRaw, setEntrate, annoInizioAttivo, onEdit, onDelete, onBack, onAddLesson, onUpdateStudent, config:propConfig, setConfig:propSetConfig, userRuolo:_sdRuolo, gruppi:_gruppiSD, setLessons:_setLessonsSD, iscrizioniAnno:_iscrizioniSD, anniScolastici:_anniScolasticiSD }) => {
+const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntrateRaw, setEntrate, annoInizioAttivo, onEdit, onDelete, onBack, onAddLesson, onUpdateStudent, config:propConfig, setConfig:propSetConfig, userRuolo:_sdRuolo, gruppi:_gruppiSD, setLessons:_setLessonsSD, iscrizioniAnno:_iscrizioniSD, anniScolastici:_anniScolasticiSD, initialTab:_initialTabSD }) => {
   const isMobile = useIsMobile();
   const sdRuolo = _sdRuolo || "admin"; // admin | docente | allievo
   const lessons = _lessonsRaw || [];
@@ -1438,7 +1438,9 @@ const StudentDetail = ({ student, courses, lessons:_lessonsRaw, entrate:_allEntr
   const isFuture = x => new Date(x.y, x.m-1, 1) > new Date(curYear, curMonth-1, 1);
   const defaultSelMese = MESI_AS.find(x => x.m===curMonth && x.y===curYear) || MESI_AS[MESI_AS.length-1];
 
-  const [tab,      setTab]      = useState("info");
+  const [tab,      setTab]      = useState(_initialTabSD || "info");
+  // [FM-REPORT-LINK-SCHEDA] se la scheda viene aperta da un link esterno (es. Report lezioni in Dashboard) sul tab richiesto
+  React.useEffect(() => { if (_initialTabSD) setTab(_initialTabSD); }, [_initialTabSD, student && student.id]);
   const [selMese,  setSelMese]  = useState(defaultSelMese);
   const [showLezForm, setShowLezForm] = useState(false);
   const [lezForm, setLezForm]   = useState({ date: new Date().toISOString().split("T")[0], topic:"", attendance:"presente", notes:"" });
@@ -4228,6 +4230,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
   const [view,     setView]     = useState(_ruoloAV==="allievo" ? "detail" : "list");
   const [selected, setSelected] = useState(_ruoloAV==="allievo" ? (students[0]||null) : null);
   const [detailFromAV, setDetailFromAV] = useState("list");   // vista da cui si è aperta la scheda allievo
+  const [initialTabAV, setInitialTabAV] = useState(null);   // [FM-REPORT-LINK-SCHEDA] tab con cui aprire la scheda allievo (da link esterni)
   const [modal,    setModal]    = useState(null);
   const [showImportModal, setShowImportModal] = useState(false);
   // Riepilogo primo pagamento mostrato obbligatoriamente dopo la creazione di un nuovo allievo
@@ -4313,12 +4316,19 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
       if(clearQaAV)clearQaAV();
     }
     else if(typeof qaAV==="string" && qaAV.startsWith("openStudent:")) {
-      const sid = qaAV.slice("openStudent:".length);
+      // formato: 'openStudent:<id>' oppure 'openStudent:<id>:<tab>' (es. 'openStudent:12:lezioni')
+      const _resto = qaAV.slice("openStudent:".length);
+      const _sep = _resto.lastIndexOf(":");
+      const sid = _sep === -1 ? _resto : _resto.slice(0, _sep);
+      const _tabReq = _sep === -1 ? null : _resto.slice(_sep + 1);
       const found = (students||[]).find(s=>String(s.id)===sid);
-      if (found) { setSelected(found); setView("detail"); }
+      if (found) { setInitialTabAV(_tabReq || null); setSelected(found); setView("detail"); }
       if(clearQaAV)clearQaAV();
     }
   },[qaAV]);
+  // [FM-REPORT-LINK-SCHEDA] il tab richiesto vale solo per quell'apertura: uscendo dal dettaglio si azzera,
+  // così le aperture successive dalla lista partono di nuovo da "Informazioni".
+  React.useEffect(()=>{ if (view !== "detail") setInitialTabAV(null); },[view]);
 
   const handleAddStudent = async (d) => {
     // Guard sincrono a livello di vista: se un salvataggio è già in corso (es. l'admin ha chiuso
@@ -4711,6 +4721,7 @@ const AllieviView = ({ students:propStudents, setStudents:propSetStudents, cours
             setLessons: setLessons,
             iscrizioniAnno: iscrizioniAnno,
             anniScolastici: propAnniScolasticiAV || [],
+            initialTab: initialTabAV,
             onUpdateStudent: d=>setStudents(p=>p.map(s=>s.id===d.id?d:s)), __self: this, __source: {fileName: _jsxFileName, lineNumber: 3893}}
           )
         )

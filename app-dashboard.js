@@ -2017,7 +2017,7 @@ const NotificationBell = ({ students, lessons, richieste, onNavigate, ruolo:_ruo
 
 
 // ─── REPORT LEZIONI CARD (Dashboard) ────────────────────────────────────────
-const ReportLezioniCard = ({ lessons, students, config, anniScolastici, onNavigate }) => {
+const ReportLezioniCard = ({ lessons, students, config, anniScolastici, onNavigate, onQuickAction }) => {
   const now3 = new Date();
   const meseCurr = now3.getMonth() + 1;
   const annoCurr = now3.getFullYear();
@@ -2049,7 +2049,13 @@ const ReportLezioniCard = ({ lessons, students, config, anniScolastici, onNaviga
 
   const RigaAllievo = (r) => React.createElement('div',{key:r.id||r.nome,
       style:{display:'flex',alignItems:'center',gap:10,padding:'7px 0',borderBottom:`1px solid ${C.border}44`,cursor:'pointer'},
-      onClick:()=>onNavigate('allievi')}
+      title:`Apri la scheda di ${r.nome} → Lezioni`,
+      // [FM-REPORT-LINK-SCHEDA] apre direttamente la scheda allievo sul tab Lezioni (quickAction 'openStudent:<id>:lezioni');
+      // se manca onQuickAction o l'id, ripiega sulla lista Allievi come prima.
+      onClick:()=>{
+        if (onQuickAction && r.id != null) onQuickAction('openStudent:' + r.id + ':lezioni');
+        onNavigate('allievi');
+      }}
     , React.createElement('span',{style:{fontSize:12,color:C.text,fontWeight:600,flex:'1 1 auto',minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}, r.nome
         /* [FM-STATO-IND] alert collettive oltre soglia */
         , r.collettivaOltre && React.createElement('span',{style:{marginLeft:6,fontSize:9,fontWeight:700,color:C.orange,background:C.orangeBg,border:`1px dashed ${C.orangeBorder}`,borderRadius:4,padding:'1px 5px'},
@@ -3422,6 +3428,7 @@ const DashboardView = ({ appUser, onNavigate, config:propConfig, setConfig:propS
                   config,
                   anniScolastici: propAnni,
                   onNavigate,
+                  onQuickAction,
                 })
             )
 
